@@ -1,0 +1,36 @@
+Scala Distribution
+------------------
+
+The Scala distribution requires Java 1.6 or above.
+
+Please report bugs at https://issues.scala-lang.org/.
+We welcome contributions at https://github.com/scala/scala!
+
+Scala Tools
+-----------
+
+- scala       Scala interactive interpreter
+- scalac      Scala compiler
+- fsc         Scala resident compiler
+- scaladoc    Scala API documentation generator
+- scalap      Scala classfile decoder 
+
+Run the command "scalac -help" to display the list of available
+compiler options.
+
+
+Installation
+------------
+
+Decompress the archive and run the above commands directly from `bin` directory.
+We recommend adding the full path of the `bin` directory to the `PATH`
+environment variable.
+
+
+Licenses
+--------
+
+Scala is licensed under the standard 3-clause BSD license,
+included in the distribution as the file `doc/LICENSE`.
+The licenses of the software included in the Scala distribution can
+be found in the `doc/licenses` directory.

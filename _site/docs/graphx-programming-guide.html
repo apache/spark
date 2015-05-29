@@ -1,0 +1,1035 @@
+<ul id="markdown-toc">
+  <li><a href="#overview" id="markdown-toc-overview">Overview</a>    <ul>
+      <li><a href="#migrating-from-spark-11" id="markdown-toc-migrating-from-spark-11">Migrating from Spark 1.1</a></li>
+    </ul>
+  </li>
+  <li><a href="#getting-started" id="markdown-toc-getting-started">Getting Started</a></li>
+  <li><a href="#the-property-graph" id="markdown-toc-the-property-graph">The Property Graph</a>    <ul>
+      <li><a href="#example-property-graph" id="markdown-toc-example-property-graph">Example Property Graph</a></li>
+    </ul>
+  </li>
+  <li><a href="#graph-operators" id="markdown-toc-graph-operators">Graph Operators</a>    <ul>
+      <li><a href="#summary-list-of-operators" id="markdown-toc-summary-list-of-operators">Summary List of Operators</a></li>
+      <li><a href="#property-operators" id="markdown-toc-property-operators">Property Operators</a></li>
+      <li><a href="#structural-operators" id="markdown-toc-structural-operators">Structural Operators</a></li>
+      <li><a href="#join-operators" id="markdown-toc-join-operators">Join Operators</a></li>
+      <li><a href="#neighborhood-aggregation" id="markdown-toc-neighborhood-aggregation">Neighborhood Aggregation</a>        <ul>
+          <li><a href="#aggregate-messages-aggregatemessages" id="markdown-toc-aggregate-messages-aggregatemessages">Aggregate Messages (aggregateMessages)</a></li>
+          <li><a href="#map-reduce-triplets-transition-guide-legacy" id="markdown-toc-map-reduce-triplets-transition-guide-legacy">Map Reduce Triplets Transition Guide (Legacy)</a></li>
+          <li><a href="#computing-degree-information" id="markdown-toc-computing-degree-information">Computing Degree Information</a></li>
+          <li><a href="#collecting-neighbors" id="markdown-toc-collecting-neighbors">Collecting Neighbors</a></li>
+        </ul>
+      </li>
+      <li><a href="#caching-and-uncaching" id="markdown-toc-caching-and-uncaching">Caching and Uncaching</a></li>
+    </ul>
+  </li>
+  <li><a href="#pregel-api" id="markdown-toc-pregel-api">Pregel API</a></li>
+  <li><a href="#graph-builders" id="markdown-toc-graph-builders">Graph Builders</a></li>
+  <li><a href="#vertex-and-edge-rdds" id="markdown-toc-vertex-and-edge-rdds">Vertex and Edge RDDs</a>    <ul>
+      <li><a href="#vertexrdds" id="markdown-toc-vertexrdds">VertexRDDs</a></li>
+      <li><a href="#edgerdds" id="markdown-toc-edgerdds">EdgeRDDs</a></li>
+    </ul>
+  </li>
+  <li><a href="#optimized-representation" id="markdown-toc-optimized-representation">Optimized Representation</a></li>
+  <li><a href="#graph-algorithms" id="markdown-toc-graph-algorithms">Graph Algorithms</a>    <ul>
+      <li><a href="#pagerank" id="markdown-toc-pagerank">PageRank</a></li>
+      <li><a href="#connected-components" id="markdown-toc-connected-components">Connected Components</a></li>
+      <li><a href="#triangle-counting" id="markdown-toc-triangle-counting">Triangle Counting</a></li>
+    </ul>
+  </li>
+  <li><a href="#examples" id="markdown-toc-examples">Examples</a></li>
+</ul>
+
+<!-- All the documentation links  -->
+
+<p style="text-align: center;">
+  <img src="img/graphx_logo.png" title="GraphX Logo" alt="GraphX" width="60%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<h1 id="overview">Overview</h1>
+
+<p>GraphX is a new component in Spark for graphs and graph-parallel computation. At a high level,
+GraphX extends the Spark <a href="api/scala/index.html#org.apache.spark.rdd.RDD">RDD</a> by introducing a
+new <a href="#property_graph">Graph</a> abstraction: a directed multigraph with properties
+attached to each vertex and edge.  To support graph computation, GraphX exposes a set of fundamental
+operators (e.g., <a href="#structural_operators">subgraph</a>, <a href="#join_operators">joinVertices</a>, and
+<a href="#aggregateMessages">aggregateMessages</a>) as well as an optimized variant of the <a href="#pregel">Pregel</a> API. In addition, GraphX includes a growing collection of graph <a href="#graph_algorithms">algorithms</a> and
+<a href="#graph_builders">builders</a> to simplify graph analytics tasks.</p>
+
+<h2 id="migrating-from-spark-11">Migrating from Spark 1.1</h2>
+
+<p>GraphX in Spark  contains a few user facing API changes:</p>
+
+<ol>
+  <li>
+    <p>To improve performance we have introduced a new version of
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"><code>mapReduceTriplets</code></a> called
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a> which takes the messages previously returned from
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"><code>mapReduceTriplets</code></a> through a callback (<a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext"><code>EdgeContext</code></a>)
+rather than by return value.
+We are deprecating <a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"><code>mapReduceTriplets</code></a> and encourage users to consult
+the <a href="#mrTripletsTransition">transition guide</a>.</p>
+  </li>
+  <li>
+    <p>In Spark 1.0 and 1.1, the type signature of <a href="api/scala/index.html#org.apache.spark.graphx.EdgeRDD"><code>EdgeRDD</code></a> switched from
+<code>EdgeRDD[ED]</code> to <code>EdgeRDD[ED, VD]</code> to enable some caching optimizations.  We have since discovered
+a more elegant solution and have restored the type signature to the more natural <code>EdgeRDD[ED]</code> type.</p>
+  </li>
+</ol>
+
+<h1 id="getting-started">Getting Started</h1>
+
+<p>To get started you first need to import Spark and GraphX into your project, as follows:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark._</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.graphx._</span>
+<span class="c1">// To make some of the examples work we will also need RDD</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.rdd.RDD</span></code></pre></div>
+
+<p>If you are not using the Spark shell you will also need a <code>SparkContext</code>.  To learn more about
+getting started with Spark refer to the <a href="quick-start.html">Spark Quick Start Guide</a>.</p>
+
+<p><a name="property_graph"></a></p>
+
+<h1 id="the-property-graph">The Property Graph</h1>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph">property graph</a> is a directed multigraph
+with user defined objects attached to each vertex and edge.  A directed multigraph is a directed
+graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
+ability to support parallel edges simplifies modeling scenarios where there can be multiple
+relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed by a
+<em>unique</em> 64-bit long identifier (<code>VertexID</code>).  GraphX does not impose any ordering constraints on
+the vertex identifiers.  Similarly, edges have corresponding source and destination vertex
+identifiers.</p>
+
+<p>The property graph is parameterized over the vertex (<code>VD</code>) and edge (<code>ED</code>) types.  These
+are the types of the objects associated with each vertex and edge respectively.</p>
+
+<blockquote>
+  <p>GraphX optimizes the representation of vertex and edge types when they are primitive data types
+(e.g., int, double, etc…) reducing the in memory footprint by storing them in specialized
+arrays.</p>
+</blockquote>
+
+<p>In some cases it may be desirable to have vertices with different property types in the same graph.
+This can be accomplished through inheritance.  For example to model users and products as a
+bipartite graph we might do the following:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">VertexProperty</span><span class="o">()</span>
+<span class="k">case</span> <span class="k">class</span> <span class="nc">UserProperty</span><span class="o">(</span><span class="k">val</span> <span class="n">name</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">extends</span> <span class="nc">VertexProperty</span>
+<span class="k">case</span> <span class="k">class</span> <span class="nc">ProductProperty</span><span class="o">(</span><span class="k">val</span> <span class="n">name</span><span class="k">:</span> <span class="kt">String</span><span class="o">,</span> <span class="k">val</span> <span class="n">price</span><span class="k">:</span> <span class="kt">Double</span><span class="o">)</span> <span class="k">extends</span> <span class="nc">VertexProperty</span>
+<span class="c1">// The graph might then have the type:</span>
+<span class="k">var</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VertexProperty</span>, <span class="kt">String</span><span class="o">]</span> <span class="k">=</span> <span class="kc">null</span></code></pre></div>
+
+<p>Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Changes to the values or
+structure of the graph are accomplished by producing a new graph with the desired changes.  Note
+that substantial parts of the original graph (i.e., unaffected structure, attributes, and indicies)
+are reused in the new graph reducing the cost of this inherently functional data structure.  The
+graph is partitioned across the executors using a range of vertex partitioning heuristics.  As with
+RDDs, each partition of the graph can be recreated on a different machine in the event of a failure.</p>
+
+<p>Logically the property graph corresponds to a pair of typed collections (RDDs) encoding the
+properties for each vertex and edge.  As a consequence, the graph class contains members to access
+the vertices and edges of the graph:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">val</span> <span class="n">vertices</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">]</span>
+  <span class="k">val</span> <span class="n">edges</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>The classes <code>VertexRDD[VD]</code> and <code>EdgeRDD[ED]</code> extend and are optimized versions of <code>RDD[(VertexID,
+VD)]</code> and <code>RDD[Edge[ED]]</code> respectively.  Both <code>VertexRDD[VD]</code> and <code>EdgeRDD[ED]</code> provide  additional
+functionality built around graph computation and leverage internal optimizations.  We discuss the
+<code>VertexRDD</code> and <code>EdgeRDD</code> API in greater detail in the section on <a href="#vertex_and_edge_rdds">vertex and edge
+RDDs</a> but for now they can be thought of as simply RDDs of the form:
+<code>RDD[(VertexID, VD)]</code> and <code>RDD[Edge[ED]]</code>.</p>
+
+<h3 id="example-property-graph">Example Property Graph</h3>
+
+<p>Suppose we want to construct a property graph consisting of the various collaborators on the GraphX
+project. The vertex property might contain the username and occupation.  We could annotate edges
+with a string describing the relationships between collaborators:</p>
+
+<p style="text-align: center;">
+  <img src="img/property_graph.png" title="The Property Graph" alt="The Property Graph" width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<p>The resulting graph would have the type signature:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">userGraph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">)</span>, <span class="kt">String</span><span class="o">]</span></code></pre></div>
+
+<p>There are numerous ways to construct a property graph from raw files, RDDs, and even synthetic
+generators and these are discussed in more detail in the section on
+<a href="#graph_builders">graph builders</a>.  Probably the most general method is to use the
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph$">Graph object</a>.  For example the following
+code constructs a graph from a collection of RDDs:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Assume the SparkContext has already been constructed</span>
+<span class="k">val</span> <span class="n">sc</span><span class="k">:</span> <span class="kt">SparkContext</span>
+<span class="c1">// Create an RDD for the vertices</span>
+<span class="k">val</span> <span class="n">users</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="o">(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">))]</span> <span class="k">=</span>
+  <span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="nc">Array</span><span class="o">((</span><span class="mi">3L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;rxin&quot;</span><span class="o">,</span> <span class="s">&quot;student&quot;</span><span class="o">)),</span> <span class="o">(</span><span class="mi">7L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;jgonzal&quot;</span><span class="o">,</span> <span class="s">&quot;postdoc&quot;</span><span class="o">)),</span>
+                       <span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;franklin&quot;</span><span class="o">,</span> <span class="s">&quot;prof&quot;</span><span class="o">)),</span> <span class="o">(</span><span class="mi">2L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;istoica&quot;</span><span class="o">,</span> <span class="s">&quot;prof&quot;</span><span class="o">))))</span>
+<span class="c1">// Create an RDD for edges</span>
+<span class="k">val</span> <span class="n">relationships</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Edge</span><span class="o">[</span><span class="kt">String</span><span class="o">]]</span> <span class="k">=</span>
+  <span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="nc">Edge</span><span class="o">(</span><span class="mi">3L</span><span class="o">,</span> <span class="mi">7L</span><span class="o">,</span> <span class="s">&quot;collab&quot;</span><span class="o">),</span>    <span class="nc">Edge</span><span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="mi">3L</span><span class="o">,</span> <span class="s">&quot;advisor&quot;</span><span class="o">),</span>
+                       <span class="nc">Edge</span><span class="o">(</span><span class="mi">2L</span><span class="o">,</span> <span class="mi">5L</span><span class="o">,</span> <span class="s">&quot;colleague&quot;</span><span class="o">),</span> <span class="nc">Edge</span><span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="mi">7L</span><span class="o">,</span> <span class="s">&quot;pi&quot;</span><span class="o">)))</span>
+<span class="c1">// Define a default user in case there are relationship with missing user</span>
+<span class="k">val</span> <span class="n">defaultUser</span> <span class="k">=</span> <span class="o">(</span><span class="s">&quot;John Doe&quot;</span><span class="o">,</span> <span class="s">&quot;Missing&quot;</span><span class="o">)</span>
+<span class="c1">// Build the initial Graph</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="nc">Graph</span><span class="o">(</span><span class="n">users</span><span class="o">,</span> <span class="n">relationships</span><span class="o">,</span> <span class="n">defaultUser</span><span class="o">)</span></code></pre></div>
+
+<p>In the above example we make use of the <a href="api/scala/index.html#org.apache.spark.graphx.Edge"><code>Edge</code></a> case class. Edges have a <code>srcId</code> and a
+<code>dstId</code> corresponding to the source and destination vertex identifiers. In addition, the <code>Edge</code>
+class has an <code>attr</code> member which stores the edge property.</p>
+
+<p>We can deconstruct a graph into the respective vertex and edge views by using the <code>graph.vertices</code>
+and <code>graph.edges</code> members respectively.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">)</span>, <span class="kt">String</span><span class="o">]</span> <span class="c1">// Constructed from above</span>
+<span class="c1">// Count all users which are postdocs</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">filter</span> <span class="o">{</span> <span class="k">case</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="o">(</span><span class="n">name</span><span class="o">,</span> <span class="n">pos</span><span class="o">))</span> <span class="k">=&gt;</span> <span class="n">pos</span> <span class="o">==</span> <span class="s">&quot;postdoc&quot;</span> <span class="o">}.</span><span class="n">count</span>
+<span class="c1">// Count all the edges where src &gt; dst</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">filter</span><span class="o">(</span><span class="n">e</span> <span class="k">=&gt;</span> <span class="n">e</span><span class="o">.</span><span class="n">srcId</span> <span class="o">&gt;</span> <span class="n">e</span><span class="o">.</span><span class="n">dstId</span><span class="o">).</span><span class="n">count</span></code></pre></div>
+
+<blockquote>
+  <p>Note that <code>graph.vertices</code> returns an <code>VertexRDD[(String, String)]</code> which extends
+<code>RDD[(VertexID, (String, String))]</code> and so we use the scala <code>case</code> expression to deconstruct the
+tuple.  On the other hand, <code>graph.edges</code> returns an <code>EdgeRDD</code> containing <code>Edge[String]</code> objects.
+We could have also used the case class type constructor as in the following:</p>
+
+</blockquote>
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">filter</span> <span class="o">{</span> <span class="k">case</span> <span class="nc">Edge</span><span class="o">(</span><span class="n">src</span><span class="o">,</span> <span class="n">dst</span><span class="o">,</span> <span class="n">prop</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">src</span> <span class="o">&gt;</span> <span class="n">dst</span> <span class="o">}.</span><span class="n">count</span></code></pre></div>
+
+<p>In addition to the vertex and edge views of the property graph, GraphX also exposes a triplet view.
+The triplet view logically joins the vertex and edge properties yielding an
+<code>RDD[EdgeTriplet[VD, ED]]</code> containing instances of the <a href="api/scala/index.html#org.apache.spark.graphx.EdgeTriplet"><code>EdgeTriplet</code></a> class. This
+<em>join</em> can be expressed in the following SQL expression:</p>
+
+<div class="highlight"><pre><code class="language-sql" data-lang="sql"><span class="k">SELECT</span> <span class="n">src</span><span class="p">.</span><span class="n">id</span><span class="p">,</span> <span class="n">dst</span><span class="p">.</span><span class="n">id</span><span class="p">,</span> <span class="n">src</span><span class="p">.</span><span class="n">attr</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">attr</span><span class="p">,</span> <span class="n">dst</span><span class="p">.</span><span class="n">attr</span>
+<span class="k">FROM</span> <span class="n">edges</span> <span class="k">AS</span> <span class="n">e</span> <span class="k">LEFT</span> <span class="k">JOIN</span> <span class="n">vertices</span> <span class="k">AS</span> <span class="n">src</span><span class="p">,</span> <span class="n">vertices</span> <span class="k">AS</span> <span class="n">dst</span>
+<span class="k">ON</span> <span class="n">e</span><span class="p">.</span><span class="n">srcId</span> <span class="o">=</span> <span class="n">src</span><span class="p">.</span><span class="n">Id</span> <span class="k">AND</span> <span class="n">e</span><span class="p">.</span><span class="n">dstId</span> <span class="o">=</span> <span class="n">dst</span><span class="p">.</span><span class="n">Id</span></code></pre></div>
+
+<p>or graphically as:</p>
+
+<p style="text-align: center;">
+  <img src="img/triplet.png" title="Edge Triplet" alt="Edge Triplet" width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.EdgeTriplet"><code>EdgeTriplet</code></a> class extends the <a href="api/scala/index.html#org.apache.spark.graphx.Edge"><code>Edge</code></a> class by adding the <code>srcAttr</code> and
+<code>dstAttr</code> members which contain the source and destination properties respectively. We can use the
+triplet view of a graph to render a collection of strings describing relationships between users.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">)</span>, <span class="kt">String</span><span class="o">]</span> <span class="c1">// Constructed from above</span>
+<span class="c1">// Use the triplets view to create an RDD of facts.</span>
+<span class="k">val</span> <span class="n">facts</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">String</span><span class="o">]</span> <span class="k">=</span>
+  <span class="n">graph</span><span class="o">.</span><span class="n">triplets</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">triplet</span> <span class="k">=&gt;</span>
+    <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span><span class="o">.</span><span class="n">_1</span> <span class="o">+</span> <span class="s">&quot; is the &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">attr</span> <span class="o">+</span> <span class="s">&quot; of &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">dstAttr</span><span class="o">.</span><span class="n">_1</span><span class="o">)</span>
+<span class="n">facts</span><span class="o">.</span><span class="n">collect</span><span class="o">.</span><span class="n">foreach</span><span class="o">(</span><span class="n">println</span><span class="o">(</span><span class="k">_</span><span class="o">))</span></code></pre></div>
+
+<h1 id="graph-operators">Graph Operators</h1>
+
+<p>Just as RDDs have basic operations like <code>map</code>, <code>filter</code>, and <code>reduceByKey</code>, property graphs also
+have a collection of basic operators that take user defined functions and produce new graphs with
+transformed properties and structure.  The core operators that have optimized implementations are
+defined in <a href="api/scala/index.html#org.apache.spark.graphx.Graph"><code>Graph</code></a> and convenient operators that are expressed as a compositions of the
+core operators are defined in <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a>.  However, thanks to Scala implicits the
+operators in <code>GraphOps</code> are automatically available as members of <code>Graph</code>.  For example, we can
+compute the in-degree of each vertex (defined in <code>GraphOps</code>) by the following:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">)</span>, <span class="kt">String</span><span class="o">]</span>
+<span class="c1">// Use the implicit GraphOps.inDegrees operator</span>
+<span class="k">val</span> <span class="n">inDegrees</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">inDegrees</span></code></pre></div>
+
+<p>The reason for differentiating between core graph operations and <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a> is to be
+able to support different graph representations in the future.  Each graph representation must
+provide implementations of the core operations and reuse many of the useful operations defined in
+<a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a>.</p>
+
+<h3 id="summary-list-of-operators">Summary List of Operators</h3>
+<p>The following is a quick summary of the functionality defined in both <a href="api/scala/index.html#org.apache.spark.graphx.Graph"><code>Graph</code></a> and
+<a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a> but presented as members of Graph for simplicity. Note that some function
+signatures have been simplified (e.g., default arguments and type constraints removed) and some more
+advanced functionality has been removed so please consult the API docs for the official list of
+operations.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="cm">/** Summary of the functionality in the property graph */</span>
+<span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="c1">// Information about the Graph ===================================================================</span>
+  <span class="k">val</span> <span class="n">numEdges</span><span class="k">:</span> <span class="kt">Long</span>
+  <span class="k">val</span> <span class="n">numVertices</span><span class="k">:</span> <span class="kt">Long</span>
+  <span class="k">val</span> <span class="n">inDegrees</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span>
+  <span class="k">val</span> <span class="n">outDegrees</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span>
+  <span class="k">val</span> <span class="n">degrees</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span>
+  <span class="c1">// Views of the graph as collections =============================================================</span>
+  <span class="k">val</span> <span class="n">vertices</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">]</span>
+  <span class="k">val</span> <span class="n">edges</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span>
+  <span class="k">val</span> <span class="n">triplets</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]]</span>
+  <span class="c1">// Functions for caching graphs ==================================================================</span>
+  <span class="k">def</span> <span class="n">persist</span><span class="o">(</span><span class="n">newLevel</span><span class="k">:</span> <span class="kt">StorageLevel</span> <span class="o">=</span> <span class="nc">StorageLevel</span><span class="o">.</span><span class="nc">MEMORY_ONLY</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">cache</span><span class="o">()</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">unpersistVertices</span><span class="o">(</span><span class="n">blocking</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="c1">// Change the partitioning heuristic  ============================================================</span>
+  <span class="k">def</span> <span class="n">partitionBy</span><span class="o">(</span><span class="n">partitionStrategy</span><span class="k">:</span> <span class="kt">PartitionStrategy</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="c1">// Transform vertex and edge attributes ==========================================================</span>
+  <span class="k">def</span> <span class="n">mapVertices</span><span class="o">[</span><span class="kt">VD2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexID</span><span class="o">,</span> <span class="kt">VD</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapEdges</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">ED2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapEdges</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">PartitionID</span><span class="o">,</span> <span class="kt">Iterator</span><span class="o">[</span><span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]])</span> <span class="k">=&gt;</span> <span class="nc">Iterator</span><span class="o">[</span><span class="kt">ED2</span><span class="o">])</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapTriplets</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">ED2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapTriplets</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">PartitionID</span><span class="o">,</span> <span class="kt">Iterator</span><span class="o">[</span><span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]])</span> <span class="k">=&gt;</span> <span class="nc">Iterator</span><span class="o">[</span><span class="kt">ED2</span><span class="o">])</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+  <span class="c1">// Modify the graph structure ====================================================================</span>
+  <span class="k">def</span> <span class="n">reverse</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">subgraph</span><span class="o">(</span>
+      <span class="n">epred</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>,<span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span> <span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="kc">true</span><span class="o">),</span>
+      <span class="n">vpred</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexID</span><span class="o">,</span> <span class="kt">VD</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span> <span class="o">((</span><span class="n">v</span><span class="o">,</span> <span class="n">d</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="kc">true</span><span class="o">))</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mask</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED2</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED2</span><span class="o">])</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">groupEdges</span><span class="o">(</span><span class="n">merge</span><span class="k">:</span> <span class="o">(</span><span class="kt">ED</span><span class="o">,</span> <span class="kt">ED</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">ED</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="c1">// Join RDDs with the graph ======================================================================</span>
+  <span class="k">def</span> <span class="n">joinVertices</span><span class="o">[</span><span class="kt">U</span><span class="o">](</span><span class="n">table</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexID</span>, <span class="kt">U</span><span class="o">)])(</span><span class="n">mapFunc</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexID</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="n">U</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">outerJoinVertices</span><span class="o">[</span><span class="kt">U</span>, <span class="kt">VD2</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexID</span>, <span class="kt">U</span><span class="o">)])</span>
+      <span class="o">(</span><span class="n">mapFunc</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexID</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">U</span><span class="o">])</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="c1">// Aggregate information about adjacent triplets =================================================</span>
+  <span class="k">def</span> <span class="n">collectNeighborIds</span><span class="o">(</span><span class="n">edgeDirection</span><span class="k">:</span> <span class="kt">EdgeDirection</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Array</span><span class="o">[</span><span class="kt">VertexID</span><span class="o">]]</span>
+  <span class="k">def</span> <span class="n">collectNeighbors</span><span class="o">(</span><span class="n">edgeDirection</span><span class="k">:</span> <span class="kt">EdgeDirection</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Array</span><span class="o">[(</span><span class="kt">VertexID</span>, <span class="kt">VD</span><span class="o">)]]</span>
+  <span class="k">def</span> <span class="n">aggregateMessages</span><span class="o">[</span><span class="kt">Msg:</span> <span class="kt">ClassTag</span><span class="o">](</span>
+      <span class="n">sendMsg</span><span class="k">:</span> <span class="kt">EdgeContext</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span>, <span class="kt">Msg</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Unit</span><span class="o">,</span>
+      <span class="n">mergeMsg</span><span class="k">:</span> <span class="o">(</span><span class="kt">Msg</span><span class="o">,</span> <span class="kt">Msg</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Msg</span><span class="o">,</span>
+      <span class="n">tripletFields</span><span class="k">:</span> <span class="kt">TripletFields</span> <span class="o">=</span> <span class="nc">TripletFields</span><span class="o">.</span><span class="nc">All</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>
+  <span class="c1">// Iterative graph-parallel computation ==========================================================</span>
+  <span class="k">def</span> <span class="n">pregel</span><span class="o">[</span><span class="kt">A</span><span class="o">](</span><span class="n">initialMsg</span><span class="k">:</span> <span class="kt">A</span><span class="o">,</span> <span class="n">maxIterations</span><span class="k">:</span> <span class="kt">Int</span><span class="o">,</span> <span class="n">activeDirection</span><span class="k">:</span> <span class="kt">EdgeDirection</span><span class="o">)(</span>
+      <span class="n">vprog</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexID</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="n">A</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD</span><span class="o">,</span>
+      <span class="n">sendMsg</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Iterator</span><span class="o">[(</span><span class="kt">VertexID</span>,<span class="kt">A</span><span class="o">)],</span>
+      <span class="n">mergeMsg</span><span class="k">:</span> <span class="o">(</span><span class="kt">A</span><span class="o">,</span> <span class="kt">A</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">A</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="c1">// Basic graph algorithms ========================================================================</span>
+  <span class="k">def</span> <span class="n">pageRank</span><span class="o">(</span><span class="n">tol</span><span class="k">:</span> <span class="kt">Double</span><span class="o">,</span> <span class="n">resetProb</span><span class="k">:</span> <span class="kt">Double</span> <span class="o">=</span> <span class="mf">0.15</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Double</span>, <span class="kt">Double</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">connectedComponents</span><span class="o">()</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VertexID</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">triangleCount</span><span class="o">()</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">stronglyConnectedComponents</span><span class="o">(</span><span class="n">numIter</span><span class="k">:</span> <span class="kt">Int</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VertexID</span>, <span class="kt">ED</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<h2 id="property-operators">Property Operators</h2>
+
+<p>Like the RDD <code>map</code> operator, the property graph contains the following:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">mapVertices</span><span class="o">[</span><span class="kt">VD2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapEdges</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">ED2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapTriplets</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">ED2</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED2</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>Each of these operators yields a new graph with the vertex or edge properties modified by the user
+defined <code>map</code> function.</p>
+
+<blockquote>
+  <p>Note that in each case the graph structure is unaffected. This is a key feature of these operators
+which allows the resulting graph to reuse the structural indices of the original graph. The
+following snippets are logically equivalent, but the first one does not preserve the structural
+indices and would not benefit from the GraphX system optimizations:</p>
+
+</blockquote>
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">newVertices</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="k">case</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">mapUdf</span><span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">))</span> <span class="o">}</span>
+<span class="k">val</span> <span class="n">newGraph</span> <span class="k">=</span> <span class="nc">Graph</span><span class="o">(</span><span class="n">newVertices</span><span class="o">,</span> <span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="o">)</span></code></pre></div>
+
+<blockquote>
+  <p>Instead, use <a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]"><code>mapVertices</code></a> to preserve the indices:</p>
+
+</blockquote>
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">newGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">mapVertices</span><span class="o">((</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">mapUdf</span><span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">))</span></code></pre></div>
+
+<p>These operators are often used to initialize the graph for a particular computation or project away
+unnecessary properties.  For example, given a graph with the out degrees as the vertex properties
+(we describe how to construct such a graph later), we initialize it for PageRank:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Given a graph where the vertex property is the out degree</span>
+<span class="k">val</span> <span class="n">inputGraph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">String</span><span class="o">]</span> <span class="k">=</span>
+  <span class="n">graph</span><span class="o">.</span><span class="n">outerJoinVertices</span><span class="o">(</span><span class="n">graph</span><span class="o">.</span><span class="n">outDegrees</span><span class="o">)((</span><span class="n">vid</span><span class="o">,</span> <span class="k">_</span><span class="o">,</span> <span class="n">degOpt</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">degOpt</span><span class="o">.</span><span class="n">getOrElse</span><span class="o">(</span><span class="mi">0</span><span class="o">))</span>
+<span class="c1">// Construct a graph where each edge contains the weight</span>
+<span class="c1">// and each vertex is the initial PageRank</span>
+<span class="k">val</span> <span class="n">outputGraph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Double</span>, <span class="kt">Double</span><span class="o">]</span> <span class="k">=</span>
+  <span class="n">inputGraph</span><span class="o">.</span><span class="n">mapTriplets</span><span class="o">(</span><span class="n">triplet</span> <span class="k">=&gt;</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span><span class="o">).</span><span class="n">mapVertices</span><span class="o">((</span><span class="n">id</span><span class="o">,</span> <span class="k">_</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="mf">1.0</span><span class="o">)</span></code></pre></div>
+
+<p><a name="structural_operators"></a></p>
+
+<h2 id="structural-operators">Structural Operators</h2>
+
+<p>Currently GraphX supports only a simple set of commonly used structural operators and we expect to
+add more in the future.  The following is a list of the basic structural operators.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">reverse</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">subgraph</span><span class="o">(</span><span class="n">epred</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>,<span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">,</span>
+               <span class="n">vpred</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mask</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED2</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED2</span><span class="o">])</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">groupEdges</span><span class="o">(</span><span class="n">merge</span><span class="k">:</span> <span class="o">(</span><span class="kt">ED</span><span class="o">,</span> <span class="kt">ED</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">ED</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>,<span class="kt">ED</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph@reverse:Graph[VD,ED]"><code>reverse</code></a> operator returns a new graph with all the edge directions reversed.
+This can be useful when, for example, trying to compute the inverse PageRank.  Because the reverse
+operation does not modify vertex or edge properties or change the number of edges, it can be
+implemented efficiently without data movement or duplication.</p>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexId,VD)⇒Boolean):Graph[VD,ED]"><code>subgraph</code></a> operator takes vertex and edge predicates and returns the graph
+containing only the vertices that satisfy the vertex predicate (evaluate to true) and edges that
+satisfy the edge predicate <em>and connect vertices that satisfy the vertex predicate</em>.  The <code>subgraph</code>
+operator can be used in number of situations to restrict the graph to the vertices and edges of
+interest or eliminate broken links. For example in the following code we remove broken links:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Create an RDD for the vertices</span>
+<span class="k">val</span> <span class="n">users</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="o">(</span><span class="kt">String</span>, <span class="kt">String</span><span class="o">))]</span> <span class="k">=</span>
+  <span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="nc">Array</span><span class="o">((</span><span class="mi">3L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;rxin&quot;</span><span class="o">,</span> <span class="s">&quot;student&quot;</span><span class="o">)),</span> <span class="o">(</span><span class="mi">7L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;jgonzal&quot;</span><span class="o">,</span> <span class="s">&quot;postdoc&quot;</span><span class="o">)),</span>
+                       <span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;franklin&quot;</span><span class="o">,</span> <span class="s">&quot;prof&quot;</span><span class="o">)),</span> <span class="o">(</span><span class="mi">2L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;istoica&quot;</span><span class="o">,</span> <span class="s">&quot;prof&quot;</span><span class="o">)),</span>
+                       <span class="o">(</span><span class="mi">4L</span><span class="o">,</span> <span class="o">(</span><span class="s">&quot;peter&quot;</span><span class="o">,</span> <span class="s">&quot;student&quot;</span><span class="o">))))</span>
+<span class="c1">// Create an RDD for edges</span>
+<span class="k">val</span> <span class="n">relationships</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Edge</span><span class="o">[</span><span class="kt">String</span><span class="o">]]</span> <span class="k">=</span>
+  <span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="nc">Edge</span><span class="o">(</span><span class="mi">3L</span><span class="o">,</span> <span class="mi">7L</span><span class="o">,</span> <span class="s">&quot;collab&quot;</span><span class="o">),</span>    <span class="nc">Edge</span><span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="mi">3L</span><span class="o">,</span> <span class="s">&quot;advisor&quot;</span><span class="o">),</span>
+                       <span class="nc">Edge</span><span class="o">(</span><span class="mi">2L</span><span class="o">,</span> <span class="mi">5L</span><span class="o">,</span> <span class="s">&quot;colleague&quot;</span><span class="o">),</span> <span class="nc">Edge</span><span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="mi">7L</span><span class="o">,</span> <span class="s">&quot;pi&quot;</span><span class="o">),</span>
+                       <span class="nc">Edge</span><span class="o">(</span><span class="mi">4L</span><span class="o">,</span> <span class="mi">0L</span><span class="o">,</span> <span class="s">&quot;student&quot;</span><span class="o">),</span>   <span class="nc">Edge</span><span class="o">(</span><span class="mi">5L</span><span class="o">,</span> <span class="mi">0L</span><span class="o">,</span> <span class="s">&quot;colleague&quot;</span><span class="o">)))</span>
+<span class="c1">// Define a default user in case there are relationship with missing user</span>
+<span class="k">val</span> <span class="n">defaultUser</span> <span class="k">=</span> <span class="o">(</span><span class="s">&quot;John Doe&quot;</span><span class="o">,</span> <span class="s">&quot;Missing&quot;</span><span class="o">)</span>
+<span class="c1">// Build the initial Graph</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="nc">Graph</span><span class="o">(</span><span class="n">users</span><span class="o">,</span> <span class="n">relationships</span><span class="o">,</span> <span class="n">defaultUser</span><span class="o">)</span>
+<span class="c1">// Notice that there is a user 0 (for which we have no information) connected to users</span>
+<span class="c1">// 4 (peter) and 5 (franklin).</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">triplets</span><span class="o">.</span><span class="n">map</span><span class="o">(</span>
+    <span class="n">triplet</span> <span class="k">=&gt;</span> <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span><span class="o">.</span><span class="n">_1</span> <span class="o">+</span> <span class="s">&quot; is the &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">attr</span> <span class="o">+</span> <span class="s">&quot; of &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">dstAttr</span><span class="o">.</span><span class="n">_1</span>
+  <span class="o">).</span><span class="n">collect</span><span class="o">.</span><span class="n">foreach</span><span class="o">(</span><span class="n">println</span><span class="o">(</span><span class="k">_</span><span class="o">))</span>
+<span class="c1">// Remove missing vertices as well as the edges to connected to them</span>
+<span class="k">val</span> <span class="n">validGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">subgraph</span><span class="o">(</span><span class="n">vpred</span> <span class="k">=</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">attr</span><span class="o">.</span><span class="n">_2</span> <span class="o">!=</span> <span class="s">&quot;Missing&quot;</span><span class="o">)</span>
+<span class="c1">// The valid subgraph will disconnect users 4 and 5 by removing user 0</span>
+<span class="n">validGraph</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">collect</span><span class="o">.</span><span class="n">foreach</span><span class="o">(</span><span class="n">println</span><span class="o">(</span><span class="k">_</span><span class="o">))</span>
+<span class="n">validGraph</span><span class="o">.</span><span class="n">triplets</span><span class="o">.</span><span class="n">map</span><span class="o">(</span>
+    <span class="n">triplet</span> <span class="k">=&gt;</span> <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span><span class="o">.</span><span class="n">_1</span> <span class="o">+</span> <span class="s">&quot; is the &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">attr</span> <span class="o">+</span> <span class="s">&quot; of &quot;</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">dstAttr</span><span class="o">.</span><span class="n">_1</span>
+  <span class="o">).</span><span class="n">collect</span><span class="o">.</span><span class="n">foreach</span><span class="o">(</span><span class="n">println</span><span class="o">(</span><span class="k">_</span><span class="o">))</span></code></pre></div>
+
+<blockquote>
+  <p>Note in the above example only the vertex predicate is provided.  The <code>subgraph</code> operator defaults
+to <code>true</code> if the vertex or edge predicates are not provided.</p>
+</blockquote>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph@mask[VD2,ED2](Graph[VD2,ED2])(ClassTag[VD2],ClassTag[ED2]):Graph[VD,ED]"><code>mask</code></a> operator constructs a subgraph by returning a graph that contains the
+vertices and edges that are also found in the input graph.  This can be used in conjunction with the
+<code>subgraph</code> operator to restrict a graph based on the properties in another related graph.  For
+example, we might run connected components using the graph with missing vertices and then restrict
+the answer to the valid subgraph.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Run Connected Components</span>
+<span class="k">val</span> <span class="n">ccGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">connectedComponents</span><span class="o">()</span> <span class="c1">// No longer contains missing field</span>
+<span class="c1">// Remove missing vertices as well as the edges to connected to them</span>
+<span class="k">val</span> <span class="n">validGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">subgraph</span><span class="o">(</span><span class="n">vpred</span> <span class="k">=</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">attr</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">attr</span><span class="o">.</span><span class="n">_2</span> <span class="o">!=</span> <span class="s">&quot;Missing&quot;</span><span class="o">)</span>
+<span class="c1">// Restrict the answer to the valid subgraph</span>
+<span class="k">val</span> <span class="n">validCCGraph</span> <span class="k">=</span> <span class="n">ccGraph</span><span class="o">.</span><span class="n">mask</span><span class="o">(</span><span class="n">validGraph</span><span class="o">)</span></code></pre></div>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph@groupEdges((ED,ED)⇒ED):Graph[VD,ED]"><code>groupEdges</code></a> operator merges parallel edges (i.e., duplicate edges between
+pairs of vertices) in the multigraph.  In many numerical applications, parallel edges can be <em>added</em>
+(their weights combined) into a single edge thereby reducing the size of the graph.</p>
+
+<p><a name="join_operators"></a></p>
+
+<h2 id="join-operators">Join Operators</h2>
+
+<p>In many cases it is necessary to join data from external collections (RDDs) with graphs.  For
+example, we might have extra user properties that we want to merge with an existing graph or we
+might want to pull vertex properties from one graph into another.  These tasks can be accomplished
+using the <em>join</em> operators. Below we list the key join operators:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">joinVertices</span><span class="o">[</span><span class="kt">U</span><span class="o">](</span><span class="n">table</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">U</span><span class="o">)])(</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="n">U</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">outerJoinVertices</span><span class="o">[</span><span class="kt">U</span>, <span class="kt">VD2</span><span class="o">](</span><span class="n">table</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">U</span><span class="o">)])(</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">U</span><span class="o">])</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">ED</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexId,U)])((VertexId,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]"><code>joinVertices</code></a> operator joins the vertices with the input RDD and
+returns a new graph with the vertex properties obtained by applying the user defined <code>map</code> function
+to the result of the joined vertices.  Vertices without a matching value in the RDD retain their
+original value.</p>
+
+<blockquote>
+  <p>Note that if the RDD contains more than one value for a given vertex only one will be used.  It
+is therefore recommended that the input RDD be made unique using the following which will
+also <em>pre-index</em> the resulting values to substantially accelerate the subsequent join.</p>
+
+</blockquote>
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">nonUniqueCosts</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexID</span>, <span class="kt">Double</span><span class="o">)]</span>
+<span class="k">val</span> <span class="n">uniqueCosts</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Double</span><span class="o">]</span> <span class="k">=</span>
+  <span class="n">graph</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">aggregateUsingIndex</span><span class="o">(</span><span class="n">nonUnique</span><span class="o">,</span> <span class="o">(</span><span class="n">a</span><span class="o">,</span><span class="n">b</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">joinedGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">joinVertices</span><span class="o">(</span><span class="n">uniqueCosts</span><span class="o">)(</span>
+  <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">oldCost</span><span class="o">,</span> <span class="n">extraCost</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">oldCost</span> <span class="o">+</span> <span class="n">extraCost</span><span class="o">)</span></code></pre></div>
+
+<p>The more general <a href="api/scala/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]"><code>outerJoinVertices</code></a> behaves similarly to <code>joinVertices</code>
+except that the user defined <code>map</code> function is applied to all vertices and can change the vertex
+property type.  Because not all vertices may have a matching value in the input RDD the <code>map</code>
+function takes an <code>Option</code> type.  For example, we can setup a graph for PageRank by initializing
+vertex properties with their <code>outDegree</code>.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">outDegrees</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">outDegrees</span>
+<span class="k">val</span> <span class="n">degreeGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">outerJoinVertices</span><span class="o">(</span><span class="n">outDegrees</span><span class="o">)</span> <span class="o">{</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">oldAttr</span><span class="o">,</span> <span class="n">outDegOpt</span><span class="o">)</span> <span class="k">=&gt;</span>
+  <span class="n">outDegOpt</span> <span class="k">match</span> <span class="o">{</span>
+    <span class="k">case</span> <span class="nc">Some</span><span class="o">(</span><span class="n">outDeg</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">outDeg</span>
+    <span class="k">case</span> <span class="nc">None</span> <span class="k">=&gt;</span> <span class="mi">0</span> <span class="c1">// No outDegree means zero outDegree</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre></div>
+
+<blockquote>
+  <p>You may have noticed the multiple parameter lists (e.g., <code>f(a)(b)</code>) curried function pattern used
+in the above examples.  While we could have equally written <code>f(a)(b)</code> as <code>f(a,b)</code> this would mean
+that type inference on <code>b</code> would not depend on <code>a</code>.  As a consequence, the user would need to
+provide type annotation for the user defined function:</p>
+
+</blockquote>
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">joinedGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">joinVertices</span><span class="o">(</span><span class="n">uniqueCosts</span><span class="o">,</span>
+  <span class="o">(</span><span class="n">id</span><span class="k">:</span> <span class="kt">VertexID</span><span class="o">,</span> <span class="n">oldCost</span><span class="k">:</span> <span class="kt">Double</span><span class="o">,</span> <span class="n">extraCost</span><span class="k">:</span> <span class="kt">Double</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">oldCost</span> <span class="o">+</span> <span class="n">extraCost</span><span class="o">)</span></code></pre></div>
+
+<blockquote>
+
+</blockquote>
+
+<p><a name="neighborhood-aggregation"></a></p>
+
+<h2 id="neighborhood-aggregation">Neighborhood Aggregation</h2>
+
+<p>A key step in many graph analytics tasks is aggregating information about the neighborhood of each
+vertex.
+For example, we might want to know the number of followers each user has or the average age of the
+the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
+connected components) repeatedly aggregate properties of neighboring vertices (e.g., current
+PageRank Value, shortest path to the source, and smallest reachable vertex id).</p>
+
+<blockquote>
+  <p>To improve performance the primary aggregation operator changed from
+<code>graph.mapReduceTriplets</code> to the new <code>graph.AggregateMessages</code>.  While the changes in the API are
+relatively small, we provide a transition guide below.</p>
+</blockquote>
+
+<p><a name="aggregateMessages"></a></p>
+
+<h3 id="aggregate-messages-aggregatemessages">Aggregate Messages (aggregateMessages)</h3>
+
+<p>The core aggregation operation in GraphX is <a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a>.
+This operator applies a user defined <code>sendMsg</code> function to each <i>edge triplet</i> in the graph
+and then uses the <code>mergeMsg</code> function to aggregate those messages at their destination vertex.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">aggregateMessages</span><span class="o">[</span><span class="kt">Msg:</span> <span class="kt">ClassTag</span><span class="o">](</span>
+      <span class="n">sendMsg</span><span class="k">:</span> <span class="kt">EdgeContext</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span>, <span class="kt">Msg</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Unit</span><span class="o">,</span>
+      <span class="n">mergeMsg</span><span class="k">:</span> <span class="o">(</span><span class="kt">Msg</span><span class="o">,</span> <span class="kt">Msg</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Msg</span><span class="o">,</span>
+      <span class="n">tripletFields</span><span class="k">:</span> <span class="kt">TripletFields</span> <span class="o">=</span> <span class="nc">TripletFields</span><span class="o">.</span><span class="nc">All</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Msg</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>The user defined <code>sendMsg</code> function takes an <a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext"><code>EdgeContext</code></a>, which exposes the
+source and destination attributes along with the edge attribute and functions
+(<a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext@sendToSrc(msg:A):Unit"><code>sendToSrc</code></a>, and <a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext@sendToDst(msg:A):Unit"><code>sendToDst</code></a>) to send
+messages to the source and destination attributes.  Think of <code>sendMsg</code> as the <i>map</i>
+function in map-reduce.
+The user defined <code>mergeMsg</code> function takes two messages destined to the same vertex and
+yields a single message.  Think of <code>mergeMsg</code> as the <i>reduce</i> function in map-reduce.
+The  <a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a> operator returns a <code>VertexRDD[Msg]</code>
+containing the aggregate message (of type <code>Msg</code>) destined to each vertex.  Vertices that did not
+receive a message are not included in the returned <code>VertexRDD</code>.</p>
+
+<!--
+> An [`EdgeContext`][EdgeContext] is provided in place of a [`EdgeTriplet`][EdgeTriplet] to
+expose the additional ([`sendToSrc`][EdgeContext.sendToSrc],
+and [`sendToDst`][EdgeContext.sendToDst]) which GraphX uses to optimize message routing.
+ -->
+
+<p>In addition, <a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a> takes an optional
+<code>tripletsFields</code> which indicates what data is accessed in the <a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext"><code>EdgeContext</code></a>
+(i.e., the source vertex attribute but not the destination vertex attribute).
+The possible options for the <code>tripletsFields</code> are defined in <a href="api/java/org/apache/spark/graphx/TripletFields.html"><code>TripletFields</code></a> and
+the default value is <a href="api/java/org/apache/spark/graphx/TripletFields.html#All"><code>TripletFields.All</code></a> which indicates that the user
+defined <code>sendMsg</code> function may access any of the fields in the <a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext"><code>EdgeContext</code></a>.
+The <code>tripletFields</code> argument can be used to notify GraphX that only part of the
+<a href="api/scala/index.html#org.apache.spark.graphx.EdgeContext"><code>EdgeContext</code></a> will be needed allowing GraphX to select an optimized join strategy.
+For example if we are computing the average age of the followers of each user we would only require
+the source field and so we would use <a href="api/java/org/apache/spark/graphx/TripletFields.html#Src"><code>TripletFields.Src</code></a> to indicate that we
+only require the source field</p>
+
+<blockquote>
+  <p>In earlier versions of GraphX we used byte code inspection to infer the
+<a href="api/java/org/apache/spark/graphx/TripletFields.html"><code>TripletFields</code></a> however we have found that bytecode inspection to be
+slightly unreliable and instead opted for more explicit user control.</p>
+</blockquote>
+
+<p>In the following example we use the <a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a> operator to
+compute the average age of the more senior followers of each user.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Import random graph generation library</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.graphx.util.GraphGenerators</span>
+<span class="c1">// Create a graph with &quot;age&quot; as the vertex property.  Here we use a random graph for simplicity.</span>
+<span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Double</span>, <span class="kt">Int</span><span class="o">]</span> <span class="k">=</span>
+  <span class="nc">GraphGenerators</span><span class="o">.</span><span class="n">logNormalGraph</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="n">numVertices</span> <span class="k">=</span> <span class="mi">100</span><span class="o">).</span><span class="n">mapVertices</span><span class="o">(</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="k">_</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">id</span><span class="o">.</span><span class="n">toDouble</span> <span class="o">)</span>
+<span class="c1">// Compute the number of older followers and their total age</span>
+<span class="k">val</span> <span class="n">olderFollowers</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[(</span><span class="kt">Int</span>, <span class="kt">Double</span><span class="o">)]</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">aggregateMessages</span><span class="o">[(</span><span class="kt">Int</span>, <span class="kt">Double</span><span class="o">)](</span>
+  <span class="n">triplet</span> <span class="k">=&gt;</span> <span class="o">{</span> <span class="c1">// Map Function</span>
+    <span class="k">if</span> <span class="o">(</span><span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span> <span class="o">&gt;</span> <span class="n">triplet</span><span class="o">.</span><span class="n">dstAttr</span><span class="o">)</span> <span class="o">{</span>
+      <span class="c1">// Send message to destination vertex containing counter and age</span>
+      <span class="n">triplet</span><span class="o">.</span><span class="n">sendToDst</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span><span class="o">)</span>
+    <span class="o">}</span>
+  <span class="o">},</span>
+  <span class="c1">// Add counter and age</span>
+  <span class="o">(</span><span class="n">a</span><span class="o">,</span> <span class="n">b</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">a</span><span class="o">.</span><span class="n">_1</span> <span class="o">+</span> <span class="n">b</span><span class="o">.</span><span class="n">_1</span><span class="o">,</span> <span class="n">a</span><span class="o">.</span><span class="n">_2</span> <span class="o">+</span> <span class="n">b</span><span class="o">.</span><span class="n">_2</span><span class="o">)</span> <span class="c1">// Reduce Function</span>
+<span class="o">)</span>
+<span class="c1">// Divide total age by number of older followers to get average age of older followers</span>
+<span class="k">val</span> <span class="n">avgAgeOfOlderFollowers</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Double</span><span class="o">]</span> <span class="k">=</span>
+  <span class="n">olderFollowers</span><span class="o">.</span><span class="n">mapValues</span><span class="o">(</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">value</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">value</span> <span class="k">match</span> <span class="o">{</span> <span class="k">case</span> <span class="o">(</span><span class="n">count</span><span class="o">,</span> <span class="n">totalAge</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">totalAge</span> <span class="o">/</span> <span class="n">count</span> <span class="o">}</span> <span class="o">)</span>
+<span class="c1">// Display the results</span>
+<span class="n">avgAgeOfOlderFollowers</span><span class="o">.</span><span class="n">collect</span><span class="o">.</span><span class="n">foreach</span><span class="o">(</span><span class="n">println</span><span class="o">(</span><span class="k">_</span><span class="o">))</span></code></pre></div>
+
+<blockquote>
+  <p>The <code>aggregateMessages</code> operation performs optimally when the messages (and the sums of
+messages) are constant sized (e.g., floats and addition instead of lists and concatenation).</p>
+</blockquote>
+
+<p><a name="mrTripletsTransition"></a></p>
+
+<h3 id="map-reduce-triplets-transition-guide-legacy">Map Reduce Triplets Transition Guide (Legacy)</h3>
+
+<p>In earlier versions of GraphX neighborhood aggregation was accomplished using the
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"><code>mapReduceTriplets</code></a> operator:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">mapReduceTriplets</span><span class="o">[</span><span class="kt">Msg</span><span class="o">](</span>
+      <span class="n">map</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Iterator</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">Msg</span><span class="o">)],</span>
+      <span class="n">reduce</span><span class="k">:</span> <span class="o">(</span><span class="kt">Msg</span><span class="o">,</span> <span class="kt">Msg</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Msg</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Msg</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>The <a href="api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]"><code>mapReduceTriplets</code></a> operator takes a user defined map function which
+is applied to each triplet and can yield <em>messages</em> which are aggregated using the user defined
+<code>reduce</code> function.
+However, we found the user of the returned iterator to be expensive and it inhibited our ability to
+apply additional optimizations (e.g., local vertex renumbering).
+In <a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a> we introduced the EdgeContext which exposes the
+triplet fields and also functions to explicitly send messages to the source and destination vertex.
+Furthermore we removed bytecode inspection and instead require the user to indicate what fields
+in the triplet are actually required.</p>
+
+<p>The following code block using <code>mapReduceTriplets</code>:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Float</span><span class="o">]</span> <span class="k">=</span> <span class="o">...</span>
+<span class="k">def</span> <span class="n">msgFun</span><span class="o">(</span><span class="n">triplet</span><span class="k">:</span> <span class="kt">Triplet</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Float</span><span class="o">])</span><span class="k">:</span> <span class="kt">Iterator</span><span class="o">[(</span><span class="kt">Int</span>, <span class="kt">String</span><span class="o">)]</span> <span class="k">=</span> <span class="o">{</span>
+  <span class="nc">Iterator</span><span class="o">((</span><span class="n">triplet</span><span class="o">.</span><span class="n">dstId</span><span class="o">,</span> <span class="s">&quot;Hi&quot;</span><span class="o">))</span>
+<span class="o">}</span>
+<span class="k">def</span> <span class="n">reduceFun</span><span class="o">(</span><span class="n">a</span><span class="k">:</span> <span class="kt">String</span><span class="o">,</span> <span class="n">b</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=</span> <span class="n">a</span> <span class="o">+</span> <span class="s">&quot; &quot;</span> <span class="o">+</span> <span class="n">b</span>
+<span class="k">val</span> <span class="n">result</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">mapReduceTriplets</span><span class="o">[</span><span class="kt">String</span><span class="o">](</span><span class="n">msgFun</span><span class="o">,</span> <span class="n">reduceFun</span><span class="o">)</span></code></pre></div>
+
+<p>can be rewritten using <code>aggregateMessages</code> as:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Float</span><span class="o">]</span> <span class="k">=</span> <span class="o">...</span>
+<span class="k">def</span> <span class="n">msgFun</span><span class="o">(</span><span class="n">triplet</span><span class="k">:</span> <span class="kt">EdgeContext</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Float</span>, <span class="kt">String</span><span class="o">])</span> <span class="o">{</span>
+  <span class="n">triplet</span><span class="o">.</span><span class="n">sendToDst</span><span class="o">(</span><span class="s">&quot;Hi&quot;</span><span class="o">)</span>
+<span class="o">}</span>
+<span class="k">def</span> <span class="n">reduceFun</span><span class="o">(</span><span class="n">a</span><span class="k">:</span> <span class="kt">String</span><span class="o">,</span> <span class="n">b</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=</span> <span class="n">a</span> <span class="o">+</span> <span class="s">&quot; &quot;</span> <span class="o">+</span> <span class="n">b</span>
+<span class="k">val</span> <span class="n">result</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">aggregateMessages</span><span class="o">[</span><span class="kt">String</span><span class="o">](</span><span class="n">msgFun</span><span class="o">,</span> <span class="n">reduceFun</span><span class="o">)</span></code></pre></div>
+
+<h3 id="computing-degree-information">Computing Degree Information</h3>
+
+<p>A common aggregation task is computing the degree of each vertex: the number of edges adjacent to
+each vertex.  In the context of directed graphs it is often necessary to know the in-degree, 
+out-degree, and the total degree of each vertex.  The  <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a> class contains a
+collection of operators to compute the degrees of each vertex.  For example in the following we
+compute the max in, out, and total degrees:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Define a reduce operation to compute the highest degree vertex</span>
+<span class="k">def</span> <span class="n">max</span><span class="o">(</span><span class="n">a</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">),</span> <span class="n">b</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">))</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">)</span> <span class="k">=</span> <span class="o">{</span>
+  <span class="k">if</span> <span class="o">(</span><span class="n">a</span><span class="o">.</span><span class="n">_2</span> <span class="o">&gt;</span> <span class="n">b</span><span class="o">.</span><span class="n">_2</span><span class="o">)</span> <span class="n">a</span> <span class="k">else</span> <span class="n">b</span>
+<span class="o">}</span>
+<span class="c1">// Compute the max degrees</span>
+<span class="k">val</span> <span class="n">maxInDegree</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">)</span>  <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">inDegrees</span><span class="o">.</span><span class="n">reduce</span><span class="o">(</span><span class="n">max</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">maxOutDegree</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">)</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">outDegrees</span><span class="o">.</span><span class="n">reduce</span><span class="o">(</span><span class="n">max</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">maxDegrees</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">Int</span><span class="o">)</span>   <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">degrees</span><span class="o">.</span><span class="n">reduce</span><span class="o">(</span><span class="n">max</span><span class="o">)</span></code></pre></div>
+
+<h3 id="collecting-neighbors">Collecting Neighbors</h3>
+
+<p>In some cases it may be easier to express computation by collecting neighboring vertices and their
+attributes at each vertex. This can be easily accomplished using the
+<a href="api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]"><code>collectNeighborIds</code></a> and the
+<a href="api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]"><code>collectNeighbors</code></a> operators.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">GraphOps</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">collectNeighborIds</span><span class="o">(</span><span class="n">edgeDirection</span><span class="k">:</span> <span class="kt">EdgeDirection</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Array</span><span class="o">[</span><span class="kt">VertexId</span><span class="o">]]</span>
+  <span class="k">def</span> <span class="n">collectNeighbors</span><span class="o">(</span><span class="n">edgeDirection</span><span class="k">:</span> <span class="kt">EdgeDirection</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span> <span class="kt">Array</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VD</span><span class="o">)]</span> <span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<blockquote>
+  <p>These operators can be quite costly as they duplicate information and require
+substantial communication.  If possible try expressing the same computation using the
+<a href="api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]"><code>aggregateMessages</code></a>  operator directly.</p>
+</blockquote>
+
+<h2 id="caching-and-uncaching">Caching and Uncaching</h2>
+
+<p>In Spark, RDDs are not persisted in memory by default. To avoid recomputation, they must be explicitly cached when using them multiple times (see the <a href="programming-guide.html#rdd-persistence">Spark Programming Guide</a>). Graphs in GraphX behave the same way. <strong>When using a graph multiple times, make sure to call <a href="api/scala/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]"><code>Graph.cache()</code></a> on it first.</strong></p>
+
+<p>In iterative computations, <em>uncaching</em> may also be necessary for best performance. By default, cached RDDs and graphs will remain in memory until memory pressure forces them to be evicted in LRU order. For iterative computation, intermediate results from previous iterations will fill up the cache. Though they will eventually be evicted, the unnecessary data stored in memory will slow down garbage collection. It would be more efficient to uncache intermediate results as soon as they are no longer necessary. This involves materializing (caching and forcing) a graph or RDD every iteration, uncaching all other datasets, and only using the materialized dataset in future iterations. However, because graphs are composed of multiple RDDs, it can be difficult to unpersist them correctly. <strong>For iterative computation we recommend using the Pregel API, which correctly unpersists intermediate results.</strong></p>
+
+<p><a name="pregel"></a></p>
+
+<h1 id="pregel-api">Pregel API</h1>
+
+<p>Graphs are inherently recursive data structures as properties of vertices depend on properties of
+their neighbors which in turn depend on properties of <em>their</em> neighbors.  As a
+consequence many important graph algorithms iteratively recompute the properties of each vertex
+until a fixed-point condition is reached.  A range of graph-parallel abstractions have been proposed
+to express these iterative algorithms.  GraphX exposes a variant of the Pregel API.</p>
+
+<p>At a high level the Pregel operator in GraphX is a bulk-synchronous parallel messaging abstraction
+<em>constrained to the topology of the graph</em>.  The Pregel operator executes in a series of super steps
+in which vertices receive the <em>sum</em> of their inbound messages from the previous super step, compute
+a new value for the vertex property, and then send messages to neighboring vertices in the next
+super step.  Unlike Pregel, messages are computed in parallel as a
+function of the edge triplet and the message computation has access to both the source and
+destination vertex attributes.  Vertices that do not receive a message are skipped within a super
+step.  The Pregel operators terminates iteration and returns the final graph when there are no
+messages remaining.</p>
+
+<blockquote>
+  <p>Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to
+neighboring vertices and the message construction is done in parallel using a user defined
+messaging function.  These constraints allow additional optimization within GraphX.</p>
+</blockquote>
+
+<p>The following is the type signature of the <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]">Pregel operator</a> as well as a <em>sketch</em>
+of its implementation (note calls to graph.cache have been removed):</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">GraphOps</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">pregel</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>
+      <span class="o">(</span><span class="n">initialMsg</span><span class="k">:</span> <span class="kt">A</span><span class="o">,</span>
+       <span class="n">maxIter</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=</span> <span class="nc">Int</span><span class="o">.</span><span class="nc">MaxValue</span><span class="o">,</span>
+       <span class="n">activeDir</span><span class="k">:</span> <span class="kt">EdgeDirection</span> <span class="o">=</span> <span class="nc">EdgeDirection</span><span class="o">.</span><span class="nc">Out</span><span class="o">)</span>
+      <span class="o">(</span><span class="n">vprog</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="n">A</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD</span><span class="o">,</span>
+       <span class="n">sendMsg</span><span class="k">:</span> <span class="kt">EdgeTriplet</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Iterator</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">A</span><span class="o">)],</span>
+       <span class="n">mergeMsg</span><span class="k">:</span> <span class="o">(</span><span class="kt">A</span><span class="o">,</span> <span class="kt">A</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">A</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span> <span class="k">=</span> <span class="o">{</span>
+    <span class="c1">// Receive the initial message at each vertex</span>
+    <span class="k">var</span> <span class="n">g</span> <span class="k">=</span> <span class="n">mapVertices</span><span class="o">(</span> <span class="o">(</span><span class="n">vid</span><span class="o">,</span> <span class="n">vdata</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">vprog</span><span class="o">(</span><span class="n">vid</span><span class="o">,</span> <span class="n">vdata</span><span class="o">,</span> <span class="n">initialMsg</span><span class="o">)</span> <span class="o">).</span><span class="n">cache</span><span class="o">()</span>
+    <span class="c1">// compute the messages</span>
+    <span class="k">var</span> <span class="n">messages</span> <span class="k">=</span> <span class="n">g</span><span class="o">.</span><span class="n">mapReduceTriplets</span><span class="o">(</span><span class="n">sendMsg</span><span class="o">,</span> <span class="n">mergeMsg</span><span class="o">)</span>
+    <span class="k">var</span> <span class="n">activeMessages</span> <span class="k">=</span> <span class="n">messages</span><span class="o">.</span><span class="n">count</span><span class="o">()</span>
+    <span class="c1">// Loop until no messages remain or maxIterations is achieved</span>
+    <span class="k">var</span> <span class="n">i</span> <span class="k">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="o">(</span><span class="n">activeMessages</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">maxIterations</span><span class="o">)</span> <span class="o">{</span>
+      <span class="c1">// Receive the messages: -----------------------------------------------------------------------</span>
+      <span class="c1">// Run the vertex program on all vertices that receive messages</span>
+      <span class="k">val</span> <span class="n">newVerts</span> <span class="k">=</span> <span class="n">g</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">innerJoin</span><span class="o">(</span><span class="n">messages</span><span class="o">)(</span><span class="n">vprog</span><span class="o">).</span><span class="n">cache</span><span class="o">()</span>
+      <span class="c1">// Merge the new vertex values back into the graph</span>
+      <span class="n">g</span> <span class="k">=</span> <span class="n">g</span><span class="o">.</span><span class="n">outerJoinVertices</span><span class="o">(</span><span class="n">newVerts</span><span class="o">)</span> <span class="o">{</span> <span class="o">(</span><span class="n">vid</span><span class="o">,</span> <span class="n">old</span><span class="o">,</span> <span class="n">newOpt</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">newOpt</span><span class="o">.</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">old</span><span class="o">)</span> <span class="o">}.</span><span class="n">cache</span><span class="o">()</span>
+      <span class="c1">// Send Messages: ------------------------------------------------------------------------------</span>
+      <span class="c1">// Vertices that didn&#39;t receive a message above don&#39;t appear in newVerts and therefore don&#39;t</span>
+      <span class="c1">// get to send messages.  More precisely the map phase of mapReduceTriplets is only invoked</span>
+      <span class="c1">// on edges in the activeDir of vertices in newVerts</span>
+      <span class="n">messages</span> <span class="k">=</span> <span class="n">g</span><span class="o">.</span><span class="n">mapReduceTriplets</span><span class="o">(</span><span class="n">sendMsg</span><span class="o">,</span> <span class="n">mergeMsg</span><span class="o">,</span> <span class="nc">Some</span><span class="o">((</span><span class="n">newVerts</span><span class="o">,</span> <span class="n">activeDir</span><span class="o">))).</span><span class="n">cache</span><span class="o">()</span>
+      <span class="n">activeMessages</span> <span class="k">=</span> <span class="n">messages</span><span class="o">.</span><span class="n">count</span><span class="o">()</span>
+      <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="o">}</span>
+    <span class="n">g</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre></div>
+
+<p>Notice that Pregel takes two argument lists (i.e., <code>graph.pregel(list1)(list2)</code>).  The first
+argument list contains configuration parameters including the initial message, the maximum number of
+iterations, and the edge direction in which to send messages (by default along out edges).  The
+second argument list contains the user defined functions for receiving messages (the vertex program
+<code>vprog</code>), computing messages (<code>sendMsg</code>), and combining messages <code>mergeMsg</code>.</p>
+
+<p>We can use the Pregel operator to express computation such as single source
+shortest path in the following example.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.graphx._</span>
+<span class="c1">// Import random graph generation library</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.graphx.util.GraphGenerators</span>
+<span class="c1">// A graph with edge attributes containing distances</span>
+<span class="k">val</span> <span class="n">graph</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Double</span><span class="o">]</span> <span class="k">=</span>
+  <span class="nc">GraphGenerators</span><span class="o">.</span><span class="n">logNormalGraph</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="n">numVertices</span> <span class="k">=</span> <span class="mi">100</span><span class="o">).</span><span class="n">mapEdges</span><span class="o">(</span><span class="n">e</span> <span class="k">=&gt;</span> <span class="n">e</span><span class="o">.</span><span class="n">attr</span><span class="o">.</span><span class="n">toDouble</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">sourceId</span><span class="k">:</span> <span class="kt">VertexId</span> <span class="o">=</span> <span class="mi">42</span> <span class="c1">// The ultimate source</span>
+<span class="c1">// Initialize the graph such that all vertices except the root have distance infinity.</span>
+<span class="k">val</span> <span class="n">initialGraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">mapVertices</span><span class="o">((</span><span class="n">id</span><span class="o">,</span> <span class="k">_</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="k">if</span> <span class="o">(</span><span class="n">id</span> <span class="o">==</span> <span class="n">sourceId</span><span class="o">)</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="nc">Double</span><span class="o">.</span><span class="nc">PositiveInfinity</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">sssp</span> <span class="k">=</span> <span class="n">initialGraph</span><span class="o">.</span><span class="n">pregel</span><span class="o">(</span><span class="nc">Double</span><span class="o">.</span><span class="nc">PositiveInfinity</span><span class="o">)(</span>
+  <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="n">dist</span><span class="o">,</span> <span class="n">newDist</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">math</span><span class="o">.</span><span class="n">min</span><span class="o">(</span><span class="n">dist</span><span class="o">,</span> <span class="n">newDist</span><span class="o">),</span> <span class="c1">// Vertex Program</span>
+  <span class="n">triplet</span> <span class="k">=&gt;</span> <span class="o">{</span>  <span class="c1">// Send Message</span>
+    <span class="k">if</span> <span class="o">(</span><span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">attr</span> <span class="o">&lt;</span> <span class="n">triplet</span><span class="o">.</span><span class="n">dstAttr</span><span class="o">)</span> <span class="o">{</span>
+      <span class="nc">Iterator</span><span class="o">((</span><span class="n">triplet</span><span class="o">.</span><span class="n">dstId</span><span class="o">,</span> <span class="n">triplet</span><span class="o">.</span><span class="n">srcAttr</span> <span class="o">+</span> <span class="n">triplet</span><span class="o">.</span><span class="n">attr</span><span class="o">))</span>
+    <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+      <span class="nc">Iterator</span><span class="o">.</span><span class="n">empty</span>
+    <span class="o">}</span>
+  <span class="o">},</span>
+  <span class="o">(</span><span class="n">a</span><span class="o">,</span><span class="n">b</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">math</span><span class="o">.</span><span class="n">min</span><span class="o">(</span><span class="n">a</span><span class="o">,</span><span class="n">b</span><span class="o">)</span> <span class="c1">// Merge Message</span>
+  <span class="o">)</span>
+<span class="n">println</span><span class="o">(</span><span class="n">sssp</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">collect</span><span class="o">.</span><span class="n">mkString</span><span class="o">(</span><span class="s">&quot;\n&quot;</span><span class="o">))</span></code></pre></div>
+
+<p><a name="graph_builders"></a></p>
+
+<h1 id="graph-builders">Graph Builders</h1>
+
+<p>GraphX provides several ways of building a graph from a collection of vertices and edges in an RDD or on disk. None of the graph builders repartitions the graph’s edges by default; instead, edges are left in their default partitions (such as their original blocks in HDFS). <a href="api/scala/index.html#org.apache.spark.graphx.Graph@groupEdges((ED,ED)⇒ED):Graph[VD,ED]"><code>Graph.groupEdges</code></a> requires the graph to be repartitioned because it assumes identical edges will be colocated on the same partition, so you must call <a href="api/scala/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]"><code>Graph.partitionBy</code></a> before calling <code>groupEdges</code>.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">object</span> <span class="nc">GraphLoader</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">edgeListFile</span><span class="o">(</span>
+      <span class="n">sc</span><span class="k">:</span> <span class="kt">SparkContext</span><span class="o">,</span>
+      <span class="n">path</span><span class="k">:</span> <span class="kt">String</span><span class="o">,</span>
+      <span class="n">canonicalOrientation</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">false</span><span class="o">,</span>
+      <span class="n">minEdgePartitions</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=</span> <span class="mi">1</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">Int</span>, <span class="kt">Int</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p><a href="api/scala/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]"><code>GraphLoader.edgeListFile</code></a> provides a way to load a graph from a list of edges on disk. It parses an adjacency list of (source vertex ID, destination vertex ID) pairs of the following form, skipping comment lines that begin with <code>#</code>:</p>
+
+<pre><code># This is a comment
+2 1
+4 1
+1 2
+</code></pre>
+
+<p>It creates a <code>Graph</code> from the specified edges, automatically creating any vertices mentioned by edges. All vertex and edge attributes default to 1. The <code>canonicalOrientation</code> argument allows reorienting edges in the positive direction (<code>srcId &lt; dstId</code>), which is required by the <a href="api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$">connected components</a> algorithm. The <code>minEdgePartitions</code> argument specifies the minimum number of edge partitions to generate; there may be more edge partitions than specified if, for example, the HDFS file has more blocks.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">object</span> <span class="nc">Graph</span> <span class="o">{</span>
+  <span class="k">def</span> <span class="n">apply</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">](</span>
+      <span class="n">vertices</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VD</span><span class="o">)],</span>
+      <span class="n">edges</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]],</span>
+      <span class="n">defaultVertexAttr</span><span class="k">:</span> <span class="kt">VD</span> <span class="o">=</span> <span class="kc">null</span><span class="o">)</span>
+    <span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+
+  <span class="k">def</span> <span class="n">fromEdges</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">](</span>
+      <span class="n">edges</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[</span><span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]],</span>
+      <span class="n">defaultValue</span><span class="k">:</span> <span class="kt">VD</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">ED</span><span class="o">]</span>
+
+  <span class="k">def</span> <span class="n">fromEdgeTuples</span><span class="o">[</span><span class="kt">VD</span><span class="o">](</span>
+      <span class="n">rawEdges</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VertexId</span><span class="o">)],</span>
+      <span class="n">defaultValue</span><span class="k">:</span> <span class="kt">VD</span><span class="o">,</span>
+      <span class="n">uniqueEdges</span><span class="k">:</span> <span class="kt">Option</span><span class="o">[</span><span class="kt">PartitionStrategy</span><span class="o">]</span> <span class="k">=</span> <span class="nc">None</span><span class="o">)</span><span class="k">:</span> <span class="kt">Graph</span><span class="o">[</span><span class="kt">VD</span>, <span class="kt">Int</span><span class="o">]</span>
+
+<span class="o">}</span></code></pre></div>
+
+<p><a href="api/scala/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexId,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]"><code>Graph.apply</code></a> allows creating a graph from RDDs of vertices and edges. Duplicate vertices are picked arbitrarily and vertices found in the edge RDD but not the vertex RDD are assigned the default attribute.</p>
+
+<p><a href="api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]"><code>Graph.fromEdges</code></a> allows creating a graph from only an RDD of edges, automatically creating any vertices mentioned by edges and assigning them the default value.</p>
+
+<p><a href="api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]"><code>Graph.fromEdgeTuples</code></a> allows creating a graph from only an RDD of edge tuples, assigning the edges the value 1, and automatically creating any vertices mentioned by edges and assigning them the default value. It also supports deduplicating the edges; to deduplicate, pass <code>Some</code> of a <a href="api/scala/index.html#org.apache.spark.graphx.PartitionStrategy"><code>PartitionStrategy</code></a> as the <code>uniqueEdges</code> parameter (for example, <code>uniqueEdges = Some(PartitionStrategy.RandomVertexCut)</code>). A partition strategy is necessary to colocate identical edges on the same partition so they can be deduplicated.</p>
+
+<p><a name="vertex_and_edge_rdds"></a></p>
+
+<h1 id="vertex-and-edge-rdds">Vertex and Edge RDDs</h1>
+
+<p>GraphX exposes <code>RDD</code> views of the vertices and edges stored within the graph.  However, because
+GraphX maintains the vertices and edges in optimized data structures and these data structures
+provide additional functionality, the vertices and edges are returned as <code>VertexRDD</code> and <code>EdgeRDD</code>
+respectively.  In this section we review some of the additional useful functionality in these types.</p>
+
+<h2 id="vertexrdds">VertexRDDs</h2>
+
+<p>The <code>VertexRDD[A]</code> extends <code>RDD[(VertexID, A)]</code> and adds the additional constraint that each
+<code>VertexID</code> occurs only <em>once</em>.  Moreover, <code>VertexRDD[A]</code> represents a <em>set</em> of vertices each with an
+attribute of type <code>A</code>.  Internally, this is achieved by storing the vertex attributes in a reusable
+hash-map data-structure.  As a consequence if two <code>VertexRDD</code>s are derived from the same base
+<code>VertexRDD</code> (e.g., by <code>filter</code> or <code>mapValues</code>) they can be joined in constant time without hash
+evaluations. To leverage this indexed data structure, the <code>VertexRDD</code> exposes the following
+additional functionality:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">class</span> <span class="nc">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">]</span> <span class="nc">extends</span> <span class="nc">RDD</span><span class="o">[(</span><span class="kt">VertexID</span>, <span class="kt">VD</span><span class="o">)]</span> <span class="o">{</span>
+  <span class="c1">// Filter the vertex set but preserves the internal index</span>
+  <span class="k">def</span> <span class="n">filter</span><span class="o">(</span><span class="n">pred</span><span class="k">:</span> <span class="kt">Tuple2</span><span class="o">[</span><span class="kt">VertexId</span>, <span class="kt">VD</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">]</span>
+  <span class="c1">// Transform the values without changing the ids (preserves the internal index)</span>
+  <span class="k">def</span> <span class="n">mapValues</span><span class="o">[</span><span class="kt">VD2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="kt">VD</span> <span class="o">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD2</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">mapValues</span><span class="o">[</span><span class="kt">VD2</span><span class="o">](</span><span class="n">map</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD2</span><span class="o">]</span>
+  <span class="c1">// Show only vertices unique to this set based on their VertexId&#39;s</span>
+  <span class="k">def</span> <span class="n">minus</span><span class="o">(</span><span class="n">other</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VD</span><span class="o">)])</span>
+  <span class="c1">// Remove vertices from this set that appear in the other set</span>
+  <span class="k">def</span> <span class="n">diff</span><span class="o">(</span><span class="n">other</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">])</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD</span><span class="o">]</span>
+  <span class="c1">// Join operators that take advantage of the internal indexing to accelerate joins (substantially)</span>
+  <span class="k">def</span> <span class="n">leftJoin</span><span class="o">[</span><span class="kt">VD2</span>, <span class="kt">VD3</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VD2</span><span class="o">)])(</span><span class="n">f</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">VD2</span><span class="o">])</span> <span class="k">=&gt;</span> <span class="nc">VD3</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD3</span><span class="o">]</span>
+  <span class="k">def</span> <span class="n">innerJoin</span><span class="o">[</span><span class="kt">U</span>, <span class="kt">VD2</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">U</span><span class="o">)])(</span><span class="n">f</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VD</span><span class="o">,</span> <span class="n">U</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD2</span><span class="o">]</span>
+  <span class="c1">// Use the index on this RDD to accelerate a `reduceByKey` operation on the input RDD.</span>
+  <span class="k">def</span> <span class="n">aggregateUsingIndex</span><span class="o">[</span><span class="kt">VD2</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">VD2</span><span class="o">)],</span> <span class="n">reduceFunc</span><span class="k">:</span> <span class="o">(</span><span class="kt">VD2</span><span class="o">,</span> <span class="kt">VD2</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">VD2</span><span class="o">)</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">VD2</span><span class="o">]</span>
+<span class="o">}</span></code></pre></div>
+
+<p>Notice, for example,  how the <code>filter</code> operator returns an <code>VertexRDD</code>.  Filter is actually
+implemented using a <code>BitSet</code> thereby reusing the index and preserving the ability to do fast joins
+with other <code>VertexRDD</code>s.  Likewise, the <code>mapValues</code> operators do not allow the <code>map</code> function to
+change the <code>VertexID</code> thereby enabling the same <code>HashMap</code> data structures to be reused.  Both the
+<code>leftJoin</code> and <code>innerJoin</code> are able to identify when joining two <code>VertexRDD</code>s derived from the same
+<code>HashMap</code> and implement the join by linear scan rather than costly point lookups.</p>
+
+<p>The <code>aggregateUsingIndex</code> operator is useful for efficient construction of a new <code>VertexRDD</code> from an
+<code>RDD[(VertexID, A)]</code>.  Conceptually, if I have constructed a <code>VertexRDD[B]</code> over a set of vertices,
+<em>which is a super-set</em> of the vertices in some <code>RDD[(VertexID, A)]</code> then I can reuse the index to
+both aggregate and then subsequently index the <code>RDD[(VertexID, A)]</code>.  For example:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">setA</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="nc">VertexRDD</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="mi">0L</span> <span class="n">until</span> <span class="mi">100L</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="n">id</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="mi">1</span><span class="o">)))</span>
+<span class="k">val</span> <span class="n">rddB</span><span class="k">:</span> <span class="kt">RDD</span><span class="o">[(</span><span class="kt">VertexId</span>, <span class="kt">Double</span><span class="o">)]</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">parallelize</span><span class="o">(</span><span class="mi">0L</span> <span class="n">until</span> <span class="mi">100L</span><span class="o">).</span><span class="n">flatMap</span><span class="o">(</span><span class="n">id</span> <span class="k">=&gt;</span> <span class="nc">List</span><span class="o">((</span><span class="n">id</span><span class="o">,</span> <span class="mf">1.0</span><span class="o">),</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="mf">2.0</span><span class="o">)))</span>
+<span class="c1">// There should be 200 entries in rddB</span>
+<span class="n">rddB</span><span class="o">.</span><span class="n">count</span>
+<span class="k">val</span> <span class="n">setB</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Double</span><span class="o">]</span> <span class="k">=</span> <span class="n">setA</span><span class="o">.</span><span class="n">aggregateUsingIndex</span><span class="o">(</span><span class="n">rddB</span><span class="o">,</span> <span class="k">_</span> <span class="o">+</span> <span class="k">_</span><span class="o">)</span>
+<span class="c1">// There should be 100 entries in setB</span>
+<span class="n">setB</span><span class="o">.</span><span class="n">count</span>
+<span class="c1">// Joining A and B should now be fast!</span>
+<span class="k">val</span> <span class="n">setC</span><span class="k">:</span> <span class="kt">VertexRDD</span><span class="o">[</span><span class="kt">Double</span><span class="o">]</span> <span class="k">=</span> <span class="n">setA</span><span class="o">.</span><span class="n">innerJoin</span><span class="o">(</span><span class="n">setB</span><span class="o">)((</span><span class="n">id</span><span class="o">,</span> <span class="n">a</span><span class="o">,</span> <span class="n">b</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span><span class="o">)</span></code></pre></div>
+
+<h2 id="edgerdds">EdgeRDDs</h2>
+
+<p>The <code>EdgeRDD[ED]</code>, which extends <code>RDD[Edge[ED]]</code> organizes the edges in blocks partitioned using one
+of the various partitioning strategies defined in <a href="api/scala/index.html#org.apache.spark.graphx.PartitionStrategy"><code>PartitionStrategy</code></a>.  Within
+each partition, edge attributes and adjacency structure, are stored separately enabling maximum
+reuse when changing attribute values.</p>
+
+<p>The three additional functions exposed by the <code>EdgeRDD</code> are:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Transform the edge attributes while preserving the structure</span>
+<span class="k">def</span> <span class="n">mapValues</span><span class="o">[</span><span class="kt">ED2</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">Edge</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span> <span class="k">=&gt;</span> <span class="nc">ED2</span><span class="o">)</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED2</span><span class="o">]</span>
+<span class="c1">// Revere the edges reusing both attributes and structure</span>
+<span class="k">def</span> <span class="n">reverse</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED</span><span class="o">]</span>
+<span class="c1">// Join two `EdgeRDD`s partitioned using the same partitioning strategy.</span>
+<span class="k">def</span> <span class="n">innerJoin</span><span class="o">[</span><span class="kt">ED2</span>, <span class="kt">ED3</span><span class="o">](</span><span class="n">other</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED2</span><span class="o">])(</span><span class="n">f</span><span class="k">:</span> <span class="o">(</span><span class="kt">VertexId</span><span class="o">,</span> <span class="kt">VertexId</span><span class="o">,</span> <span class="nc">ED</span><span class="o">,</span> <span class="nc">ED2</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">ED3</span><span class="o">)</span><span class="k">:</span> <span class="kt">EdgeRDD</span><span class="o">[</span><span class="kt">ED3</span><span class="o">]</span></code></pre></div>
+
+<p>In most applications we have found that operations on the <code>EdgeRDD</code> are accomplished through the
+graph operators or rely on operations defined in the base <code>RDD</code> class.</p>
+
+<h1 id="optimized-representation">Optimized Representation</h1>
+
+<p>While a detailed description of the optimizations used in the GraphX representation of distributed
+graphs is beyond the scope of this guide, some high-level understanding may aid in the design of
+scalable algorithms as well as optimal use of the API.  GraphX adopts a vertex-cut approach to
+distributed graph partitioning:</p>
+
+<p style="text-align: center;">
+  <img src="img/edge_cut_vs_vertex_cut.png" title="Edge Cut vs. Vertex Cut" alt="Edge Cut vs. Vertex Cut" width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<p>Rather than splitting graphs along edges, GraphX partitions the graph along vertices which can
+reduce both the communication and storage overhead.  Logically, this corresponds to assigning edges
+to machines and allowing vertices to span multiple machines.  The exact method of assigning edges
+depends on the <a href="api/scala/index.html#org.apache.spark.graphx.PartitionStrategy"><code>PartitionStrategy</code></a> and there are several tradeoffs to the
+various heuristics.  Users can choose between different strategies by repartitioning the graph with
+the <a href="api/scala/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]"><code>Graph.partitionBy</code></a> operator.  The default partitioning strategy is to use
+the initial partitioning of the edges as provided on graph construction.  However, users can easily
+switch to 2D-partitioning or other heuristics included in GraphX.</p>
+
+<p style="text-align: center;">
+  <img src="img/vertex_routing_edge_tables.png" title="RDD Graph Representation" alt="RDD Graph Representation" width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+<p>Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
+edges than vertices, we move vertex attributes to the edges.  Because not all partitions will
+contain edges adjacent to all vertices we internally maintain a routing table which identifies where
+to broadcast vertices when implementing the join required for operations like <code>triplets</code> and
+<code>aggregateMessages</code>.</p>
+
+<p><a name="graph_algorithms"></a></p>
+
+<h1 id="graph-algorithms">Graph Algorithms</h1>
+
+<p>GraphX includes a set of graph algorithms to simplify analytics tasks. The algorithms are contained in the <code>org.apache.spark.graphx.lib</code> package and can be accessed directly as methods on <code>Graph</code> via <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a>. This section describes the algorithms and how they are used.</p>
+
+<p><a name="pagerank"></a></p>
+
+<h2 id="pagerank">PageRank</h2>
+
+<p>PageRank measures the importance of each vertex in a graph, assuming an edge from <em>u</em> to <em>v</em> represents an endorsement of <em>v</em>’s importance by <em>u</em>. For example, if a Twitter user is followed by many others, the user will be ranked highly.</p>
+
+<p>GraphX comes with static and dynamic implementations of PageRank as methods on the <a href="api/scala/index.html#org.apache.spark.graphx.lib.PageRank$"><code>PageRank</code> object</a>. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). <a href="api/scala/index.html#org.apache.spark.graphx.GraphOps"><code>GraphOps</code></a> allows calling these algorithms directly as methods on <code>Graph</code>.</p>
+
+<p>GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in <code>graphx/data/users.txt</code>, and a set of relationships between users is given in <code>graphx/data/followers.txt</code>. We compute the PageRank of each user as follows:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Load the edges as a graph</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="nc">GraphLoader</span><span class="o">.</span><span class="n">edgeListFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;graphx/data/followers.txt&quot;</span><span class="o">)</span>
+<span class="c1">// Run PageRank</span>
+<span class="k">val</span> <span class="n">ranks</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">pageRank</span><span class="o">(</span><span class="mf">0.0001</span><span class="o">).</span><span class="n">vertices</span>
+<span class="c1">// Join the ranks with the usernames</span>
+<span class="k">val</span> <span class="n">users</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;graphx/data/users.txt&quot;</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">fields</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot;,&quot;</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">fields</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">toLong</span><span class="o">,</span> <span class="n">fields</span><span class="o">(</span><span class="mi">1</span><span class="o">))</span>
+<span class="o">}</span>
+<span class="k">val</span> <span class="n">ranksByUsername</span> <span class="k">=</span> <span class="n">users</span><span class="o">.</span><span class="n">join</span><span class="o">(</span><span class="n">ranks</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">rank</span><span class="o">))</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">rank</span><span class="o">)</span>
+<span class="o">}</span>
+<span class="c1">// Print the result</span>
+<span class="n">println</span><span class="o">(</span><span class="n">ranksByUsername</span><span class="o">.</span><span class="n">collect</span><span class="o">().</span><span class="n">mkString</span><span class="o">(</span><span class="s">&quot;\n&quot;</span><span class="o">))</span></code></pre></div>
+
+<h2 id="connected-components">Connected Components</h2>
+
+<p>The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. GraphX contains an implementation of the algorithm in the <a href="api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$"><code>ConnectedComponents</code> object</a>, and we compute the connected components of the example social network dataset from the <a href="#pagerank">PageRank section</a> as follows:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Load the graph as in the PageRank example</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="nc">GraphLoader</span><span class="o">.</span><span class="n">edgeListFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;graphx/data/followers.txt&quot;</span><span class="o">)</span>
+<span class="c1">// Find the connected components</span>
+<span class="k">val</span> <span class="n">cc</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">connectedComponents</span><span class="o">().</span><span class="n">vertices</span>
+<span class="c1">// Join the connected components with the usernames</span>
+<span class="k">val</span> <span class="n">users</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;graphx/data/users.txt&quot;</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">fields</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot;,&quot;</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">fields</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">toLong</span><span class="o">,</span> <span class="n">fields</span><span class="o">(</span><span class="mi">1</span><span class="o">))</span>
+<span class="o">}</span>
+<span class="k">val</span> <span class="n">ccByUsername</span> <span class="k">=</span> <span class="n">users</span><span class="o">.</span><span class="n">join</span><span class="o">(</span><span class="n">cc</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">cc</span><span class="o">))</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">cc</span><span class="o">)</span>
+<span class="o">}</span>
+<span class="c1">// Print the result</span>
+<span class="n">println</span><span class="o">(</span><span class="n">ccByUsername</span><span class="o">.</span><span class="n">collect</span><span class="o">().</span><span class="n">mkString</span><span class="o">(</span><span class="s">&quot;\n&quot;</span><span class="o">))</span></code></pre></div>
+
+<h2 id="triangle-counting">Triangle Counting</h2>
+
+<p>A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the <a href="api/scala/index.html#org.apache.spark.graphx.lib.TriangleCount$"><code>TriangleCount</code> object</a> that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the <a href="#pagerank">PageRank section</a>. <em>Note that <code>TriangleCount</code> requires the edges to be in canonical orientation (<code>srcId &lt; dstId</code>) and the graph to be partitioned using <a href="api/scala/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]"><code>Graph.partitionBy</code></a>.</em></p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Load the edges in canonical order and partition the graph for triangle count</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="nc">GraphLoader</span><span class="o">.</span><span class="n">edgeListFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;graphx/data/followers.txt&quot;</span><span class="o">,</span> <span class="kc">true</span><span class="o">).</span><span class="n">partitionBy</span><span class="o">(</span><span class="nc">PartitionStrategy</span><span class="o">.</span><span class="nc">RandomVertexCut</span><span class="o">)</span>
+<span class="c1">// Find the triangle count for each vertex</span>
+<span class="k">val</span> <span class="n">triCounts</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">triangleCount</span><span class="o">().</span><span class="n">vertices</span>
+<span class="c1">// Join the triangle counts with the usernames</span>
+<span class="k">val</span> <span class="n">users</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;graphx/data/users.txt&quot;</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">fields</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot;,&quot;</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">fields</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">toLong</span><span class="o">,</span> <span class="n">fields</span><span class="o">(</span><span class="mi">1</span><span class="o">))</span>
+<span class="o">}</span>
+<span class="k">val</span> <span class="n">triCountByUsername</span> <span class="k">=</span> <span class="n">users</span><span class="o">.</span><span class="n">join</span><span class="o">(</span><span class="n">triCounts</span><span class="o">).</span><span class="n">map</span> <span class="o">{</span> <span class="k">case</span> <span class="o">(</span><span class="n">id</span><span class="o">,</span> <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">tc</span><span class="o">))</span> <span class="k">=&gt;</span>
+  <span class="o">(</span><span class="n">username</span><span class="o">,</span> <span class="n">tc</span><span class="o">)</span>
+<span class="o">}</span>
+<span class="c1">// Print the result</span>
+<span class="n">println</span><span class="o">(</span><span class="n">triCountByUsername</span><span class="o">.</span><span class="n">collect</span><span class="o">().</span><span class="n">mkString</span><span class="o">(</span><span class="s">&quot;\n&quot;</span><span class="o">))</span></code></pre></div>
+
+<h1 id="examples">Examples</h1>
+
+<p>Suppose I want to build a graph from some text files, restrict the graph
+to important relationships and users, run page-rank on the sub-graph, and
+then finally return attributes associated with the top users.  I can do
+all of this in just a few lines with GraphX:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Connect to the Spark cluster</span>
+<span class="k">val</span> <span class="n">sc</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SparkContext</span><span class="o">(</span><span class="s">&quot;spark://master.amplab.org&quot;</span><span class="o">,</span> <span class="s">&quot;research&quot;</span><span class="o">)</span>
+
+<span class="c1">// Load my user data and parse into tuples of user id and attribute list</span>
+<span class="k">val</span> <span class="n">users</span> <span class="k">=</span> <span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;graphx/data/users.txt&quot;</span><span class="o">)</span>
+  <span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">line</span> <span class="k">=&gt;</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="s">&quot;,&quot;</span><span class="o">)).</span><span class="n">map</span><span class="o">(</span> <span class="n">parts</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">parts</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">toLong</span><span class="o">,</span> <span class="n">parts</span><span class="o">.</span><span class="n">tail</span><span class="o">)</span> <span class="o">))</span>
+
+<span class="c1">// Parse the edge data which is already in userId -&gt; userId format</span>
+<span class="k">val</span> <span class="n">followerGraph</span> <span class="k">=</span> <span class="nc">GraphLoader</span><span class="o">.</span><span class="n">edgeListFile</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;graphx/data/followers.txt&quot;</span><span class="o">)</span>
+
+<span class="c1">// Attach the user attributes</span>
+<span class="k">val</span> <span class="n">graph</span> <span class="k">=</span> <span class="n">followerGraph</span><span class="o">.</span><span class="n">outerJoinVertices</span><span class="o">(</span><span class="n">users</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">uid</span><span class="o">,</span> <span class="n">deg</span><span class="o">,</span> <span class="nc">Some</span><span class="o">(</span><span class="n">attrList</span><span class="o">))</span> <span class="k">=&gt;</span> <span class="n">attrList</span>
+  <span class="c1">// Some users may not have attributes so we set them as empty</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">uid</span><span class="o">,</span> <span class="n">deg</span><span class="o">,</span> <span class="nc">None</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Array</span><span class="o">.</span><span class="n">empty</span><span class="o">[</span><span class="kt">String</span><span class="o">]</span>
+<span class="o">}</span>
+
+<span class="c1">// Restrict the graph to users with usernames and names</span>
+<span class="k">val</span> <span class="n">subgraph</span> <span class="k">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">subgraph</span><span class="o">(</span><span class="n">vpred</span> <span class="k">=</span> <span class="o">(</span><span class="n">vid</span><span class="o">,</span> <span class="n">attr</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">attr</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">2</span><span class="o">)</span>
+
+<span class="c1">// Compute the PageRank</span>
+<span class="k">val</span> <span class="n">pagerankGraph</span> <span class="k">=</span> <span class="n">subgraph</span><span class="o">.</span><span class="n">pageRank</span><span class="o">(</span><span class="mf">0.001</span><span class="o">)</span>
+
+<span class="c1">// Get the attributes of the top pagerank users</span>
+<span class="k">val</span> <span class="n">userInfoWithPageRank</span> <span class="k">=</span> <span class="n">subgraph</span><span class="o">.</span><span class="n">outerJoinVertices</span><span class="o">(</span><span class="n">pagerankGraph</span><span class="o">.</span><span class="n">vertices</span><span class="o">)</span> <span class="o">{</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">uid</span><span class="o">,</span> <span class="n">attrList</span><span class="o">,</span> <span class="nc">Some</span><span class="o">(</span><span class="n">pr</span><span class="o">))</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">pr</span><span class="o">,</span> <span class="n">attrList</span><span class="o">.</span><span class="n">toList</span><span class="o">)</span>
+  <span class="k">case</span> <span class="o">(</span><span class="n">uid</span><span class="o">,</span> <span class="n">attrList</span><span class="o">,</span> <span class="nc">None</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="mf">0.0</span><span class="o">,</span> <span class="n">attrList</span><span class="o">.</span><span class="n">toList</span><span class="o">)</span>
+<span class="o">}</span>
+
+<span class="n">println</span><span class="o">(</span><span class="n">userInfoWithPageRank</span><span class="o">.</span><span class="n">vertices</span><span class="o">.</span><span class="n">top</span><span class="o">(</span><span class="mi">5</span><span class="o">)(</span><span class="nc">Ordering</span><span class="o">.</span><span class="n">by</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">_2</span><span class="o">.</span><span class="n">_1</span><span class="o">)).</span><span class="n">mkString</span><span class="o">(</span><span class="s">&quot;\n&quot;</span><span class="o">))</span></code></pre></div>
+

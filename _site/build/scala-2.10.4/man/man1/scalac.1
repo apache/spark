@@ -1,0 +1,423 @@
+.\" ##########################################################################
+.\" #                      __                                                #
+.\" #      ________ ___   / /  ___     Scala 2 On-line Manual Pages          #
+.\" #     / __/ __// _ | / /  / _ |    (c) 2002-2013, LAMP/EPFL              #
+.\" #   __\ \/ /__/ __ |/ /__/ __ |                                          #
+.\" #  /____/\___/_/ |_/____/_/ | |    http://scala-lang.org/                #
+.\" #                           |/                                           #
+.\" ##########################################################################
+.\"
+.\" Process this file with nroff -man scala.1
+.\"
+.TH scalac 1  "March 2012" "version 1.0" "USER COMMANDS"
+.\"
+.\" ############################## NAME ###############################
+.\"
+.SH NAME
+.PP
+\fBscalac\fR \- Compiler for the Scala 2 language
+.\"
+.\" ############################## SYNOPSIS ###############################
+.\"
+.SH SYNOPSIS
+.PP
+\fBscalac\fR  [ <\fIoptions\fR> ] <\fIsource files\fR>
+.\"
+.\" ############################## PARAMETERS ###############################
+.\"
+.SH PARAMETERS
+.PP
+.TP
+<\fIoptions\fR>
+Command line options. See \fBOPTIONS\fR below.
+.TP
+<\fIsource files\fR>
+One or more source files to be compiled (such as MyClass.scala).
+.\"
+.\" ############################## DESCRIPTION ###############################
+.\"
+.SH DESCRIPTION
+.PP
+The \fBscalac\fR tool reads class and object definitions, written in the Scala programming language, and compiles them into bytecode class files.
+.PP
+By default, the compiler puts each class file in the same directory as its source file. You can specify a separate destination directory with -d (see \fBOPTIONS\fR, below).
+.\"
+.\" ############################## OPTIONS ###############################
+.\"
+.SH OPTIONS
+.PP
+The compiler has a set of standard options that are supported on the current development environment and will be supported in future releases. An additional set of non-standard options are specific to the current virtual machine implementation and are subject to change in the future.  Non-standard options begin with \fB-X\fR.
+.\"
+.\" ############################## Standard Options ###############################
+.\"
+.SS "Standard Options"
+.PP
+.TP
+\fB\-D\fRproperty=value 
+Pass \fB\-D\fRproperty=value  directly to the runtime system.
+.TP
+\fB\-J\fR<\fIflag\fR> 
+Pass <\fIflag\fR> directly to the runtime system.
+.TP
+\fB\-P:\fR<\fIplugin:opt\fR> 
+Pass an option to a plugin
+.TP
+\fB\-X\fR 
+Print a synopsis of advanced options.
+.TP
+\fB\-bootclasspath\fR <\fIpath\fR> 
+Override location of bootstrap class files (where to find the standard built-in classes, such as "scala.List").
+.TP
+\fB\-classpath\fR <\fIpath\fR> 
+Specify where to find user class files (on Unix-based systems a colon-separated list of paths, on Windows-based systems, a semicolon-separate list of paths). This does not override the built-in ("boot") search path.
+.IP
+The default class path is the current directory. Setting the CLASSPATH variable or using the -classpath command-line option overrides that default, so if you want to include the current directory in the search path, you must include "." in the new settings.
+.IP
+
+.TP
+\fB\-d\fR <\fIdirectory|jar\fR> 
+Specify where to place generated class files.
+.TP
+\fB\-deprecation\fR 
+Emit warning and location for usages of deprecated APIs.
+.IP
+Available since Scala version 2.2.1
+.IP
+
+.TP
+\fB\-encoding\fR <\fIencoding\fR> 
+Specify character encoding used by source files.
+.IP
+The default value is platform-specific (Linux: "UTF8", Windows: "Cp1252"). Executing the following code in the Scala interpreter will return the default value on your system:
+.IP
+\fB    scala> \fRnew java.io.InputStreamReader(System.in).getEncoding
+.IP
+
+.TP
+\fB\-explaintypes\fR 
+Explain type errors in more detail.
+.TP
+\fB\-extdirs\fR <\fIdirs\fR> 
+Override location of installed extensions.
+.TP
+\fB\-g:\fR{none,source,line,vars,notailcalls} 
+"none" generates no debugging info,
+.IP
+"source" generates only the source file attribute,
+.IP
+"line" generates source and line number information,
+.IP
+"vars" generates source, line number and local variable information,
+.IP
+"notailcalls" generates all of the above and \fIwill not\fR perform tail call optimization.
+.IP
+
+.TP
+\fB\-help\fR 
+Print a synopsis of standard options.
+.TP
+\fB\-javabootclasspath\fR <\fIpath\fR> 
+Override Java boot classpath.
+.TP
+\fB\-javaextdirs\fR <\fIpath\fR> 
+Override Java extdirs classpath.
+.TP
+\fB\-no-specialization\fR 
+Ignore \fI@specialize\fR annotations.
+.TP
+\fB\-nobootcp\fR 
+Do not use the boot classpath for the Scala jar files.
+.TP
+\fB\-nowarn\fR 
+Generate no warnings
+.TP
+\fB\-optimise\fR 
+Generates faster bytecode by applying optimisations to the program.
+.TP
+\fB\-print\fR 
+Print program with all Scala-specific features removed.
+.TP
+\fB\-sourcepath\fR <\fIpath\fR> 
+Specify location(s) of source files.
+.TP
+\fB\-target:\fR<\fItarget\fR> 
+Specify which backend to use (jvm-1.5,msil).
+.IP
+The default value is "jvm-1.5" (was "jvm-1.4" up to Scala version 2.6.1).
+.IP
+
+.TP
+\fB\-toolcp\fR <\fIpath\fR> 
+Add to the runner classpath.
+.TP
+\fB\-unchecked\fR 
+Enable detailed unchecked (erasure) warnings
+.IP
+Non variable type-arguments in type patterns are unchecked since they are eliminated by erasure
+.IP
+Available since Scala version 2.3.0
+.IP
+
+.TP
+\fB\-uniqid\fR 
+Uniquely tag all identifiers in debugging output.
+.TP
+\fB\-verbose\fR 
+Output messages about what the compiler is doing
+.TP
+\fB\-version\fR 
+Print product version and exit.
+.TP
+\fB@\fR<\fIfile\fR>
+A text file containing compiler arguments (options and source files)
+.\"
+.\" ############################## Advanced Options ###############################
+.\"
+.SS "Advanced Options"
+.PP
+.TP
+\fB\-Xassem-extdirs\fR <\fIdirs\fR> 
+(Requires -target:msil) List of directories containing assemblies.  default:lib.
+.TP
+\fB\-Xassem-name\fR <\fIfile\fR> 
+(Requires -target:msil) Name of the output assembly.
+.TP
+\fB\-Xassem-path\fR <\fIpath\fR> 
+(Requires -target:msil) List of assemblies referenced by the program.
+.TP
+\fB\-Xcheck-null\fR 
+Warn upon selection of nullable reference
+.TP
+\fB\-Xcheckinit\fR 
+Wrap field accessors to throw an exception on uninitialized access.
+.TP
+\fB\-Xdisable-assertions\fR 
+Generate no assertions and assumptions
+.TP
+\fB\-Xelide-below\fR <\fIn\fR> 
+Calls to \fI@elidable\fR methods are omitted if method priority is lower than argument.
+.TP
+\fB\-Xexperimental\fR 
+Enable experimental extensions
+.TP
+\fB\-Xfatal-warnings\fR 
+Fail the compilation if there are any warnings.
+.TP
+\fB\-Xfuture\fR 
+Turn on future language features.
+.TP
+\fB\-Xgenerate-phase-graph\fR <\fIfile\fR> 
+Generate the phase graphs (outputs .dot files) to fileX.dot.
+.TP
+\fB\-Xlint\fR 
+Enable recommended additional warnings.
+.TP
+\fB\-Xlog-implicits\fR 
+Show more detail on why some implicits are not applicable.
+.TP
+\fB\-Xmax-classfile-name\fR <\fIn\fR> 
+Maximum filename length for generated classes.
+.TP
+\fB\-Xmigration\fR 
+Warn about constructs whose behavior may have changed between 2.7 and 2.8.
+.TP
+\fB\-Xno-forwarders\fR 
+Do not generate static forwarders in mirror classes.
+.TP
+\fB\-Xno-uescape\fR 
+Disable handling of \eu unicode escapes
+.TP
+\fB\-Xnojline\fR 
+Do not use JLine for editing.
+.TP
+\fB\-Xplugin:\fR<\fIfile\fR> 
+Load a plugin from a file
+.TP
+\fB\-Xplugin-disable:\fR<\fIplugin\fR> 
+Disable a plugin
+.TP
+\fB\-Xplugin-list\fR 
+Print a synopsis of loaded plugins
+.TP
+\fB\-Xplugin-require:\fR<\fIplugin\fR> 
+Abort unless the given plugin(s) are available
+.TP
+\fB\-Xpluginsdir\fR <\fIpath\fR> 
+Path to search compiler plugins.
+.TP
+\fB\-Xprint:\fR<\fIphases\fR> 
+Print out program after <\fIphases\fR> (see below).
+.TP
+\fB\-Xprint-icode\fR 
+Log internal icode to *.icode files.
+.TP
+\fB\-Xprint-pos\fR 
+Print tree positions, as offsets.
+.TP
+\fB\-Xprint-types\fR 
+Print tree types (debugging option).
+.TP
+\fB\-Xprompt\fR 
+Display a prompt after each error (debugging option).
+.TP
+\fB\-Xresident\fR 
+Compiler stays resident, files to compile are read from standard input.
+.TP
+\fB\-Xscript\fR <\fIobject\fR> 
+Treat the source file as a script and wrap it in a main method.
+.TP
+\fB\-Xshow-class\fR <\fIclass\fR> 
+Show internal representation of class.
+.TP
+\fB\-Xshow-object\fR <\fIobject\fR> 
+Show internal representation of object.
+.TP
+\fB\-Xshow-phases\fR 
+Print a synopsis of compiler phases.
+.TP
+\fB\-Xsource-reader\fR <\fIclassname\fR> 
+Specify a custom method for reading source files.
+.TP
+\fB\-Xsourcedir\fR <\fIpath\fR> 
+(Requires -target:msil) Mirror source folder structure in output directory..
+.TP
+\fB\-Xverify\fR 
+Verify generic signatures in generated bytecode.
+.TP
+\fB\-Y\fR 
+Print a synopsis of private options.
+.\"
+.\" ############################## Compilation Phases ###############################
+.\"
+.SS "Compilation Phases"
+.PP
+.TP
+\fIinitial\fR
+initializing compiler
+.TP
+\fIparse\fR
+parse source files
+.TP
+\fInamer\fR
+create symbols
+.TP
+\fIanalyze\fR
+name and type analysis
+.TP
+\fIrefcheck\fR
+reference checking
+.TP
+\fIuncurry\fR
+uncurry function types and applications
+.TP
+\fIlambdalift\fR
+lambda lifter
+.TP
+\fItypesasvalues\fR
+represent types as values
+.TP
+\fIaddaccessors\fR
+add accessors for constructor arguments
+.TP
+\fIexplicitouterclasses\fR
+make links from inner classes to enclosing one explicit
+.TP
+\fIaddconstructors\fR
+add explicit constructor for each class
+.TP
+\fItailcall\fR
+add tail-calls
+.TP
+\fIwholeprog\fR
+perform whole program analysis
+.TP
+\fIaddinterfaces\fR
+add one interface per class
+.TP
+\fIexpandmixins\fR
+expand mixins by code copying
+.TP
+\fIboxing\fR
+makes boxing explicit
+.TP
+\fIerasure\fR
+type eraser
+.TP
+\fIicode\fR
+generate icode
+.TP
+\fIcodegen\fR
+enable code generation
+.TP
+\fIterminal\fR
+compilation terminated
+.TP
+\fIall\fR
+matches all phases
+.\"
+.\" ############################## ENVIRONMENT ###############################
+.\"
+.SH ENVIRONMENT
+.PP
+.TP
+\fBJAVACMD\fR
+Specify the \fBjava\fR command to be used for running the Scala code.  Arguments may be specified as part of the environment variable; spaces, quotation marks, etc., will be passed directly to the shell for expansion.
+.TP
+\fBJAVA_HOME\fR
+Specify JDK/JRE home directory. This directory is used to locate the \fBjava\fR command unless \fBJAVACMD\fR variable set.
+.TP
+\fBJAVA_OPTS\fR
+Specify the options to be passed to the \fBjava\fR command defined by \fBJAVACMD\fR.
+.IP
+With Java 1.5 (or newer) one may for example configure the memory usage of the JVM as follows: JAVA_OPTS="-Xmx512M -Xms16M -Xss16M"
+.IP
+With GNU Java one may configure the memory usage of the GIJ as follows: JAVA_OPTS="--mx512m --ms16m"
+.IP
+
+.\"
+.\" ############################## EXAMPLES ###############################
+.\"
+.SH EXAMPLES
+.PP
+.TP
+Compile a Scala program to the current directory
+\fBscalac\fR HelloWorld
+.TP
+Compile a Scala program to the destination directory \fBclasses\fR
+\fBscalac\fR \fB\-d\fR classes HelloWorld.scala
+.TP
+Compile a Scala program using a user-defined \fBjava\fR command
+\fBenv JAVACMD\fR=/usr/local/bin/cacao \fBscalac\fR \fB\-d\fR classes HelloWorld.scala
+.TP
+Compile all Scala files found in the source directory \fBsrc\fR to the destination directory \fBclasses\fR
+\fBscalac\fR \fB\-d\fR classes src/*.scala
+.\"
+.\" ############################## EXIT STATUS ###############################
+.\"
+.SH "EXIT STATUS"
+.PP
+\fBscalac\fR returns a zero exist status if it succeeds to compile the specified input files. Non zero is returned in case of failure.
+.\"
+.\" ############################## AUTHOR ###############################
+.\"
+.SH AUTHOR
+.PP
+Written by Martin Odersky and other members of the Scala team.
+.\"
+.\" ############################## REPORTING BUGS ###############################
+.\"
+.SH "REPORTING BUGS"
+.PP
+Report bugs to https://issues.scala-lang.org/.
+.\"
+.\" ############################## COPYRIGHT ###############################
+.\"
+.SH COPYRIGHT
+.PP
+This is open-source software, available to you under a BSD-like license. See accomponying "copyright" or "LICENSE" file for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+.\"
+.\" ############################## SEE ALSO ###############################
+.\"
+.SH "SEE ALSO"
+.PP
+\fBfsc\fR(1), \fBscala\fR(1), \fBscaladoc\fR(1), \fBscalap\fR(1)

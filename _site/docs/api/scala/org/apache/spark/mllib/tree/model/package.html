@@ -1,0 +1,231 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>model - org.apache.spark.mllib.tree.model</title>
+          <meta name="description" content="model - org.apache.spark.mllib.tree.model" />
+          <meta name="keywords" content="model org.apache.spark.mllib.tree.model" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../../index.html';
+            var hash = 'org.apache.spark.mllib.tree.model.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../../package.html" class="extype" name="org">org</a>.<a href="../../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../../package.html" class="extype" name="org.apache.spark.mllib">mllib</a>.<a href="../package.html" class="extype" name="org.apache.spark.mllib.tree">tree</a></p>
+        <h1>model</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">model</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.mllib.tree.model.DecisionTreeModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="DecisionTreeModelextendsSerializablewithSaveable"></a>
+      <a id="DecisionTreeModel:DecisionTreeModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="DecisionTreeModel.html"><span class="name">DecisionTreeModel</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../../util/Saveable.html" class="extype" name="org.apache.spark.mllib.util.Saveable">Saveable</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::
+Decision tree model for classification or regression.</p>
+    </li><li name="org.apache.spark.mllib.tree.model.GradientBoostedTreesModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GradientBoostedTreesModelextendsTreeEnsembleModelwithSaveable"></a>
+      <a id="GradientBoostedTreesModel:GradientBoostedTreesModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GradientBoostedTreesModel.html"><span class="name">GradientBoostedTreesModel</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.mllib.tree.model.TreeEnsembleModel">TreeEnsembleModel</span> with <a href="../../util/Saveable.html" class="extype" name="org.apache.spark.mllib.util.Saveable">Saveable</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::
+Represents a gradient boosted trees model.</p>
+    </li><li name="org.apache.spark.mllib.tree.model.InformationGainStats" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="InformationGainStatsextendsSerializable"></a>
+      <a id="InformationGainStats:InformationGainStats"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="InformationGainStats.html"><span class="name">InformationGainStats</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Information gain statistics for each split</p>
+    </li><li name="org.apache.spark.mllib.tree.model.Node" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NodeextendsSerializablewithLogging"></a>
+      <a id="Node:Node"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Node.html"><span class="name">Node</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Node in a decision tree.</p>
+    </li><li name="org.apache.spark.mllib.tree.model.Predict" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PredictextendsSerializable"></a>
+      <a id="Predict:Predict"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Predict.html"><span class="name">Predict</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Predicted value for a node</p>
+    </li><li name="org.apache.spark.mllib.tree.model.RandomForestModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="RandomForestModelextendsTreeEnsembleModelwithSaveable"></a>
+      <a id="RandomForestModel:RandomForestModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="RandomForestModel.html"><span class="name">RandomForestModel</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.mllib.tree.model.TreeEnsembleModel">TreeEnsembleModel</span> with <a href="../../util/Saveable.html" class="extype" name="org.apache.spark.mllib.util.Saveable">Saveable</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::
+Represents a random forest model.</p>
+    </li><li name="org.apache.spark.mllib.tree.model.Split" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SplitextendsProductwithSerializable"></a>
+      <a id="Split:Split"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="Split.html"><span class="name">Split</span></a><span class="params">(<span name="feature">feature: <span class="extype" name="scala.Int">Int</span></span>, <span name="threshold">threshold: <span class="extype" name="scala.Double">Double</span></span>, <span name="featureType">featureType: <a href="../configuration/FeatureType$.html#FeatureType=org.apache.spark.mllib.tree.configuration.FeatureType.Value" class="extmbr" name="org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType">FeatureType</a></span>, <span name="categories">categories: <span class="extype" name="scala.List">List</span>[<span class="extype" name="scala.Double">Double</span>]</span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+Split applied to a feature</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.mllib.tree.model.DecisionTreeModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="DecisionTreeModel"></a>
+      <a id="DecisionTreeModel:DecisionTreeModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="DecisionTreeModel$.html"><span class="name">DecisionTreeModel</span></a><span class="result"> extends <a href="../../util/Loader.html" class="extype" name="org.apache.spark.mllib.util.Loader">Loader</a>[<a href="DecisionTreeModel.html" class="extype" name="org.apache.spark.mllib.tree.model.DecisionTreeModel">DecisionTreeModel</a>] with <a href="../../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.mllib.tree.model.GradientBoostedTreesModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GradientBoostedTreesModel"></a>
+      <a id="GradientBoostedTreesModel:GradientBoostedTreesModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="GradientBoostedTreesModel$.html"><span class="name">GradientBoostedTreesModel</span></a><span class="result"> extends <a href="../../util/Loader.html" class="extype" name="org.apache.spark.mllib.util.Loader">Loader</a>[<a href="GradientBoostedTreesModel.html" class="extype" name="org.apache.spark.mllib.tree.model.GradientBoostedTreesModel">GradientBoostedTreesModel</a>] with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.mllib.tree.model.RandomForestModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="RandomForestModel"></a>
+      <a id="RandomForestModel:RandomForestModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="RandomForestModel$.html"><span class="name">RandomForestModel</span></a><span class="result"> extends <a href="../../util/Loader.html" class="extype" name="org.apache.spark.mllib.util.Loader">Loader</a>[<a href="RandomForestModel.html" class="extype" name="org.apache.spark.mllib.tree.model.RandomForestModel">RandomForestModel</a>] with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../../lib/template.js"></script>
+    </body>
+      </html>

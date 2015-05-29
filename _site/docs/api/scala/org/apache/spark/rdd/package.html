@@ -1,0 +1,345 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>rdd - org.apache.spark.rdd</title>
+          <meta name="description" content="rdd - org.apache.spark.rdd" />
+          <meta name="keywords" content="rdd org.apache.spark.rdd" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../index.html';
+            var hash = 'org.apache.spark.rdd.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../package.html" class="extype" name="org">org</a>.<a href="../../package.html" class="extype" name="org.apache">apache</a>.<a href="../package.html" class="extype" name="org.apache.spark">spark</a></p>
+        <h1>rdd</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">rdd</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>Provides several RDD implementations. See <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">org.apache.spark.rdd.RDD</a>.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.rdd"><span>rdd</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.rdd.AsyncRDDActions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AsyncRDDActions[T]extendsSerializablewithLogging"></a>
+      <a id="AsyncRDDActions[T]:AsyncRDDActions[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="AsyncRDDActions.html"><span class="name">AsyncRDDActions</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A set of asynchronous RDD actions available through an implicit conversion.</p>
+    </li><li name="org.apache.spark.rdd.CoGroupedRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="CoGroupedRDD[K]extendsRDD[(K,Array[Iterable[_]])]"></a>
+      <a id="CoGroupedRDD[K]:CoGroupedRDD[K]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="CoGroupedRDD.html"><span class="name">CoGroupedRDD</span></a><span class="tparams">[<span name="K">K</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<span class="extype" name="org.apache.spark.rdd.CoGroupedRDD.K">K</span>, <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Iterable">Iterable</span>[_]])]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+A RDD that cogroups its parents.</p>
+    </li><li name="org.apache.spark.rdd.DoubleRDDFunctions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="DoubleRDDFunctionsextendsLoggingwithSerializable"></a>
+      <a id="DoubleRDDFunctions:DoubleRDDFunctions"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="DoubleRDDFunctions.html"><span class="name">DoubleRDDFunctions</span></a><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extra functions available on RDDs of Doubles through an implicit conversion.</p>
+    </li><li name="org.apache.spark.rdd.HadoopRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="HadoopRDD[K,V]extendsRDD[(K,V)]withLogging"></a>
+      <a id="HadoopRDD[K,V]:HadoopRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="HadoopRDD.html"><span class="name">HadoopRDD</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<span class="extype" name="org.apache.spark.rdd.HadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.rdd.HadoopRDD.V">V</span>)] with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+An RDD that provides core functionality for reading data stored in Hadoop (e.</p>
+    </li><li name="org.apache.spark.rdd.JdbcRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="JdbcRDD[T]extendsRDD[T]withLogging"></a>
+      <a id="JdbcRDD[T]:JdbcRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="JdbcRDD.html"><span class="name">JdbcRDD</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="org.apache.spark.rdd.JdbcRDD.T">T</span>] with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">An RDD that executes an SQL query on a JDBC connection and reads results.</p>
+    </li><li name="org.apache.spark.rdd.NewHadoopRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="NewHadoopRDD[K,V]extendsRDD[(K,V)]withSparkHadoopMapReduceUtilwithLogging"></a>
+      <a id="NewHadoopRDD[K,V]:NewHadoopRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="NewHadoopRDD.html"><span class="name">NewHadoopRDD</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<span class="extype" name="org.apache.spark.rdd.NewHadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.rdd.NewHadoopRDD.V">V</span>)] with <span class="extype" name="org.apache.spark.mapreduce.SparkHadoopMapReduceUtil">SparkHadoopMapReduceUtil</span> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+An RDD that provides core functionality for reading data stored in Hadoop (e.</p>
+    </li><li name="org.apache.spark.rdd.OrderedRDDFunctions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="OrderedRDDFunctions[K,V,P&lt;:Product2[K,V]]extendsLoggingwithSerializable"></a>
+      <a id="OrderedRDDFunctions[K,V,P&lt;:Product2[K,V]]:OrderedRDDFunctions[K,V,P]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="OrderedRDDFunctions.html"><span class="name">OrderedRDDFunctions</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="P">P &lt;: <span class="extype" name="scala.Product2">Product2</span>[<span class="extype" name="org.apache.spark.rdd.OrderedRDDFunctions.K">K</span>, <span class="extype" name="org.apache.spark.rdd.OrderedRDDFunctions.V">V</span>]</span>]</span><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extra functions available on RDDs of (key, value) pairs where the key is sortable through
+an implicit conversion.</p>
+    </li><li name="org.apache.spark.rdd.PairRDDFunctions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PairRDDFunctions[K,V]extendsLoggingwithSparkHadoopMapReduceUtilwithSerializable"></a>
+      <a id="PairRDDFunctions[K,V]:PairRDDFunctions[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PairRDDFunctions.html"><span class="name">PairRDDFunctions</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="org.apache.spark.mapreduce.SparkHadoopMapReduceUtil">SparkHadoopMapReduceUtil</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extra functions available on RDDs of (key, value) pairs through an implicit conversion.</p>
+    </li><li name="org.apache.spark.rdd.PartitionPruningRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PartitionPruningRDD[T]extendsRDD[T]"></a>
+      <a id="PartitionPruningRDD[T]:PartitionPruningRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PartitionPruningRDD.html"><span class="name">PartitionPruningRDD</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="org.apache.spark.rdd.PartitionPruningRDD.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+A RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
+all partitions.</p>
+    </li><li name="org.apache.spark.rdd.RDD" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="RDD[T]extendsSerializablewithLogging"></a>
+      <a id="RDD[T]:RDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="RDD.html"><span class="name">RDD</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.</p>
+    </li><li name="org.apache.spark.rdd.SequenceFileRDDFunctions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SequenceFileRDDFunctions[K,V]extendsLoggingwithSerializable"></a>
+      <a id="SequenceFileRDDFunctions[K,V]:SequenceFileRDDFunctions[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="SequenceFileRDDFunctions.html"><span class="name">SequenceFileRDDFunctions</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="result"> extends <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
+through an implicit conversion.</p>
+    </li><li name="org.apache.spark.rdd.ShuffledRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="ShuffledRDD[K,V,C]extendsRDD[(K,C)]"></a>
+      <a id="ShuffledRDD[K,V,C]:ShuffledRDD[K,V,C]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ShuffledRDD.html"><span class="name">ShuffledRDD</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="C">C</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<span class="extype" name="org.apache.spark.rdd.ShuffledRDD.K">K</span>, <span class="extype" name="org.apache.spark.rdd.ShuffledRDD.C">C</span>)]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: DeveloperApi ::
+The resulting RDD from a shuffle (e.</p>
+    </li><li name="org.apache.spark.rdd.UnionRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="UnionRDD[T]extendsRDD[T]"></a>
+      <a id="UnionRDD[T]:UnionRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="UnionRDD.html"><span class="name">UnionRDD</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="org.apache.spark.rdd.UnionRDD.T">T</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.rdd.JdbcRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="JdbcRDD"></a>
+      <a id="JdbcRDD:JdbcRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="JdbcRDD$.html"><span class="name">JdbcRDD</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.rdd.PartitionPruningRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="PartitionPruningRDD"></a>
+      <a id="PartitionPruningRDD:PartitionPruningRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="PartitionPruningRDD$.html"><span class="name">PartitionPruningRDD</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../annotation/DeveloperApi.html" class="extype" name="org.apache.spark.annotation.DeveloperApi">DeveloperApi</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.rdd.RDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="RDD"></a>
+      <a id="RDD:RDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="RDD$.html"><span class="name">RDD</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Defines implicit functions that provide extra functionalities on RDDs of specific types.</p>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../lib/template.js"></script>
+    </body>
+      </html>

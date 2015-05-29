@@ -1,0 +1,158 @@
+<p>Apache Spark is a fast and general-purpose cluster computing system.
+It provides high-level APIs in Java, Scala, Python and R,
+and an optimized engine that supports general execution graphs.
+It also supports a rich set of higher-level tools including <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing, <a href="mllib-guide.html">MLlib</a> for machine learning, <a href="graphx-programming-guide.html">GraphX</a> for graph processing, and <a href="streaming-programming-guide.html">Spark Streaming</a>.</p>
+
+<h1 id="downloading">Downloading</h1>
+
+<p>Get Spark from the <a href="http://spark.apache.org/downloads.html">downloads page</a> of the project website. This documentation is for Spark version . The downloads page 
+contains Spark packages for many popular HDFS versions. If you’d like to build Spark from 
+scratch, visit <a href="building-spark.html">Building Spark</a>.</p>
+
+<p>Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It’s easy to run
+locally on one machine — all you need is to have <code>java</code> installed on your system <code>PATH</code>,
+or the <code>JAVA_HOME</code> environment variable pointing to a Java installation.</p>
+
+<p>Spark runs on Java 6+, Python 2.6+ and R 3.1+. For the Scala API, Spark  uses
+Scala . You will need to use a compatible Scala version 
+(.x).</p>
+
+<h1 id="running-the-examples-and-shell">Running the Examples and Shell</h1>
+
+<p>Spark comes with several sample programs.  Scala, Java, Python and R examples are in the
+<code>examples/src/main</code> directory. To run one of the Java or Scala sample programs, use
+<code>bin/run-example &lt;class&gt; [params]</code> in the top-level Spark directory. (Behind the scenes, this
+invokes the more general
+<a href="submitting-applications.html"><code>spark-submit</code> script</a> for
+launching applications). For example,</p>
+
+<pre><code>./bin/run-example SparkPi 10
+</code></pre>
+
+<p>You can also run Spark interactively through a modified version of the Scala shell. This is a
+great way to learn the framework.</p>
+
+<pre><code>./bin/spark-shell --master local[2]
+</code></pre>
+
+<p>The <code>--master</code> option specifies the
+<a href="submitting-applications.html#master-urls">master URL for a distributed cluster</a>, or <code>local</code> to run
+locally with one thread, or <code>local[N]</code> to run locally with N threads. You should start by using
+<code>local</code> for testing. For a full list of options, run Spark shell with the <code>--help</code> option.</p>
+
+<p>Spark also provides a Python API. To run Spark interactively in a Python interpreter, use
+<code>bin/pyspark</code>:</p>
+
+<pre><code>./bin/pyspark --master local[2]
+</code></pre>
+
+<p>Example applications are also provided in Python. For example,</p>
+
+<pre><code>./bin/spark-submit examples/src/main/python/pi.py 10
+</code></pre>
+
+<p>Spark also provides an experimental R API since 1.4 (only DataFrames APIs included).
+To run Spark interactively in a R interpreter, use <code>bin/sparkR</code>:</p>
+
+<pre><code>./bin/sparkR --master local[2]
+</code></pre>
+
+<p>Example applications are also provided in R. For example,</p>
+
+<pre><code>./bin/spark-submit examples/src/main/r/dataframe.R
+</code></pre>
+
+<h1 id="launching-on-a-cluster">Launching on a Cluster</h1>
+
+<p>The Spark <a href="cluster-overview.html">cluster mode overview</a> explains the key concepts in running on a cluster.
+Spark can run both by itself, or over several existing cluster managers. It currently provides several
+options for deployment:</p>
+
+<ul>
+  <li><a href="ec2-scripts.html">Amazon EC2</a>: our EC2 scripts let you launch a cluster in about 5 minutes</li>
+  <li><a href="spark-standalone.html">Standalone Deploy Mode</a>: simplest way to deploy Spark on a private cluster</li>
+  <li><a href="running-on-mesos.html">Apache Mesos</a></li>
+  <li><a href="running-on-yarn.html">Hadoop YARN</a></li>
+</ul>
+
+<h1 id="where-to-go-from-here">Where to Go from Here</h1>
+
+<p><strong>Programming Guides:</strong></p>
+
+<ul>
+  <li><a href="quick-start.html">Quick Start</a>: a quick introduction to the Spark API; start here!</li>
+  <li><a href="programming-guide.html">Spark Programming Guide</a>: detailed overview of Spark
+in all supported languages (Scala, Java, Python, R)</li>
+  <li>Modules built on Spark:
+    <ul>
+      <li><a href="streaming-programming-guide.html">Spark Streaming</a>: processing real-time data streams</li>
+      <li><a href="sql-programming-guide.html">Spark SQL and DataFrames</a>: support for structured data and relational queries</li>
+      <li><a href="mllib-guide.html">MLlib</a>: built-in machine learning library</li>
+      <li><a href="graphx-programming-guide.html">GraphX</a>: Spark’s new API for graph processing</li>
+      <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a>: older, simple graph processing model</li>
+    </ul>
+  </li>
+</ul>
+
+<p><strong>API Docs:</strong></p>
+
+<ul>
+  <li><a href="api/scala/index.html#org.apache.spark.package">Spark Scala API (Scaladoc)</a></li>
+  <li><a href="api/java/index.html">Spark Java API (Javadoc)</a></li>
+  <li><a href="api/python/index.html">Spark Python API (Sphinx)</a></li>
+  <li><a href="api/R/index.html">Spark R API (Roxygen2)</a></li>
+</ul>
+
+<p><strong>Deployment Guides:</strong></p>
+
+<ul>
+  <li><a href="cluster-overview.html">Cluster Overview</a>: overview of concepts and components when running on a cluster</li>
+  <li><a href="submitting-applications.html">Submitting Applications</a>: packaging and deploying applications</li>
+  <li>Deployment modes:
+    <ul>
+      <li><a href="ec2-scripts.html">Amazon EC2</a>: scripts that let you launch a cluster on EC2 in about 5 minutes</li>
+      <li><a href="spark-standalone.html">Standalone Deploy Mode</a>: launch a standalone cluster quickly without a third-party cluster manager</li>
+      <li><a href="running-on-mesos.html">Mesos</a>: deploy a private cluster using
+  <a href="http://mesos.apache.org">Apache Mesos</a></li>
+      <li><a href="running-on-yarn.html">YARN</a>: deploy Spark on top of Hadoop NextGen (YARN)</li>
+    </ul>
+  </li>
+</ul>
+
+<p><strong>Other Documents:</strong></p>
+
+<ul>
+  <li><a href="configuration.html">Configuration</a>: customize Spark via its configuration system</li>
+  <li><a href="monitoring.html">Monitoring</a>: track the behavior of your applications</li>
+  <li><a href="tuning.html">Tuning Guide</a>: best practices to optimize performance and memory use</li>
+  <li><a href="job-scheduling.html">Job Scheduling</a>: scheduling resources across and within Spark applications</li>
+  <li><a href="security.html">Security</a>: Spark security support</li>
+  <li><a href="hardware-provisioning.html">Hardware Provisioning</a>: recommendations for cluster hardware</li>
+  <li><a href="hadoop-third-party-distributions.html">3<sup>rd</sup> Party Hadoop Distributions</a>: using common Hadoop distributions</li>
+  <li>Integration with other storage systems:
+    <ul>
+      <li><a href="storage-openstack-swift.html">OpenStack Swift</a></li>
+    </ul>
+  </li>
+  <li><a href="building-spark.html">Building Spark</a>: build Spark using the Maven system</li>
+  <li><a href="https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark">Contributing to Spark</a></li>
+  <li><a href="https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects">Supplemental Projects</a>: related third party Spark projects</li>
+</ul>
+
+<p><strong>External Resources:</strong></p>
+
+<ul>
+  <li><a href="http://spark.apache.org">Spark Homepage</a></li>
+  <li><a href="https://cwiki.apache.org/confluence/display/SPARK">Spark Wiki</a></li>
+  <li><a href="http://spark.apache.org/community.html">Spark Community</a> resources, including local meetups</li>
+  <li><a href="http://stackoverflow.com/questions/tagged/apache-spark">StackOverflow tag <code>apache-spark</code></a></li>
+  <li><a href="http://spark.apache.org/mailing-lists.html">Mailing Lists</a>: ask questions about Spark here</li>
+  <li><a href="http://ampcamp.berkeley.edu/">AMP Camps</a>: a series of training camps at UC Berkeley that featured talks and
+exercises about Spark, Spark Streaming, Mesos, and more. <a href="http://ampcamp.berkeley.edu/3/">Videos</a>,
+<a href="http://ampcamp.berkeley.edu/3/">slides</a> and <a href="http://ampcamp.berkeley.edu/3/exercises/">exercises</a> are
+available online for free.</li>
+  <li><a href="http://spark.apache.org/examples.html">Code Examples</a>: more are also available in the <code>examples</code> subfolder of Spark (<a href="/tree/master/examples/src/main/scala/org/apache/spark/examples">Scala</a>,
+ <a href="/tree/master/examples/src/main/java/org/apache/spark/examples">Java</a>,
+ <a href="/tree/master/examples/src/main/python">Python</a>,
+ <a href="/tree/master/examples/src/main/r">R</a>)</li>
+</ul>

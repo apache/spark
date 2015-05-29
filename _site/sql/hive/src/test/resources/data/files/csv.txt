@@ -1,0 +1,18 @@
+why hello there,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+another record,98,4,101,9999999,false,99.89,0.00000009,beta,Earth#101,1134:false:wazzup,RED,\N,,ef
+third record,45,5,102,999999999,true,89.99,0.00000000000009,alpha:gamma,Earth#237:Bob#723,102:false:BNL,GREEN,\N,,hi
+\N,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,\N,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,\N,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,\N,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,\N,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,\N,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,true,\N,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,true,42.43,\N,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,\N,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,\N,17:true:Abe Linkedin,BLUE,72,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,\N,BLUE,72,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,\N,72,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,\N,,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,\N,bc
+string,42,3,100,1412341,true,42.43,85.23423424,alpha:beta:gamma,Earth#42:Control#86:Bob#31,17:true:Abe Linkedin,BLUE,72,,\N

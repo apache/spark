@@ -1,0 +1,15 @@
+viewtime            	string              	                    
+userid              	int                 	                    
+page_url            	string              	                    
+referrer_url        	string              	                    
+friends             	array<bigint>       	                    
+properties          	map<string,string>  	                    
+ip                  	string              	IP Address of the User
+ds                  	string              	                    
+country             	string              	                    
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+	 	 
+ds                  	string              	                    
+country             	string              	                    

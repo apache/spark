@@ -1,0 +1,133 @@
+<p>This document gives a short overview of how Spark runs on clusters, to make it easier to understand
+the components involved. Read through the <a href="submitting-applications.html">application submission guide</a>
+to submit applications to a cluster.</p>
+
+<h1 id="components">Components</h1>
+
+<p>Spark applications run as independent sets of processes on a cluster, coordinated by the SparkContext
+object in your main program (called the <em>driver program</em>).
+Specifically, to run on a cluster, the SparkContext can connect to several types of <em>cluster managers</em>
+(either Spark’s own standalone cluster manager or Mesos/YARN), which allocate resources across
+applications. Once connected, Spark acquires <em>executors</em> on nodes in the cluster, which are
+processes that run computations and store data for your application.
+Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
+the executors. Finally, SparkContext sends <em>tasks</em> for the executors to run.</p>
+
+<p style="text-align: center;">
+  <img src="img/cluster-overview.png" title="Spark cluster components" alt="Spark cluster components" />
+</p>
+
+<p>There are several useful things to note about this architecture:</p>
+
+<ol>
+  <li>Each application gets its own executor processes, which stay up for the duration of the whole
+application and run tasks in multiple threads. This has the benefit of isolating applications
+from each other, on both the scheduling side (each driver schedules its own tasks) and executor
+side (tasks from different applications run in different JVMs). However, it also means that
+data cannot be shared across different Spark applications (instances of SparkContext) without
+writing it to an external storage system.</li>
+  <li>Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
+processes, and these communicate with each other, it is relatively easy to run it even on a
+cluster manager that also supports other applications (e.g. Mesos/YARN).</li>
+  <li>The driver program must listen for and accept incoming connections from its executors throughout 
+its lifetime (e.g., see <a href="configuration.html#networking">spark.driver.port and spark.fileserver.port in the network config 
+section</a>). As such, the driver program must be network 
+addressable from the worker nodes.</li>
+  <li>Because the driver schedules tasks on the cluster, it should be run close to the worker
+nodes, preferably on the same local area network. If you’d like to send requests to the
+cluster remotely, it’s better to open an RPC to the driver and have it submit operations
+from nearby than to run a driver far away from the worker nodes.</li>
+</ol>
+
+<h1 id="cluster-manager-types">Cluster Manager Types</h1>
+
+<p>The system currently supports three cluster managers:</p>
+
+<ul>
+  <li><a href="spark-standalone.html">Standalone</a> – a simple cluster manager included with Spark that makes it
+easy to set up a cluster.</li>
+  <li><a href="running-on-mesos.html">Apache Mesos</a> – a general cluster manager that can also run Hadoop MapReduce
+and service applications.</li>
+  <li><a href="running-on-yarn.html">Hadoop YARN</a> – the resource manager in Hadoop 2.</li>
+</ul>
+
+<p>In addition, Spark’s <a href="ec2-scripts.html">EC2 launch scripts</a> make it easy to launch a standalone
+cluster on Amazon EC2.</p>
+
+<h1 id="submitting-applications">Submitting Applications</h1>
+
+<p>Applications can be submitted to a cluster of any type using the <code>spark-submit</code> script.
+The <a href="submitting-applications.html">application submission guide</a> describes how to do this.</p>
+
+<h1 id="monitoring">Monitoring</h1>
+
+<p>Each driver program has a web UI, typically on port 4040, that displays information about running
+tasks, executors, and storage usage. Simply go to <code>http://&lt;driver-node&gt;:4040</code> in a web browser to
+access this UI. The <a href="monitoring.html">monitoring guide</a> also describes other monitoring options.</p>
+
+<h1 id="job-scheduling">Job Scheduling</h1>
+
+<p>Spark gives control over resource allocation both <em>across</em> applications (at the level of the cluster
+manager) and <em>within</em> applications (if multiple computations are happening on the same SparkContext).
+The <a href="job-scheduling.html">job scheduling overview</a> describes this in more detail.</p>
+
+<h1 id="glossary">Glossary</h1>
+
+<p>The following table summarizes terms you’ll see used to refer to cluster concepts:</p>
+
+<table class="table">
+  <thead>
+    <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Application</td>
+      <td>User program built on Spark. Consists of a <em>driver program</em> and <em>executors</em> on the cluster.</td>
+    </tr>
+    <tr>
+      <td>Application jar</td>
+      <td>
+        A jar containing the user's Spark application. In some cases users will want to create
+        an "uber jar" containing their application along with its dependencies. The user's jar
+        should never include Hadoop or Spark libraries, however, these will be added at runtime.
+      </td>
+    </tr>
+    <tr>
+      <td>Driver program</td>
+      <td>The process running the main() function of the application and creating the SparkContext</td>
+    </tr>
+    <tr>
+      <td>Cluster manager</td>
+      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
+    </tr>
+    <tr>
+      <td>Deploy mode</td>
+      <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
+        the driver inside of the cluster. In "client" mode, the submitter launches the driver
+        outside of the cluster.</td>
+    </tr>
+    <tr>
+      <td>Worker node</td>
+      <td>Any node that can run application code in the cluster</td>
+    </tr>
+    <tr>
+      <td>Executor</td>
+      <td>A process launched for an application on a worker node, that runs tasks and keeps data in memory
+        or disk storage across them. Each application has its own executors.</td>
+    </tr>
+    <tr>
+      <td>Task</td>
+      <td>A unit of work that will be sent to one executor</td>
+    </tr>
+    <tr>
+      <td>Job</td>
+      <td>A parallel computation consisting of multiple tasks that gets spawned in response to a Spark action
+        (e.g. <code>save</code>, <code>collect</code>); you'll see this term used in the driver's logs.</td>
+    </tr>
+    <tr>
+      <td>Stage</td>
+      <td>Each job gets divided into smaller sets of tasks called <em>stages</em> that depend on each other
+        (similar to the map and reduce stages in MapReduce); you'll see this term used in the driver's logs.</td>
+    </tr>
+  </tbody>
+</table>

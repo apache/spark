@@ -1,0 +1,310 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>clustering - org.apache.spark.mllib.clustering</title>
+          <meta name="description" content="clustering - org.apache.spark.mllib.clustering" />
+          <meta name="keywords" content="clustering org.apache.spark.mllib.clustering" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.mllib.clustering.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.mllib">mllib</a></p>
+        <h1>clustering</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clustering</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.mllib.clustering.DistributedLDAModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="DistributedLDAModelextendsLDAModel"></a>
+      <a id="DistributedLDAModel:DistributedLDAModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="DistributedLDAModel.html"><span class="name">DistributedLDAModel</span></a><span class="result"> extends <a href="LDAModel.html" class="extype" name="org.apache.spark.mllib.clustering.LDAModel">LDAModel</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.GaussianMixture" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GaussianMixtureextendsSerializable"></a>
+      <a id="GaussianMixture:GaussianMixture"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GaussianMixture.html"><span class="name">GaussianMixture</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.GaussianMixtureModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="GaussianMixtureModelextendsSerializablewithSaveable"></a>
+      <a id="GaussianMixtureModel:GaussianMixtureModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="GaussianMixtureModel.html"><span class="name">GaussianMixtureModel</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../util/Saveable.html" class="extype" name="org.apache.spark.mllib.util.Saveable">Saveable</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.KMeans" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="KMeansextendsSerializablewithLogging"></a>
+      <a id="KMeans:KMeans"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="KMeans.html"><span class="name">KMeans</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">K-means clustering with support for multiple parallel runs and a k-means++ like initialization
+mode (the k-means|| algorithm by Bahmani et al).</p>
+    </li><li name="org.apache.spark.mllib.clustering.KMeansModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="KMeansModelextendsSaveablewithSerializable"></a>
+      <a id="KMeansModel:KMeansModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="KMeansModel.html"><span class="name">KMeansModel</span></a><span class="result"> extends <a href="../util/Saveable.html" class="extype" name="org.apache.spark.mllib.util.Saveable">Saveable</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A clustering model for K-means.</p>
+    </li><li name="org.apache.spark.mllib.clustering.LDA" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LDAextendsLogging"></a>
+      <a id="LDA:LDA"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LDA.html"><span class="name">LDA</span></a><span class="result"> extends <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.LDAModel" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="LDAModelextendsAnyRef"></a>
+      <a id="LDAModel:LDAModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LDAModel.html"><span class="name">LDAModel</span></a><span class="result"> extends <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.LocalLDAModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="LocalLDAModelextendsLDAModelwithSerializable"></a>
+      <a id="LocalLDAModel:LocalLDAModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="LocalLDAModel.html"><span class="name">LocalLDAModel</span></a><span class="result"> extends <a href="LDAModel.html" class="extype" name="org.apache.spark.mllib.clustering.LDAModel">LDAModel</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.PowerIterationClustering" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PowerIterationClusteringextendsSerializable"></a>
+      <a id="PowerIterationClustering:PowerIterationClustering"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PowerIterationClustering.html"><span class="name">PowerIterationClustering</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.PowerIterationClusteringModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PowerIterationClusteringModelextendsSerializable"></a>
+      <a id="PowerIterationClusteringModel:PowerIterationClusteringModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PowerIterationClusteringModel.html"><span class="name">PowerIterationClusteringModel</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.StreamingKMeans" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StreamingKMeansextendsLogging"></a>
+      <a id="StreamingKMeans:StreamingKMeans"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StreamingKMeans.html"><span class="name">StreamingKMeans</span></a><span class="result"> extends <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li><li name="org.apache.spark.mllib.clustering.StreamingKMeansModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="StreamingKMeansModelextendsKMeansModelwithLogging"></a>
+      <a id="StreamingKMeansModel:StreamingKMeansModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="StreamingKMeansModel.html"><span class="name">StreamingKMeansModel</span></a><span class="result"> extends <a href="KMeansModel.html" class="extype" name="org.apache.spark.mllib.clustering.KMeansModel">KMeansModel</a> with <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: Experimental ::</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.mllib.clustering.GaussianMixtureModel" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="GaussianMixtureModel"></a>
+      <a id="GaussianMixtureModel:GaussianMixtureModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="GaussianMixtureModel$.html"><span class="name">GaussianMixtureModel</span></a><span class="result"> extends <a href="../util/Loader.html" class="extype" name="org.apache.spark.mllib.util.Loader">Loader</a>[<a href="GaussianMixtureModel.html" class="extype" name="org.apache.spark.mllib.clustering.GaussianMixtureModel">GaussianMixtureModel</a>] with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.mllib.clustering.KMeans" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="KMeans"></a>
+      <a id="KMeans:KMeans"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="KMeans$.html"><span class="name">KMeans</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Top-level methods for calling K-means clustering.</p>
+    </li><li name="org.apache.spark.mllib.clustering.KMeansModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="KMeansModel"></a>
+      <a id="KMeansModel:KMeansModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="KMeansModel$.html"><span class="name">KMeansModel</span></a><span class="result"> extends <a href="../util/Loader.html" class="extype" name="org.apache.spark.mllib.util.Loader">Loader</a>[<a href="KMeansModel.html" class="extype" name="org.apache.spark.mllib.clustering.KMeansModel">KMeansModel</a>] with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.mllib.clustering.PowerIterationClustering" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="PowerIterationClustering"></a>
+      <a id="PowerIterationClustering:PowerIterationClustering"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="PowerIterationClustering$.html"><span class="name">PowerIterationClustering</span></a><span class="result"> extends <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

@@ -1,0 +1,7 @@
+ceil(x) - Find the smallest integer not smaller than x
+Synonyms: ceiling
+Example:
+  > SELECT ceil(-0.1) FROM src LIMIT 1;
+  0
+  > SELECT ceil(5) FROM src LIMIT 1;
+  5

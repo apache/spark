@@ -1,0 +1,1754 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>JavaSparkContext - org.apache.spark.api.java.JavaSparkContext</title>
+          <meta name="description" content="JavaSparkContext - org.apache.spark.api.java.JavaSparkContext" />
+          <meta name="keywords" content="JavaSparkContext org.apache.spark.api.java.JavaSparkContext" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.api.java.JavaSparkContext';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="type">
+      <div id="definition">
+        <a href="JavaSparkContext$.html" title="Go to companion"><img src="../../../../../lib/class_to_object_big.png" /></a>
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.api">api</a>.<a href="package.html" class="extype" name="org.apache.spark.api.java">java</a></p>
+        <h1><a href="JavaSparkContext$.html" title="Go to companion">JavaSparkContext</a></h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="result"> extends <span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround">JavaSparkContextVarargsWorkaround</span> with <span class="extype" name="java.io.Closeable">Closeable</span></span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>A Java-friendly version of <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">org.apache.spark.SparkContext</a> that returns
+<a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">org.apache.spark.api.java.JavaRDD</a>s and works with Java collections instead of Scala ones.</p><p>Only one SparkContext may be active per JVM.  You must <code>stop()</code> the active SparkContext before
+creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="java.io.Closeable">Closeable</span>, <span class="extype" name="java.lang.AutoCloseable">AutoCloseable</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround">JavaSparkContextVarargsWorkaround</span>, <span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.api.java.JavaSparkContext"><span>JavaSparkContext</span></li><li class="in" name="java.io.Closeable"><span>Closeable</span></li><li class="in" name="java.lang.AutoCloseable"><span>AutoCloseable</span></li><li class="in" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround"><span>JavaSparkContextVarargsWorkaround</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        <div id="constructors" class="members">
+              <h3>Instance Constructors</h3>
+              <ol><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(master:String,appName:String,sparkHome:String,jars:Array[String],environment:java.util.Map[String,String]):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="master">master: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="sparkHome">sparkHome: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="jars">jars: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="environment">environment: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">master</dt><dd class="cmt"><p>Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).</p></dd><dt class="param">appName</dt><dd class="cmt"><p>A name for your application, to display on the cluster web UI</p></dd><dt class="param">sparkHome</dt><dd class="cmt"><p>The SPARK_HOME directory on the slave nodes</p></dd><dt class="param">jars</dt><dd class="cmt"><p>Collection of JARs to send to the cluster. These can be paths on the local file
+            system or HDFS, HTTP, HTTPS, or FTP URLs.</p></dd><dt class="param">environment</dt><dd class="cmt"><p>Environment variables to set on worker nodes
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(master:String,appName:String,sparkHome:String,jars:Array[String]):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="master">master: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="sparkHome">sparkHome: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="jars">jars: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">master</dt><dd class="cmt"><p>Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).</p></dd><dt class="param">appName</dt><dd class="cmt"><p>A name for your application, to display on the cluster web UI</p></dd><dt class="param">sparkHome</dt><dd class="cmt"><p>The SPARK_HOME directory on the slave nodes</p></dd><dt class="param">jars</dt><dd class="cmt"><p>Collection of JARs to send to the cluster. These can be paths on the local file
+            system or HDFS, HTTP, HTTPS, or FTP URLs.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(master:String,appName:String,sparkHome:String,jarFile:String):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="master">master: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="sparkHome">sparkHome: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="jarFile">jarFile: <span class="extype" name="scala.Predef.String">String</span></span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">master</dt><dd class="cmt"><p>Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).</p></dd><dt class="param">appName</dt><dd class="cmt"><p>A name for your application, to display on the cluster web UI</p></dd><dt class="param">sparkHome</dt><dd class="cmt"><p>The SPARK_HOME directory on the slave nodes</p></dd><dt class="param">jarFile</dt><dd class="cmt"><p>JAR file to send to the cluster. This can be a path on the local file system
+               or an HDFS, HTTP, HTTPS, or FTP URL.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(master:String,appName:String,conf:org.apache.spark.SparkConf):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="master">master: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="conf">conf: <a href="../../SparkConf.html" class="extype" name="org.apache.spark.SparkConf">SparkConf</a></span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">master</dt><dd class="cmt"><p>Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).</p></dd><dt class="param">appName</dt><dd class="cmt"><p>A name for your application, to display on the cluster web UI</p></dd><dt class="param">conf</dt><dd class="cmt"><p>a <a href="../../SparkConf.html" class="extype" name="org.apache.spark.SparkConf">org.apache.spark.SparkConf</a> object specifying other Spark parameters
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(master:String,appName:String):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="master">master: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="appName">appName: <span class="extype" name="scala.Predef.String">String</span></span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">master</dt><dd class="cmt"><p>Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).</p></dd><dt class="param">appName</dt><dd class="cmt"><p>A name for your application, to display on the cluster web UI
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;(conf:org.apache.spark.SparkConf):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="conf">conf: <a href="../../SparkConf.html" class="extype" name="org.apache.spark.SparkConf">SparkConf</a></span>)</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="paramcmts block"><dt class="param">conf</dt><dd class="cmt"><p>a <a href="../../SparkConf.html" class="extype" name="org.apache.spark.SparkConf">org.apache.spark.SparkConf</a> object specifying Spark parameters
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="&lt;init&gt;():org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">()</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create a JavaSparkContext that loads settings from system properties (for instance, when
+launching with .</p><div class="fullcomment"><div class="comment cmt"><p>Create a JavaSparkContext that loads settings from system properties (for instance, when
+launching with ./bin/spark-submit).
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="&lt;init&gt;(sc:org.apache.spark.SparkContext):org.apache.spark.api.java.JavaSparkContext"></a>
+      <a id="&lt;init&gt;:JavaSparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">new</span>
+      </span>
+      <span class="symbol">
+        <span class="name">JavaSparkContext</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>)</span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="scala.AnyRef#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:AnyRef):Boolean"></a>
+      <a id="!=(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:Any):Boolean"></a>
+      <a id="!=(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef###" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="##():Int"></a>
+      <a id="##():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $hash$hash" class="name">##</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:AnyRef):Boolean"></a>
+      <a id="==(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:Any):Boolean"></a>
+      <a id="==(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulable" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulable[T,R](initialValue:T,name:String,param:org.apache.spark.AccumulableParam[T,R]):org.apache.spark.Accumulable[T,R]"></a>
+      <a id="accumulable[T,R](T,String,AccumulableParam[T,R]):Accumulable[T,R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulable</span><span class="tparams">[<span name="T">T</span>, <span name="R">R</span>]</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="param">param: <a href="../../AccumulableParam.html" class="extype" name="org.apache.spark.AccumulableParam">AccumulableParam</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.R">R</span>]</span>)</span><span class="result">: <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">Accumulable</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">org.apache.spark.Accumulable</a> shared variable of the given type, to which tasks
+can &quot;add&quot; values with <code>add</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">org.apache.spark.Accumulable</a> shared variable of the given type, to which tasks
+can &quot;add&quot; values with <code>add</code>. Only the master can access the accumuable's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulable" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulable[T,R](initialValue:T,param:org.apache.spark.AccumulableParam[T,R]):org.apache.spark.Accumulable[T,R]"></a>
+      <a id="accumulable[T,R](T,AccumulableParam[T,R]):Accumulable[T,R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulable</span><span class="tparams">[<span name="T">T</span>, <span name="R">R</span>]</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span></span>, <span name="param">param: <a href="../../AccumulableParam.html" class="extype" name="org.apache.spark.AccumulableParam">AccumulableParam</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.R">R</span>]</span>)</span><span class="result">: <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">Accumulable</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.T">T</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulable.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">org.apache.spark.Accumulable</a> shared variable of the given type, to which tasks
+can &quot;add&quot; values with <code>add</code>.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulable.html" class="extype" name="org.apache.spark.Accumulable">org.apache.spark.Accumulable</a> shared variable of the given type, to which tasks
+can &quot;add&quot; values with <code>add</code>. Only the master can access the accumuable's <code>value</code>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator[T](initialValue:T,name:String,accumulatorParam:org.apache.spark.AccumulatorParam[T]):org.apache.spark.Accumulator[T]"></a>
+      <a id="accumulator[T](T,String,AccumulatorParam[T]):Accumulator[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="accumulatorParam">accumulatorParam: <a href="../../AccumulatorParam.html" class="extype" name="org.apache.spark.AccumulatorParam">AccumulatorParam</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span>]</span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> variable of a given type, which tasks can &quot;add&quot;
+values to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> variable of a given type, which tasks can &quot;add&quot;
+values to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator[T](initialValue:T,accumulatorParam:org.apache.spark.AccumulatorParam[T]):org.apache.spark.Accumulator[T]"></a>
+      <a id="accumulator[T](T,AccumulatorParam[T]):Accumulator[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span></span>, <span name="accumulatorParam">accumulatorParam: <a href="../../AccumulatorParam.html" class="extype" name="org.apache.spark.AccumulatorParam">AccumulatorParam</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span>]</span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.accumulator.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> variable of a given type, which tasks can &quot;add&quot;
+values to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> variable of a given type, which tasks can &quot;add&quot;
+values to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator(initialValue:Double,name:String):org.apache.spark.Accumulator[Double]"></a>
+      <a id="accumulator(Double,String):Accumulator[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Double">Double</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator(initialValue:Double):org.apache.spark.Accumulator[Double]"></a>
+      <a id="accumulator(Double):Accumulator[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Double">Double</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator(initialValue:Int,name:String):org.apache.spark.Accumulator[Integer]"></a>
+      <a id="accumulator(Int,String):Accumulator[Integer]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Int">Int</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Integer">Integer</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#accumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="accumulator(initialValue:Int):org.apache.spark.Accumulator[Integer]"></a>
+      <a id="accumulator(Int):Accumulator[Integer]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">accumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Integer">Integer</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#addFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="addFile(path:String):Unit"></a>
+      <a id="addFile(String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">addFile</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Add a file to be downloaded with this Spark job on every node.</p><div class="fullcomment"><div class="comment cmt"><p>Add a file to be downloaded with this Spark job on every node.
+The <code>path</code> passed can be either a local file, a file in HDFS (or other Hadoop-supported
+filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+use <code>SparkFiles.get(fileName)</code> to find its download location.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#addJar" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="addJar(path:String):Unit"></a>
+      <a id="addJar(String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">addJar</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.</p><div class="fullcomment"><div class="comment cmt"><p>Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+The <code>path</code> passed can be either a local file, a file in HDFS (or other Hadoop-supported
+filesystems), or an HTTP, HTTPS or FTP URI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#appName" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="appName:String"></a>
+      <a id="appName:String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">appName</span><span class="result">: <span class="extype" name="scala.Predef.String">String</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="scala.Any#asInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="asInstanceOf[T0]:T0"></a>
+      <a id="asInstanceOf[T0]:T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">asInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Any.asInstanceOf.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#binaryFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="binaryFiles(path:String):org.apache.spark.api.java.JavaPairRDD[String,org.apache.spark.input.PortableDataStream]"></a>
+      <a id="binaryFiles(String):JavaPairRDD[String,PortableDataStream]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">binaryFiles</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="scala.Predef.String">String</span>, <a href="../../input/PortableDataStream.html" class="extype" name="org.apache.spark.input.PortableDataStream">PortableDataStream</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::</p><p>Read a directory of binary files from HDFS, a local file system (available on all nodes),
+or any Hadoop-supported file system URI as a byte array. Each file is read as a single
+record and returned in a key-value pair, where the key is the path of each file,
+the value is the content of each file.</p><p>For example, if you have the following files:</p><pre>hdfs:<span class="cmt">//a-hdfs-path/part-00000</span>
+hdfs:<span class="cmt">//a-hdfs-path/part-00001</span>
+...
+hdfs:<span class="cmt">//a-hdfs-path/part-nnnnn</span></pre><p>Do
+<code>JavaPairRDD&lt;String, byte[]&gt; rdd = sparkContext.dataStreamFiles(&quot;hdfs://a-hdfs-path&quot;)</code>,</p><p>then <code>rdd</code> contains</p><pre>(a-hdfs-path/part-<span class="num">00000</span>, its content)
+(a-hdfs-path/part-<span class="num">00001</span>, its content)
+...
+(a-hdfs-path/part-nnnnn, its content)</pre></div><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd><dt>Note</dt><dd><span class="cmt"><p>Small files are preferred; very large files but may cause bad performance.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#binaryFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="binaryFiles(path:String,minPartitions:Int):org.apache.spark.api.java.JavaPairRDD[String,org.apache.spark.input.PortableDataStream]"></a>
+      <a id="binaryFiles(String,Int):JavaPairRDD[String,PortableDataStream]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">binaryFiles</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="scala.Predef.String">String</span>, <a href="../../input/PortableDataStream.html" class="extype" name="org.apache.spark.input.PortableDataStream">PortableDataStream</a>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Read a directory of binary files from HDFS, a local file system (available on all nodes),
+or any Hadoop-supported file system URI as a byte array.</p><div class="fullcomment"><div class="comment cmt"><p>Read a directory of binary files from HDFS, a local file system (available on all nodes),
+or any Hadoop-supported file system URI as a byte array. Each file is read as a single
+record and returned in a key-value pair, where the key is the path of each file,
+the value is the content of each file.</p><p>For example, if you have the following files:</p><pre>hdfs:<span class="cmt">//a-hdfs-path/part-00000</span>
+hdfs:<span class="cmt">//a-hdfs-path/part-00001</span>
+...
+hdfs:<span class="cmt">//a-hdfs-path/part-nnnnn</span></pre><p>Do
+<code>JavaPairRDD&lt;String, byte[]&gt; rdd = sparkContext.dataStreamFiles(&quot;hdfs://a-hdfs-path&quot;)</code>,</p><p>then <code>rdd</code> contains</p><pre>(a-hdfs-path/part-<span class="num">00000</span>, its content)
+(a-hdfs-path/part-<span class="num">00001</span>, its content)
+...
+(a-hdfs-path/part-nnnnn, its content)</pre></div><dl class="paramcmts block"><dt class="param">minPartitions</dt><dd class="cmt"><p>A suggestion value of the minimal splitting number for input data.
+</p></dd></dl><dl class="attributes block"> <dt>Note</dt><dd><span class="cmt"><p>Small files are preferred; very large files but may cause bad performance.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#binaryRecords" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="binaryRecords(path:String,recordLength:Int):org.apache.spark.api.java.JavaRDD[Array[Byte]]"></a>
+      <a id="binaryRecords(String,Int):JavaRDD[Array[Byte]]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">binaryRecords</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="recordLength">recordLength: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Byte">Byte</span>]]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::</p><p>Load data from a flat binary file, assuming the length of each record is constant.
+</p></div><dl class="paramcmts block"><dt class="param">path</dt><dd class="cmt"><p>Directory to the input data files</p></dd><dt>returns</dt><dd class="cmt"><p>An RDD of data with values, represented as byte arrays
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#broadcast" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="broadcast[T](value:T):org.apache.spark.broadcast.Broadcast[T]"></a>
+      <a id="broadcast[T](T):Broadcast[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">broadcast</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="value">value: <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.broadcast.T">T</span></span>)</span><span class="result">: <a href="../../broadcast/Broadcast.html" class="extype" name="org.apache.spark.broadcast.Broadcast">Broadcast</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.broadcast.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Broadcast a read-only variable to the cluster, returning a
+<a href="../../broadcast/Broadcast.html" class="extype" name="org.apache.spark.broadcast.Broadcast">org.apache.spark.broadcast.Broadcast</a> object for reading it in distributed functions.</p><div class="fullcomment"><div class="comment cmt"><p>Broadcast a read-only variable to the cluster, returning a
+<a href="../../broadcast/Broadcast.html" class="extype" name="org.apache.spark.broadcast.Broadcast">org.apache.spark.broadcast.Broadcast</a> object for reading it in distributed functions.
+The variable will be sent to each cluster only once.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#cancelAllJobs" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="cancelAllJobs():Unit"></a>
+      <a id="cancelAllJobs():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">cancelAllJobs</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Cancel all jobs that have been scheduled or are running.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#cancelJobGroup" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="cancelJobGroup(groupId:String):Unit"></a>
+      <a id="cancelJobGroup(String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">cancelJobGroup</span><span class="params">(<span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Cancel active jobs for the specified group.</p><div class="fullcomment"><div class="comment cmt"><p>Cancel active jobs for the specified group. See
+<a href="#setJobGroup(groupId:String,description:String):Unit" class="extmbr" name="org.apache.spark.api.java.JavaSparkContext#setJobGroup">org.apache.spark.api.java.JavaSparkContext.setJobGroup</a> for more information.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#checkpointFile" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="checkpointFile[T](path:String):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="checkpointFile[T](String):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">checkpointFile</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.checkpointFile.T">T</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected </dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#clearCallSite" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clearCallSite():Unit"></a>
+      <a id="clearCallSite():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clearCallSite</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Pass-through to SparkContext.</p><div class="fullcomment"><div class="comment cmt"><p>Pass-through to SparkContext.setCallSite.  For API support only.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#clearJobGroup" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="clearJobGroup():Unit"></a>
+      <a id="clearJobGroup():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clearJobGroup</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Clear the current thread's job group ID and its description.</p>
+    </li><li name="scala.AnyRef#clone" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clone():Object"></a>
+      <a id="clone():AnyRef"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clone</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.CloneNotSupportedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#close" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="close():Unit"></a>
+      <a id="close():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">close</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a> → Closeable → AutoCloseable</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#defaultMinPartitions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="defaultMinPartitions:Integer"></a>
+      <a id="defaultMinPartitions:Integer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">defaultMinPartitions</span><span class="result">: <span class="extype" name="java.lang.Integer">Integer</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Default min number of partitions for Hadoop RDDs when not given by user</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#defaultParallelism" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="defaultParallelism:Integer"></a>
+      <a id="defaultParallelism:Integer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">defaultParallelism</span><span class="result">: <span class="extype" name="java.lang.Integer">Integer</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Default level of parallelism to use when not given by user (e.</p><div class="fullcomment"><div class="comment cmt"><p>Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD).</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#doubleAccumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="doubleAccumulator(initialValue:Double,name:String):org.apache.spark.Accumulator[Double]"></a>
+      <a id="doubleAccumulator(Double,String):Accumulator[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">doubleAccumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Double">Double</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#doubleAccumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="doubleAccumulator(initialValue:Double):org.apache.spark.Accumulator[Double]"></a>
+      <a id="doubleAccumulator(Double):Accumulator[Double]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">doubleAccumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Double">Double</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Double">Double</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> double variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#emptyRDD" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="emptyRDD[T]:org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="emptyRDD[T]:JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">emptyRDD</span><span class="tparams">[<span name="T">T</span>]</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.emptyRDD.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD that has no partitions or elements.</p>
+    </li><li name="scala.AnyRef#eq" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="eq(x$1:AnyRef):Boolean"></a>
+      <a id="eq(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">eq</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#equals" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="equals(x$1:Any):Boolean"></a>
+      <a id="equals(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">equals</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#finalize" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="finalize():Unit"></a>
+      <a id="finalize():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">finalize</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="symbol">classOf[java.lang.Throwable]</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#getCheckpointDir" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="getCheckpointDir:com.google.common.base.Optional[String]"></a>
+      <a id="getCheckpointDir:Optional[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getCheckpointDir</span><span class="result">: <span class="extype" name="com.google.common.base.Optional">Optional</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      
+    </li><li name="scala.AnyRef#getClass" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getClass():Class[_]"></a>
+      <a id="getClass():Class[_]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getClass</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.Class">Class</span>[_]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#getConf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getConf:org.apache.spark.SparkConf"></a>
+      <a id="getConf:SparkConf"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getConf</span><span class="result">: <a href="../../SparkConf.html" class="extype" name="org.apache.spark.SparkConf">SparkConf</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Return a copy of this JavaSparkContext's configuration.</p><div class="fullcomment"><div class="comment cmt"><p>Return a copy of this JavaSparkContext's configuration. The configuration <i>cannot</i> be
+changed at runtime.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#getLocalProperty" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getLocalProperty(key:String):String"></a>
+      <a id="getLocalProperty(String):String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getLocalProperty</span><span class="params">(<span name="key">key: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Predef.String">String</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get a local property set in this thread, or null if it is missing.</p><div class="fullcomment"><div class="comment cmt"><p>Get a local property set in this thread, or null if it is missing. See
+<a href="#setLocalProperty(key:String,value:String):Unit" class="extmbr" name="org.apache.spark.api.java.JavaSparkContext#setLocalProperty">org.apache.spark.api.java.JavaSparkContext.setLocalProperty</a>.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#getSparkHome" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getSparkHome():com.google.common.base.Optional[String]"></a>
+      <a id="getSparkHome():Optional[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getSparkHome</span><span class="params">()</span><span class="result">: <span class="extype" name="com.google.common.base.Optional">Optional</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get Spark's home location from either a value set through the constructor,
+or the spark.</p><div class="fullcomment"><div class="comment cmt"><p>Get Spark's home location from either a value set through the constructor,
+or the spark.home Java property, or the SPARK_HOME environment variable
+(in that order of preference). If neither of these is set, return None.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#hadoopConfiguration" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hadoopConfiguration():org.apache.hadoop.conf.Configuration"></a>
+      <a id="hadoopConfiguration():Configuration"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hadoopConfiguration</span><span class="params">()</span><span class="result">: <span class="extype" name="org.apache.hadoop.conf.Configuration">Configuration</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Returns the Hadoop configuration used for the Hadoop code (e.</p><div class="fullcomment"><div class="comment cmt"><p>Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.</p><p><b>Note:</b> As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+plan to set some global configurations for all Hadoop RDDs.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#hadoopFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hadoopFile[K,V,F&lt;:org.apache.hadoop.mapred.InputFormat[K,V]](path:String,inputFormatClass:Class[F],keyClass:Class[K],valueClass:Class[V]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="hadoopFile[K,V,F&lt;:InputFormat[K,V]](String,Class[F],Class[K],Class[V]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hadoopFile</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapred.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="inputFormatClass">inputFormatClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.F">F</span>]</span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop file with an arbitrary InputFormat</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop file with an arbitrary InputFormat</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#hadoopFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hadoopFile[K,V,F&lt;:org.apache.hadoop.mapred.InputFormat[K,V]](path:String,inputFormatClass:Class[F],keyClass:Class[K],valueClass:Class[V],minPartitions:Int):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="hadoopFile[K,V,F&lt;:InputFormat[K,V]](String,Class[F],Class[K],Class[V],Int):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hadoopFile</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapred.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="inputFormatClass">inputFormatClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.F">F</span>]</span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopFile.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop file with an arbitrary InputFormat.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop file with an arbitrary InputFormat.</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#hadoopRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hadoopRDD[K,V,F&lt;:org.apache.hadoop.mapred.InputFormat[K,V]](conf:org.apache.hadoop.mapred.JobConf,inputFormatClass:Class[F],keyClass:Class[K],valueClass:Class[V]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="hadoopRDD[K,V,F&lt;:InputFormat[K,V]](JobConf,Class[F],Class[K],Class[V]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hadoopRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapred.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>]</span><span class="params">(<span name="conf">conf: <span class="extype" name="org.apache.hadoop.mapred.JobConf">JobConf</span></span>, <span name="inputFormatClass">inputFormatClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.F">F</span>]</span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+other necessary info (e.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
+</p></div><dl class="paramcmts block"><dt class="param">conf</dt><dd class="cmt"><p>JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+            Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+            sure you won't modify the conf. A safe approach is always creating a new conf for
+            a new RDD.</p></dd><dt class="param">inputFormatClass</dt><dd class="cmt"><p>Class of the InputFormat</p></dd><dt class="param">keyClass</dt><dd class="cmt"><p>Class of the keys</p></dd><dt class="param">valueClass</dt><dd class="cmt"><p>Class of the values</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#hadoopRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hadoopRDD[K,V,F&lt;:org.apache.hadoop.mapred.InputFormat[K,V]](conf:org.apache.hadoop.mapred.JobConf,inputFormatClass:Class[F],keyClass:Class[K],valueClass:Class[V],minPartitions:Int):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="hadoopRDD[K,V,F&lt;:InputFormat[K,V]](JobConf,Class[F],Class[K],Class[V],Int):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hadoopRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapred.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>]</span><span class="params">(<span name="conf">conf: <span class="extype" name="org.apache.hadoop.mapred.JobConf">JobConf</span></span>, <span name="inputFormatClass">inputFormatClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.F">F</span>]</span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.hadoopRDD.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+other necessary info (e.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
+etc).
+</p></div><dl class="paramcmts block"><dt class="param">conf</dt><dd class="cmt"><p>JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+            Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+            sure you won't modify the conf. A safe approach is always creating a new conf for
+            a new RDD.</p></dd><dt class="param">inputFormatClass</dt><dd class="cmt"><p>Class of the InputFormat</p></dd><dt class="param">keyClass</dt><dd class="cmt"><p>Class of the keys</p></dd><dt class="param">valueClass</dt><dd class="cmt"><p>Class of the values</p></dd><dt class="param">minPartitions</dt><dd class="cmt"><p>Minimum number of Hadoop Splits to generate.</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#hashCode" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hashCode():Int"></a>
+      <a id="hashCode():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hashCode</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#intAccumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="intAccumulator(initialValue:Int,name:String):org.apache.spark.Accumulator[Integer]"></a>
+      <a id="intAccumulator(Int,String):Accumulator[Integer]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">intAccumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Int">Int</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Integer">Integer</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.</p><p>This version supports naming the accumulator for display in Spark's web UI.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#intAccumulator" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="intAccumulator(initialValue:Int):org.apache.spark.Accumulator[Integer]"></a>
+      <a id="intAccumulator(Int):Accumulator[Integer]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">intAccumulator</span><span class="params">(<span name="initialValue">initialValue: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">Accumulator</a>[<span class="extype" name="java.lang.Integer">Integer</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method.</p><div class="fullcomment"><div class="comment cmt"><p>Create an <a href="../../Accumulator.html" class="extype" name="org.apache.spark.Accumulator">org.apache.spark.Accumulator</a> integer variable, which tasks can &quot;add&quot; values
+to using the <code>add</code> method. Only the master can access the accumulator's <code>value</code>.
+</p></div></div>
+    </li><li name="scala.Any#isInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#isLocal" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="isLocal:Boolean"></a>
+      <a id="isLocal:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isLocal</span><span class="result">: <span class="extype" name="java.lang.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#jars" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="jars:java.util.List[String]"></a>
+      <a id="jars:List[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">jars</span><span class="result">: <span class="extype" name="java.util.List">List</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#master" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="master:String"></a>
+      <a id="master:String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">master</span><span class="result">: <span class="extype" name="scala.Predef.String">String</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="scala.AnyRef#ne" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ne(x$1:AnyRef):Boolean"></a>
+      <a id="ne(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ne</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#newAPIHadoopFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="newAPIHadoopFile[K,V,F&lt;:org.apache.hadoop.mapreduce.InputFormat[K,V]](path:String,fClass:Class[F],kClass:Class[K],vClass:Class[V],conf:org.apache.hadoop.conf.Configuration):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="newAPIHadoopFile[K,V,F&lt;:InputFormat[K,V]](String,Class[F],Class[K],Class[V],Configuration):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">newAPIHadoopFile</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapreduce.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.V">V</span>]</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="fClass">fClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.F">F</span>]</span>, <span name="kClass">kClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.K">K</span>]</span>, <span name="vClass">vClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.V">V</span>]</span>, <span name="conf">conf: <span class="extype" name="org.apache.hadoop.conf.Configuration">Configuration</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopFile.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+and extra configuration options to pass to the input format.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+and extra configuration options to pass to the input format.</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#newAPIHadoopRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="newAPIHadoopRDD[K,V,F&lt;:org.apache.hadoop.mapreduce.InputFormat[K,V]](conf:org.apache.hadoop.conf.Configuration,fClass:Class[F],kClass:Class[K],vClass:Class[V]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="newAPIHadoopRDD[K,V,F&lt;:InputFormat[K,V]](Configuration,Class[F],Class[K],Class[V]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">newAPIHadoopRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="F">F &lt;: <span class="extype" name="org.apache.hadoop.mapreduce.InputFormat">InputFormat</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.V">V</span>]</span>]</span><span class="params">(<span name="conf">conf: <span class="extype" name="org.apache.hadoop.conf.Configuration">Configuration</span></span>, <span name="fClass">fClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.F">F</span>]</span>, <span name="kClass">kClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.K">K</span>]</span>, <span name="vClass">vClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.V">V</span>]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.newAPIHadoopRDD.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+and extra configuration options to pass to the input format.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+and extra configuration options to pass to the input format.
+</p></div><dl class="paramcmts block"><dt class="param">conf</dt><dd class="cmt"><p>Configuration for setting up the dataset. Note: This will be put into a Broadcast.
+            Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+            sure you won't modify the conf. A safe approach is always creating a new conf for
+            a new RDD.</p></dd><dt class="param">fClass</dt><dd class="cmt"><p>Class of the InputFormat</p></dd><dt class="param">kClass</dt><dd class="cmt"><p>Class of the keys</p></dd><dt class="param">vClass</dt><dd class="cmt"><p>Class of the values</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#notify" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notify():Unit"></a>
+      <a id="notify():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notify</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notifyAll" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notifyAll():Unit"></a>
+      <a id="notifyAll():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notifyAll</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#objectFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="objectFile[T](path:String):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="objectFile[T](String):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">objectFile</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.objectFile.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+BytesWritable values that contain a serialized partition.</p><div class="fullcomment"><div class="comment cmt"><p>Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+BytesWritable values that contain a serialized partition. This is still an experimental storage
+format and may not be supported exactly as is in future Spark releases. It will also be pretty
+slow if you use the default serializer (Java serialization), though the nice thing about it is
+that there's very little effort required to save arbitrary objects.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#objectFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="objectFile[T](path:String,minPartitions:Int):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="objectFile[T](String,Int):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">objectFile</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.objectFile.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+BytesWritable values that contain a serialized partition.</p><div class="fullcomment"><div class="comment cmt"><p>Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+BytesWritable values that contain a serialized partition. This is still an experimental storage
+format and may not be supported exactly as is in future Spark releases. It will also be pretty
+slow if you use the default serializer (Java serialization), though the nice thing about it is
+that there's very little effort required to save arbitrary objects.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelize" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelize[T](list:java.util.List[T]):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="parallelize[T](List[T]):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelize</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelize.T">T</span>]</span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelize.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelize" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelize[T](list:java.util.List[T],numSlices:Int):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="parallelize[T](List[T],Int):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelize</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelize.T">T</span>]</span>, <span name="numSlices">numSlices: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelize.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelizeDoubles" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelizeDoubles(list:java.util.List[Double]):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="parallelizeDoubles(List[Double]):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelizeDoubles</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[<span class="extype" name="java.lang.Double">Double</span>]</span>)</span><span class="result">: <a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelizeDoubles" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelizeDoubles(list:java.util.List[Double],numSlices:Int):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="parallelizeDoubles(List[Double],Int):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelizeDoubles</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[<span class="extype" name="java.lang.Double">Double</span>]</span>, <span name="numSlices">numSlices: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelizePairs" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelizePairs[K,V](list:java.util.List[(K,V)]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="parallelizePairs[K,V](List[(K,V)]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelizePairs</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[(<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.V">V</span>)]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#parallelizePairs" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="parallelizePairs[K,V](list:java.util.List[(K,V)],numSlices:Int):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="parallelizePairs[K,V](List[(K,V)],Int):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">parallelizePairs</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="list">list: <span class="extype" name="java.util.List">List</span>[(<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.V">V</span>)]</span>, <span name="numSlices">numSlices: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.parallelizePairs.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Distribute a local Scala collection to form an RDD.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#sc" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="sc:org.apache.spark.SparkContext"></a>
+      <a id="sc:SparkContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">sc</span><span class="result">: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#sequenceFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="sequenceFile[K,V](path:String,keyClass:Class[K],valueClass:Class[V]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="sequenceFile[K,V](String,Class[K],Class[V]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">sequenceFile</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.V">V</span>]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop SequenceFile.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop SequenceFile.</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#sequenceFile" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="sequenceFile[K,V](path:String,keyClass:Class[K],valueClass:Class[V],minPartitions:Int):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="sequenceFile[K,V](String,Class[K],Class[V],Int):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">sequenceFile</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.V">V</span>]</span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.sequenceFile.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Get an RDD for a Hadoop SequenceFile with given key and value types.</p><div class="fullcomment"><div class="comment cmt"><p>Get an RDD for a Hadoop SequenceFile with given key and value types.</p><p><b>Note:</b> Because Hadoop's RecordReader class re-uses the same Writable object for each
+record, directly caching the returned RDD will create many references to the same object.
+If you plan to directly cache Hadoop writable objects, you should first copy them using
+a <code>map</code> function.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#setCallSite" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="setCallSite(site:String):Unit"></a>
+      <a id="setCallSite(String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">setCallSite</span><span class="params">(<span name="site">site: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Pass-through to SparkContext.</p><div class="fullcomment"><div class="comment cmt"><p>Pass-through to SparkContext.setCallSite.  For API support only.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#setCheckpointDir" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="setCheckpointDir(dir:String):Unit"></a>
+      <a id="setCheckpointDir(String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">setCheckpointDir</span><span class="params">(<span name="dir">dir: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Set the directory under which RDDs are going to be checkpointed.</p><div class="fullcomment"><div class="comment cmt"><p>Set the directory under which RDDs are going to be checkpointed. The directory must
+be a HDFS path if running on a cluster.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#setJobGroup" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="setJobGroup(groupId:String,description:String):Unit"></a>
+      <a id="setJobGroup(String,String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">setJobGroup</span><span class="params">(<span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="description">description: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+different value or cleared.</p><div class="fullcomment"><div class="comment cmt"><p>Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+different value or cleared.
+</p></div><dl class="attributes block"> <dt>See also</dt><dd><span class="cmt"><p><code>setJobGroup(groupId: String, description: String, interruptThread: Boolean)</code>.
+     This method sets interruptOnCancel to false.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#setJobGroup" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="setJobGroup(groupId:String,description:String,interruptOnCancel:Boolean):Unit"></a>
+      <a id="setJobGroup(String,String,Boolean):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">setJobGroup</span><span class="params">(<span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="description">description: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="interruptOnCancel">interruptOnCancel: <span class="extype" name="scala.Boolean">Boolean</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+different value or cleared.</p><div class="fullcomment"><div class="comment cmt"><p>Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+different value or cleared.</p><p>Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+Application programmers can use this method to group all those jobs together and give a
+group description. Once set, the Spark web UI will associate such jobs with this group.</p><p>The application can also use <a href="#cancelJobGroup(groupId:String):Unit" class="extmbr" name="org.apache.spark.api.java.JavaSparkContext#cancelJobGroup">org.apache.spark.api.java.JavaSparkContext.cancelJobGroup</a>
+to cancel all running jobs in this group. For example,</p><pre><span class="cmt">// In the main thread:</span>
+sc.setJobGroup(<span class="lit">"some_job_to_cancel"</span>, <span class="lit">"some job description"</span>);
+rdd.map(...).count();
+
+<span class="cmt">// In a separate thread:</span>
+sc.cancelJobGroup(<span class="lit">"some_job_to_cancel"</span>);</pre><p>If interruptOnCancel is set to true for the job group, then job cancellation will result
+in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
+that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
+where HDFS may respond to Thread.interrupt() by marking nodes as dead.
+</p></div></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#setLocalProperty" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="setLocalProperty(key:String,value:String):Unit"></a>
+      <a id="setLocalProperty(String,String):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">setLocalProperty</span><span class="params">(<span name="key">key: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="value">value: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Set a local property that affects jobs submitted from this thread, such as the
+Spark fair scheduler pool.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#sparkUser" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="sparkUser:String"></a>
+      <a id="sparkUser:String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">sparkUser</span><span class="result">: <span class="extype" name="scala.Predef.String">String</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#startTime" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="startTime:Long"></a>
+      <a id="startTime:Long"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">startTime</span><span class="result">: <span class="extype" name="java.lang.Long">Long</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#statusTracker" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="statusTracker:org.apache.spark.api.java.JavaSparkStatusTracker"></a>
+      <a id="statusTracker:JavaSparkStatusTracker"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">statusTracker</span><span class="result">: <a href="JavaSparkStatusTracker.html" class="extype" name="org.apache.spark.api.java.JavaSparkStatusTracker">JavaSparkStatusTracker</a></span>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#stop" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="stop():Unit"></a>
+      <a id="stop():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">stop</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Shut down the SparkContext.</p>
+    </li><li name="scala.AnyRef#synchronized" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="synchronized[T0](x$1:=&gt;T0):T0"></a>
+      <a id="synchronized[T0](⇒T0):T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">synchronized</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="params">(<span name="arg0">arg0: ⇒ <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>)</span><span class="result">: <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#textFile" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="textFile(path:String,minPartitions:Int):org.apache.spark.api.java.JavaRDD[String]"></a>
+      <a id="textFile(String,Int):JavaRDD[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">textFile</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Read a text file from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI, and return it as an RDD of Strings.</p>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#textFile" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="textFile(path:String):org.apache.spark.api.java.JavaRDD[String]"></a>
+      <a id="textFile(String):JavaRDD[String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">textFile</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Read a text file from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI, and return it as an RDD of Strings.</p>
+    </li><li name="scala.AnyRef#toString" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="toString():String"></a>
+      <a id="toString():String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">toString</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.String">String</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union(first:org.apache.spark.api.java.JavaDoubleRDD,rest:java.util.List[org.apache.spark.api.java.JavaDoubleRDD]):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="union(JavaDoubleRDD,List[JavaDoubleRDD]):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="params">(<span name="first">first: <a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>, <span name="rest">rest: <span class="extype" name="java.util.List">List</span>[<a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a>]</span>)</span><span class="result">: <a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Build the union of two or more RDDs.</p><div class="fullcomment"><div class="comment cmt"><p>Build the union of two or more RDDs.</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a> → JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union[K,V](first:org.apache.spark.api.java.JavaPairRDD[K,V],rest:java.util.List[org.apache.spark.api.java.JavaPairRDD[K,V]]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="union[K,V](JavaPairRDD[K,V],List[JavaPairRDD[K,V]]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="first">first: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.V">V</span>]</span>, <span name="rest">rest: <span class="extype" name="java.util.List">List</span>[<a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.V">V</span>]]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Build the union of two or more RDDs.</p><div class="fullcomment"><div class="comment cmt"><p>Build the union of two or more RDDs.</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a> → JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union[T](first:org.apache.spark.api.java.JavaRDD[T],rest:java.util.List[org.apache.spark.api.java.JavaRDD[T]]):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="union[T](JavaRDD[T],List[JavaRDD[T]]):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="first">first: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.T">T</span>]</span>, <span name="rest">rest: <span class="extype" name="java.util.List">List</span>[<a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.T">T</span>]]</span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContext.union.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Build the union of two or more RDDs.</p><div class="fullcomment"><div class="comment cmt"><p>Build the union of two or more RDDs.</p></div><dl class="attributes block"> <dt>Definition Classes</dt><dd><a href="" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a> → JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union[K,V](rdds:&lt;repeated...&gt;[org.apache.spark.api.java.JavaPairRDD[K,V]]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="union[K,V](&lt;repeated...&gt;[JavaPairRDD[K,V]]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="params">(<span name="rdds">rdds: <span class="extype" name="scala.&lt;repeated...&gt;">&lt;repeated...&gt;</span>[<a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.V">V</span>]]</span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.K">K</span>, <span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.V">V</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union(rdds:&lt;repeated...&gt;[org.apache.spark.api.java.JavaDoubleRDD]):org.apache.spark.api.java.JavaDoubleRDD"></a>
+      <a id="union(&lt;repeated...&gt;[JavaDoubleRDD]):JavaDoubleRDD"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="params">(<span name="rdds">rdds: <span class="extype" name="scala.&lt;repeated...&gt;">&lt;repeated...&gt;</span>[<a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a>]</span>)</span><span class="result">: <a href="JavaDoubleRDD.html" class="extype" name="org.apache.spark.api.java.JavaDoubleRDD">JavaDoubleRDD</a></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround#union" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="union[T](rdds:&lt;repeated...&gt;[org.apache.spark.api.java.JavaRDD[T]]):org.apache.spark.api.java.JavaRDD[T]"></a>
+      <a id="union[T](&lt;repeated...&gt;[JavaRDD[T]]):JavaRDD[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">union</span><span class="tparams">[<span name="T">T</span>]</span><span class="params">(<span name="rdds">rdds: <span class="extype" name="scala.&lt;repeated...&gt;">&lt;repeated...&gt;</span>[<a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.T">T</span>]]</span>)</span><span class="result">: <a href="JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround.union.T">T</span>]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>JavaSparkContextVarargsWorkaround</dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#version" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="version:String"></a>
+      <a id="version:String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">version</span><span class="result">: <span class="extype" name="scala.Predef.String">String</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">The version of Spark on which this application is running.</p>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait():Unit"></a>
+      <a id="wait():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long,x$2:Int):Unit"></a>
+      <a id="wait(Long,Int):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>, <span name="arg1">arg1: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long):Unit"></a>
+      <a id="wait(Long):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#wholeTextFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wholeTextFiles(path:String):org.apache.spark.api.java.JavaPairRDD[String,String]"></a>
+      <a id="wholeTextFiles(String):JavaPairRDD[String,String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wholeTextFiles</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI.</p><div class="fullcomment"><div class="comment cmt"><p>Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI. Each file is read as a single record and returned in a
+key-value pair, where the key is the path of each file, the value is the content of each file.
+</p></div><dl class="attributes block"> <dt>See also</dt><dd><span class="cmt"><p><code>wholeTextFiles(path: String, minPartitions: Int)</code>.
+</p></span></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#wholeTextFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wholeTextFiles(path:String,minPartitions:Int):org.apache.spark.api.java.JavaPairRDD[String,String]"></a>
+      <a id="wholeTextFiles(String,Int):JavaPairRDD[String,String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wholeTextFiles</span><span class="params">(<span name="path">path: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="minPartitions">minPartitions: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <a href="JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI.</p><div class="fullcomment"><div class="comment cmt"><p>Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+Hadoop-supported file system URI. Each file is read as a single record and returned in a
+key-value pair, where the key is the path of each file, the value is the content of each file.</p><p> For example, if you have the following files:</p><pre>hdfs:<span class="cmt">//a-hdfs-path/part-00000</span>
+hdfs:<span class="cmt">//a-hdfs-path/part-00001</span>
+...
+hdfs:<span class="cmt">//a-hdfs-path/part-nnnnn</span></pre><p>Do</p><pre>JavaPairRDD&lt;<span class="std">String</span>, <span class="std">String</span>&gt; rdd = sparkContext.wholeTextFiles(<span class="lit">"hdfs://a-hdfs-path"</span>)</pre><p> then <code>rdd</code> contains</p><pre>(a-hdfs-path/part-<span class="num">00000</span>, its content)
+(a-hdfs-path/part-<span class="num">00001</span>, its content)
+...
+(a-hdfs-path/part-nnnnn, its content)</pre></div><dl class="paramcmts block"><dt class="param">minPartitions</dt><dd class="cmt"><p>A suggestion value of the minimal splitting number for input data.
+</p></dd></dl><dl class="attributes block"> <dt>Note</dt><dd><span class="cmt"><p>Small files are preferred, large file is also allowable, but may cause bad performance.
+</p></span></dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Deprecated Value Members</h3>
+              <ol><li name="org.apache.spark.api.java.JavaSparkContext#clearFiles" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clearFiles():Unit"></a>
+      <a id="clearFiles():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name deprecated" title="Deprecated: (Since version 1.0.0) adding files no longer creates local copies that need to be deleted">clearFiles</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Clear the job's list of files added by <code>addFile</code> so that they do not get downloaded to
+any new nodes.</p><div class="fullcomment"><div class="comment cmt"><p>Clear the job's list of files added by <code>addFile</code> so that they do not get downloaded to
+any new nodes.
+</p></div><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@deprecated</span>
+              
+        </dd><dt>Deprecated</dt><dd class="cmt"><p><i>(Since version 1.0.0)</i> adding files no longer creates local copies that need to be deleted</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#clearJars" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clearJars():Unit"></a>
+      <a id="clearJars():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name deprecated" title="Deprecated: (Since version 1.0.0) adding jars no longer creates local copies that need to be deleted">clearJars</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Clear the job's list of JARs added by <code>addJar</code> so that they do not get downloaded to
+any new nodes.</p><div class="fullcomment"><div class="comment cmt"><p>Clear the job's list of JARs added by <code>addJar</code> so that they do not get downloaded to
+any new nodes.
+</p></div><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@deprecated</span>
+              
+        </dd><dt>Deprecated</dt><dd class="cmt"><p><i>(Since version 1.0.0)</i> adding jars no longer creates local copies that need to be deleted</p></dd></dl></div>
+    </li><li name="org.apache.spark.api.java.JavaSparkContext#defaultMinSplits" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="defaultMinSplits:Integer"></a>
+      <a id="defaultMinSplits:Integer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name deprecated" title="Deprecated: (Since version 1.0.0) use defaultMinPartitions">defaultMinSplits</span><span class="result">: <span class="extype" name="java.lang.Integer">Integer</span></span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Default min number of partitions for Hadoop RDDs when not given by user.</p><div class="fullcomment"><div class="comment cmt"><p>Default min number of partitions for Hadoop RDDs when not given by user.</p></div><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@deprecated</span>
+              
+        </dd><dt>Deprecated</dt><dd class="cmt"><p><i>(Since version 1.0.0)</i> use defaultMinPartitions</p></dd></dl></div>
+    </li></ol>
+            </div>
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="java.io.Closeable">
+              <h3>Inherited from <span class="extype" name="java.io.Closeable">Closeable</span></h3>
+            </div><div class="parent" name="java.lang.AutoCloseable">
+              <h3>Inherited from <span class="extype" name="java.lang.AutoCloseable">AutoCloseable</span></h3>
+            </div><div class="parent" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround">
+              <h3>Inherited from <span class="extype" name="org.apache.spark.api.java.JavaSparkContextVarargsWorkaround">JavaSparkContextVarargsWorkaround</span></h3>
+            </div><div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

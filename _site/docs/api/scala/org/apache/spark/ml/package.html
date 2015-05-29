@@ -1,0 +1,326 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>ml - org.apache.spark.ml</title>
+          <meta name="description" content="ml - org.apache.spark.ml" />
+          <meta name="keywords" content="ml org.apache.spark.ml" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../index.html';
+            var hash = 'org.apache.spark.ml.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../package.html" class="extype" name="org">org</a>.<a href="../../package.html" class="extype" name="org.apache">apache</a>.<a href="../package.html" class="extype" name="org.apache.spark">spark</a></p>
+        <h1>ml</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ml</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>Spark ML is an ALPHA component that adds a new set of machine learning APIs to let users quickly
+assemble and configure practical machine learning pipelines.
+</p></div><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.ml"><span>ml</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.ml.Estimator" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="Estimator[M&lt;:org.apache.spark.ml.Model[M]]extendsPipelineStagewithParams"></a>
+      <a id="Estimator[M&lt;:Model[M]]:Estimator[M]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Estimator.html"><span class="name">Estimator</span></a><span class="tparams">[<span name="M">M &lt;: <a href="Model.html" class="extype" name="org.apache.spark.ml.Model">Model</a>[<span class="extype" name="org.apache.spark.ml.Estimator.M">M</span>]</span>]</span><span class="result"> extends <a href="PipelineStage.html" class="extype" name="org.apache.spark.ml.PipelineStage">PipelineStage</a> with <a href="param/Params.html" class="extype" name="org.apache.spark.ml.param.Params">Params</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Abstract class for estimators that fit models to data.</p>
+    </li><li name="org.apache.spark.ml.Evaluator" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="EvaluatorextendsIdentifiable"></a>
+      <a id="Evaluator:Evaluator"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Evaluator.html"><span class="name">Evaluator</span></a><span class="result"> extends <span class="extype" name="org.apache.spark.ml.Identifiable">Identifiable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Abstract class for evaluators that compute metrics from predictions.</p>
+    </li><li name="org.apache.spark.ml.Model" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="Model[M&lt;:org.apache.spark.ml.Model[M]]extendsTransformer"></a>
+      <a id="Model[M&lt;:Model[M]]:Model[M]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Model.html"><span class="name">Model</span></a><span class="tparams">[<span name="M">M &lt;: <a href="Model.html" class="extype" name="org.apache.spark.ml.Model">Model</a>[<span class="extype" name="org.apache.spark.ml.Model.M">M</span>]</span>]</span><span class="result"> extends <a href="Transformer.html" class="extype" name="org.apache.spark.ml.Transformer">Transformer</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+A fitted model, i.</p>
+    </li><li name="org.apache.spark.ml.Pipeline" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PipelineextendsEstimator[org.apache.spark.ml.PipelineModel]"></a>
+      <a id="Pipeline:Pipeline"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Pipeline.html"><span class="name">Pipeline</span></a><span class="result"> extends <a href="Estimator.html" class="extype" name="org.apache.spark.ml.Estimator">Estimator</a>[<a href="PipelineModel.html" class="extype" name="org.apache.spark.ml.PipelineModel">PipelineModel</a>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+A simple pipeline, which acts as an estimator.</p>
+    </li><li name="org.apache.spark.ml.PipelineModel" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PipelineModelextendsModel[org.apache.spark.ml.PipelineModel]withLogging"></a>
+      <a id="PipelineModel:PipelineModel"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PipelineModel.html"><span class="name">PipelineModel</span></a><span class="result"> extends <a href="Model.html" class="extype" name="org.apache.spark.ml.Model">Model</a>[<a href="PipelineModel.html" class="extype" name="org.apache.spark.ml.PipelineModel">PipelineModel</a>] with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Represents a compiled pipeline.</p>
+    </li><li name="org.apache.spark.ml.PipelineStage" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="PipelineStageextendsSerializablewithLogging"></a>
+      <a id="PipelineStage:PipelineStage"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PipelineStage.html"><span class="name">PipelineStage</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+A stage in a pipeline, either an <a href="Estimator.html" class="extype" name="org.apache.spark.ml.Estimator">Estimator</a> or a <a href="Transformer.html" class="extype" name="org.apache.spark.ml.Transformer">Transformer</a>.</p>
+    </li><li name="org.apache.spark.ml.Transformer" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="TransformerextendsPipelineStagewithParams"></a>
+      <a id="Transformer:Transformer"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="Transformer.html"><span class="name">Transformer</span></a><span class="result"> extends <a href="PipelineStage.html" class="extype" name="org.apache.spark.ml.PipelineStage">PipelineStage</a> with <a href="param/Params.html" class="extype" name="org.apache.spark.ml.param.Params">Params</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">:: AlphaComponent ::
+Abstract class for transformers that transform one dataset into another.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.ml.attribute" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="attribute"></a>
+      <a id="attribute:attribute"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="attribute/package.html"><span class="name">attribute</span></a>
+      </span>
+      </h4>
+      <p class="comment cmt">The ML pipeline API uses <span class="extype" name="DataFrame">DataFrame</span>s as ML datasets.</p>
+    </li><li name="org.apache.spark.ml.classification" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="classification"></a>
+      <a id="classification:classification"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="classification/package.html"><span class="name">classification</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.evaluation" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="evaluation"></a>
+      <a id="evaluation:evaluation"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="evaluation/package.html"><span class="name">evaluation</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.feature" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="feature"></a>
+      <a id="feature:feature"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="feature/package.html"><span class="name">feature</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.param" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="param"></a>
+      <a id="param:param"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="param/package.html"><span class="name">param</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.recommendation" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="recommendation"></a>
+      <a id="recommendation:recommendation"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="recommendation/package.html"><span class="name">recommendation</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.regression" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="regression"></a>
+      <a id="regression:regression"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="regression/package.html"><span class="name">regression</span></a>
+      </span>
+      </h4>
+      
+    </li><li name="org.apache.spark.ml.tuning" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="tuning"></a>
+      <a id="tuning:tuning"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <a href="tuning/package.html"><span class="name">tuning</span></a>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Members</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../lib/template.js"></script>
+    </body>
+      </html>

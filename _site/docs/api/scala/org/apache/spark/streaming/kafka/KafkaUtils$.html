@@ -1,0 +1,749 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>KafkaUtils - org.apache.spark.streaming.kafka.KafkaUtils</title>
+          <meta name="description" content="KafkaUtils - org.apache.spark.streaming.kafka.KafkaUtils" />
+          <meta name="keywords" content="KafkaUtils org.apache.spark.streaming.kafka.KafkaUtils" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.streaming.kafka.KafkaUtils$';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/object_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.streaming">streaming</a>.<a href="package.html" class="extype" name="org.apache.spark.streaming.kafka">kafka</a></p>
+        <h1>KafkaUtils</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <span class="name">KafkaUtils</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.streaming.kafka.KafkaUtils"><span>KafkaUtils</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="scala.AnyRef#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:AnyRef):Boolean"></a>
+      <a id="!=(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#!=" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="!=(x$1:Any):Boolean"></a>
+      <a id="!=(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $bang$eq" class="name">!=</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef###" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="##():Int"></a>
+      <a id="##():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $hash$hash" class="name">##</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:AnyRef):Boolean"></a>
+      <a id="==(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.Any#==" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="==(x$1:Any):Boolean"></a>
+      <a id="==(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span title="gt4s: $eq$eq" class="name">==</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.Any#asInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="asInstanceOf[T0]:T0"></a>
+      <a id="asInstanceOf[T0]:T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">asInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Any.asInstanceOf.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef#clone" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="clone():Object"></a>
+      <a id="clone():AnyRef"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">clone</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.AnyRef">AnyRef</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.CloneNotSupportedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createDirectStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createDirectStream[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V]](jssc:org.apache.spark.streaming.api.java.JavaStreamingContext,keyClass:Class[K],valueClass:Class[V],keyDecoderClass:Class[KD],valueDecoderClass:Class[VD],kafkaParams:java.util.Map[String,String],topics:java.util.Set[String]):org.apache.spark.streaming.api.java.JavaPairInputDStream[K,V]"></a>
+      <a id="createDirectStream[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V]](JavaStreamingContext,Class[K],Class[V],Class[KD],Class[VD],Map[String,String],Set[String]):JavaPairInputDStream[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createDirectStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>]</span><span class="params">(<span name="jssc">jssc: <a href="../api/java/JavaStreamingContext.html" class="extype" name="org.apache.spark.streaming.api.java.JavaStreamingContext">JavaStreamingContext</a></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="keyDecoderClass">keyDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.KD">KD</span>]</span>, <span name="valueDecoderClass">valueDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.VD">VD</span>]</span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="topics">topics: <span class="extype" name="java.util.Set">Set</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>)</span><span class="result">: <a href="../api/java/JavaPairInputDStream.html" class="extype" name="org.apache.spark.streaming.api.java.JavaPairInputDStream">JavaPairInputDStream</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver. This stream can guarantee that each message
+from Kafka is included in transformations exactly once (see points below).</p><p>Points to note:</p><ul><li>No receivers: This stream does not use any receiver. It directly queries Kafka</li><li>Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+   by the stream itself. For interoperability with Kafka monitoring tools that depend on
+   Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   You can access the offsets used in each batch from the generated RDDs (see
+   <a href="HasOffsetRanges.html" class="extype" name="org.apache.spark.streaming.kafka.HasOffsetRanges">org.apache.spark.streaming.kafka.HasOffsetRanges</a>).</li><li>Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   in the <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a>. The information on consumed offset can be
+   recovered from the checkpoint. See the programming guide for details (constraints, etc.).</li><li>End-to-end semantics: This stream ensures that every records is effectively received and
+   transformed exactly once, but gives no guarantees on whether the transformed data are
+   outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+   that the output operation is idempotent, or use transactions to output records atomically.
+   See the programming guide for more details.
+</li></ul></div><dl class="paramcmts block"><dt class="param">jssc</dt><dd class="cmt"><p>JavaStreamingContext object</p></dd><dt class="param">keyClass</dt><dd class="cmt"><p>Class of the keys in the Kafka records</p></dd><dt class="param">valueClass</dt><dd class="cmt"><p>Class of the values in the Kafka records</p></dd><dt class="param">keyDecoderClass</dt><dd class="cmt"><p>Class of the key decoder</p></dd><dt class="param">valueDecoderClass</dt><dd class="cmt"><p>Class type of the value decoder</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+  configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+  to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+  host1:port1,host2:port2 form.
+  If not starting from a checkpoint, &quot;auto.offset.reset&quot; may be set to &quot;largest&quot; or &quot;smallest&quot;
+  to determine where the stream starts (defaults to &quot;largest&quot;)</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Names of the topics to consume
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createDirectStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createDirectStream[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V],R](jssc:org.apache.spark.streaming.api.java.JavaStreamingContext,keyClass:Class[K],valueClass:Class[V],keyDecoderClass:Class[KD],valueDecoderClass:Class[VD],recordClass:Class[R],kafkaParams:java.util.Map[String,String],fromOffsets:java.util.Map[kafka.common.TopicAndPartition,Long],messageHandler:org.apache.spark.api.java.function.Function[kafka.message.MessageAndMetadata[K,V],R]):org.apache.spark.streaming.api.java.JavaInputDStream[R]"></a>
+      <a id="createDirectStream[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V],R](JavaStreamingContext,Class[K],Class[V],Class[KD],Class[VD],Class[R],Map[String,String],Map[TopicAndPartition,Long],Function[MessageAndMetadata[K,V],R]):JavaInputDStream[R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createDirectStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="R">R</span>]</span><span class="params">(<span name="jssc">jssc: <a href="../api/java/JavaStreamingContext.html" class="extype" name="org.apache.spark.streaming.api.java.JavaStreamingContext">JavaStreamingContext</a></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="keyDecoderClass">keyDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.KD">KD</span>]</span>, <span name="valueDecoderClass">valueDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.VD">VD</span>]</span>, <span name="recordClass">recordClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span>]</span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="fromOffsets">fromOffsets: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="kafka.common.TopicAndPartition">TopicAndPartition</span>, <span class="extype" name="java.lang.Long">Long</span>]</span>, <span name="messageHandler">messageHandler: <a href="../../api/java/function/Function.html" class="extype" name="org.apache.spark.api.java.function.Function">Function</a>[<span class="extype" name="kafka.message.MessageAndMetadata">MessageAndMetadata</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>], <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span>]</span>)</span><span class="result">: <a href="../api/java/JavaInputDStream.html" class="extype" name="org.apache.spark.streaming.api.java.JavaInputDStream">JavaInputDStream</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver. This stream can guarantee that each message
+from Kafka is included in transformations exactly once (see points below).</p><p>Points to note:</p><ul><li>No receivers: This stream does not use any receiver. It directly queries Kafka</li><li>Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+   by the stream itself. For interoperability with Kafka monitoring tools that depend on
+   Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   You can access the offsets used in each batch from the generated RDDs (see
+   <a href="HasOffsetRanges.html" class="extype" name="org.apache.spark.streaming.kafka.HasOffsetRanges">org.apache.spark.streaming.kafka.HasOffsetRanges</a>).</li><li>Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   in the <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a>. The information on consumed offset can be
+   recovered from the checkpoint. See the programming guide for details (constraints, etc.).</li><li>End-to-end semantics: This stream ensures that every records is effectively received and
+   transformed exactly once, but gives no guarantees on whether the transformed data are
+   outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+   that the output operation is idempotent, or use transactions to output records atomically.
+   See the programming guide for more details.
+</li></ul></div><dl class="paramcmts block"><dt class="param">jssc</dt><dd class="cmt"><p>JavaStreamingContext object</p></dd><dt class="param">keyClass</dt><dd class="cmt"><p>Class of the keys in the Kafka records</p></dd><dt class="param">valueClass</dt><dd class="cmt"><p>Class of the values in the Kafka records</p></dd><dt class="param">keyDecoderClass</dt><dd class="cmt"><p>Class of the key decoder</p></dd><dt class="param">valueDecoderClass</dt><dd class="cmt"><p>Class of the value decoder</p></dd><dt class="param">recordClass</dt><dd class="cmt"><p>Class of the records in DStream</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+  configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+  to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+  host1:port1,host2:port2 form.</p></dd><dt class="param">fromOffsets</dt><dd class="cmt"><p>Per-topic/partition Kafka offsets defining the (inclusive)
+   starting point of the stream</p></dd><dt class="param">messageHandler</dt><dd class="cmt"><p>Function for translating each message and metadata into the desired type
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createDirectStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createDirectStream[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V]](ssc:org.apache.spark.streaming.StreamingContext,kafkaParams:Map[String,String],topics:Set[String])(implicitevidence$19:scala.reflect.ClassTag[K],implicitevidence$20:scala.reflect.ClassTag[V],implicitevidence$21:scala.reflect.ClassTag[KD],implicitevidence$22:scala.reflect.ClassTag[VD]):org.apache.spark.streaming.dstream.InputDStream[(K,V)]"></a>
+      <a id="createDirectStream[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V]](StreamingContext,Map[String,String],Set[String])(ClassTag[K],ClassTag[V],ClassTag[KD],ClassTag[VD]):InputDStream[(K,V)]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createDirectStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>]</span><span class="params">(<span name="ssc">ssc: <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a></span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="topics">topics: <span class="extype" name="scala.Predef.Set">Set</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="arg2">arg2: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.KD">KD</span>]</span>, <span name="arg3">arg3: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.VD">VD</span>]</span>)</span><span class="result">: <a href="../dstream/InputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.InputDStream">InputDStream</a>[(<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>)]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver. This stream can guarantee that each message
+from Kafka is included in transformations exactly once (see points below).</p><p>Points to note:</p><ul><li>No receivers: This stream does not use any receiver. It directly queries Kafka</li><li>Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+   by the stream itself. For interoperability with Kafka monitoring tools that depend on
+   Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   You can access the offsets used in each batch from the generated RDDs (see
+   <a href="HasOffsetRanges.html" class="extype" name="org.apache.spark.streaming.kafka.HasOffsetRanges">org.apache.spark.streaming.kafka.HasOffsetRanges</a>).</li><li>Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   in the <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a>. The information on consumed offset can be
+   recovered from the checkpoint. See the programming guide for details (constraints, etc.).</li><li>End-to-end semantics: This stream ensures that every records is effectively received and
+   transformed exactly once, but gives no guarantees on whether the transformed data are
+   outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+   that the output operation is idempotent, or use transactions to output records atomically.
+   See the programming guide for more details.
+</li></ul></div><dl class="paramcmts block"><dt class="param">ssc</dt><dd class="cmt"><p>StreamingContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+  configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+  to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+  host1:port1,host2:port2 form.
+  If not starting from a checkpoint, &quot;auto.offset.reset&quot; may be set to &quot;largest&quot; or &quot;smallest&quot;
+  to determine where the stream starts (defaults to &quot;largest&quot;)</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Names of the topics to consume
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createDirectStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createDirectStream[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V],R](ssc:org.apache.spark.streaming.StreamingContext,kafkaParams:Map[String,String],fromOffsets:Map[kafka.common.TopicAndPartition,Long],messageHandler:kafka.message.MessageAndMetadata[K,V]=&gt;R)(implicitevidence$14:scala.reflect.ClassTag[K],implicitevidence$15:scala.reflect.ClassTag[V],implicitevidence$16:scala.reflect.ClassTag[KD],implicitevidence$17:scala.reflect.ClassTag[VD],implicitevidence$18:scala.reflect.ClassTag[R]):org.apache.spark.streaming.dstream.InputDStream[R]"></a>
+      <a id="createDirectStream[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V],R](StreamingContext,Map[String,String],Map[TopicAndPartition,Long],(MessageAndMetadata[K,V])⇒R)(ClassTag[K],ClassTag[V],ClassTag[KD],ClassTag[VD],ClassTag[R]):InputDStream[R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createDirectStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="R">R</span>]</span><span class="params">(<span name="ssc">ssc: <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a></span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="fromOffsets">fromOffsets: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="kafka.common.TopicAndPartition">TopicAndPartition</span>, <span class="extype" name="scala.Long">Long</span>]</span>, <span name="messageHandler">messageHandler: (<span class="extype" name="kafka.message.MessageAndMetadata">MessageAndMetadata</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]) ⇒ <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.K">K</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.V">V</span>]</span>, <span name="arg2">arg2: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.KD">KD</span>]</span>, <span name="arg3">arg3: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.VD">VD</span>]</span>, <span name="arg4">arg4: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span>]</span>)</span><span class="result">: <a href="../dstream/InputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.InputDStream">InputDStream</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createDirectStream.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create an input stream that directly pulls messages from Kafka Brokers
+without using any receiver. This stream can guarantee that each message
+from Kafka is included in transformations exactly once (see points below).</p><p>Points to note:</p><ul><li>No receivers: This stream does not use any receiver. It directly queries Kafka</li><li>Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+   by the stream itself. For interoperability with Kafka monitoring tools that depend on
+   Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   You can access the offsets used in each batch from the generated RDDs (see
+   <a href="HasOffsetRanges.html" class="extype" name="org.apache.spark.streaming.kafka.HasOffsetRanges">org.apache.spark.streaming.kafka.HasOffsetRanges</a>).</li><li>Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   in the <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a>. The information on consumed offset can be
+   recovered from the checkpoint. See the programming guide for details (constraints, etc.).</li><li>End-to-end semantics: This stream ensures that every records is effectively received and
+   transformed exactly once, but gives no guarantees on whether the transformed data are
+   outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+   that the output operation is idempotent, or use transactions to output records atomically.
+   See the programming guide for more details.
+</li></ul></div><dl class="paramcmts block"><dt class="param">ssc</dt><dd class="cmt"><p>StreamingContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+   to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   host1:port1,host2:port2 form.</p></dd><dt class="param">fromOffsets</dt><dd class="cmt"><p>Per-topic/partition Kafka offsets defining the (inclusive)
+   starting point of the stream</p></dd><dt class="param">messageHandler</dt><dd class="cmt"><p>Function for translating each message and metadata into the desired type
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createRDD[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V],R](jsc:org.apache.spark.api.java.JavaSparkContext,keyClass:Class[K],valueClass:Class[V],keyDecoderClass:Class[KD],valueDecoderClass:Class[VD],recordClass:Class[R],kafkaParams:java.util.Map[String,String],offsetRanges:Array[org.apache.spark.streaming.kafka.OffsetRange],leaders:java.util.Map[kafka.common.TopicAndPartition,org.apache.spark.streaming.kafka.Broker],messageHandler:org.apache.spark.api.java.function.Function[kafka.message.MessageAndMetadata[K,V],R]):org.apache.spark.api.java.JavaRDD[R]"></a>
+      <a id="createRDD[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V],R](JavaSparkContext,Class[K],Class[V],Class[KD],Class[VD],Class[R],Map[String,String],Array[OffsetRange],Map[TopicAndPartition,Broker],Function[MessageAndMetadata[K,V],R]):JavaRDD[R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="R">R</span>]</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="keyDecoderClass">keyDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.KD">KD</span>]</span>, <span name="valueDecoderClass">valueDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.VD">VD</span>]</span>, <span name="recordClass">recordClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span>]</span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="offsetRanges">offsetRanges: <span class="extype" name="scala.Array">Array</span>[<a href="OffsetRange.html" class="extype" name="org.apache.spark.streaming.kafka.OffsetRange">OffsetRange</a>]</span>, <span name="leaders">leaders: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="kafka.common.TopicAndPartition">TopicAndPartition</span>, <a href="Broker.html" class="extype" name="org.apache.spark.streaming.kafka.Broker">Broker</a>]</span>, <span name="messageHandler">messageHandler: <a href="../../api/java/function/Function.html" class="extype" name="org.apache.spark.api.java.function.Function">Function</a>[<span class="extype" name="kafka.message.MessageAndMetadata">MessageAndMetadata</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>], <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span>]</span>)</span><span class="result">: <a href="../../api/java/JavaRDD.html" class="extype" name="org.apache.spark.api.java.JavaRDD">JavaRDD</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create a RDD from Kafka using offset ranges for each topic and partition.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+as the metadata.
+</p></div><dl class="paramcmts block"><dt class="param">jsc</dt><dd class="cmt"><p>JavaSparkContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+   to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   host1:port1,host2:port2 form.</p></dd><dt class="param">offsetRanges</dt><dd class="cmt"><p>Each OffsetRange in the batch corresponds to a
+  range of offsets for a given Kafka topic/partition</p></dd><dt class="param">leaders</dt><dd class="cmt"><p>Kafka brokers for each TopicAndPartition in offsetRanges.  May be an empty map,
+  in which case leaders will be looked up on the driver.</p></dd><dt class="param">messageHandler</dt><dd class="cmt"><p>Function for translating each message and metadata into the desired type
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createRDD[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V]](jsc:org.apache.spark.api.java.JavaSparkContext,keyClass:Class[K],valueClass:Class[V],keyDecoderClass:Class[KD],valueDecoderClass:Class[VD],kafkaParams:java.util.Map[String,String],offsetRanges:Array[org.apache.spark.streaming.kafka.OffsetRange]):org.apache.spark.api.java.JavaPairRDD[K,V]"></a>
+      <a id="createRDD[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V]](JavaSparkContext,Class[K],Class[V],Class[KD],Class[VD],Map[String,String],Array[OffsetRange]):JavaPairRDD[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>]</span><span class="params">(<span name="jsc">jsc: <a href="../../api/java/JavaSparkContext.html" class="extype" name="org.apache.spark.api.java.JavaSparkContext">JavaSparkContext</a></span>, <span name="keyClass">keyClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="valueClass">valueClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="keyDecoderClass">keyDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.KD">KD</span>]</span>, <span name="valueDecoderClass">valueDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.VD">VD</span>]</span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="offsetRanges">offsetRanges: <span class="extype" name="scala.Array">Array</span>[<a href="OffsetRange.html" class="extype" name="org.apache.spark.streaming.kafka.OffsetRange">OffsetRange</a>]</span>)</span><span class="result">: <a href="../../api/java/JavaPairRDD.html" class="extype" name="org.apache.spark.api.java.JavaPairRDD">JavaPairRDD</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create a RDD from Kafka using offset ranges for each topic and partition.</p><div class="fullcomment"><div class="comment cmt"><p>Create a RDD from Kafka using offset ranges for each topic and partition.
+</p></div><dl class="paramcmts block"><dt class="param">jsc</dt><dd class="cmt"><p>JavaSparkContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+   to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   host1:port1,host2:port2 form.</p></dd><dt class="param">offsetRanges</dt><dd class="cmt"><p>Each OffsetRange in the batch corresponds to a
+  range of offsets for a given Kafka topic/partition
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createRDD[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V],R](sc:org.apache.spark.SparkContext,kafkaParams:Map[String,String],offsetRanges:Array[org.apache.spark.streaming.kafka.OffsetRange],leaders:Map[kafka.common.TopicAndPartition,org.apache.spark.streaming.kafka.Broker],messageHandler:kafka.message.MessageAndMetadata[K,V]=&gt;R)(implicitevidence$9:scala.reflect.ClassTag[K],implicitevidence$10:scala.reflect.ClassTag[V],implicitevidence$11:scala.reflect.ClassTag[KD],implicitevidence$12:scala.reflect.ClassTag[VD],implicitevidence$13:scala.reflect.ClassTag[R]):org.apache.spark.rdd.RDD[R]"></a>
+      <a id="createRDD[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V],R](SparkContext,Map[String,String],Array[OffsetRange],Map[TopicAndPartition,Broker],(MessageAndMetadata[K,V])⇒R)(ClassTag[K],ClassTag[V],ClassTag[KD],ClassTag[VD],ClassTag[R]):RDD[R]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="R">R</span>]</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="offsetRanges">offsetRanges: <span class="extype" name="scala.Array">Array</span>[<a href="OffsetRange.html" class="extype" name="org.apache.spark.streaming.kafka.OffsetRange">OffsetRange</a>]</span>, <span name="leaders">leaders: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="kafka.common.TopicAndPartition">TopicAndPartition</span>, <a href="Broker.html" class="extype" name="org.apache.spark.streaming.kafka.Broker">Broker</a>]</span>, <span name="messageHandler">messageHandler: (<span class="extype" name="kafka.message.MessageAndMetadata">MessageAndMetadata</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]) ⇒ <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="arg2">arg2: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.KD">KD</span>]</span>, <span name="arg3">arg3: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.VD">VD</span>]</span>, <span name="arg4">arg4: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span>]</span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.R">R</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">:: Experimental ::
+Create a RDD from Kafka using offset ranges for each topic and partition.</p><div class="fullcomment"><div class="comment cmt"><p>:: Experimental ::
+Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+as the metadata.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+   to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   host1:port1,host2:port2 form.</p></dd><dt class="param">offsetRanges</dt><dd class="cmt"><p>Each OffsetRange in the batch corresponds to a
+  range of offsets for a given Kafka topic/partition</p></dd><dt class="param">leaders</dt><dd class="cmt"><p>Kafka brokers for each TopicAndPartition in offsetRanges.  May be an empty map,
+  in which case leaders will be looked up on the driver.</p></dd><dt class="param">messageHandler</dt><dd class="cmt"><p>Function for translating each message and metadata into the desired type
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createRDD" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createRDD[K,V,KD&lt;:kafka.serializer.Decoder[K],VD&lt;:kafka.serializer.Decoder[V]](sc:org.apache.spark.SparkContext,kafkaParams:Map[String,String],offsetRanges:Array[org.apache.spark.streaming.kafka.OffsetRange])(implicitevidence$5:scala.reflect.ClassTag[K],implicitevidence$6:scala.reflect.ClassTag[V],implicitevidence$7:scala.reflect.ClassTag[KD],implicitevidence$8:scala.reflect.ClassTag[VD]):org.apache.spark.rdd.RDD[(K,V)]"></a>
+      <a id="createRDD[K,V,KD&lt;:Decoder[K],VD&lt;:Decoder[V]](SparkContext,Map[String,String],Array[OffsetRange])(ClassTag[K],ClassTag[V],ClassTag[KD],ClassTag[VD]):RDD[(K,V)]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createRDD</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="KD">KD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="VD">VD &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>]</span><span class="params">(<span name="sc">sc: <a href="../../SparkContext.html" class="extype" name="org.apache.spark.SparkContext">SparkContext</a></span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="offsetRanges">offsetRanges: <span class="extype" name="scala.Array">Array</span>[<a href="OffsetRange.html" class="extype" name="org.apache.spark.streaming.kafka.OffsetRange">OffsetRange</a>]</span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>]</span>, <span name="arg2">arg2: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.KD">KD</span>]</span>, <span name="arg3">arg3: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.VD">VD</span>]</span>)</span><span class="result">: <a href="../../rdd/RDD.html" class="extype" name="org.apache.spark.rdd.RDD">RDD</a>[(<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createRDD.V">V</span>)]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create a RDD from Kafka using offset ranges for each topic and partition.</p><div class="fullcomment"><div class="comment cmt"><p>Create a RDD from Kafka using offset ranges for each topic and partition.
+</p></div><dl class="paramcmts block"><dt class="param">sc</dt><dd class="cmt"><p>SparkContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   configuration parameters</a>. Requires &quot;metadata.broker.list&quot; or &quot;bootstrap.servers&quot;
+   to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   host1:port1,host2:port2 form.</p></dd><dt class="param">offsetRanges</dt><dd class="cmt"><p>Each OffsetRange in the batch corresponds to a
+  range of offsets for a given Kafka topic/partition
+</p></dd></dl><dl class="attributes block"> <dt>Annotations</dt><dd>
+                <span class="name">@<a href="../../annotation/Experimental.html" class="extype" name="org.apache.spark.annotation.Experimental">Experimental</a></span><span class="args">()</span>
+              
+        </dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createStream[K,V,U&lt;:kafka.serializer.Decoder[_],T&lt;:kafka.serializer.Decoder[_]](jssc:org.apache.spark.streaming.api.java.JavaStreamingContext,keyTypeClass:Class[K],valueTypeClass:Class[V],keyDecoderClass:Class[U],valueDecoderClass:Class[T],kafkaParams:java.util.Map[String,String],topics:java.util.Map[String,Integer],storageLevel:org.apache.spark.storage.StorageLevel):org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream[K,V]"></a>
+      <a id="createStream[K,V,U&lt;:Decoder[_],T&lt;:Decoder[_]](JavaStreamingContext,Class[K],Class[V],Class[U],Class[T],Map[String,String],Map[String,Integer],StorageLevel):JavaPairReceiverInputDStream[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="U">U &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[_]</span>, <span name="T">T &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[_]</span>]</span><span class="params">(<span name="jssc">jssc: <a href="../api/java/JavaStreamingContext.html" class="extype" name="org.apache.spark.streaming.api.java.JavaStreamingContext">JavaStreamingContext</a></span>, <span name="keyTypeClass">keyTypeClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.K">K</span>]</span>, <span name="valueTypeClass">valueTypeClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.V">V</span>]</span>, <span name="keyDecoderClass">keyDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.U">U</span>]</span>, <span name="valueDecoderClass">valueDecoderClass: <span class="extype" name="scala.Predef.Class">Class</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.T">T</span>]</span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="topics">topics: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="java.lang.Integer">Integer</span>]</span>, <span name="storageLevel">storageLevel: <a href="../../storage/StorageLevel.html" class="extype" name="org.apache.spark.storage.StorageLevel">StorageLevel</a></span>)</span><span class="result">: <a href="../api/java/JavaPairReceiverInputDStream.html" class="extype" name="org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream">JavaPairReceiverInputDStream</a>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.V">V</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an input stream that pulls messages from Kafka Brokers.</p><div class="fullcomment"><div class="comment cmt"><p>Create an input stream that pulls messages from Kafka Brokers.</p></div><dl class="paramcmts block"><dt class="param">jssc</dt><dd class="cmt"><p>JavaStreamingContext object</p></dd><dt class="param">keyTypeClass</dt><dd class="cmt"><p>Key type of DStream</p></dd><dt class="param">valueTypeClass</dt><dd class="cmt"><p>value type of Dstream</p></dd><dt class="param">keyDecoderClass</dt><dd class="cmt"><p>Type of kafka key decoder</p></dd><dt class="param">valueDecoderClass</dt><dd class="cmt"><p>Type of kafka value decoder</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Map of kafka configuration parameters,
+                   see http://kafka.apache.org/08/configuration.html</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
+               in its own thread</p></dd><dt class="param">storageLevel</dt><dd class="cmt"><p>RDD storage level.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createStream(jssc:org.apache.spark.streaming.api.java.JavaStreamingContext,zkQuorum:String,groupId:String,topics:java.util.Map[String,Integer],storageLevel:org.apache.spark.storage.StorageLevel):org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream[String,String]"></a>
+      <a id="createStream(JavaStreamingContext,String,String,Map[String,Integer],StorageLevel):JavaPairReceiverInputDStream[String,String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createStream</span><span class="params">(<span name="jssc">jssc: <a href="../api/java/JavaStreamingContext.html" class="extype" name="org.apache.spark.streaming.api.java.JavaStreamingContext">JavaStreamingContext</a></span>, <span name="zkQuorum">zkQuorum: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="topics">topics: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="java.lang.Integer">Integer</span>]</span>, <span name="storageLevel">storageLevel: <a href="../../storage/StorageLevel.html" class="extype" name="org.apache.spark.storage.StorageLevel">StorageLevel</a></span>)</span><span class="result">: <a href="../api/java/JavaPairReceiverInputDStream.html" class="extype" name="org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream">JavaPairReceiverInputDStream</a>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an input stream that pulls messages from Kafka Brokers.</p><div class="fullcomment"><div class="comment cmt"><p>Create an input stream that pulls messages from Kafka Brokers.</p></div><dl class="paramcmts block"><dt class="param">jssc</dt><dd class="cmt"><p>JavaStreamingContext object</p></dd><dt class="param">zkQuorum</dt><dd class="cmt"><p>Zookeeper quorum (hostname:port,hostname:port,..).</p></dd><dt class="param">groupId</dt><dd class="cmt"><p>The group id for this consumer.</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
+                 in its own thread.</p></dd><dt class="param">storageLevel</dt><dd class="cmt"><p>RDD storage level.
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createStream(jssc:org.apache.spark.streaming.api.java.JavaStreamingContext,zkQuorum:String,groupId:String,topics:java.util.Map[String,Integer]):org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream[String,String]"></a>
+      <a id="createStream(JavaStreamingContext,String,String,Map[String,Integer]):JavaPairReceiverInputDStream[String,String]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createStream</span><span class="params">(<span name="jssc">jssc: <a href="../api/java/JavaStreamingContext.html" class="extype" name="org.apache.spark.streaming.api.java.JavaStreamingContext">JavaStreamingContext</a></span>, <span name="zkQuorum">zkQuorum: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="topics">topics: <span class="extype" name="java.util.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="java.lang.Integer">Integer</span>]</span>)</span><span class="result">: <a href="../api/java/JavaPairReceiverInputDStream.html" class="extype" name="org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream">JavaPairReceiverInputDStream</a>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an input stream that pulls messages from Kafka Brokers.</p><div class="fullcomment"><div class="comment cmt"><p>Create an input stream that pulls messages from Kafka Brokers.
+Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.</p></div><dl class="paramcmts block"><dt class="param">jssc</dt><dd class="cmt"><p>JavaStreamingContext object</p></dd><dt class="param">zkQuorum</dt><dd class="cmt"><p>Zookeeper quorum (hostname:port,hostname:port,..)</p></dd><dt class="param">groupId</dt><dd class="cmt"><p>The group id for this consumer</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
+                 in its own thread
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createStream[K,V,U&lt;:kafka.serializer.Decoder[_],T&lt;:kafka.serializer.Decoder[_]](ssc:org.apache.spark.streaming.StreamingContext,kafkaParams:Map[String,String],topics:Map[String,Int],storageLevel:org.apache.spark.storage.StorageLevel)(implicitevidence$1:scala.reflect.ClassTag[K],implicitevidence$2:scala.reflect.ClassTag[V],implicitevidence$3:scala.reflect.ClassTag[U],implicitevidence$4:scala.reflect.ClassTag[T]):org.apache.spark.streaming.dstream.ReceiverInputDStream[(K,V)]"></a>
+      <a id="createStream[K,V,U&lt;:Decoder[_],T&lt;:Decoder[_]](StreamingContext,Map[String,String],Map[String,Int],StorageLevel)(ClassTag[K],ClassTag[V],ClassTag[U],ClassTag[T]):ReceiverInputDStream[(K,V)]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createStream</span><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>, <span name="U">U &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[_]</span>, <span name="T">T &lt;: <span class="extype" name="kafka.serializer.Decoder">Decoder</span>[_]</span>]</span><span class="params">(<span name="ssc">ssc: <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a></span>, <span name="kafkaParams">kafkaParams: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>]</span>, <span name="topics">topics: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Int">Int</span>]</span>, <span name="storageLevel">storageLevel: <a href="../../storage/StorageLevel.html" class="extype" name="org.apache.spark.storage.StorageLevel">StorageLevel</a></span>)</span><span class="params">(<span class="implicit">implicit </span><span name="arg0">arg0: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.K">K</span>]</span>, <span name="arg1">arg1: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.V">V</span>]</span>, <span name="arg2">arg2: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.U">U</span>]</span>, <span name="arg3">arg3: <span class="extype" name="scala.reflect.ClassTag">ClassTag</span>[<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.T">T</span>]</span>)</span><span class="result">: <a href="../dstream/ReceiverInputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.ReceiverInputDStream">ReceiverInputDStream</a>[(<span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.K">K</span>, <span class="extype" name="org.apache.spark.streaming.kafka.KafkaUtils.createStream.V">V</span>)]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an input stream that pulls messages from Kafka Brokers.</p><div class="fullcomment"><div class="comment cmt"><p>Create an input stream that pulls messages from Kafka Brokers.</p></div><dl class="paramcmts block"><dt class="param">ssc</dt><dd class="cmt"><p>StreamingContext object</p></dd><dt class="param">kafkaParams</dt><dd class="cmt"><p>Map of kafka configuration parameters,
+                   see http://kafka.apache.org/08/configuration.html</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
+                   in its own thread.</p></dd><dt class="param">storageLevel</dt><dd class="cmt"><p>Storage level to use for storing the received objects
+</p></dd></dl></div>
+    </li><li name="org.apache.spark.streaming.kafka.KafkaUtils#createStream" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="createStream(ssc:org.apache.spark.streaming.StreamingContext,zkQuorum:String,groupId:String,topics:Map[String,Int],storageLevel:org.apache.spark.storage.StorageLevel):org.apache.spark.streaming.dstream.ReceiverInputDStream[(String,String)]"></a>
+      <a id="createStream(StreamingContext,String,String,Map[String,Int],StorageLevel):ReceiverInputDStream[(String,String)]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">createStream</span><span class="params">(<span name="ssc">ssc: <a href="../StreamingContext.html" class="extype" name="org.apache.spark.streaming.StreamingContext">StreamingContext</a></span>, <span name="zkQuorum">zkQuorum: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="groupId">groupId: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="topics">topics: <span class="extype" name="scala.Predef.Map">Map</span>[<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Int">Int</span>]</span>, <span name="storageLevel">storageLevel: <a href="../../storage/StorageLevel.html" class="extype" name="org.apache.spark.storage.StorageLevel">StorageLevel</a> = <span class="symbol"><span class="name"><a href="../../../../package.html">StorageLevel.MEMORY_AND_DISK_SER_2</a></span></span></span>)</span><span class="result">: <a href="../dstream/ReceiverInputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.ReceiverInputDStream">ReceiverInputDStream</a>[(<span class="extype" name="scala.Predef.String">String</span>, <span class="extype" name="scala.Predef.String">String</span>)]</span>
+      </span>
+      </h4>
+      <p class="shortcomment cmt">Create an input stream that pulls messages from Kafka Brokers.</p><div class="fullcomment"><div class="comment cmt"><p>Create an input stream that pulls messages from Kafka Brokers.</p></div><dl class="paramcmts block"><dt class="param">ssc</dt><dd class="cmt"><p>StreamingContext object</p></dd><dt class="param">zkQuorum</dt><dd class="cmt"><p>Zookeeper quorum (hostname:port,hostname:port,..)</p></dd><dt class="param">groupId</dt><dd class="cmt"><p>The group id for this consumer</p></dd><dt class="param">topics</dt><dd class="cmt"><p>Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
+                 in its own thread</p></dd><dt class="param">storageLevel</dt><dd class="cmt"><p>Storage level to use for storing the received objects
+                     (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+</p></dd></dl></div>
+    </li><li name="scala.AnyRef#eq" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="eq(x$1:AnyRef):Boolean"></a>
+      <a id="eq(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">eq</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#equals" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="equals(x$1:Any):Boolean"></a>
+      <a id="equals(Any):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">equals</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Any">Any</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#finalize" visbl="prt" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="finalize():Unit"></a>
+      <a id="finalize():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">finalize</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Attributes</dt><dd>protected[<a href="../../../../../java$lang.html" class="extype" name="java.lang">java.lang</a>] </dd><dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="symbol">classOf[java.lang.Throwable]</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#getClass" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="getClass():Class[_]"></a>
+      <a id="getClass():Class[_]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">getClass</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.Class">Class</span>[_]</span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#hashCode" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="hashCode():Int"></a>
+      <a id="hashCode():Int"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">hashCode</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Int">Int</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.Any#isInstanceOf" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <a id="isInstanceOf[T0]:Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">isInstanceOf</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>Any</dd></dl></div>
+    </li><li name="scala.AnyRef#ne" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="ne(x$1:AnyRef):Boolean"></a>
+      <a id="ne(AnyRef):Boolean"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">ne</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.AnyRef">AnyRef</span></span>)</span><span class="result">: <span class="extype" name="scala.Boolean">Boolean</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notify" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notify():Unit"></a>
+      <a id="notify():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notify</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#notifyAll" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="notifyAll():Unit"></a>
+      <a id="notifyAll():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">notifyAll</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#synchronized" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="synchronized[T0](x$1:=&gt;T0):T0"></a>
+      <a id="synchronized[T0](⇒T0):T0"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">synchronized</span><span class="tparams">[<span name="T0">T0</span>]</span><span class="params">(<span name="arg0">arg0: ⇒ <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>)</span><span class="result">: <span class="extype" name="java.lang.AnyRef.synchronized.T0">T0</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="scala.AnyRef#toString" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="toString():String"></a>
+      <a id="toString():String"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">toString</span><span class="params">()</span><span class="result">: <span class="extype" name="java.lang.String">String</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef → Any</dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait():Unit"></a>
+      <a id="wait():Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">()</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long,x$2:Int):Unit"></a>
+      <a id="wait(Long,Int):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>, <span name="arg1">arg1: <span class="extype" name="scala.Int">Int</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
+      <a id="wait(x$1:Long):Unit"></a>
+      <a id="wait(Long):Unit"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">final </span>
+        <span class="kind">def</span>
+      </span>
+      <span class="symbol">
+        <span class="name">wait</span><span class="params">(<span name="arg0">arg0: <span class="extype" name="scala.Long">Long</span></span>)</span><span class="result">: <span class="extype" name="scala.Unit">Unit</span></span>
+      </span>
+      </h4>
+      <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd><dt>Annotations</dt><dd>
+                <span class="name">@throws</span><span class="args">(<span>
+      
+      <span class="defval" name="classOf[java.lang.InterruptedException]">...</span>
+    </span>)</span>
+              
+        </dd></dl></div>
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

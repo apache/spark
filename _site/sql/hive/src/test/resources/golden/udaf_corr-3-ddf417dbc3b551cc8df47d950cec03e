@@ -1,0 +1,2 @@
+corr(x,y) - Returns the Pearson coefficient of correlation
+between a set of number pairs

@@ -1,0 +1,136 @@
+<p><a href="http://en.wikipedia.org/wiki/Naive_Bayes_classifier">Naive Bayes</a> is a simple
+multiclass classification algorithm with the assumption of independence between
+every pair of features. Naive Bayes can be trained very efficiently. Within a
+single pass to the training data, it computes the conditional probability
+distribution of each feature given label, and then it applies Bayes’ theorem to
+compute the conditional probability distribution of label given an observation
+and use it for prediction.</p>
+
+<p>MLlib supports <a href="http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes">multinomial naive
+Bayes</a>
+and <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">Bernoulli naive Bayes</a>.
+These models are typically used for <a href="http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html">document classification</a>.
+Within that context, each observation is a document and each
+feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
+a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
+Feature values must be nonnegative. The model type is selected with an optional parameter
+“multinomial” or “bernoulli” with “multinomial” as the default.
+<a href="http://en.wikipedia.org/wiki/Lidstone_smoothing">Additive smoothing</a> can be used by
+setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
+vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
+sparsity. Since the training data is only used once, it is not necessary to cache it.</p>
+
+<h2 id="examples">Examples</h2>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+    <p><a href="api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$">NaiveBayes</a> implements
+multinomial naive Bayes. It takes an RDD of
+<a href="api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint">LabeledPoint</a> and an optional
+smoothing parameter <code>lambda</code> as input, an optional model type parameter (default is “multinomial”), and outputs a
+<a href="api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel">NaiveBayesModel</a>, which
+can be used for evaluation and prediction.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.classification.</span><span class="o">{</span><span class="nc">NaiveBayes</span><span class="o">,</span> <span class="nc">NaiveBayesModel</span><span class="o">}</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span>
+
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/sample_naive_bayes_data.txt&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">parsedData</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">parts</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39;,&#39;</span><span class="o">)</span>
+  <span class="nc">LabeledPoint</span><span class="o">(</span><span class="n">parts</span><span class="o">(</span><span class="mi">0</span><span class="o">).</span><span class="n">toDouble</span><span class="o">,</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">parts</span><span class="o">(</span><span class="mi">1</span><span class="o">).</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39; &#39;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toDouble</span><span class="o">)))</span>
+<span class="o">}</span>
+<span class="c1">// Split data into training (60%) and test (40%).</span>
+<span class="k">val</span> <span class="n">splits</span> <span class="k">=</span> <span class="n">parsedData</span><span class="o">.</span><span class="n">randomSplit</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">),</span> <span class="n">seed</span> <span class="k">=</span> <span class="mi">11L</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">training</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">0</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">test</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">1</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">model</span> <span class="k">=</span> <span class="nc">NaiveBayes</span><span class="o">.</span><span class="n">train</span><span class="o">(</span><span class="n">training</span><span class="o">,</span> <span class="n">lambda</span> <span class="k">=</span> <span class="mf">1.0</span><span class="o">,</span> <span class="n">model</span> <span class="k">=</span> <span class="s">&quot;multinomial&quot;</span><span class="o">)</span>
+
+<span class="k">val</span> <span class="n">predictionAndLabel</span> <span class="k">=</span> <span class="n">test</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">p</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="o">(</span><span class="n">p</span><span class="o">.</span><span class="n">features</span><span class="o">),</span> <span class="n">p</span><span class="o">.</span><span class="n">label</span><span class="o">))</span>
+<span class="k">val</span> <span class="n">accuracy</span> <span class="k">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">predictionAndLabel</span><span class="o">.</span><span class="n">filter</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">x</span><span class="o">.</span><span class="n">_1</span> <span class="o">==</span> <span class="n">x</span><span class="o">.</span><span class="n">_2</span><span class="o">).</span><span class="n">count</span><span class="o">()</span> <span class="o">/</span> <span class="n">test</span><span class="o">.</span><span class="n">count</span><span class="o">()</span>
+
+<span class="c1">// Save and load model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;myModelPath&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">sameModel</span> <span class="k">=</span> <span class="nc">NaiveBayesModel</span><span class="o">.</span><span class="n">load</span><span class="o">(</span><span class="n">sc</span><span class="o">,</span> <span class="s">&quot;myModelPath&quot;</span><span class="o">)</span></code></pre></div>
+
+  </div>
+
+<div data-lang="java">
+
+    <p><a href="api/java/org/apache/spark/mllib/classification/NaiveBayes.html">NaiveBayes</a> implements
+multinomial naive Bayes. It takes a Scala RDD of
+<a href="api/java/org/apache/spark/mllib/regression/LabeledPoint.html">LabeledPoint</a> and an
+optionally smoothing parameter <code>lambda</code> as input, and output a
+<a href="api/java/org/apache/spark/mllib/classification/NaiveBayesModel.html">NaiveBayesModel</a>, which
+can be used for evaluation and prediction.</p>
+
+    <div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">scala.Tuple2</span><span class="o">;</span>
+
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaPairRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.Function</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.PairFunction</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.classification.NaiveBayes</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.classification.NaiveBayesModel</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.regression.LabeledPoint</span><span class="o">;</span>
+
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">training</span> <span class="o">=</span> <span class="o">...</span> <span class="c1">// training set</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">&gt;</span> <span class="n">test</span> <span class="o">=</span> <span class="o">...</span> <span class="c1">// test set</span>
+
+<span class="kd">final</span> <span class="n">NaiveBayesModel</span> <span class="n">model</span> <span class="o">=</span> <span class="n">NaiveBayes</span><span class="o">.</span><span class="na">train</span><span class="o">(</span><span class="n">training</span><span class="o">.</span><span class="na">rdd</span><span class="o">(),</span> <span class="mf">1.0</span><span class="o">);</span>
+
+<span class="n">JavaPairRDD</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="n">predictionAndLabel</span> <span class="o">=</span> 
+  <span class="n">test</span><span class="o">.</span><span class="na">mapToPair</span><span class="o">(</span><span class="k">new</span> <span class="n">PairFunction</span><span class="o">&lt;</span><span class="n">LabeledPoint</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;()</span> <span class="o">{</span>
+    <span class="nd">@Override</span> <span class="kd">public</span> <span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="nf">call</span><span class="o">(</span><span class="n">LabeledPoint</span> <span class="n">p</span><span class="o">)</span> <span class="o">{</span>
+      <span class="k">return</span> <span class="k">new</span> <span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;(</span><span class="n">model</span><span class="o">.</span><span class="na">predict</span><span class="o">(</span><span class="n">p</span><span class="o">.</span><span class="na">features</span><span class="o">()),</span> <span class="n">p</span><span class="o">.</span><span class="na">label</span><span class="o">());</span>
+    <span class="o">}</span>
+  <span class="o">});</span>
+<span class="kt">double</span> <span class="n">accuracy</span> <span class="o">=</span> <span class="n">predictionAndLabel</span><span class="o">.</span><span class="na">filter</span><span class="o">(</span><span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;,</span> <span class="n">Boolean</span><span class="o">&gt;()</span> <span class="o">{</span>
+    <span class="nd">@Override</span> <span class="kd">public</span> <span class="n">Boolean</span> <span class="nf">call</span><span class="o">(</span><span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="n">pl</span><span class="o">)</span> <span class="o">{</span>
+      <span class="k">return</span> <span class="n">pl</span><span class="o">.</span><span class="na">_1</span><span class="o">().</span><span class="na">equals</span><span class="o">(</span><span class="n">pl</span><span class="o">.</span><span class="na">_2</span><span class="o">());</span>
+    <span class="o">}</span>
+  <span class="o">}).</span><span class="na">count</span><span class="o">()</span> <span class="o">/</span> <span class="o">(</span><span class="kt">double</span><span class="o">)</span> <span class="n">test</span><span class="o">.</span><span class="na">count</span><span class="o">();</span>
+
+<span class="c1">// Save and load model</span>
+<span class="n">model</span><span class="o">.</span><span class="na">save</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="na">sc</span><span class="o">(),</span> <span class="s">&quot;myModelPath&quot;</span><span class="o">);</span>
+<span class="n">NaiveBayesModel</span> <span class="n">sameModel</span> <span class="o">=</span> <span class="n">NaiveBayesModel</span><span class="o">.</span><span class="na">load</span><span class="o">(</span><span class="n">sc</span><span class="o">.</span><span class="na">sc</span><span class="o">(),</span> <span class="s">&quot;myModelPath&quot;</span><span class="o">);</span></code></pre></div>
+
+  </div>
+
+<div data-lang="python">
+
+    <p><a href="api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes">NaiveBayes</a> implements multinomial
+naive Bayes. It takes an RDD of
+<a href="api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint">LabeledPoint</a> and an optionally
+smoothing parameter <code>lambda</code> as input, and output a
+<a href="api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel">NaiveBayesModel</a>, which can be
+used for evaluation and prediction.</p>
+
+    <p>Note that the Python API does not yet support model save/load but will in the future.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.classification</span> <span class="kn">import</span> <span class="n">NaiveBayes</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.linalg</span> <span class="kn">import</span> <span class="n">Vectors</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.regression</span> <span class="kn">import</span> <span class="n">LabeledPoint</span>
+
+<span class="k">def</span> <span class="nf">parseLine</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;,&#39;</span><span class="p">)</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">features</span> <span class="o">=</span> <span class="n">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39; &#39;</span><span class="p">)])</span>
+    <span class="k">return</span> <span class="n">LabeledPoint</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">features</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="p">(</span><span class="s">&#39;data/mllib/sample_naive_bayes_data.txt&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">parseLine</span><span class="p">)</span>
+
+<span class="c"># Split data aproximately into training (60%) and test (40%)</span>
+<span class="n">training</span><span class="p">,</span> <span class="n">test</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">randomSplit</span><span class="p">([</span><span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">],</span> <span class="n">seed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+
+<span class="c"># Train a naive Bayes model.</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">NaiveBayes</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">training</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+<span class="c"># Make prediction and test accuracy.</span>
+<span class="n">predictionAndLabel</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span> <span class="p">:</span> <span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">features</span><span class="p">),</span> <span class="n">p</span><span class="o">.</span><span class="n">label</span><span class="p">))</span>
+<span class="n">accuracy</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">predictionAndLabel</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span> <span class="n">x</span> <span class="o">==</span> <span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">/</span> <span class="n">test</span><span class="o">.</span><span class="n">count</span><span class="p">()</span></code></pre></div>
+
+  </div>
+</div>

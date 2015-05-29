@@ -1,0 +1,1 @@
+SHOW TABLES FROM nonexistent LIKE 'test';

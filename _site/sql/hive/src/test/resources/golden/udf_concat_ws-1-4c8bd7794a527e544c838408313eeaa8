@@ -1,0 +1,1 @@
+concat_ws(separator, [string | array(string)]+) - returns the concatenation of the strings separated by the separator.

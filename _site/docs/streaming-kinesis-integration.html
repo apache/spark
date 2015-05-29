@@ -1,0 +1,187 @@
+<p><a href="http://aws.amazon.com/kinesis/">Amazon Kinesis</a> is a fully managed service for real-time processing of streaming data at massive scale.
+The Kinesis receiver creates an input DStream using the Kinesis Client Library (KCL) provided by Amazon under the Amazon Software License (ASL).
+The KCL builds on top of the Apache 2.0 licensed AWS Java SDK and provides load-balancing, fault-tolerance, checkpointing through the concepts of Workers, Checkpoints, and Shard Leases.
+Here we explain how to configure Spark Streaming to receive data from Kinesis.</p>
+
+<h4 id="configuring-kinesis">Configuring Kinesis</h4>
+
+<p>A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or more shards per the following
+<a href="http://docs.aws.amazon.com/kinesis/latest/dev/step-one-create-stream.html">guide</a>.</p>
+
+<h4 id="configuring-spark-streaming-application">Configuring Spark Streaming Application</h4>
+
+<ol>
+  <li>
+    <p><strong>Linking:</strong> In your SBT/Maven project definition, link your streaming application against the following artifact (see <a href="streaming-programming-guide.html#linking">Linking section</a> in the main programming guide for further information).</p>
+
+    <pre><code> groupId = org.apache.spark
+ artifactId = spark-streaming-kinesis-asl_
+ version = 
+</code></pre>
+
+    <p><strong>Note that by linking to this library, you will include <a href="https://aws.amazon.com/asl/">ASL</a>-licensed code in your application.</strong></p>
+  </li>
+  <li>
+    <p><strong>Programming:</strong> In the streaming application code, import <code>KinesisUtils</code> and create the input DStream as follows:</p>
+
+    <div class="codetabs">
+ <div data-lang="scala">
+        <pre><code> import org.apache.spark.streaming.Duration
+ import org.apache.spark.streaming.kinesis._
+ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+
+ val kinesisStream = KinesisUtils.createStream(
+ 	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position])
+</code></pre>
+
+        <p>See the <a href="api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$">API docs</a>
+ and the <a href="/tree/master/extras/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala">example</a>. Refer to the Running the Example section for instructions on how to run the example.</p>
+
+      </div>
+ <div data-lang="java">
+        <pre><code> import org.apache.spark.streaming.Duration;
+ import org.apache.spark.streaming.kinesis.*;
+ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+
+ JavaReceiverInputDStream&lt;byte[]&gt; kinesisStream = KinesisUtils.createStream(
+ 	streamingContext, [Kinesis stream name], [endpoint URL], [checkpoint interval], [initial position]);
+</code></pre>
+
+        <p>See the <a href="api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html">API docs</a>
+ and the <a href="/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java">example</a>. Refer to the next subsection for instructions to run the example.</p>
+
+      </div>
+ </div>
+
+    <ul>
+      <li>
+        <p><code>streamingContext</code>: StreamingContext containg an application name used by Kinesis to tie this Kinesis application to the Kinesis stream</p>
+      </li>
+      <li><code>[Kinesis stream name]</code>: The Kinesis stream that this streaming application receives from
+        <ul>
+          <li>The application name used in the streaming context becomes the Kinesis application name</li>
+          <li>The application name must be unique for a given account and region.</li>
+          <li>The Kinesis backend automatically associates the application name to the Kinesis stream using a DynamoDB table (always in the us-east-1 region) created during Kinesis Client Library initialization.</li>
+          <li>Changing the application name or stream name can lead to Kinesis errors in some cases.  If you see errors, you may need to manually delete the DynamoDB table.</li>
+        </ul>
+      </li>
+      <li>
+        <p><code>[endpoint URL]</code>: Valid Kinesis endpoints URL can be found <a href="http://docs.aws.amazon.com/general/latest/gr/rande.html#ak_region">here</a>.</p>
+      </li>
+      <li>
+        <p><code>[checkpoint interval]</code>: The interval (e.g., Duration(2000) = 2 seconds) at which the Kinesis Client Library saves its position in the stream.  For starters, set it to the same as the batch interval of the streaming application.</p>
+      </li>
+      <li><code>[initial position]</code>: Can be either <code>InitialPositionInStream.TRIM_HORIZON</code> or <code>InitialPositionInStream.LATEST</code> (see Kinesis Checkpointing section and Amazon Kinesis API documentation for more details).</li>
+    </ul>
+  </li>
+  <li>
+    <p><strong>Deploying:</strong> Package <code>spark-streaming-kinesis-asl_</code> and its dependencies (except <code>spark-core_</code> and <code>spark-streaming_</code> which are provided by <code>spark-submit</code>) into the application JAR. Then use <code>spark-submit</code> to launch your application (see <a href="streaming-programming-guide.html#deploying-applications">Deploying section</a> in the main programming guide).</p>
+
+    <p><em>Points to remember at runtime:</em></p>
+
+    <ul>
+      <li>
+        <p>Kinesis data processing is ordered per partition and occurs at-least once per message.</p>
+      </li>
+      <li>
+        <p>Multiple applications can read from the same Kinesis stream.  Kinesis will maintain the application-specific shard and checkpoint info in DynamodDB.</p>
+      </li>
+      <li>
+        <p>A single Kinesis stream shard is processed by one input DStream at a time.</p>
+      </li>
+    </ul>
+
+    <p style="text-align: center;">
+  		<img src="img/streaming-kinesis-arch.png" title="Spark Streaming Kinesis Architecture" alt="Spark Streaming Kinesis Architecture" width="60%" />
+   	<!-- Images are downsized intentionally to improve quality on retina displays -->
+ </p>
+
+    <ul>
+      <li>
+        <p>A single Kinesis input DStream can read from multiple shards of a Kinesis stream by creating multiple KinesisRecordProcessor threads.</p>
+      </li>
+      <li>
+        <p>Multiple input DStreams running in separate processes/instances can read from a Kinesis stream.</p>
+      </li>
+      <li>
+        <p>You never need more Kinesis input DStreams than the number of Kinesis stream shards as each input DStream will create at least one KinesisRecordProcessor thread that handles a single shard.</p>
+      </li>
+      <li>
+        <p>Horizontal scaling is achieved by adding/removing  Kinesis input DStreams (within a single process or across multiple processes/instances) - up to the total number of Kinesis stream shards per the previous point.</p>
+      </li>
+      <li>
+        <p>The Kinesis input DStream will balance the load between all DStreams - even across processes/instances.</p>
+      </li>
+      <li>
+        <p>The Kinesis input DStream will balance the load during re-shard events (merging and splitting) due to changes in load.</p>
+      </li>
+      <li>
+        <p>As a best practice, it’s recommended that you avoid re-shard jitter by over-provisioning when possible.</p>
+      </li>
+      <li>
+        <p>Each Kinesis input DStream maintains its own checkpoint info.  See the Kinesis Checkpointing section for more details.</p>
+      </li>
+      <li>
+        <p>There is no correlation between the number of Kinesis stream shards and the number of RDD partitions/shards created across the Spark cluster during input DStream processing.  These are 2 independent partitioning schemes.</p>
+      </li>
+    </ul>
+  </li>
+</ol>
+
+<h4 id="running-the-example">Running the Example</h4>
+<p>To run the example,</p>
+
+<ul>
+  <li>
+    <p>Download Spark source and follow the <a href="building-spark.html">instructions</a> to build Spark with profile <em>-Pkinesis-asl</em>.</p>
+
+    <pre><code>  mvn -Pkinesis-asl -DskipTests clean package
+</code></pre>
+  </li>
+  <li>
+    <p>Set up Kinesis stream (see earlier section) within AWS. Note the name of the Kinesis stream and the endpoint URL corresponding to the region where the stream was created.</p>
+  </li>
+  <li>
+    <p>Set up the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_KEY with your AWS credentials.</p>
+  </li>
+  <li>
+    <p>In the Spark root directory, run the example as</p>
+
+    <div class="codetabs">
+  <div data-lang="scala">
+
+  	bin/run-example streaming.KinesisWordCountASL [Kinesis stream name] [endpoint URL]
+
+      </div>
+  <div data-lang="java">
+
+        <pre><code>  bin/run-example streaming.JavaKinesisWordCountASL [Kinesis stream name] [endpoint URL]
+</code></pre>
+
+      </div>
+  </div>
+
+    <p>This will wait for data to be received from the Kinesis stream.</p>
+  </li>
+  <li>
+    <p>To generate random string data to put onto the Kinesis stream, in another terminal, run the associated Kinesis data producer.</p>
+
+    <pre><code>  bin/run-example streaming.KinesisWordCountProducerASL [Kinesis stream name] [endpoint URL] 1000 10
+</code></pre>
+
+    <p>This will push 1000 lines per second of 10 random numbers per line to the Kinesis stream.  This data should then be received and processed by the running example.</p>
+  </li>
+</ul>
+
+<h4 id="kinesis-checkpointing">Kinesis Checkpointing</h4>
+<ul>
+  <li>
+    <p>Each Kinesis input DStream periodically stores the current position of the stream in the backing DynamoDB table.  This allows the system to recover from failures and continue processing where the DStream left off.</p>
+  </li>
+  <li>
+    <p>Checkpointing too frequently will cause excess load on the AWS checkpoint storage layer and may lead to AWS throttling.  The provided example handles this throttling with a random-backoff-retry strategy.</p>
+  </li>
+  <li>If no Kinesis checkpoint info exists when the input DStream starts, it will start either from the oldest record available (InitialPositionInStream.TRIM_HORIZON) or from the latest tip (InitialPostitionInStream.LATEST).  This is configurable.</li>
+  <li>InitialPositionInStream.LATEST could lead to missed records if data is added to the stream while no input DStreams are running (and no checkpoint info is being stored).</li>
+  <li>InitialPositionInStream.TRIM_HORIZON may lead to duplicate processing of records where the impact is dependent on checkpoint frequency and processing idempotency.</li>
+</ul>

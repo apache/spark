@@ -1,0 +1,4 @@
+a | b - Bitwise or
+Example:
+  > SELECT 3 | 5 FROM src LIMIT 1;
+  7

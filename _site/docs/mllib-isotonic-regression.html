@@ -1,0 +1,149 @@
+<h2 id="isotonic-regression">Isotonic regression</h2>
+<p><a href="http://en.wikipedia.org/wiki/Isotonic_regression">Isotonic regression</a>
+belongs to the family of regression algorithms. Formally isotonic regression is a problem where
+given a finite set of real numbers <code>$Y = {y_1, y_2, ..., y_n}$</code> representing observed responses
+and <code>$X = {x_1, x_2, ..., x_n}$</code> the unknown response values to be fitted
+finding a function that minimises</p>
+
+<p><code>\begin{equation}
+  f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
+\end{equation}</code></p>
+
+<p>with respect to complete order subject to
+<code>$x_1\le x_2\le ...\le x_n$</code> where <code>$w_i$</code> are positive weights.
+The resulting function is called isotonic regression and it is unique.
+It can be viewed as least squares problem under order restriction.
+Essentially isotonic regression is a
+<a href="http://en.wikipedia.org/wiki/Monotonic_function">monotonic function</a>
+best fitting the original data points.</p>
+
+<p>MLlib supports a
+<a href="http://doi.org/10.1198/TECH.2010.10111">pool adjacent violators algorithm</a>
+which uses an approach to
+<a href="http://doi.org/10.1007/978-3-642-99789-1_10">parallelizing isotonic regression</a>.
+The training input is a RDD of tuples of three double values that represent
+label, feature and weight in this order. Additionally IsotonicRegression algorithm has one
+optional parameter called $isotonic$ defaulting to true.
+This argument specifies if the isotonic regression is
+isotonic (monotonically increasing) or antitonic (monotonically decreasing).</p>
+
+<p>Training returns an IsotonicRegressionModel that can be used to predict
+labels for both known and unknown features. The result of isotonic regression
+is treated as piecewise linear function. The rules for prediction therefore are:</p>
+
+<ul>
+  <li>If the prediction input exactly matches a training feature
+then associated prediction is returned. In case there are multiple predictions with the same
+feature then one of them is returned. Which one is undefined
+(same as java.util.Arrays.binarySearch).</li>
+  <li>If the prediction input is lower or higher than all training features
+then prediction with lowest or highest feature is returned respectively.
+In case there are multiple predictions with the same feature
+then the lowest or highest is returned respectively.</li>
+  <li>If the prediction input falls between two training features then prediction is treated
+as piecewise linear function and interpolated value is calculated from the
+predictions of the two closest features. In case there are multiple values
+with the same feature then the same rules as in previous point are used.</li>
+</ul>
+
+<h3 id="examples">Examples</h3>
+
+<div class="codetabs">
+<div data-lang="scala">
+    <p>Data are read from a file where each line has a format label,feature
+i.e. 4710.28,500.00. The data are split to training and testing set.
+Model is created using the training set and a mean squared error is calculated from the predicted
+labels and real labels in the test set.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.regression.IsotonicRegression</span>
+
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/sample_isotonic_regression_data.txt&quot;</span><span class="o">)</span>
+
+<span class="c1">// Create label, feature, weight tuples from input data with weight set to default value 1.0.</span>
+<span class="k">val</span> <span class="n">parsedData</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">line</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">parts</span> <span class="k">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39;,&#39;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toDouble</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">parts</span><span class="o">(</span><span class="mi">0</span><span class="o">),</span> <span class="n">parts</span><span class="o">(</span><span class="mi">1</span><span class="o">),</span> <span class="mf">1.0</span><span class="o">)</span>
+<span class="o">}</span>
+
+<span class="c1">// Split data into training (60%) and test (40%) sets.</span>
+<span class="k">val</span> <span class="n">splits</span> <span class="k">=</span> <span class="n">parsedData</span><span class="o">.</span><span class="n">randomSplit</span><span class="o">(</span><span class="nc">Array</span><span class="o">(</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">),</span> <span class="n">seed</span> <span class="k">=</span> <span class="mi">11L</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">training</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">0</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">test</span> <span class="k">=</span> <span class="n">splits</span><span class="o">(</span><span class="mi">1</span><span class="o">)</span>
+
+<span class="c1">// Create isotonic regression model from training data.</span>
+<span class="c1">// Isotonic parameter defaults to true so it is only shown for demonstration</span>
+<span class="k">val</span> <span class="n">model</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">IsotonicRegression</span><span class="o">().</span><span class="n">setIsotonic</span><span class="o">(</span><span class="kc">true</span><span class="o">).</span><span class="n">run</span><span class="o">(</span><span class="n">training</span><span class="o">)</span>
+
+<span class="c1">// Create tuples of predicted and real labels.</span>
+<span class="k">val</span> <span class="n">predictionAndLabel</span> <span class="k">=</span> <span class="n">test</span><span class="o">.</span><span class="n">map</span> <span class="o">{</span> <span class="n">point</span> <span class="k">=&gt;</span>
+  <span class="k">val</span> <span class="n">predictedLabel</span> <span class="k">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="o">(</span><span class="n">point</span><span class="o">.</span><span class="n">_2</span><span class="o">)</span>
+  <span class="o">(</span><span class="n">predictedLabel</span><span class="o">,</span> <span class="n">point</span><span class="o">.</span><span class="n">_1</span><span class="o">)</span>
+<span class="o">}</span>
+
+<span class="c1">// Calculate mean squared error between predicted and real labels.</span>
+<span class="k">val</span> <span class="n">meanSquaredError</span> <span class="k">=</span> <span class="n">predictionAndLabel</span><span class="o">.</span><span class="n">map</span><span class="o">{</span><span class="k">case</span><span class="o">(</span><span class="n">p</span><span class="o">,</span> <span class="n">l</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="n">math</span><span class="o">.</span><span class="n">pow</span><span class="o">((</span><span class="n">p</span> <span class="o">-</span> <span class="n">l</span><span class="o">),</span> <span class="mi">2</span><span class="o">)}.</span><span class="n">mean</span><span class="o">()</span>
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;Mean Squared Error = &quot;</span> <span class="o">+</span> <span class="n">meanSquaredError</span><span class="o">)</span></code></pre></div>
+
+  </div>
+
+<div data-lang="java">
+    <p>Data are read from a file where each line has a format label,feature
+i.e. 4710.28,500.00. The data are split to training and testing set.
+Model is created using the training set and a mean squared error is calculated from the predicted
+labels and real labels in the test set.</p>
+
+    <div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">org.apache.spark.SparkConf</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaDoubleRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaPairRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaRDD</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.JavaSparkContext</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.Function</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.PairFunction</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.regression.IsotonicRegressionModel</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">scala.Tuple2</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">scala.Tuple3</span><span class="o">;</span>
+
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="na">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/sample_isotonic_regression_data.txt&quot;</span><span class="o">);</span>
+
+<span class="c1">// Create label, feature, weight tuples from input data with weight set to default value 1.0.</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;&gt;</span> <span class="n">parsedData</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="na">map</span><span class="o">(</span>
+  <span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">String</span><span class="o">,</span> <span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;&gt;()</span> <span class="o">{</span>
+    <span class="kd">public</span> <span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="nf">call</span><span class="o">(</span><span class="n">String</span> <span class="n">line</span><span class="o">)</span> <span class="o">{</span>
+      <span class="n">String</span><span class="o">[]</span> <span class="n">parts</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="na">split</span><span class="o">(</span><span class="s">&quot;,&quot;</span><span class="o">);</span>
+      <span class="k">return</span> <span class="k">new</span> <span class="n">Tuple3</span><span class="o">&lt;&gt;(</span><span class="k">new</span> <span class="nf">Double</span><span class="o">(</span><span class="n">parts</span><span class="o">[</span><span class="mi">0</span><span class="o">]),</span> <span class="k">new</span> <span class="nf">Double</span><span class="o">(</span><span class="n">parts</span><span class="o">[</span><span class="mi">1</span><span class="o">]),</span> <span class="mf">1.0</span><span class="o">);</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">);</span>
+
+<span class="c1">// Split data into training (60%) and test (40%) sets.</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;&gt;[]</span> <span class="n">splits</span> <span class="o">=</span> <span class="n">parsedData</span><span class="o">.</span><span class="na">randomSplit</span><span class="o">(</span><span class="k">new</span> <span class="kt">double</span><span class="o">[]</span> <span class="o">{</span><span class="mf">0.6</span><span class="o">,</span> <span class="mf">0.4</span><span class="o">},</span> <span class="mi">11L</span><span class="o">);</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;&gt;</span> <span class="n">training</span> <span class="o">=</span> <span class="n">splits</span><span class="o">[</span><span class="mi">0</span><span class="o">];</span>
+<span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;&gt;</span> <span class="n">test</span> <span class="o">=</span> <span class="n">splits</span><span class="o">[</span><span class="mi">1</span><span class="o">];</span>
+
+<span class="c1">// Create isotonic regression model from training data.</span>
+<span class="c1">// Isotonic parameter defaults to true so it is only shown for demonstration</span>
+<span class="n">IsotonicRegressionModel</span> <span class="n">model</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">IsotonicRegression</span><span class="o">().</span><span class="na">setIsotonic</span><span class="o">(</span><span class="kc">true</span><span class="o">).</span><span class="na">run</span><span class="o">(</span><span class="n">training</span><span class="o">);</span>
+
+<span class="c1">// Create tuples of predicted and real labels.</span>
+<span class="n">JavaPairRDD</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="n">predictionAndLabel</span> <span class="o">=</span> <span class="n">test</span><span class="o">.</span><span class="na">mapToPair</span><span class="o">(</span>
+  <span class="k">new</span> <span class="n">PairFunction</span><span class="o">&lt;</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;()</span> <span class="o">{</span>
+    <span class="nd">@Override</span> <span class="kd">public</span> <span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="nf">call</span><span class="o">(</span><span class="n">Tuple3</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="n">point</span><span class="o">)</span> <span class="o">{</span>
+      <span class="n">Double</span> <span class="n">predictedLabel</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="na">predict</span><span class="o">(</span><span class="n">point</span><span class="o">.</span><span class="na">_2</span><span class="o">());</span>
+      <span class="k">return</span> <span class="k">new</span> <span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;(</span><span class="n">predictedLabel</span><span class="o">,</span> <span class="n">point</span><span class="o">.</span><span class="na">_1</span><span class="o">());</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">);</span>
+
+<span class="c1">// Calculate mean squared error between predicted and real labels.</span>
+<span class="n">Double</span> <span class="n">meanSquaredError</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">JavaDoubleRDD</span><span class="o">(</span><span class="n">predictionAndLabel</span><span class="o">.</span><span class="na">map</span><span class="o">(</span>
+  <span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;,</span> <span class="n">Object</span><span class="o">&gt;()</span> <span class="o">{</span>
+    <span class="nd">@Override</span> <span class="kd">public</span> <span class="n">Object</span> <span class="nf">call</span><span class="o">(</span><span class="n">Tuple2</span><span class="o">&lt;</span><span class="n">Double</span><span class="o">,</span> <span class="n">Double</span><span class="o">&gt;</span> <span class="n">pl</span><span class="o">)</span> <span class="o">{</span>
+      <span class="k">return</span> <span class="n">Math</span><span class="o">.</span><span class="na">pow</span><span class="o">(</span><span class="n">pl</span><span class="o">.</span><span class="na">_1</span><span class="o">()</span> <span class="o">-</span> <span class="n">pl</span><span class="o">.</span><span class="na">_2</span><span class="o">(),</span> <span class="mi">2</span><span class="o">);</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">).</span><span class="na">rdd</span><span class="o">()).</span><span class="na">mean</span><span class="o">();</span>
+
+<span class="n">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">&quot;Mean Squared Error = &quot;</span> <span class="o">+</span> <span class="n">meanSquaredError</span><span class="o">);</span></code></pre></div>
+
+  </div>
+</div>

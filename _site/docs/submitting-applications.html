@@ -1,0 +1,182 @@
+<p>The <code>spark-submit</code> script in Spark’s <code>bin</code> directory is used to launch applications on a cluster.
+It can use all of Spark’s supported <a href="cluster-overview.html#cluster-manager-types">cluster managers</a>
+through a uniform interface so you don’t have to configure your application specially for each one.</p>
+
+<h1 id="bundling-your-applications-dependencies">Bundling Your Application’s Dependencies</h1>
+<p>If your code depends on other projects, you will need to package them alongside
+your application in order to distribute the code to a Spark cluster. To do this,
+create an assembly jar (or “uber” jar) containing your code and its dependencies. Both
+<a href="https://github.com/sbt/sbt-assembly">sbt</a> and
+<a href="http://maven.apache.org/plugins/maven-shade-plugin/">Maven</a>
+have assembly plugins. When creating assembly jars, list Spark and Hadoop
+as <code>provided</code> dependencies; these need not be bundled since they are provided by
+the cluster manager at runtime. Once you have an assembled jar you can call the <code>bin/spark-submit</code>
+script as shown here while passing your jar.</p>
+
+<p>For Python, you can use the <code>--py-files</code> argument of <code>spark-submit</code> to add <code>.py</code>, <code>.zip</code> or <code>.egg</code>
+files to be distributed with your application. If you depend on multiple Python files we recommend
+packaging them into a <code>.zip</code> or <code>.egg</code>.</p>
+
+<h1 id="launching-applications-with-spark-submit">Launching Applications with spark-submit</h1>
+
+<p>Once a user application is bundled, it can be launched using the <code>bin/spark-submit</code> script.
+This script takes care of setting up the classpath with Spark and its
+dependencies, and can support different cluster managers and deploy modes that Spark supports:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash">./bin/spark-submit <span class="se">\</span>
+  --class &lt;main-class&gt;
+  --master &lt;master-url&gt; <span class="se">\</span>
+  --deploy-mode &lt;deploy-mode&gt; <span class="se">\</span>
+  --conf &lt;key&gt;<span class="o">=</span>&lt;value&gt; <span class="se">\</span>
+  ... <span class="c"># other options</span>
+  &lt;application-jar&gt; <span class="se">\</span>
+  <span class="o">[</span>application-arguments<span class="o">]</span></code></pre></div>
+
+<p>Some of the commonly used options are:</p>
+
+<ul>
+  <li><code>--class</code>: The entry point for your application (e.g. <code>org.apache.spark.examples.SparkPi</code>)</li>
+  <li><code>--master</code>: The <a href="#master-urls">master URL</a> for the cluster (e.g. <code>spark://23.195.26.187:7077</code>)</li>
+  <li><code>--deploy-mode</code>: Whether to deploy your driver on the worker nodes (<code>cluster</code>) or locally as an external client (<code>client</code>) (default: <code>client</code>) <b> † </b></li>
+  <li><code>--conf</code>: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap “key=value” in quotes (as shown).</li>
+  <li><code>application-jar</code>: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an <code>hdfs://</code> path or a <code>file://</code> path that is present on all nodes.</li>
+  <li><code>application-arguments</code>: Arguments passed to the main method of your main class, if any</li>
+</ul>
+
+<p><b>†</b> A common deployment strategy is to submit your application from a gateway machine
+that is
+physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
+In this setup, <code>client</code> mode is appropriate. In <code>client</code> mode, the driver is launched directly
+within the <code>spark-submit</code> process which acts as a <em>client</em> to the cluster. The input and
+output of the application is attached to the console. Thus, this mode is especially suitable
+for applications that involve the REPL (e.g. Spark shell).</p>
+
+<p>Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
+locally on your laptop), it is common to use <code>cluster</code> mode to minimize network latency between
+the drivers and the executors. Note that <code>cluster</code> mode is currently not supported for
+Mesos clusters. Currently only YARN supports cluster mode for Python applications.</p>
+
+<p>For Python applications, simply pass a <code>.py</code> file in the place of <code>&lt;application-jar&gt;</code> instead of a JAR,
+and add Python <code>.zip</code>, <code>.egg</code> or <code>.py</code> files to the search path with <code>--py-files</code>.</p>
+
+<p>There are a few options available that are specific to the
+<a href="#cluster-overview.html#cluster-manager-types">cluster manager</a> that is being used.
+For example, with a <a href="#spark-standalone">Spark Standalone</a> cluster with <code>cluster</code> deploy mode,
+you can also specify <code>--supervise</code> to make sure that the driver is automatically restarted if it
+fails with non-zero exit code. To enumerate all such options available to <code>spark-submit</code>,
+run it with <code>--help</code>. Here are a few examples of common options:</p>
+
+<div class="highlight"><pre><code class="language-bash" data-lang="bash"><span class="c"># Run application locally on 8 cores</span>
+./bin/spark-submit <span class="se">\</span>
+  --class org.apache.spark.examples.SparkPi <span class="se">\</span>
+  --master <span class="nb">local</span><span class="o">[</span>8<span class="o">]</span> <span class="se">\</span>
+  /path/to/examples.jar <span class="se">\</span>
+  100
+
+<span class="c"># Run on a Spark Standalone cluster in client deploy mode</span>
+./bin/spark-submit <span class="se">\</span>
+  --class org.apache.spark.examples.SparkPi <span class="se">\</span>
+  --master spark://207.184.161.138:7077 <span class="se">\</span>
+  --executor-memory 20G <span class="se">\</span>
+  --total-executor-cores <span class="m">100</span> <span class="se">\</span>
+  /path/to/examples.jar <span class="se">\</span>
+  1000
+
+<span class="c"># Run on a Spark Standalone cluster in cluster deploy mode with supervise</span>
+./bin/spark-submit <span class="se">\</span>
+  --class org.apache.spark.examples.SparkPi <span class="se">\</span>
+  --master spark://207.184.161.138:7077 <span class="se">\</span>
+  --deploy-mode cluster
+  --supervise
+  --executor-memory 20G <span class="se">\</span>
+  --total-executor-cores <span class="m">100</span> <span class="se">\</span>
+  /path/to/examples.jar <span class="se">\</span>
+  1000
+
+<span class="c"># Run on a YARN cluster</span>
+<span class="nb">export </span><span class="nv">HADOOP_CONF_DIR</span><span class="o">=</span>XXX
+./bin/spark-submit <span class="se">\</span>
+  --class org.apache.spark.examples.SparkPi <span class="se">\</span>
+  --master yarn-cluster <span class="se">\ </span> <span class="c"># can also be `yarn-client` for client mode</span>
+  --executor-memory 20G <span class="se">\</span>
+  --num-executors <span class="m">50</span> <span class="se">\</span>
+  /path/to/examples.jar <span class="se">\</span>
+  1000
+
+<span class="c"># Run a Python application on a Spark Standalone cluster</span>
+./bin/spark-submit <span class="se">\</span>
+  --master spark://207.184.161.138:7077 <span class="se">\</span>
+  examples/src/main/python/pi.py <span class="se">\</span>
+  1000</code></pre></div>
+
+<h1 id="master-urls">Master URLs</h1>
+
+<p>The master URL passed to Spark can be in one of the following formats:</p>
+
+<table class="table">
+<tr><th>Master URL</th><th>Meaning</th></tr>
+<tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
+<tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
+        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
+</td></tr>
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
+        The port must be whichever one your is configured to use, which is 5050 by default.
+        Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
+</td></tr>
+<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
+</td></tr>
+<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
+</td></tr>
+</table>
+
+<h1 id="loading-configuration-from-a-file">Loading Configuration from a File</h1>
+
+<p>The <code>spark-submit</code> script can load default <a href="configuration.html">Spark configuration values</a> from a
+properties file and pass them on to your application. By default it will read options
+from <code>conf/spark-defaults.conf</code> in the Spark directory. For more detail, see the section on
+<a href="configuration.html#loading-default-configurations">loading default configurations</a>.</p>
+
+<p>Loading default Spark configurations this way can obviate the need for certain flags to
+<code>spark-submit</code>. For instance, if the <code>spark.master</code> property is set, you can safely omit the
+<code>--master</code> flag from <code>spark-submit</code>. In general, configuration values explicitly set on a
+<code>SparkConf</code> take the highest precedence, then flags passed to <code>spark-submit</code>, then values in the
+defaults file.</p>
+
+<p>If you are ever unclear where configuration options are coming from, you can print out fine-grained
+debugging information by running <code>spark-submit</code> with the <code>--verbose</code> option.</p>
+
+<h1 id="advanced-dependency-management">Advanced Dependency Management</h1>
+<p>When using <code>spark-submit</code>, the application jar along with any jars included with the <code>--jars</code> option
+will be automatically transferred to the cluster. Spark uses the following URL scheme to allow
+different strategies for disseminating jars:</p>
+
+<ul>
+  <li><strong>file:</strong> - Absolute paths and <code>file:/</code> URIs are served by the driver’s HTTP file server, and
+every executor pulls the file from the driver HTTP server.</li>
+  <li><strong>hdfs:</strong>, <strong>http:</strong>, <strong>https:</strong>, <strong>ftp:</strong> - these pull down files and JARs from the URI as expected</li>
+  <li><strong>local:</strong> - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
+means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
+or shared via NFS, GlusterFS, etc.</li>
+</ul>
+
+<p>Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
+This can use up a significant amount of space over time and will need to be cleaned up. With YARN, cleanup
+is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
+<code>spark.worker.cleanup.appDataTtl</code> property.</p>
+
+<p>Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates 
+with <code>--packages</code>. All transitive dependencies will be handled when using this command. Additional 
+repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag <code>--repositories</code>. 
+These commands can be used with <code>pyspark</code>, <code>spark-shell</code>, and <code>spark-submit</code> to include Spark Packages.</p>
+
+<p>For Python, the equivalent <code>--py-files</code> option can be used to distribute <code>.egg</code>, <code>.zip</code> and <code>.py</code> libraries
+to executors.</p>
+
+<h1 id="more-information">More Information</h1>
+
+<p>Once you have deployed your application, the <a href="cluster-overview.html">cluster mode overview</a> describes
+the components involved in distributed execution, and how to monitor and debug applications.</p>

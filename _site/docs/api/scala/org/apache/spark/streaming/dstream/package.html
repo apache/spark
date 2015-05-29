@@ -1,0 +1,204 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>dstream - org.apache.spark.streaming.dstream</title>
+          <meta name="description" content="dstream - org.apache.spark.streaming.dstream" />
+          <meta name="keywords" content="dstream org.apache.spark.streaming.dstream" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../../../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../../../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../../../../index.html';
+            var hash = 'org.apache.spark.streaming.dstream.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../../../../lib/package_big.png" />
+        <p id="owner"><a href="../../../../package.html" class="extype" name="org">org</a>.<a href="../../../package.html" class="extype" name="org.apache">apache</a>.<a href="../../package.html" class="extype" name="org.apache.spark">spark</a>.<a href="../package.html" class="extype" name="org.apache.spark.streaming">streaming</a></p>
+        <h1>dstream</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">dstream</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"><div class="comment cmt"><p>Various implementations of DStream's.</p></div><dl class="attributes block"> <dt>See also</dt><dd><span class="cmt"><p><a href="DStream.html" class="extype" name="org.apache.spark.streaming.dstream.DStream">org.apache.spark.streaming.dstream.DStream</a>
+</p></span></dd></dl><div class="toggleContainer block">
+          <span class="toggle">Linear Supertypes</span>
+          <div class="superTypes hiddenContent"><span class="extype" name="scala.AnyRef">AnyRef</span>, <span class="extype" name="scala.Any">Any</span></div>
+        </div></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        <div id="order">
+              <span class="filtertype">Ordering</span>
+              <ol>
+                
+                <li class="alpha in"><span>Alphabetic</span></li>
+                <li class="inherit out"><span>By inheritance</span></li>
+              </ol>
+            </div>
+        <div id="ancestors">
+                <span class="filtertype">Inherited<br />
+                </span>
+                <ol id="linearization">
+                  <li class="in" name="org.apache.spark.streaming.dstream"><span>dstream</span></li><li class="in" name="scala.AnyRef"><span>AnyRef</span></li><li class="in" name="scala.Any"><span>Any</span></li>
+                </ol>
+              </div><div id="ancestors">
+            <span class="filtertype"></span>
+            <ol>
+              <li class="hideall out"><span>Hide All</span></li>
+              <li class="showall in"><span>Show all</span></li>
+            </ol>
+            <a href="http://docs.scala-lang.org/overviews/scaladoc/usage.html#members" target="_blank">Learn more about member selection</a>
+          </div>
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="org.apache.spark.streaming.dstream.ConstantInputDStream" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="ConstantInputDStream[T]extendsInputDStream[T]"></a>
+      <a id="ConstantInputDStream[T]:ConstantInputDStream[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ConstantInputDStream.html"><span class="name">ConstantInputDStream</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="InputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.InputDStream">InputDStream</a>[<span class="extype" name="org.apache.spark.streaming.dstream.ConstantInputDStream.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">An input stream that always returns the same RDD on each timestep.</p>
+    </li><li name="org.apache.spark.streaming.dstream.DStream" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="DStream[T]extendsSerializablewithLogging"></a>
+      <a id="DStream[T]:DStream[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="DStream.html"><span class="name">DStream</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span> with <a href="../../Logging.html" class="extype" name="org.apache.spark.Logging">Logging</a></span>
+      </span>
+      </h4>
+      <p class="comment cmt">A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
+sequence of RDDs (of the same type) representing a continuous stream of data (see
+org.</p>
+    </li><li name="org.apache.spark.streaming.dstream.InputDStream" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="InputDStream[T]extendsDStream[T]"></a>
+      <a id="InputDStream[T]:InputDStream[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="InputDStream.html"><span class="name">InputDStream</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="DStream.html" class="extype" name="org.apache.spark.streaming.dstream.DStream">DStream</a>[<span class="extype" name="org.apache.spark.streaming.dstream.InputDStream.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">This is the abstract base class for all input streams.</p>
+    </li><li name="org.apache.spark.streaming.dstream.PairDStreamFunctions" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="PairDStreamFunctions[K,V]extendsSerializable"></a>
+      <a id="PairDStreamFunctions[K,V]:PairDStreamFunctions[K,V]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="PairDStreamFunctions.html"><span class="name">PairDStreamFunctions</span></a><span class="tparams">[<span name="K">K</span>, <span name="V">V</span>]</span><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      <p class="comment cmt">Extra functions available on DStream of (key, value) pairs through an implicit conversion.</p>
+    </li><li name="org.apache.spark.streaming.dstream.ReceiverInputDStream" visbl="pub" data-isabs="true" fullComment="no" group="Ungrouped">
+      <a id="ReceiverInputDStream[T]extendsInputDStream[T]"></a>
+      <a id="ReceiverInputDStream[T]:ReceiverInputDStream[T]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier">abstract </span>
+        <span class="kind">class</span>
+      </span>
+      <span class="symbol">
+        <a href="ReceiverInputDStream.html"><span class="name">ReceiverInputDStream</span></a><span class="tparams">[<span name="T">T</span>]</span><span class="result"> extends <a href="InputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.InputDStream">InputDStream</a>[<span class="extype" name="org.apache.spark.streaming.dstream.ReceiverInputDStream.T">T</span>]</span>
+      </span>
+      </h4>
+      <p class="comment cmt">Abstract class for defining any <a href="InputDStream.html" class="extype" name="org.apache.spark.streaming.dstream.InputDStream">org.apache.spark.streaming.dstream.InputDStream</a>
+that has to start a receiver on worker nodes to receive external data.</p>
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="org.apache.spark.streaming.dstream.DStream" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="DStream"></a>
+      <a id="DStream:DStream"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="DStream$.html"><span class="name">DStream</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        <div class="parent" name="scala.AnyRef">
+              <h3>Inherited from <span class="extype" name="scala.AnyRef">AnyRef</span></h3>
+            </div><div class="parent" name="scala.Any">
+              <h3>Inherited from <span class="extype" name="scala.Any">Any</span></h3>
+            </div>
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+      <script defer="defer" type="text/javascript" id="jquery-js" src="../../../../../lib/jquery.js"></script><script defer="defer" type="text/javascript" id="jquery-ui-js" src="../../../../../lib/jquery-ui.js"></script><script defer="defer" type="text/javascript" id="tools-tooltip-js" src="../../../../../lib/tools.tooltip.js"></script><script defer="defer" type="text/javascript" id="template-js" src="../../../../../lib/template.js"></script>
+    </body>
+      </html>

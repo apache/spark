@@ -1,0 +1,1 @@
+xpath_string(xml, xpath) - Returns the text contents of the first xml node that matches the xpath expression

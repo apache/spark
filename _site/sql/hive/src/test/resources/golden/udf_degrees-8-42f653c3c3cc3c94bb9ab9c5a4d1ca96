@@ -1,0 +1,5 @@
+degrees(x) - Converts radians to degrees
+Example:
+  > SELECT degrees(30) FROM src LIMIT 1;
+  -1
+

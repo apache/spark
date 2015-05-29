@@ -1,0 +1,138 @@
+.\" ##########################################################################
+.\" #                      __                                                #
+.\" #      ________ ___   / /  ___     Scala 2 On-line Manual Pages          #
+.\" #     / __/ __// _ | / /  / _ |    (c) 2002-2013, LAMP/EPFL              #
+.\" #   __\ \/ /__/ __ |/ /__/ __ |                                          #
+.\" #  /____/\___/_/ |_/____/_/ | |    http://scala-lang.org/                #
+.\" #                           |/                                           #
+.\" ##########################################################################
+.\"
+.\" Process this file with nroff -man scala.1
+.\"
+.TH scaladoc 1  "June 2010" "version 2.0" "USER COMMANDS"
+.\"
+.\" ############################## NAME ###############################
+.\"
+.SH NAME
+.PP
+\fBscaladoc\fR \- Documentation generator for the Scala 2 language
+.\"
+.\" ############################## SYNOPSIS ###############################
+.\"
+.SH SYNOPSIS
+.PP
+\fBscaladoc\fR  [ <\fIoptions\fR> ] <\fIsource files\fR>
+.\"
+.\" ############################## PARAMETERS ###############################
+.\"
+.SH PARAMETERS
+.PP
+.TP
+<\fIoptions\fR>
+Command line options. See \fBOPTIONS\fR below.
+.TP
+<\fIsource files\fR>
+One or more source files to be compiled (such as MyClass.scala).
+.\"
+.\" ############################## DESCRIPTION ###############################
+.\"
+.SH DESCRIPTION
+.PP
+The \fBscaladoc\fR tool reads class and object definitions, written in the Scala 2 programming language, and generates their API as HTML files.
+.PP
+By default, the generator puts each HTML file in the same directory as its source file. You can specify a separate destination directory with \fB\-d\fR (see \fBOPTIONS\fR, below).
+.PP
+The recognised format of comments in source is described in the online documentation
+.\"
+.\" ############################## OPTIONS ###############################
+.\"
+.SH OPTIONS
+.\"
+.\" ############################## Standard Options ###############################
+.\"
+.SS "Standard Options"
+.PP
+.TP
+\fB\-d\fR <\fIdirectory\fR> 
+Specify where to generate documentation.
+.TP
+\fB\-version\fR 
+Print product version and exit.
+.TP
+\fB\-help\fR 
+Print a synopsis of available options.
+.\"
+.\" ############################## Documentation Options ###############################
+.\"
+.SS "Documentation Options"
+.PP
+.TP
+\fB\-doc-title\fR <\fItitle\fR> 
+Define the overall title of the documentation, typically the name of the library being documented.
+.TP
+\fB\-doc-version\fR <\fIversion\fR> 
+Define the overall version number of the documentation, typically the version of the library being documented.
+.TP
+\fB\-doc-source-url\fR <\fIurl\fR> 
+Define a URL to be concatenated with source locations for link to source files.
+.TP
+\fB\-doc-external-doc\fR <\fIexternal-doc\fR> 
+Define a comma-separated list of classpath_entry_path#doc_URL pairs describing external dependencies.
+.\"
+.\" ############################## Compiler Options ###############################
+.\"
+.SS "Compiler Options"
+.PP
+.TP
+\fB\-verbose\fR 
+Output messages about what the compiler is doing
+.TP
+\fB\-deprecation\fR 
+Indicate whether source should be compiled with deprecation information; defaults to off (accepted values are: on, off, yes and no)
+.IP
+Available since Scala version 2.2.1
+.IP
+
+.TP
+\fB\-classpath\fR <\fIpath\fR> 
+Specify where to find user class files (on Unix-based systems a colon-separated list of paths, on Windows-based systems, a semicolon-separate list of paths). This does not override the built-in ("boot") search path.
+.IP
+The default class path is the current directory. Setting the CLASSPATH variable or using the -classpath command-line option overrides that default, so if you want to include the current directory in the search path, you must include "." in the new settings.
+.IP
+
+.TP
+\fB\-sourcepath\fR <\fIpath\fR> 
+Specify where to find input source files.
+.TP
+\fB\-bootclasspath\fR <\fIpath\fR> 
+Override location of bootstrap class files (where to find the standard built-in classes, such as "scala.List").
+.TP
+\fB\-extdirs\fR <\fIdirs\fR> 
+Override location of installed extensions.
+.TP
+\fB\-encoding\fR <\fIencoding\fR> 
+Specify character encoding used by source files.
+.IP
+The default value is platform-specific (Linux: "UTF8", Windows: "Cp1252"). Executing the following code in the Scala interpreter will return the default value on your system:
+.IP
+\fB    scala> \fRnew java.io.InputStreamReader(System.in).getEncoding
+.IP
+
+.\"
+.\" ############################## EXIT STATUS ###############################
+.\"
+.SH "EXIT STATUS"
+.PP
+\fBscaladoc\fR returns a zero exit status if it succeeds at processing the specified input files. Non zero is returned in case of failure.
+.\"
+.\" ############################## AUTHORS ###############################
+.\"
+.SH AUTHORS
+.PP
+This version of Scaladoc was written by Gilles Dubochet with contributions by Pedro Furlanetto and Johannes Rudolph. It is based on the original Scaladoc (Sean McDirmid, Geoffrey Washburn, Vincent Cremet and Stéphane Micheloud), on vScaladoc (David Bernard), as well as on an unreleased version of Scaladoc 2 (Manohar Jonnalagedda).
+.\"
+.\" ############################## SEE ALSO ###############################
+.\"
+.SH "SEE ALSO"
+.PP
+\fBfsc\fR(1), \fBscala\fR(1), \fBscalac\fR(1), \fBscalap\fR(1)
