@@ -155,7 +155,7 @@ private[nio] class BlockMessage() {
 
   override def toString: String = {
     "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level +
-    ", data = " + (if (data != null) data.remaining.toString  else "null") + "]"
+    ", data = " + (if (data != null) data.remaining.toString else "null") + "]"
   }
 }
 
