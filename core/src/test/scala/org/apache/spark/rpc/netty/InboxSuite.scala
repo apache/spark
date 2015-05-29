@@ -18,6 +18,7 @@
 package org.apache.spark.rpc.netty
 
 import java.util.concurrent.{TimeUnit, CountDownLatch}
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.mockito.Mockito._
 import org.scalatest.FunSuite
@@ -67,10 +68,10 @@ class InboxSuite extends FunSuite {
 
     val dispatcher = mock(classOf[Dispatcher])
 
-    @volatile var numDroppedMessages = 0
+    val numDroppedMessages = new AtomicInteger(0)
     val inbox = new Inbox(endpointRef, endpoint) {
       override def onDrop(message: Any): Unit = {
-        numDroppedMessages += 1
+        numDroppedMessages.incrementAndGet()
       }
     }
 
@@ -93,7 +94,7 @@ class InboxSuite extends FunSuite {
 
     exitLatch.await(30, TimeUnit.SECONDS)
 
-    assert(1000 === endpoint.numReceiveMessages + numDroppedMessages)
+    assert(1000 === endpoint.numReceiveMessages + numDroppedMessages.get)
     endpoint.verifyStarted()
     endpoint.verifyStopped()
     verify(dispatcher).unregisterRpcEndpoint("hello")
