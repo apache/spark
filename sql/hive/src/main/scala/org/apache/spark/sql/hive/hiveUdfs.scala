@@ -315,7 +315,7 @@ private[hive] case class HiveWindowFunction(
 
   // The object inspector of values returned from the Hive window function.
   @transient
-  protected lazy val returnInspector  = {
+  protected lazy val returnInspector = {
     evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inputInspectors)
   }
 
@@ -410,7 +410,7 @@ private[hive] case class HiveGenericUdaf(
   protected lazy val resolver: AbstractGenericUDAFResolver = funcWrapper.createFunction()
 
   @transient
-  protected lazy val objectInspector  = {
+  protected lazy val objectInspector = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
     resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
@@ -443,7 +443,7 @@ private[hive] case class HiveUdaf(
     new GenericUDAFBridge(funcWrapper.createFunction())
 
   @transient
-  protected lazy val objectInspector  = {
+  protected lazy val objectInspector = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
     resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
