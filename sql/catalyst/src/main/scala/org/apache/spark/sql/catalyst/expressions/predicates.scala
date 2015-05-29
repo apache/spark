@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{DecimalType, BinaryType, BooleanType, DataType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType}
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -172,9 +172,18 @@ case class Or(left: Expression, right: Expression)
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.fail(
+        s"differing types in BinaryComparison, ${left.dataType} != ${right.dataType}")
+    } else {
+      TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
+    }
+  }
+
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
-    if(evalE1 == null) {
+    if (evalE1 == null) {
       null
     } else {
       val evalE2 = right.eval(input)
@@ -187,11 +196,14 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   }
 
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =
-    sys.error(s"BinaryArithmetics must either override eval or evalInternal")
+    sys.error(s"BinaryComparisons must either override eval or evalInternal")
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
+
+  // EqualTo don't need 2 equal orderable types
+  override def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.success
 
   protected override def evalInternal(l: Any, r: Any) = {
     if (left.dataType != BinaryType) l == r
@@ -201,8 +213,10 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
 
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<=>"
-
   override def nullable: Boolean = false
+
+  // EqualNullSafe don't need 2 equal orderable types
+  override def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.success
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -220,16 +234,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
-    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
-      TypeCheckResult.success
-    } else {
-      TypeCheckResult.fail("todo")
-    }
-  }
-
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.lt(evalE1, evalE2)
@@ -237,16 +241,6 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
-
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
-    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
-      TypeCheckResult.success
-    } else {
-      TypeCheckResult.fail("todo")
-    }
-  }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
@@ -256,16 +250,6 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
-    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
-      TypeCheckResult.success
-    } else {
-      TypeCheckResult.fail("todo")
-    }
-  }
-
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
   protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.gt(evalE1, evalE2)
@@ -273,16 +257,6 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
-
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.fail("types do not match -- ${left.dataType} != ${right.dataType}")
-    } else if (TypeUtils.validForOrderingExpr(left.dataType)) {
-      TypeCheckResult.success
-    } else {
-      TypeCheckResult.fail("todo")
-    }
-  }
 
   private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
@@ -295,10 +269,13 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
-  override def checkInputDataTypes: TypeCheckResult = {
-    if (trueValue.dataType != falseValue.dataType) {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (predicate.dataType != BooleanType) {
       TypeCheckResult.fail(
-        s"differing types in If, ${trueValue.dataType}, ${falseValue.dataType}")
+        s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
+    } else if (trueValue.dataType != falseValue.dataType) {
+      TypeCheckResult.fail(
+        s"differing types in If, ${trueValue.dataType} != ${falseValue.dataType}")
     } else {
       TypeCheckResult.success
     }
@@ -357,11 +334,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override def children: Seq[Expression] = branches
 
-  override def checkInputDataTypes: TypeCheckResult = {
+  override def checkInputDataTypes(): TypeCheckResult = {
     if (!whenList.forall(_.dataType == BooleanType)) {
       TypeCheckResult.fail(s"WHEN expressions should all be boolean type")
     } else if (!valueTypesEqual) {
-      TypeCheckResult.fail("THEN and ELSE expressions should all be same type")
+      TypeCheckResult.fail("THEN and ELSE expressions should all be same type or coercible to a common type")
     } else {
       TypeCheckResult.success
     }
@@ -408,9 +385,9 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override def checkInputDataTypes: TypeCheckResult = {
+  override def checkInputDataTypes(): TypeCheckResult = {
     if (!valueTypesEqual) {
-      TypeCheckResult.fail("THEN and ELSE expressions should all be same type")
+      TypeCheckResult.fail("THEN and ELSE expressions should all be same type or coercible to a common type")
     } else {
       TypeCheckResult.success
     }

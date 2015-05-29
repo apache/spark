@@ -88,9 +88,10 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * todo
+   * Check the input data types, returns `TypeCheckResult.success` if it's valid,
+   * or return a `TypeCheckResult` with an error message if invalid.
    */
-  def checkInputDataTypes: TypeCheckResult = TypeCheckResult.success
+  def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.success
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {

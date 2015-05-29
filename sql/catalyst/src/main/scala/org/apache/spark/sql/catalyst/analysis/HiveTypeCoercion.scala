@@ -619,17 +619,12 @@ trait HiveTypeCoercion {
    */
   object Division extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
+      // Skip nodes who's children have not been resolved yet or input types do not match.
+      case e if !e.childrenResolved || e.checkInputDataTypes().hasError => e
 
       // Decimal and Double remain the same
       case d: Divide if d.resolved && d.dataType == DoubleType => d
       case d: Divide if d.resolved && d.dataType.isInstanceOf[DecimalType] => d
-
-      case Divide(l, r) if l.dataType.isInstanceOf[DecimalType] =>
-        Divide(l, Cast(r, DecimalType.Unlimited))
-      case Divide(l, r) if r.dataType.isInstanceOf[DecimalType] =>
-        Divide(Cast(l, DecimalType.Unlimited), r)
 
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }

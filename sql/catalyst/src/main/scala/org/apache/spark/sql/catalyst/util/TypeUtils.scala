@@ -17,18 +17,36 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types._
 
 /**
- * Helper function to check valid data types
+ * Helper function to check for valid data types
  */
 object TypeUtils {
+  def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
+    if (t.isInstanceOf[NumericType] || t == NullType) {
+      TypeCheckResult.success
+    } else {
+      TypeCheckResult.fail(s"$caller need numeric type(int, long, double, etc.), not $t")
+    }
+  }
 
-  def validForNumericExpr(t: DataType): Boolean = t.isInstanceOf[NumericType] || t == NullType
+  def checkForBitwiseExpr(t: DataType, caller: String): TypeCheckResult = {
+    if (t.isInstanceOf[IntegralType] || t == NullType) {
+      TypeCheckResult.success
+    } else {
+      TypeCheckResult.fail(s"$caller need integral type(short, int, long, etc.), not $t")
+    }
+  }
 
-  def validForBitwiseExpr(t: DataType): Boolean = t.isInstanceOf[IntegralType] || t == NullType
-
-  def validForOrderingExpr(t: DataType): Boolean = t.isInstanceOf[AtomicType] || t == NullType
+  def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
+    if (t.isInstanceOf[AtomicType] || t == NullType) {
+      TypeCheckResult.success
+    } else {
+      TypeCheckResult.fail(s"$caller need atomic type(binary, boolean, numeric, etc), not $t")
+    }
+  }
 
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
