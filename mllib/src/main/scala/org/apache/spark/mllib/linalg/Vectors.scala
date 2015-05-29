@@ -725,8 +725,9 @@ class SparseVector(
       -1
     } else {
 
-      var maxIdx = 0
-      var maxValue = if(indices(0) != 0) 0.0 else values(0)
+      //grab first active index and value by default
+      var maxIdx = indices(0)
+      var maxValue = values(0)
 
       foreachActive { (i, v) =>
         if (v > maxValue) {
@@ -736,8 +737,8 @@ class SparseVector(
       }
 
       // look for inactive values incase all active node values are negative
-      if(size != values.size && maxValue < 0){
-        maxIdx = calcInactiveIdx(indices(0))
+      if(size != values.size && maxValue <= 0){
+        maxIdx = calcInactiveIdx(0)
         maxValue = 0
       }
       maxIdx
@@ -748,20 +749,19 @@ class SparseVector(
    * Calculates the first instance of an inactive node in a sparse vector and returns the Idx
    * of the element.
    * @param idx starting index of computation
-   * @return index of first inactive node or -1 if it cannot find one
+   * @return index of first inactive node
    */
-  private[SparseVector] def calcInactiveIdx(idx: Int): Int ={
-    if(idx < size){
-      if(!indices.contains(idx)){
+  private[SparseVector] def calcInactiveIdx(idx: Int): Int = {
+    if (idx < size) {
+      if (!indices.contains(idx)) {
         idx
-      }else{
-        calcInactiveIdx(idx+1)
+      } else {
+        calcInactiveIdx(idx + 1)
       }
-    }else{
+    } else {
       -1
     }
   }
-
 }
 
 object SparseVector {

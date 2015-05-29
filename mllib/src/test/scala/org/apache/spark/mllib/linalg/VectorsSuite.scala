@@ -105,9 +105,9 @@ class VectorsSuite extends FunSuite {
     val max4 = vec5.argmax
     assert(max4 === 1)
 
-    val vec6 = Vectors.sparse(5,Array(0, 1, 2),Array(-1.0, -.025, -.7))
+    val vec6 = Vectors.sparse(2,Array(0, 1),Array(-1.0, 0.0))
     val max5 = vec6.argmax
-    assert(max5 === 3)
+    assert(max5 === 1)
   }
 
   test("vector equals") {
