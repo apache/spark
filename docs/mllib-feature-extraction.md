@@ -201,6 +201,11 @@ val synonyms = model.findSynonyms("china", 40)
 for((synonym, cosineSimilarity) <- synonyms) {
   println(s"$synonym $cosineSimilarity")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = Word2VecModel.load(sc, "myModelPath")
+
 {% endhighlight %}
 </div>
 <div data-lang="python">

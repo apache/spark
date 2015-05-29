@@ -88,6 +88,10 @@ val predictionAndLabel = test.map { point =>
 // Calculate mean squared error between predicted and real labels.
 val meanSquaredError = predictionAndLabel.map{case(p, l) => math.pow((p - l), 2)}.mean()
 println("Mean Squared Error = " + meanSquaredError)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -150,6 +154,10 @@ Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
 ).rdd()).mean();
 
 System.out.println("Mean Squared Error = " + meanSquaredError);
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 </div>
