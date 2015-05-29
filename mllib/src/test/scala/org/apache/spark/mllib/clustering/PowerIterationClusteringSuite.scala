@@ -94,11 +94,13 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
      */
     val similarities = Seq[(Long, Long, Double)](
       (0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (2, 3, 1.0))
+    // scalastyle:off
     val expected = Array(
       Array(0.0,     1.0/3.0, 1.0/3.0, 1.0/3.0),
       Array(1.0/2.0,     0.0, 1.0/2.0,     0.0),
       Array(1.0/3.0, 1.0/3.0,     0.0, 1.0/3.0),
       Array(1.0/2.0,     0.0, 1.0/2.0,     0.0))
+    // scalastyle:on
     val w = normalize(sc.parallelize(similarities, 2))
     w.edges.collect().foreach { case Edge(i, j, x) =>
       assert(x ~== expected(i.toInt)(j.toInt) absTol 1e-14)

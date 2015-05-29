@@ -70,7 +70,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
-    val localCurrMean= currMean
+    val localCurrMean = currMean
     val localCurrM2n = currM2n
     val localCurrM2 = currM2
     val localCurrL1 = currL1

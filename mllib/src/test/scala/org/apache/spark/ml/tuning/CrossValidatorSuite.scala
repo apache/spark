@@ -90,14 +90,20 @@ object CrossValidatorSuite {
 
     override def validateParams(): Unit = require($(inputCol).nonEmpty)
 
-    override def fit(dataset: DataFrame): MyModel = ???
+    override def fit(dataset: DataFrame): MyModel = {
+      throw new UnsupportedOperationException
+    }
 
-    override def transformSchema(schema: StructType): StructType = ???
+    override def transformSchema(schema: StructType): StructType = {
+      throw new UnsupportedOperationException
+    }
   }
 
   class MyEvaluator extends Evaluator {
 
-    override def evaluate(dataset: DataFrame): Double = ???
+    override def evaluate(dataset: DataFrame): Double = {
+      throw new UnsupportedOperationException
+    }
 
     override val uid: String = "eval"
   }
