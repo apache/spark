@@ -47,7 +47,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
   test("column type inference") {
     def check(raw: String, literal: Literal): Unit = {
-      assert(inferPartitionColumnValue(raw, defaultPartitionName) === literal)
+      assert(inferPartitionColumnValue(raw, defaultPartitionName, true) === literal)
     }
 
     check("10", Literal.create(10, IntegerType))
@@ -59,12 +59,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
-      assert(expected === parsePartition(new Path(path), defaultPartitionName))
+      assert(expected === parsePartition(new Path(path), defaultPartitionName, true))
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), defaultPartitionName).get
+        parsePartition(new Path(path), defaultPartitionName, true).get
       }.getMessage
 
       assert(message.contains(expected))
@@ -104,7 +104,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
   test("parse partitions") {
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
-      assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName) === spec)
+      assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName, true) === spec)
     }
 
     check(Seq(
@@ -166,6 +166,77 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         Seq(
           Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
           Partition(Row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+
+    check(Seq(
+      s"hdfs://host:9000/path1",
+      s"hdfs://host:9000/path2"),
+      PartitionSpec.emptySpec)
+  }
+
+  test("parse partitions with type inference disabled") {
+    def check(paths: Seq[String], spec: PartitionSpec): Unit = {
+      assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName, false) === spec)
+    }
+
+    check(Seq(
+      "hdfs://host:9000/path/a=10/b=hello"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", StringType))),
+        Seq(Partition(Row("10", "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+
+    check(Seq(
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+
+    check(Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello",
+      "hdfs://host:9000/path/a=10.5/_temporary",
+      "hdfs://host:9000/path/a=10.5/_TeMpOrArY",
+      "hdfs://host:9000/path/a=10.5/b=hello/_temporary",
+      "hdfs://host:9000/path/a=10.5/b=hello/_TEMPORARY",
+      "hdfs://host:9000/path/_temporary/path",
+      "hdfs://host:9000/path/a=11/_temporary/path",
+      "hdfs://host:9000/path/a=10.5/b=world/_temporary/path"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+
+    check(Seq(
+      s"hdfs://host:9000/path/a=10/b=20",
+      s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row("10", "20"), s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+
+    check(Seq(
+      s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
+      s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"),
+      PartitionSpec(
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", StringType))),
+        Seq(
+          Partition(Row("10", null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(Row("10.5", null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 
     check(Seq(
       s"hdfs://host:9000/path1",
