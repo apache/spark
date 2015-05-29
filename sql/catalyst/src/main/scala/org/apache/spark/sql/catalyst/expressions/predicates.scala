@@ -325,7 +325,18 @@ trait CaseWhenLike extends Expression {
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
   def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
 
-  override def dataType: DataType = valueTypes.head
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (valueTypes.distinct.size > 1) {
+      TypeCheckResult.fail(
+        "THEN and ELSE expressions should all be same type or coercible to a common type")
+    } else {
+      checkTypesInternal()
+    }
+  }
+
+  protected def checkTypesInternal(): TypeCheckResult
+
+  override def dataType: DataType = thenList.head.dataType
 
   override def nullable: Boolean = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
@@ -347,14 +358,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override def children: Seq[Expression] = branches
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!whenList.forall(_.dataType == BooleanType)) {
-      TypeCheckResult.fail(s"WHEN expressions should all be boolean type")
-    } else if (!valueTypesEqual) {
-      TypeCheckResult.fail(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
-    } else {
+  override protected def checkTypesInternal(): TypeCheckResult = {
+    if (whenList.forall(_.dataType == BooleanType)) {
       TypeCheckResult.success
+    } else {
+      TypeCheckResult.fail(s"WHEN expressions in CaseWhen should all be boolean type")
     }
   }
 
@@ -399,14 +407,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!valueTypesEqual) {
-      TypeCheckResult.fail(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
-    } else {
-      TypeCheckResult.success
-    }
-  }
+  override protected def checkTypesInternal(): TypeCheckResult = TypeCheckResult.success
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {

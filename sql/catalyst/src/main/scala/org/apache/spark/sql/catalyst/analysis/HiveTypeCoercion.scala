@@ -599,9 +599,8 @@ trait HiveTypeCoercion {
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
       case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
-        val dt: Option[DataType] = Some(NullType)
         val types = es.map(_.dataType)
-        val rt = types.foldLeft(dt)((r, c) => r match {
+        val rt = types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
           case None => None
           case Some(d) => findTightestCommonType(d, c)
         })
@@ -635,28 +634,30 @@ trait HiveTypeCoercion {
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
   object CaseWhenCoercion extends Rule[LogicalPlan] {
+
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw: CaseWhenLike if cw.childrenResolved && !cw.valueTypesEqual =>
+      case cw: CaseWhenLike if cw.childrenResolved && cw.checkInputDataTypes().hasError =>
         logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
-        val commonType = cw.valueTypes.reduce { (v1, v2) =>
-          findTightestCommonType(v1, v2).getOrElse(sys.error(
-            s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
-        }
-        val transformedBranches = cw.branches.sliding(2, 2).map {
-          case Seq(when, value) if value.dataType != commonType =>
-            Seq(when, Cast(value, commonType))
-          case Seq(elseVal) if elseVal.dataType != commonType =>
-            Seq(Cast(elseVal, commonType))
-          case s => s
-        }.reduce(_ ++ _)
-        cw match {
-          case _: CaseWhen =>
-            CaseWhen(transformedBranches)
-          case CaseKeyWhen(key, _) =>
-            CaseKeyWhen(key, transformedBranches)
-        }
+        cw.valueTypes.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+          case None => None
+          case Some(d) => findTightestCommonType(d, c)
+        }).map { commonType =>
+          val transformedBranches = cw.branches.sliding(2, 2).map {
+            case Seq(when, value) if value.dataType != commonType =>
+              Seq(when, Cast(value, commonType))
+            case Seq(elseVal) if elseVal.dataType != commonType =>
+              Seq(Cast(elseVal, commonType))
+            case s => s
+          }.reduce(_ ++ _)
+          cw match {
+            case _: CaseWhen =>
+              CaseWhen(transformedBranches)
+            case CaseKeyWhen(key, _) =>
+              CaseKeyWhen(key, transformedBranches)
+          }
+        }.getOrElse(cw)
 
       case ckw: CaseKeyWhen if ckw.childrenResolved && !ckw.resolved =>
         val commonType = (ckw.key +: ckw.whenList).map(_.dataType).reduce { (v1, v2) =>

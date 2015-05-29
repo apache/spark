@@ -126,7 +126,15 @@ class ExpressionTypeCheckingSuite extends FunSuite {
       "type of predicate expression in If should be boolean")
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
-    // Will write tests for CaseWhen later,
-    // as the error reporting of it is not handle by the new interface for now
+    assertError(
+      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'complexField)),
+      "THEN and ELSE expressions should all be same type or coercible to a common type")
+    assertError(
+      CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'complexField)),
+      "THEN and ELSE expressions should all be same type or coercible to a common type")
+    assertError(
+      CaseWhen(Seq('booleanField, 'intField, 'intField, 'intField)),
+      "WHEN expressions in CaseWhen should all be boolean type")
+
   }
 }
