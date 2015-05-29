@@ -84,7 +84,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     val result = cbe.getClazz()
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
-    logWarning(s"Code (${code.size} bytes) compiled in $timeMs ms")
+    logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
     result
   }
 
@@ -106,7 +106,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val result = create(in)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
-          logWarning(s"Code generated expression $in in $timeMs ms")
+          logInfo(s"Code generated expression $in in $timeMs ms")
           result
         }
       })

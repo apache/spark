@@ -223,7 +223,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }
     """
 
-    println(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)

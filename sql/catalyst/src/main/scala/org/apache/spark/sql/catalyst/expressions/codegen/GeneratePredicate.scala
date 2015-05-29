@@ -62,7 +62,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
         }
       }"""
 
-    logWarning(s"Generated predicate '$predicate':\n$code")
+    logDebug(s"Generated predicate '$predicate':\n$code")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)

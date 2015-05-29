@@ -123,7 +123,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
         }
       }"""
 
-    logWarning(s"Generated Ordering: $code")
+    logDebug(s"Generated Ordering: $code")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)
