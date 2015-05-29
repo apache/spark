@@ -160,4 +160,13 @@ class BlockObjectWriterSuite extends FunSuite with BeforeAndAfterEach {
     }
     writer.close()
   }
+
+  test("commitAndClose() without ever opening or writing") {
+    val file = new File(tempDir, "somefile")
+    val writeMetrics = new ShuffleWriteMetrics()
+    val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
+      new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
+    writer.commitAndClose()
+    assert(writer.fileSegment().length === 0)
+  }
 }
