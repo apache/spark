@@ -210,7 +210,6 @@ private[spark] object Utils extends Logging {
 
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
-    logInfo("Registering shutdown hook for deleting dir " + file + ": " + Thread.currentThread().getStackTrace.toSeq.mkString("\n\t"))
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
