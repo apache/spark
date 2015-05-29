@@ -338,7 +338,8 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     if (!whenList.forall(_.dataType == BooleanType)) {
       TypeCheckResult.fail(s"WHEN expressions should all be boolean type")
     } else if (!valueTypesEqual) {
-      TypeCheckResult.fail("THEN and ELSE expressions should all be same type or coercible to a common type")
+      TypeCheckResult.fail(
+        "THEN and ELSE expressions should all be same type or coercible to a common type")
     } else {
       TypeCheckResult.success
     }
@@ -387,7 +388,8 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!valueTypesEqual) {
-      TypeCheckResult.fail("THEN and ELSE expressions should all be same type or coercible to a common type")
+      TypeCheckResult.fail(
+        "THEN and ELSE expressions should all be same type or coercible to a common type")
     } else {
       TypeCheckResult.success
     }

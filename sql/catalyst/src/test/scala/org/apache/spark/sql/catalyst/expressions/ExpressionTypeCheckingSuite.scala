@@ -34,7 +34,8 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     val e = intercept[AnalysisException] {
       checkAnalysis(expr)
     }
-    assert(e.getMessage.contains(s"cannot resolve '${expr.prettyString}' due to data type mismatch:"))
+    assert(e.getMessage.contains(
+      s"cannot resolve '${expr.prettyString}' due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -58,7 +59,7 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     checkAnalysis(Multiply('a, 'b))
     checkAnalysis(Divide('a, 'b))
     checkAnalysis(Remainder('a, 'b))
-    //checkAnalysis(BitwiseAnd('a, 'b))
+    // checkAnalysis(BitwiseAnd('a, 'b))
 
     val msg = "differing types in BinaryArithmetic, IntegerType != BooleanType"
     checkError(Add('a, 'c), msg)
