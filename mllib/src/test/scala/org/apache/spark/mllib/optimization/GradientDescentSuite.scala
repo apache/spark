@@ -42,7 +42,7 @@ object GradientDescentSuite {
       offset: Double,
       scale: Double,
       nPoints: Int,
-      seed: Int): Seq[LabeledPoint]  = {
+      seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
