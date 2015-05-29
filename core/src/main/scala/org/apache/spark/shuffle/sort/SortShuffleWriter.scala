@@ -28,6 +28,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     shuffleBlockResolver: IndexShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
     mapId: Int,
+    stageAttemptId: Int,
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
@@ -65,15 +66,16 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId, stageAttemptId)
     // Because we append to the data file, we need the index file to know the current size of the
     // data file as a starting point
     val initialFileLength = outputFile.length()
-    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
+    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID,
+      stageAttemptId)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
-    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths, initialFileLength)
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, stageAttemptId, partitionLengths)
 
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+    mapStatus = MapStatus(blockManager.shuffleServerId, stageAttemptId, partitionLengths)
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -87,7 +89,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         return Option(mapStatus)
       } else {
         // The map task failed, so delete our output data.
-        shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId)
+        shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId, stageAttemptId)
         return None
       }
     } finally {

@@ -50,15 +50,21 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
-  override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
-      : ShuffleWriter[K, V] = {
-    new HashShuffleWriter(
-      shuffleBlockResolver, handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
+  override def getWriter[K, V](
+      handle: ShuffleHandle,
+      mapId: Int,
+      stageAttemptId: Int,
+      context: TaskContext): ShuffleWriter[K, V] = {
+    addShuffleAttempt(handle.shuffleId, stageAttemptId)
+    new HashShuffleWriter(shuffleBlockResolver, handle.asInstanceOf[BaseShuffleHandle[K, V, _]],
+      mapId, stageAttemptId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    shuffleBlockResolver.removeShuffle(shuffleId)
+    stageAttemptsForShuffle(shuffleId).forall { stageAttemptId =>
+      shuffleBlockResolver.removeShuffle(shuffleId, stageAttemptId)
+    }
   }
 
   override def shuffleBlockResolver: FileShuffleBlockResolver = {

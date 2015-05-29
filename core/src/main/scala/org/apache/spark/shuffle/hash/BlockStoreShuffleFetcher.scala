@@ -43,14 +43,14 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
-    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
-    for (((address, size), index) <- statuses.zipWithIndex) {
-      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
+    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Int, Long)]]
+    for (((address, stageAttempt, size), index) <- statuses.zipWithIndex) {
+      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, stageAttempt, size))
     }
 
     val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
-        (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+        (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId, s._2), s._3)))
     }
 
     def unpackBlock(blockPair: (BlockId, Try[Iterator[Any]])) : Iterator[T] = {
@@ -62,9 +62,10 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
         }
         case Failure(e) => {
           blockId match {
-            case ShuffleBlockId(shufId, mapId, _) =>
+            case ShuffleBlockId(shufId, mapId, _, stageAttempt) =>
               val address = statuses(mapId.toInt)._1
-              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
+              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId,
+                stageAttempt, e)
             case _ =>
               throw new SparkException(
                 "Failed to get block " + blockId + ", which is not a shuffle block", e)

@@ -160,11 +160,13 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
   override def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,
+      stageAttemptId:Int,
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
       case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>
         numMapsForShufflesThatUsedNewPath.putIfAbsent(handle.shuffleId, unsafeShuffleHandle.numMaps)
         val env = SparkEnv.get
+        addShuffleAttempt(handle.shuffleId, stageAttemptId)
         new UnsafeShuffleWriter(
           env.blockManager,
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
@@ -172,11 +174,12 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
           env.shuffleMemoryManager,
           unsafeShuffleHandle,
           mapId,
+          stageAttemptId,
           context,
           env.conf)
       case other =>
         shufflesThatFellBackToSortShuffle.add(handle.shuffleId)
-        sortShuffleManager.getWriter(handle, mapId, context)
+        sortShuffleManager.getWriter(handle, mapId, stageAttemptId, context)
     }
   }
 
@@ -186,8 +189,11 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       sortShuffleManager.unregisterShuffle(shuffleId)
     } else {
       Option(numMapsForShufflesThatUsedNewPath.remove(shuffleId)).foreach { numMaps =>
+        val attempts = stageAttemptsForShuffle(shuffleId)
         (0 until numMaps).foreach { mapId =>
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+          attempts.foreach{ stageAttemptId =>
+            shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
+          }
         }
       }
       true

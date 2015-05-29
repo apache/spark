@@ -205,6 +205,7 @@ public class UnsafeShuffleWriterSuite {
       shuffleMemoryManager,
       new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
+      0, // stage attempt id
       taskContext,
       conf
     );

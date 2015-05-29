@@ -127,7 +127,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * Called from executors to get the server URIs and output sizes of the map outputs of
    * a given shuffle.
    */
-  def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
+  def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Int, Long)] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -380,7 +380,7 @@ private[spark] object MapOutputTracker extends Logging {
   private def convertMapStatuses(
       shuffleId: Int,
       reduceId: Int,
-      statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
+      statuses: Array[MapStatus]): Array[(BlockManagerId, Int, Long)] = {
     assert (statuses != null)
     statuses.map {
       status =>
@@ -390,7 +390,7 @@ private[spark] object MapOutputTracker extends Logging {
           logError(msg)
           throw new MetadataFetchFailedException(shuffleId, reduceId, msg)
         } else {
-          (status.location, status.getSizeForBlock(reduceId))
+          (status.location, status.stageAttemptId, status.getSizeForBlock(reduceId))
         }
     }
   }
