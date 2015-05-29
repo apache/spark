@@ -1243,8 +1243,8 @@ private[spark] class BlockManager(
   }
 
   private[storage] def hasCachedBlocks: Boolean = {
-    blockInfo.exists { kv =>
-      getCurrentBlockStatus(kv._1, kv._2).isCached
+    blockInfo.exists { case (blockId, info) =>
+      !blockId.isBroadcast && getCurrentBlockStatus(blockId, info).isCached
     }
   }
 }

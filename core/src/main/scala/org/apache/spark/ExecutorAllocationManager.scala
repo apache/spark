@@ -104,6 +104,11 @@ private[spark] class ExecutorAllocationManager(
   private val executorIdleTimeoutS = conf.getTimeAsSeconds(
     "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
+  private val cachedExecutorTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.executorIdleTimeout", s"${Long.MaxValue / 60}s")
+
+  val executorsWithCachedBlocks = new mutable.HashSet[String]()
+
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
 
@@ -245,13 +250,10 @@ private[spark] class ExecutorAllocationManager(
 
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
-      var removed = false
-      val executorEndpoint = executorEndpoints.get(executorId)
-      if (expired && !executorEndpoint.exists(_.askWithRetry[Boolean](HasCachedBlocks))) {
+      if (expired) {
         removeExecutor(executorId)
-        removed = true
       }
-      !removed
+      !expired
     }
   }
 
@@ -464,9 +466,27 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
+
+        val hasCachedBlocks =
+          executorsWithCachedBlocks.contains(executorId) ||
+            executorEndpoints.get(executorId).exists(_.askWithRetry[Boolean](HasCachedBlocks))
+
+        if (hasCachedBlocks) executorsWithCachedBlocks += executorId
+
+        val now = clock.getTimeMillis()
+        val timeout = {
+          if (hasCachedBlocks) {
+            val newExpiry = now + cachedExecutorTimeoutS * 1000
+            if (newExpiry < 0) Long.MaxValue // Overflow
+            else newExpiry
+          } else {
+            now + executorIdleTimeoutS * 1000
+          }
+        }
+
+        removeTimes(executorId) = timeout
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor (to expire in $executorIdleTimeoutS seconds)")
-        removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeoutS * 1000
+          s"scheduled to run on the executor")
       }
     } else {
       logWarning(s"Attempted to mark unknown executor $executorId idle")
