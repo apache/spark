@@ -87,7 +87,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
-    org.apache.spark.util.SizeEstimator invokePrivate initialize()
+    SizeEstimator invokePrivate initialize()
   }
 
   override def afterEach(): Unit = {
@@ -420,8 +420,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store = makeBlockManager(12000)
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list2 = List(new Array[Byte](500), new Array[Byte](1000), new Array[Byte](1500))
-    val list1SizeEstimate = org.apache.spark.SizeEstimator.estimate(list1.iterator.toArray)
-    val list2SizeEstimate = org.apache.spark.SizeEstimator.estimate(list2.iterator.toArray)
+    val list1SizeEstimate = SizeEstimator.estimate(list1.iterator.toArray)
+    val list2SizeEstimate = SizeEstimator.estimate(list2.iterator.toArray)
     store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIterator("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
@@ -674,7 +674,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putIterator("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     val listForSizeEstimate = new ArrayBuffer[Any]
     listForSizeEstimate ++= list1.iterator
-    val listSize = org.apache.spark.SizeEstimator.estimate(listForSizeEstimate)
+    val listSize = SizeEstimator.estimate(listForSizeEstimate)
     // At this point LRU should not kick in because list3 is only on disk
     assert(store.get("list1").isDefined, "list1 was not in store")
     assert(store.get("list1").get.data.size === 2)
