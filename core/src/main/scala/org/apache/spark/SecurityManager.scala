@@ -27,7 +27,7 @@ import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.sasl.SecretKeyHolder
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{GroupMappingServiceProvider, Utils}
 
 /**
  * Spark class responsible for security.
@@ -196,16 +196,21 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
+  private var groupAclOn = sparkConf.getBoolean("spark.security.group.acls.enable", false)
 
   // admin acls should be set before view or modify acls
   private var adminAcls: Set[String] =
-    stringToSet(sparkConf.get("spark.admin.acls", ""))
+    getUsersOrGroups(sparkConf.get("spark.admin.acls", ""), true)
+  private var adminGroupAcls: Set[String] =
+    getUsersOrGroups(sparkConf.get("spark.admin.acls", ""), false)
 
   private var viewAcls: Set[String] = _
+  private var viewGroupAcls: Set[String] = _
 
   // list of users who have permission to modify the application. This should
   // apply to both UI and CLI for things like killing the application.
   private var modifyAcls: Set[String] = _
+  private var modifyGroupAcls: Set[String] = _
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
@@ -301,9 +306,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setViewAcls(defaultUsers: Set[String], allowedUsers: String) {
-    viewAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
-    logInfo("Changing view acls to: " + viewAcls.mkString(","))
+  def setViewAcls(defaultUsers: Set[String], allowedUsersAndGroups: String) {
+    viewAcls = (adminAcls ++ defaultUsers ++ getUsersOrGroups(allowedUsersAndGroups, true))
+    viewGroupAcls = (adminGroupAcls ++ getUsersOrGroups(allowedUsersAndGroups, false))
+    logInfo("Changing view acls to user: " + viewAcls.mkString(",") + "; to group:" + viewGroupAcls.mkString(","))
   }
 
   def setViewAcls(defaultUser: String, allowedUsers: String) {
@@ -316,9 +322,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * Admin acls should be set before the view or modify acls.  If you modify the admin
    * acls you should also set the view and modify acls again to pick up the changes.
    */
-  def setModifyAcls(defaultUsers: Set[String], allowedUsers: String) {
-    modifyAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
-    logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
+  def setModifyAcls(defaultUsers: Set[String], allowedUsersAndGroups: String) {
+    modifyAcls = (adminAcls ++ defaultUsers ++ getUsersOrGroups(allowedUsersAndGroups, true))
+    modifyGroupAcls = (adminGroupAcls ++ getUsersOrGroups(allowedUsersAndGroups, false))
+    logInfo("Changing modify acls to: " + modifyAcls.mkString(",") + "; to group:" + modifyGroupAcls.mkString(","))
   }
 
   def getModifyAcls: String = modifyAcls.mkString(",")
@@ -328,8 +335,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * acls you should also set the view and modify acls again to pick up the changes.
    */
   def setAdminAcls(adminUsers: String) {
-    adminAcls = stringToSet(adminUsers)
-    logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+    adminAcls = getUsersOrGroups(adminUsers, true)
+    adminGroupAcls = getUsersOrGroups(adminUsers, false)
+    logInfo("Changing admin acls to: " + adminAcls.mkString(",") + "; to group:" + adminGroupAcls.mkString(","))
   }
 
   def setAcls(aclSetting: Boolean) {
@@ -392,7 +400,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user)
+    !aclsEnabled || user == null || viewAcls.contains(user) || ckeckGroupPermissions(user, viewGroupAcls)
   }
 
   /**
@@ -407,7 +415,60 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user)
+    !aclsEnabled || user == null || modifyAcls.contains(user) || ckeckGroupPermissions(user, modifyGroupAcls)
+  }
+
+  def ckeckGroupPermissions(user: String, allowedGroups: Set[String]): Boolean = {
+    if (groupAclOn) {
+      val groupMappingProvider = getGroupMappingProvider()
+      groupMappingProvider match {
+        case Some(provider) => checkGroupPermissionsWithProvider(user, allowedGroups, provider)
+        // can't find groupMappingProvider, there will be no check for group.
+        case None => false
+      }
+    } else {
+      false
+    }
+  }
+
+  def checkGroupPermissionsWithProvider(user: String, allowedGroups: Set[String],
+    provider: GroupMappingServiceProvider): Boolean = {
+    val groups = provider.getGroups(user)
+    for (allowedGroup <- allowedGroups) {
+      if (groups.indexOf(allowedGroup) != -1) {
+        return true
+      }
+    }
+    false
+  }
+
+  // Create an instance of the groupMappingProvider
+  def getGroupMappingProvider() : Option[GroupMappingServiceProvider] = {
+    // use the ShellBasedUnixGroupsMapping as the default mappingProvider
+    val cls = Class.forName(sparkConf.get("spark.security.groupMappingProvider",
+      "org.apache.spark.util.ShellBasedUnixGroupsMapping"))
+    try {
+      Some(cls.getConstructor().newInstance().asInstanceOf[GroupMappingServiceProvider])
+    } catch {
+      case e: Exception => logWarning("The class for spark.security.groupMappingProvider is not valid.")
+        None
+    }
+  }
+
+  def getUsersOrGroups(userGroupStr: String, isForUser: Boolean):Set[String] = {
+    val userGroupArray = userGroupStr.split("\\|")
+    val USER_INDEX = 0
+    val GROUP_INDEX = 1
+    if (isForUser) {
+      stringToSet(userGroupArray(USER_INDEX))
+    } else {
+      // split the configuration for group
+      if (userGroupArray.length == 2) {
+        stringToSet(userGroupArray(GROUP_INDEX))
+      } else {
+        Set[String]()
+      }
+    }
   }
 
 
