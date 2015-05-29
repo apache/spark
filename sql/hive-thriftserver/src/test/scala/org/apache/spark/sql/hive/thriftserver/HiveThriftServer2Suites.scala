@@ -438,7 +438,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
     val driverClassPath = {
       // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
-      val tempLog4jConf= Utils.createTempDir().getCanonicalPath
+      val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
         Paths.get(s"$tempLog4jConf/log4j.properties"),
