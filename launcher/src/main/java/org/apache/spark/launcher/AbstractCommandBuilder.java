@@ -295,7 +295,11 @@ abstract class AbstractCommandBuilder {
       FileInputStream fd = null;
       try {
         fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, "UTF-8"));
+        Properties rawProps = new Properties();
+        rawProps.load(new InputStreamReader(fd, "UTF-8"));
+        for (String str : rawProps.stringPropertyNames()) {
+          props.setProperty(str, rawProps.getProperty(str).trim());
+        }
       } finally {
         if (fd != null) {
           try {
