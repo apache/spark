@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class TachyonBlockManager() extends ExternalBlockManager with Logging {
 
-  var blockManager: BlockManager =_
+  var blockManager: BlockManager = _
   var rootDirs: String = _
   var master: String = _
   var client: tachyon.client.TachyonFS = _
