@@ -19,13 +19,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 
+// MutableProjection is not accessible in Java
+abstract class BaseMutableProjection extends MutableProjection {}
+
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
  * input [[Row]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
   import scala.reflect.runtime.universe._
-  import scala.reflect.runtime.{universe => ru}
 
   val mutableRowName = newTermName("mutableRow")
 
@@ -42,38 +44,54 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       evaluationCode.code +
         s"""
           if(${evaluationCode.nullTerm})
-            mutableRow.setNullAt($i)
+            mutableRow.setNullAt($i);
           else
-            ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)}
+            ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)};
         """
     }.mkString("\n")
-
     val code =
-     s"""
-     (expressions: Seq[$exprType]) => {
-        () => { new $mutableProjectionType {
+    s"""
+    import org.apache.spark.sql.Row;
 
-          private[this] var $mutableRowName: $mutableRowType =
-            new $genericMutableRowType(${expressions.size})
+    public SpecificProjection generate($exprType[] expr) {
+      return new SpecificProjection(expr);
+    }
 
-          def target(row: $mutableRowType): $mutableProjectionType = {
-            $mutableRowName = row
-            this
-          }
+    class SpecificProjection extends ${typeOf[BaseMutableProjection]} {
 
-          /* Provide immutable access to the last projected row. */
-          def currentValue: $rowType = mutableRow
+      $exprType[] expressions = null;
+      $mutableRowType mutableRow = null;
 
-          def apply(i: $rowType): $rowType = {
-            $projectionCode
-            mutableRow
-          }
-        }}
-     }
-     """
+      public SpecificProjection($exprType[] expr) {
+        expressions = expr;
+        mutableRow = new $genericMutableRowType(${expressions.size});
+      }
+
+      public ${typeOf[BaseMutableProjection]} target($mutableRowType row) {
+        mutableRow = row;
+        return this;
+      }
+
+      /* Provide immutable access to the last projected row. */
+      public Row currentValue() {
+        return mutableRow;
+      }
+
+      public Object apply(Object _i) {
+        Row i = (Row)_i;
+        $projectionCode
+
+        return mutableRow;
+      }
+    }
+    """
 
     logWarning(s"code for ${expressions.mkString(",")}:\n$code")
-    toolBox.eval(toolBox.parse(code)).asInstanceOf[
-      (Seq[Expression]) => (() => MutableProjection)](ctx.borrowed)
+
+    val c = compile(code)
+    val m = c.getDeclaredMethods()(0)
+    () => {
+      m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[BaseMutableProjection]
+    }
   }
 }

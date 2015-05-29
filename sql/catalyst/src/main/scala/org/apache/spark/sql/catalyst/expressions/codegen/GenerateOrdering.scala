@@ -18,8 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BinaryType, NumericType, StringType}
+import org.apache.spark.sql.types.{BinaryType, NumericType}
+
+class BaseOrdering extends Ordering[Row] {
+  def compare(a: Row, b: Row): Int = {
+    throw new UnsupportedOperationException
+  }
+}
 
 /**
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
@@ -43,46 +50,55 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
       val evalA = expressionEvaluator(order.child, ctx)
       val evalB = expressionEvaluator(order.child, ctx)
-
+      val asc = order.direction == Ascending
       val compare = order.child.dataType match {
         case BinaryType =>
           s"""
-          val x = ${if (order.direction == Ascending) evalA.primitiveTerm else evalB.primitiveTerm}
-          val y = ${if (order.direction != Ascending) evalB.primitiveTerm else evalA.primitiveTerm}
-          var i = 0
-          while (i < x.length && i < y.length) {
-            val res = x(i).compareTo(y(i))
-            if (res != 0) return res
-            i = i+1
+          {
+            byte[] x = ${if (asc) evalA.primitiveTerm else evalB.primitiveTerm};
+            byte[] y = ${if (!asc) evalB.primitiveTerm else evalA.primitiveTerm};
+            int i = 0;
+            while (i < x.length() && i < y.length()) {
+              int res = x[i].compareTo(y[i]);
+              if (res != 0) return res;
+              i = i+1;
+            }
+            int d = x.length - y.length;
+            if (d != 0) {
+              return d;
+            }
           }
-          return x.length - y.length
           """
         case _: NumericType =>
           s"""
-          val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}
-          if(comp != 0) {
-            return ${if (order.direction == Ascending) "comp.toInt" else "-comp.toInt"}
+          if (${evalA.primitiveTerm} != ${evalB.primitiveTerm}) {
+            if (${evalA.primitiveTerm} > ${evalB.primitiveTerm}) {
+              return ${if (asc) "1" else "-1"};
+            } else {
+              return ${if (asc) "-1" else "1"};
+            }
           }
           """
-        case StringType =>
-          if (order.direction == Ascending) {
-            s"""return ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm})"""
-          } else {
-            s"""return ${evalB.primitiveTerm}.compare(${evalA.primitiveTerm})"""
+        case _ =>
+          s"""
+          int comp = ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm});
+          if (comp != 0) {
+            return ${if (asc) "comp" else "-comp"};
           }
+          """
       }
 
       s"""
-        i = $a
+        i = $a;
         ${evalA.code}
-        i = $b
+        i = $b;
         ${evalB.code}
         if (${evalA.nullTerm} && ${evalB.nullTerm}) {
           // Nothing
         } else if (${evalA.nullTerm}) {
-          return ${if (order.direction == Ascending) "-1" else "1"}
+          return ${if (order.direction == Ascending) "-1" else "1"};
         } else if (${evalB.nullTerm}) {
-          return ${if (order.direction == Ascending) "1" else "-1"}
+          return ${if (order.direction == Ascending) "1" else "-1"};
         } else {
           $compare
         }
@@ -90,20 +106,33 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
     }.mkString("\n")
 
     val code = s"""
-      (ordering: Seq[org.apache.spark.sql.catalyst.expressions.SortOrder],
-       expressions: Seq[$exprType]) => {
-        class SpecificOrdering extends scala.math.Ordering[$rowType]  {
-          def compare(a: $rowType, b: $rowType): Int = {
-            var i: $rowType = null // Holds current row being evaluated.
-            $comparisons
-            return 0
-          }
+      import org.apache.spark.sql.Row;
+
+      public SpecificOrdering generate($exprType[] expr) {
+        return new SpecificOrdering(expr);
+      }
+
+      class SpecificOrdering extends ${typeOf[BaseOrdering]} {
+
+        private $exprType[] expressions = null;
+
+        public SpecificOrdering($exprType[] expr) {
+          expressions = expr;
         }
-        new SpecificOrdering()
+
+        @Override
+        public int compare(Row a, Row b) {
+          Row i = null;  // Holds current row being evaluated.
+          $comparisons
+          return 0;
+        }
       }
       """
+
     logWarning(s"Generated Ordering: $code")
-    toolBox.eval(toolBox.parse(code)).asInstanceOf[
-      (Seq[SortOrder], Seq[Expression]) => Ordering[Row]](ordering, ctx.borrowed)
+
+    val c = compile(code)
+    val m = c.getDeclaredMethods()(0)
+    m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[BaseOrdering]
   }
 }

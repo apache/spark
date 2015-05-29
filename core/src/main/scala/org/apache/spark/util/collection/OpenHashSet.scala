@@ -110,6 +110,14 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     rehashIfNeeded(k, grow, move)
   }
 
+  def union(other: OpenHashSet[T]): OpenHashSet[T] = {
+    val iterator = other.iterator
+    while (iterator.hasNext) {
+      add(iterator.next())
+    }
+    this
+  }
+
   /**
    * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
    * The caller is responsible for calling rehashIfNeeded.

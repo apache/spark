@@ -19,11 +19,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 
+trait Predicate {
+  def predict(r: Row): Boolean
+}
+
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[Row]].
  */
 object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
-  import scala.reflect.runtime.{universe => ru}
+  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
@@ -35,18 +39,39 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
     val cEval = expressionEvaluator(predicate, ctx)
 
     val code = s"""
-      (expressions: Seq[$exprType]) => {
-        (i: $rowType) => {
+      import org.apache.spark.sql.Row;
+
+      public SpecificPredicate generate($exprType[] expr) {
+        return new SpecificPredicate(expr);
+      }
+
+      class SpecificPredicate implements ${typeOf[Predicate]} {
+        private final $exprType[] expressions;
+        public SpecificPredicate($exprType[] expr) {
+        System.err.println("number of expressions");
+          System.err.println(expr.length);
+          expressions = expr;
+        }
+
+        @Override
+        public boolean predict(Row i) {
           ${cEval.code}
-          if (${cEval.nullTerm})
-            false
-          else
-            ${cEval.primitiveTerm}
+          if (${cEval.nullTerm}) {
+            return false;
+          } else {
+            return ${cEval.primitiveTerm};
+          }
         }
       }
       """
 
     logWarning(s"Generated predicate '$predicate':\n$code")
-    toolBox.eval(toolBox.parse(code)).asInstanceOf[(Seq[Expression]) => (Row => Boolean)](ctx.borrowed)
+
+    val c = compile(code)
+    val m = c.getDeclaredMethods()(0)
+    val p = m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[Predicate]
+    (r: Row) => {
+      p.predict(r)
+    }
   }
 }
