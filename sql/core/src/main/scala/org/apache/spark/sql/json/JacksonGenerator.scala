@@ -33,7 +33,7 @@ private[sql] object JacksonGenerator {
     */
   def apply(rowSchema: StructType, gen: JsonGenerator)(row: Row): Unit = {
     def valWriter: (DataType, Any) => Unit = {
-      case (_, null) | (NullType, _)  => gen.writeNull()
+      case (_, null) | (NullType, _) => gen.writeNull()
       case (StringType, v: String) => gen.writeString(v)
       case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
@@ -48,16 +48,16 @@ private[sql] object JacksonGenerator {
       case (DateType, v) => gen.writeString(v.toString)
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, udt.serialize(v))
 
-      case (ArrayType(ty, _), v: Seq[_] ) =>
+      case (ArrayType(ty, _), v: Seq[_]) =>
         gen.writeStartArray()
-        v.foreach(valWriter(ty,_))
+        v.foreach(valWriter(ty, _))
         gen.writeEndArray()
 
-      case (MapType(kv,vv, _), v: Map[_,_]) =>
+      case (MapType(kv, vv, _), v: Map[_, _]) =>
         gen.writeStartObject()
         v.foreach { p =>
           gen.writeFieldName(p._1.toString)
-          valWriter(vv,p._2)
+          valWriter(vv, p._2)
         }
         gen.writeEndObject()
 

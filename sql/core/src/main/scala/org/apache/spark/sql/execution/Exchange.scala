@@ -296,7 +296,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           .sliding(2)
           .map {
             case Seq(a) => true
-            case Seq(a,b) => a compatibleWith b
+            case Seq(a, b) => a.compatibleWith(b)
           }.exists(!_)
 
       // Adds Exchange or Sort operators as required

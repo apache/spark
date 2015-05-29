@@ -255,7 +255,7 @@ class DataFrame private[sql](
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
-    select(newCols :_*)
+    select(newCols : _*)
   }
 
   /**
@@ -500,7 +500,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): DataFrame = {
-    sort((sortCol +: sortCols).map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) : _*)
   }
 
   /**
@@ -531,7 +531,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols :_*)
+  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols : _*)
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
@@ -540,7 +540,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs :_*)
+  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -611,7 +611,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) :_*)
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -825,7 +825,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs :_*)
+    groupBy().agg(aggExpr, aggExprs : _*)
   }
 
   /**
@@ -863,7 +863,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
@@ -1039,7 +1039,7 @@ class DataFrame private[sql](
         val name = field.name
         if (resolver(name, colName)) col.as(colName) else Column(name)
       }
-      select(colNames :_*)
+      select(colNames : _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -1262,7 +1262,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
+  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() : _*)
 
   /**
    * Returns the number of rows in the [[DataFrame]].
