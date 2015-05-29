@@ -48,6 +48,11 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
+  def assertErrorForDifferingTypes(expr: Expression): Unit = {
+    assertError(expr,
+      s"differing types in ${expr.getClass.getSimpleName} (IntegerType and BooleanType).")
+  }
+
   test("check types for unary arithmetic") {
     assertError(UnaryMinus('stringField), "operator - accepts numeric type")
     assertSuccess(Sqrt('stringField)) // We will cast String to Double for sqrt
@@ -65,17 +70,16 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     assertSuccess(Remainder('intField, 'stringField))
     // checkAnalysis(BitwiseAnd('intField, 'stringField))
 
-    def msg(caller: String) = s"differing types in $caller, IntegerType != BooleanType"
-    assertError(Add('intField, 'booleanField), msg("Add"))
-    assertError(Subtract('intField, 'booleanField), msg("Subtract"))
-    assertError(Multiply('intField, 'booleanField), msg("Multiply"))
-    assertError(Divide('intField, 'booleanField), msg("Divide"))
-    assertError(Remainder('intField, 'booleanField), msg("Remainder"))
-    assertError(BitwiseAnd('intField, 'booleanField), msg("BitwiseAnd"))
-    assertError(BitwiseOr('intField, 'booleanField), msg("BitwiseOr"))
-    assertError(BitwiseXor('intField, 'booleanField), msg("BitwiseXor"))
-    assertError(MaxOf('intField, 'booleanField), msg("MaxOf"))
-    assertError(MinOf('intField, 'booleanField), msg("MinOf"))
+    assertErrorForDifferingTypes(Add('intField, 'booleanField))
+    assertErrorForDifferingTypes(Subtract('intField, 'booleanField))
+    assertErrorForDifferingTypes(Multiply('intField, 'booleanField))
+    assertErrorForDifferingTypes(Divide('intField, 'booleanField))
+    assertErrorForDifferingTypes(Remainder('intField, 'booleanField))
+    assertErrorForDifferingTypes(BitwiseAnd('intField, 'booleanField))
+    assertErrorForDifferingTypes(BitwiseOr('intField, 'booleanField))
+    assertErrorForDifferingTypes(BitwiseXor('intField, 'booleanField))
+    assertErrorForDifferingTypes(MaxOf('intField, 'booleanField))
+    assertErrorForDifferingTypes(MinOf('intField, 'booleanField))
 
     assertError(Add('booleanField, 'booleanField), "operator + accepts numeric type")
     assertError(Subtract('booleanField, 'booleanField), "operator - accepts numeric type")
@@ -102,19 +106,24 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     assertSuccess(GreaterThan('intField, 'stringField))
     assertSuccess(GreaterThanOrEqual('intField, 'stringField))
 
-    def msg(caller: String) = s"differing types in $caller, IntegerType != BooleanType"
-    assertError(LessThan('intField, 'booleanField), msg("LessThan"))
-    assertError(LessThanOrEqual('intField, 'booleanField), msg("LessThanOrEqual"))
-    assertError(GreaterThan('intField, 'booleanField), msg("GreaterThan"))
-    assertError(GreaterThanOrEqual('intField, 'booleanField), msg("GreaterThanOrEqual"))
+    assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
+    assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
+    assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
+    assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(LessThan('complexField, 'complexField), "operator < accepts non-complex type")
-    assertError(LessThanOrEqual('complexField, 'complexField), "operator <= accepts non-complex type")
-    assertError(GreaterThan('complexField, 'complexField), "operator > accepts non-complex type")
-    assertError(GreaterThanOrEqual('complexField, 'complexField), "operator >= accepts non-complex type")
+    assertError(
+      LessThan('complexField, 'complexField), "operator < accepts non-complex type")
+    assertError(
+      LessThanOrEqual('complexField, 'complexField), "operator <= accepts non-complex type")
+    assertError(
+      GreaterThan('complexField, 'complexField), "operator > accepts non-complex type")
+    assertError(
+      GreaterThanOrEqual('complexField, 'complexField), "operator >= accepts non-complex type")
 
-    assertError(If('intField, 'stringField, 'stringField), "type of predicate expression in If should be boolean")
-    assertError(If('booleanField, 'intField, 'stringField), "differing types in If, IntegerType != StringType")
+    assertError(
+      If('intField, 'stringField, 'stringField),
+      "type of predicate expression in If should be boolean")
+    assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
     // Will write tests for CaseWhen later,
     // as the error reporting of it is not handle by the new interface for now

@@ -91,7 +91,8 @@ abstract class BinaryArithmetic extends BinaryExpression {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
       TypeCheckResult.fail(
-        s"differing types in ${this.getClass.getSimpleName}, ${left.dataType} != ${right.dataType}")
+        s"differing types in ${this.getClass.getSimpleName} " +
+        s"(${left.dataType} and ${right.dataType}).")
     } else {
       checkTypesInternal(dataType)
     }

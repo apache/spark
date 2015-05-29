@@ -175,7 +175,8 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
       TypeCheckResult.fail(
-        s"differing types in ${this.getClass.getSimpleName}, ${left.dataType} != ${right.dataType}")
+        s"differing types in ${this.getClass.getSimpleName} " +
+        s"(${left.dataType} and ${right.dataType}).")
     } else {
       TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
     }
@@ -275,7 +276,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
         s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
     } else if (trueValue.dataType != falseValue.dataType) {
       TypeCheckResult.fail(
-        s"differing types in If, ${trueValue.dataType} != ${falseValue.dataType}")
+        s"differing types in If (${trueValue.dataType} and ${falseValue.dataType}).")
     } else {
       TypeCheckResult.success
     }

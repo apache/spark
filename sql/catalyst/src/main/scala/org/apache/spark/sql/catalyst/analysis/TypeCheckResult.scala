@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 /**
- * todo
+ * Represents the result of `Expression.checkInputDataTypes`.
+ * We will throw `AnalysisException` in `CheckAnalysis` if error message is not null.
+ *
  */
 class TypeCheckResult(val errorMessage: String) extends AnyVal {
   def hasError: Boolean = errorMessage != null
