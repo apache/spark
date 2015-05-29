@@ -34,9 +34,8 @@ class BaseOrdering extends Ordering[Row] {
  */
 object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] with Logging {
   import scala.reflect.runtime.universe._
-  import scala.reflect.runtime.{universe => ru}
 
- protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
+  protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
@@ -54,53 +53,50 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
       val compare = order.child.dataType match {
         case BinaryType =>
           s"""
-          {
-            byte[] x = ${if (asc) evalA.primitiveTerm else evalB.primitiveTerm};
-            byte[] y = ${if (!asc) evalB.primitiveTerm else evalA.primitiveTerm};
-            int j = 0;
-            while (j < x.length && j < y.length) {
-              if (x[j] != y[j]) return x[j] - y[j];
-              j = j + 1;
-            }
-            int d = x.length - y.length;
-            if (d != 0) {
-              return d;
-            }
-          }
-          """
+            {
+              byte[] x = ${if (asc) evalA.primitiveTerm else evalB.primitiveTerm};
+              byte[] y = ${if (!asc) evalB.primitiveTerm else evalA.primitiveTerm};
+              int j = 0;
+              while (j < x.length && j < y.length) {
+                if (x[j] != y[j]) return x[j] - y[j];
+                j = j + 1;
+              }
+              int d = x.length - y.length;
+              if (d != 0) {
+                return d;
+              }
+            }"""
         case _: NumericType =>
           s"""
-          if (${evalA.primitiveTerm} != ${evalB.primitiveTerm}) {
-            if (${evalA.primitiveTerm} > ${evalB.primitiveTerm}) {
-              return ${if (asc) "1" else "-1"};
-            } else {
-              return ${if (asc) "-1" else "1"};
-            }
-          }
-          """
+            if (${evalA.primitiveTerm} != ${evalB.primitiveTerm}) {
+              if (${evalA.primitiveTerm} > ${evalB.primitiveTerm}) {
+                return ${if (asc) "1" else "-1"};
+              } else {
+                return ${if (asc) "-1" else "1"};
+              }
+            }"""
         case _ =>
           s"""
-          int comp = ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm});
-          if (comp != 0) {
-            return ${if (asc) "comp" else "-comp"};
-          }
-          """
+            int comp = ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm});
+            if (comp != 0) {
+              return ${if (asc) "comp" else "-comp"};
+            }"""
       }
 
       s"""
-        i = $a;
-        ${evalA.code}
-        i = $b;
-        ${evalB.code}
-        if (${evalA.nullTerm} && ${evalB.nullTerm}) {
-          // Nothing
-        } else if (${evalA.nullTerm}) {
-          return ${if (order.direction == Ascending) "-1" else "1"};
-        } else if (${evalB.nullTerm}) {
-          return ${if (order.direction == Ascending) "1" else "-1"};
-        } else {
-          $compare
-        }
+          i = $a;
+          ${evalA.code}
+          i = $b;
+          ${evalB.code}
+          if (${evalA.nullTerm} && ${evalB.nullTerm}) {
+            // Nothing
+          } else if (${evalA.nullTerm}) {
+            return ${if (order.direction == Ascending) "-1" else "1"};
+          } else if (${evalB.nullTerm}) {
+            return ${if (order.direction == Ascending) "1" else "-1"};
+          } else {
+            $compare
+          }
       """
     }.mkString("\n")
 
@@ -125,13 +121,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
           $comparisons
           return 0;
         }
-      }
-      """
+      }"""
 
     logWarning(s"Generated Ordering: $code")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)
-    m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[BaseOrdering]
+    m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }

@@ -234,28 +234,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       // Some combinations.
       testCodeGen(
         """
-        |SELECT
-        |  value,
-        |  sum(key),
-        |  max(key),
-        |  min(key),
-        |  avg(key),
-        |  count(key),
-        |  count(distinct key)
-        |FROM testData3x
-        |GROUP BY value
-      """.stripMargin,
-      (1 to 100).map(i
-      => Row(i.toString, i*3, i, i, i, 3, 1)))
-    testCodeGen(
-      "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
-      Row(100, 1,
-        50.5, 300, 100) :: Nil)
+          |SELECT
+          |  value,
+          |  sum(key),
+          |  max(key),
+          |  min(key),
+          |  avg(key),
+          |  count(key),
+          |  count(distinct key)
+          |FROM testData3x
+          |GROUP BY value
+        """.stripMargin,
+        (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
+      testCodeGen(
+        "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
+        Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
         "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-      Row(0,
-        null, 0) :: Nil)
+        Row(0, null, 0) :: Nil)
     } finally {
       dropTempTable("testData3x")
       setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)

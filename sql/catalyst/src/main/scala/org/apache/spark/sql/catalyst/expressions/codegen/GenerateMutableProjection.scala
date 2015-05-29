@@ -29,8 +29,6 @@ abstract class BaseMutableProjection extends MutableProjection {}
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
   import scala.reflect.runtime.universe._
 
-  val mutableRowName = newTermName("mutableRow")
-
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
 
@@ -46,44 +44,43 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           if(${evaluationCode.nullTerm})
             mutableRow.setNullAt($i);
           else
-            ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)};
+            ${setColumn("mutableRow", e.dataType, i, evaluationCode.primitiveTerm)};
         """
     }.mkString("\n")
-    val code =
-    s"""
-    import org.apache.spark.sql.Row;
+    val code = s"""
+      import org.apache.spark.sql.Row;
 
-    public SpecificProjection generate($exprType[] expr) {
-      return new SpecificProjection(expr);
-    }
-
-    class SpecificProjection extends ${typeOf[BaseMutableProjection]} {
-
-      $exprType[] expressions = null;
-      $mutableRowType mutableRow = null;
-
-      public SpecificProjection($exprType[] expr) {
-        expressions = expr;
-        mutableRow = new $genericMutableRowType(${expressions.size});
+      public SpecificProjection generate($exprType[] expr) {
+        return new SpecificProjection(expr);
       }
 
-      public ${typeOf[BaseMutableProjection]} target($mutableRowType row) {
-        mutableRow = row;
-        return this;
-      }
+      class SpecificProjection extends ${typeOf[BaseMutableProjection]} {
 
-      /* Provide immutable access to the last projected row. */
-      public Row currentValue() {
-        return mutableRow;
-      }
+        $exprType[] expressions = null;
+        $mutableRowType mutableRow = null;
 
-      public Object apply(Object _i) {
-        Row i = (Row)_i;
-        $projectionCode
+        public SpecificProjection($exprType[] expr) {
+          expressions = expr;
+          mutableRow = new $genericMutableRowType(${expressions.size});
+        }
 
-        return mutableRow;
+        public ${typeOf[BaseMutableProjection]} target($mutableRowType row) {
+          mutableRow = row;
+          return this;
+        }
+
+        /* Provide immutable access to the last projected row. */
+        public Row currentValue() {
+          return mutableRow;
+        }
+
+        public Object apply(Object _i) {
+          Row i = (Row)_i;
+          $projectionCode
+
+          return mutableRow;
+        }
       }
-    }
     """
 
 
@@ -92,7 +89,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)
     () => {
-      m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[BaseMutableProjection]
+      m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseMutableProjection]
     }
   }
 }

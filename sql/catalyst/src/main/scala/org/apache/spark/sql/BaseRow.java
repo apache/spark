@@ -22,7 +22,9 @@ import java.sql.Date;
 import java.util.List;
 
 import scala.collection.Seq;
+import scala.collection.mutable.ArraySeq;
 
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.StructType;
 
 public abstract class BaseRow implements Row {
@@ -39,6 +41,8 @@ public abstract class BaseRow implements Row {
         return true;
       }
     }
+    float a = 0;
+    byte b = 0;
     return false;
   }
 
@@ -147,12 +151,20 @@ public abstract class BaseRow implements Row {
 
   @Override
   public Row copy() {
-    throw new UnsupportedOperationException();
+    Object[] arr = new Object[size()];
+    for (int i = 0; i < size(); i++) {
+      arr[i] = get(i);
+    }
+    return new GenericRow(arr);
   }
 
   @Override
   public Seq<Object> toSeq() {
-    throw new UnsupportedOperationException();
+    final ArraySeq<Object> values = new ArraySeq<Object>(size());
+    for (int i = 0; i < size(); i++) {
+      values.update(i, get(i));
+    }
+    return values;
   }
 
   @Override
@@ -174,5 +186,4 @@ public abstract class BaseRow implements Row {
   public String mkString(String start, String sep, String end) {
     return toSeq().mkString(start, sep, end);
   }
-
 }

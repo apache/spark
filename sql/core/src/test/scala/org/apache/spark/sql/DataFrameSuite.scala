@@ -453,8 +453,8 @@ class DataFrameSuite extends QueryTest {
     TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
     try{
       checkAnswer(
-        decimalData.agg(sum('a)),
-        Row(new java.math.BigDecimal(12.0)))
+        decimalData.agg(avg('a)),
+        Row(new java.math.BigDecimal(2.0)))
     } finally {
       TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
     }

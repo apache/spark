@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 
+/**
+ * Interface for generated predicate
+ */
 trait Predicate {
   def predict(r: Row): Boolean
 }
@@ -36,8 +39,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
 
   protected def create(predicate: Expression): ((Row) => Boolean) = {
     val ctx = newCodeGenContext()
-    val cEval = expressionEvaluator(predicate, ctx)
-
+    val eval = expressionEvaluator(predicate, ctx)
     val code = s"""
       import org.apache.spark.sql.Row;
 
@@ -55,23 +57,16 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
 
         @Override
         public boolean predict(Row i) {
-          ${cEval.code}
-          if (${cEval.nullTerm}) {
-            return false;
-          } else {
-            return ${cEval.primitiveTerm};
-          }
+          ${eval.code}
+          return !${eval.nullTerm} && ${eval.primitiveTerm};
         }
-      }
-      """
+      }"""
 
     logWarning(s"Generated predicate '$predicate':\n$code")
 
     val c = compile(code)
     val m = c.getDeclaredMethods()(0)
-    val p = m.invoke(c.newInstance(), ctx.borrowed.toArray).asInstanceOf[Predicate]
-    (r: Row) => {
-      p.predict(r)
-    }
+    val p = m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Predicate]
+    (r: Row) => p.predict(r)
   }
 }

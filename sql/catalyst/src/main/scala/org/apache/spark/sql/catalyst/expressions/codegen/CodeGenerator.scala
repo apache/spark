@@ -39,10 +39,7 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
   import scala.reflect.runtime.universe._
-  import scala.reflect.runtime.{universe => ru}
-  import scala.tools.reflect.ToolBox
 
-  protected val toolBox = runtimeMirror(getClass.getClassLoader).mkToolBox()
   protected val cbe = CompilerFactoryFactory.getDefaultCompilerFactory().newClassBodyEvaluator()
 
   protected val rowType = typeOf[Row]
@@ -55,7 +52,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableProjectionType = typeOf[MutableProjection]
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
-  private val javaSeparator = "$"
 
   /**
    * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
@@ -77,13 +73,18 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   /** Binds an input expression to a given input schema */
   protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
-  def compile(code: String): Class[_] = {
-    val startTime = System.currentTimeMillis()
+  /**
+   * Compile the Java source code into a Java class, using Janino.
+   *
+   * It will track the time used to compile
+   */
+  protected def compile(code: String): Class[_] = {
+    val startTime = System.nanoTime()
     cbe.cook(code)
     val result = cbe.getClazz()
-    val endTime = System.currentTimeMillis()
-    def timeMs: Double = (endTime - startTime).toDouble
-    logWarning(s"Code generated ${code.size} in $timeMs ms")
+    val endTime = System.nanoTime()
+    def timeMs: Double = (endTime - startTime).toDouble / 1000000
+    logWarning(s"Code (${code.size} bytes) compiled in $timeMs ms")
     result
   }
 
@@ -123,8 +124,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  protected def freshName(prefix: String): TermName = {
-    newTermName(s"$prefix$javaSeparator${curId.getAndIncrement}")
+  protected def freshName(prefix: String): String = {
+    s"$prefix${curId.getAndIncrement}"
   }
 
   /**
@@ -139,21 +140,21 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   protected case class EvaluatedExpression(
       code: String,
-      nullTerm: TermName,
-      primitiveTerm: TermName,
-      objectTerm: TermName)
+      nullTerm: String,
+      primitiveTerm: String,
+      objectTerm: String)
 
   /**
    * A context for codegen
-   * @param borrowed the expressions that don't support codegen
+   * @param references the expressions that don't support codegen
    */
-  case class CodeGenContext(borrowed: mutable.ArrayBuffer[Expression])
+  protected case class CodeGenContext(references: mutable.ArrayBuffer[Expression])
 
   /**
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
-  def newCodeGenContext(): CodeGenContext = {
+  protected def newCodeGenContext(): CodeGenContext = {
     new CodeGenContext(new mutable.ArrayBuffer[Expression]())
   }
 
@@ -167,7 +168,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     val objectTerm = freshName("objectTerm")
 
     implicit class Evaluate1(e: Expression) {
-      def castOrNull(f: TermName => String, dataType: DataType): String = {
+      def castOrNull(f: String => String, dataType: DataType): String = {
         val eval = expressionEvaluator(e, ctx)
         eval.code +
         s"""
@@ -189,10 +190,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
        *
        * @param f a function from two primitive term names to a tree that evaluates them.
        */
-      def evaluate(f: (TermName, TermName) => String): String =
+      def evaluate(f: (String, String) => String): String =
         evaluateAs(expressions._1.dataType)(f)
 
-      def evaluateAs(resultType: DataType)(f: (TermName, TermName) => String): String = {
+      def evaluateAs(resultType: DataType)(f: (String, String) => String): String = {
         // TODO: Right now some timestamp tests fail if we enforce this...
         if (expressions._1.dataType != expressions._2.dataType) {
           log.warn(s"${expressions._1.dataType} != ${expressions._2.dataType}")
@@ -218,35 +219,35 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     // TODO: Skip generation of null handling code when expression are not nullable.
     val primitiveEvaluation: PartialFunction[Expression, String] = {
       case b @ BoundReference(ordinal, dataType, nullable) =>
-         s"""
-          boolean $nullTerm = $inputTuple.isNullAt($ordinal);
-          ${primitiveForType(dataType)} $primitiveTerm = $nullTerm ?
+        s"""
+          final boolean $nullTerm = $inputTuple.isNullAt($ordinal);
+          final ${primitiveForType(dataType)} $primitiveTerm = $nullTerm ?
               ${defaultPrimitive(dataType)} : (${getColumn(inputTuple, dataType, ordinal)});
          """
 
       case expressions.Literal(null, dataType) =>
         s"""
-          boolean $nullTerm = true;
+          final boolean $nullTerm = true;
           ${primitiveForType(dataType)} $primitiveTerm = ${defaultPrimitive(dataType)};
         """
 
-      case expressions.Literal(value: UTF8String, dataType) =>
+      case expressions.Literal(value: UTF8String, StringType) =>
         val arr = s"new byte[]{${value.getBytes.map(_.toString).mkString(", ")}}"
         s"""
-          boolean $nullTerm = ${value == null};
+          final boolean $nullTerm = false;
           org.apache.spark.sql.types.UTF8String $primitiveTerm =
             new org.apache.spark.sql.types.UTF8String().set(${arr});
          """
+
       case expressions.Literal(value, FloatType) =>
         s"""
-          boolean $nullTerm = ${value == null};
+          final boolean $nullTerm = false;
           float $primitiveTerm = ${value}f;
          """
-      // TODO(davies): other literal types
 
       case expressions.Literal(value, dataType) =>
         s"""
-          boolean $nullTerm = ${value == null};
+          final boolean $nullTerm = false;
           ${primitiveForType(dataType)} $primitiveTerm = $value;
          """
 
@@ -587,10 +588,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     val code: String =
       primitiveEvaluation.lift.apply(e).getOrElse {
         logError(s"No rules to generate $e")
-        ctx.borrowed += e
+        ctx.references += e
         s"""
           // expression: ${e}
-          Object $objectTerm = expressions[${ctx.borrowed.size - 1}].eval(i);
+          Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
           boolean $nullTerm = $objectTerm == null;
           ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
           if (!$nullTerm) $primitiveTerm = (${termForType(e.dataType)})$objectTerm;
@@ -622,10 +623,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   protected def setColumn(
-      destinationRow: TermName,
+      destinationRow: String,
       dataType: DataType,
       ordinal: Int,
-      value: TermName) = {
+      value: String) = {
     dataType match {
       case StringType => s"$destinationRow.update($ordinal, $value)"
       case dt: DataType if isNativeType(dt) =>
@@ -692,34 +693,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
-<<<<<<< HEAD
     case DateType => "Integer"
     case TimestampType => "java.sql.Timestamp"
-//    case udt: UserDefinedType[_] =>
-//      udt.userClass.getCanonicalName
     case _ =>
       "Object"
-=======
-  }
-
-  protected def defaultPrimitive(dt: DataType) = dt match {
-    case BooleanType => ru.Literal(Constant(false))
-    case FloatType => ru.Literal(Constant(-1.0.toFloat))
-    case StringType => q"""org.apache.spark.sql.types.UTF8String("<uninit>")"""
-    case ShortType => ru.Literal(Constant(-1.toShort))
-    case LongType => ru.Literal(Constant(-1L))
-    case ByteType => ru.Literal(Constant(-1.toByte))
-    case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"
-    case IntegerType => ru.Literal(Constant(-1))
-    case DateType => ru.Literal(Constant(-1))
-    case _ => ru.Literal(Constant(null))
-  }
-
-  protected def termForType(dt: DataType) = dt match {
-    case n: AtomicType => n.tag
-    case _ => typeTag[Any]
->>>>>>> 6181937f315480543d28e542d43269cfa591e9d0
   }
 
   /**
