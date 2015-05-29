@@ -95,13 +95,13 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     val (keys, tupleValues) = distCacheFiles.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
     if (keys.size > 0) {
-      env("SPARK_YARN_CACHE_FILES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_FILES") = keys.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") = 
-        timeStamps.reduceLeft[String] { (acc,n) => acc + "," + n }
+        timeStamps.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_FILES_FILE_SIZES") = 
-        sizes.reduceLeft[String] { (acc,n) => acc + "," + n }
+        sizes.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_FILES_VISIBILITIES") = 
-        visibilities.reduceLeft[String] { (acc,n) => acc + "," + n }
+        visibilities.reduceLeft[String] { (acc, n) => acc + "," + n }
     }
   }
 
@@ -112,13 +112,13 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     val (keys, tupleValues) = distCacheArchives.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
     if (keys.size > 0) {
-      env("SPARK_YARN_CACHE_ARCHIVES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_ARCHIVES") = keys.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS") = 
-        timeStamps.reduceLeft[String] { (acc,n) => acc + "," + n }
+        timeStamps.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES") =
-        sizes.reduceLeft[String] { (acc,n) => acc + "," + n }
+        sizes.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES") = 
-        visibilities.reduceLeft[String] { (acc,n) => acc + "," + n }
+        visibilities.reduceLeft[String] { (acc, n) => acc + "," + n }
     }
   }
 
@@ -160,7 +160,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
   def ancestorsHaveExecutePermissions(
       fs: FileSystem,
       path: Path,
-      statCache: Map[URI, FileStatus]): Boolean =  {
+      statCache: Map[URI, FileStatus]): Boolean = {
     var current = path
     while (current != null) {
       // the subdirs in the path should have execute permissions for others
