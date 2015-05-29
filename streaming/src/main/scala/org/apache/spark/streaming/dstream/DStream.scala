@@ -20,7 +20,7 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, Set}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
