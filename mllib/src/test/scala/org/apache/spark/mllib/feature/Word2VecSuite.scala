@@ -39,6 +39,18 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
   }
+ 
+  test("Word2Vec with negative sampling") {
+    val sentence = "a b " * 100 + "a c " * 10
+    val localDoc = Seq(sentence, sentence)
+    val doc = sc.parallelize(localDoc)
+      .map(line => line.split(" ").toSeq)
+    val model = new Word2Vec().setVectorSize(10).setSeed(42L).setNSMode(2).fit(doc)
+    val syms = model.findSynonyms("a", 2)
+    assert(syms.length == 2)
+    assert(syms(0)._1 == "b")
+    assert(syms(1)._1 == "c")
+  }
 
   test("Word2VecModel") {
     val num = 2
