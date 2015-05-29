@@ -96,16 +96,16 @@ class ExpressionTypeCheckingSuite extends FunSuite {
   }
 
   test("check types for predicates") {
-    // EqualTo don't have type constraint
-    assertSuccess(EqualTo('intField, 'booleanField))
-    assertSuccess(EqualNullSafe('intField, 'booleanField))
-
     // We will cast String to Double for binary comparison
+    assertSuccess(EqualTo('intField, 'stringField))
+    assertSuccess(EqualNullSafe('intField, 'stringField))
     assertSuccess(LessThan('intField, 'stringField))
     assertSuccess(LessThanOrEqual('intField, 'stringField))
     assertSuccess(GreaterThan('intField, 'stringField))
     assertSuccess(GreaterThanOrEqual('intField, 'stringField))
 
+    assertErrorForDifferingTypes(EqualTo('intField, 'booleanField))
+    assertErrorForDifferingTypes(EqualNullSafe('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
