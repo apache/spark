@@ -815,6 +815,21 @@ abstract class DStream[T: ClassTag] (
   }
 
   /**
+   * Save filenames of Dstream to a set provided in the argument
+   * by parsing the .toDebugString output of RDD and searching 
+   * for the pattern ":/" ( as in file:/, hdfs:/ etc.)
+   * The set `x` should be mutable for the method to function.
+   */
+  def generateFileList(x:Set[String]) : Unit = { 
+    this.foreachRDD{ rdd  => {
+        if(rdd.count > 0){
+          val files = rdd.toDebugString.stripMargin.split("\n").filter(_.contains(":/"))
+          for(ms <- files) x += ms.split(" ")(2)
+        }
+      }
+  } }
+
+  /**
    * Register this streaming as an output stream. This would ensure that RDDs of this
    * DStream will be generated.
    */
