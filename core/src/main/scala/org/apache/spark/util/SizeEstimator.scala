@@ -54,14 +54,14 @@ object SizeEstimator extends Logging {
   def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
 
   // Sizes of primitive types
-  private val BYTE_SIZE    = 1
+  private val BYTE_SIZE = 1
   private val BOOLEAN_SIZE = 1
-  private val CHAR_SIZE    = 2
-  private val SHORT_SIZE   = 2
-  private val INT_SIZE     = 4
-  private val LONG_SIZE    = 8
-  private val FLOAT_SIZE   = 4
-  private val DOUBLE_SIZE  = 8
+  private val CHAR_SIZE = 2
+  private val SHORT_SIZE = 2
+  private val INT_SIZE = 4
+  private val LONG_SIZE = 8
+  private val FLOAT_SIZE = 4
+  private val DOUBLE_SIZE = 8
 
   // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of
   // a pointer is 4 or 8 depending on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
@@ -96,7 +96,7 @@ object SizeEstimator extends Logging {
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
-      if(!isCompressedOops) {
+      if (!isCompressedOops) {
         16
       } else {
         12

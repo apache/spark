@@ -222,8 +222,8 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val dir1 = Utils.createTempDir()
     val dir2 = Utils.createTempDir()
 
-    val dirpath1=dir1.getAbsolutePath
-    val dirpath2=dir2.getAbsolutePath
+    val dirpath1 = dir1.getAbsolutePath
+    val dirpath2 = dir2.getAbsolutePath
 
     // file1 and file2 are placed inside dir1, they are also used for
     // textFile, hadoopFile, and newAPIHadoopFile
@@ -235,11 +235,11 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val file4 = new File(dir2, "part-00001")
     val file5 = new File(dir2, "part-00002")
 
-    val filepath1=file1.getAbsolutePath
-    val filepath2=file2.getAbsolutePath
-    val filepath3=file3.getAbsolutePath
-    val filepath4=file4.getAbsolutePath
-    val filepath5=file5.getAbsolutePath
+    val filepath1 = file1.getAbsolutePath
+    val filepath2 = file2.getAbsolutePath
+    val filepath3 = file3.getAbsolutePath
+    val filepath4 = file4.getAbsolutePath
+    val filepath5 = file5.getAbsolutePath
 
 
     try {
