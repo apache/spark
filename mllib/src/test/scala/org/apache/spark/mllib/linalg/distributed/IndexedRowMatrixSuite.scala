@@ -143,6 +143,109 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("similar rows with cosine kernel") {
+    val n = 3
+
+    val denseData = sc.parallelize(Seq(
+      IndexedRow(0, Vectors.dense(0.0, 3.0, 6.0, 9.0)),
+      IndexedRow(1, Vectors.dense(1.0, 4.0, 7.0, 0.0)),
+      IndexedRow(2, Vectors.dense(2.0, 5.0, 8.0, 1.0))
+    ), 2)
+
+    val denseMat = new IndexedRowMatrix(denseData, 3L, 4)
+
+    val similarRows = denseMat.rowSimilarities()
+
+    assert(similarRows.numRows() == n)
+    assert(similarRows.numCols() == n)
+
+    val similarEntries = similarRows.entries.collect()
+
+    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+
+    val expected = BDM(
+      (126.0, 54.0, 72.0),
+      (54.0, 66.0, 78.0),
+      (72.0, 78.0, 94.0))
+
+    for (i <- 0 until n; j <- 0 until n) expected(i, j) /= (colMags(i) * colMags(j))
+
+    similarEntries.foreach { entry =>
+      val row = entry.i.toInt
+      val col = entry.j.toInt
+      assert(math.abs(entry.value - expected(row, col)) < 1e-6)
+    }
+  }
+
+  test("similar rows with cosine kernel and topk") {
+    val n = 3
+
+    val denseData = sc.parallelize(Seq(
+      IndexedRow(0, Vectors.dense(0.0, 3.0, 6.0, 9.0)),
+      IndexedRow(1, Vectors.dense(1.0, 4.0, 7.0, 0.0)),
+      IndexedRow(2, Vectors.dense(2.0, 5.0, 8.0, 1.0))
+    ), 2)
+
+    val denseMat = new IndexedRowMatrix(denseData, 3L, 4)
+    val topk = 2
+    val similarRows = denseMat.rowSimilarities(topk=2)
+
+    assert(similarRows.numRows() == n)
+    assert(similarRows.entries.count() == n * topk)
+
+    val similarEntries = similarRows.entries.collect()
+
+    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+
+    val expected = BDM(
+      (126.0, 54.0, 72.0),
+      (54.0, 66.0, 78.0),
+      (72.0, 78.0, 94.0))
+
+    for (i <- 0 until n; j <- 0 until n) expected(i, j) /= (colMags(i) * colMags(j))
+
+    similarEntries.foreach { entry =>
+      val row = entry.i.toInt
+      val col = entry.j.toInt
+      assert(math.abs(entry.value - expected(row, col)) < 1e-6)
+    }
+  }
+
+  test("similar rows with cosine kernel and sparse data") {
+    val n = 3
+
+    val sparseData = sc.parallelize(Seq(
+      IndexedRow(0, Vectors.sparse(4, Array(1, 2, 3), Array(3.0, 6.0, 9.0))),
+      IndexedRow(1, Vectors.sparse(4, Array(0, 1, 2), Array(1.0, 4.0, 7.0))),
+      IndexedRow(2, Vectors.sparse(4, Array(0, 1, 2, 3), Array(2.0, 5.0, 8.0, 1.0)))
+    ), 2)
+
+    val sparseMat = new IndexedRowMatrix(sparseData, 3L, 4)
+
+
+    val similarRows = sparseMat.rowSimilarities()
+
+    assert(similarRows.numRows() == n)
+    assert(similarRows.numCols() == n)
+
+    val similarEntries = similarRows.entries.collect()
+
+    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+
+    val expected = BDM(
+      (126.0, 54.0, 72.0),
+      (54.0, 66.0, 78.0),
+      (72.0, 78.0, 94.0))
+
+    for (i <- 0 until n; j <- 0 until n) expected(i, j) /= (colMags(i) * colMags(j))
+
+    similarEntries.foreach { entry =>
+      val row = entry.i.toInt
+      val col = entry.j.toInt
+      assert(math.abs(entry.value - expected(row, col)) < 1e-6)
+    }
+  }
+
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
   }

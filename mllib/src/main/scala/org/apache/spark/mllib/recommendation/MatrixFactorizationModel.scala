@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
+import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, CoordinateMatrix}
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -135,6 +136,51 @@ class MatrixFactorizationModel(
     MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
 
+  /**
+   * Find similar products to every product. Cosine similarity is used
+   *
+   * @param num how many products to return. The number returned may be less than this.
+   * @return CoordinateMatrix containing similar product pair and the corresponding similarity
+   *  scores. zero similarities are filtered out
+   */
+  def similarProducts(num: Int, threshold: Double = 1e-4): CoordinateMatrix = {
+    val productNorms = productFeatures.map {
+      case (index, features) => (index.toLong, blas.dnrm2(rank, features, 1))
+    }.collectAsMap()
+
+    val kernel = CosineKernel(productNorms, threshold)
+
+    val similarProducts =
+      MatrixFactorizationModel.recommendForAll(
+        rank, kernel,
+        productFeatures, productFeatures, num).flatMap {
+        case (product, top) => top.map { case (index, value) => MatrixEntry(product, index, value) }
+      }
+    new CoordinateMatrix(similarProducts)
+  }
+
+  /**
+   * Find similar users to every user. Cosine similarity is used
+   *
+   * @param num how many users to return. The number returned may be less than this.
+   * @return CoordinateMatrix containing similar user pair and the corresponding similarity
+   *  scores. zero similarities are filtered out
+   */
+  def similarUsers(num: Int, threshold: Double=1e-4): CoordinateMatrix = {
+    val userNorms = userFeatures.map {
+      case (index, features) => (index.toLong, blas.dnrm2(rank, features, 1))
+    }.collectAsMap()
+
+    val kernel = CosineKernel(userNorms, threshold)
+
+    val similarUsers =
+      MatrixFactorizationModel.recommendForAll(
+        rank, kernel, userFeatures, userFeatures, num).flatMap {
+        case (user, top) => top.map { case (index, value) => MatrixEntry(user, index, value) }
+      }
+    new CoordinateMatrix(similarUsers)
+  }
+
   protected override val formatVersion: String = "1.0"
 
   override def save(sc: SparkContext, path: String): Unit = {
@@ -150,13 +196,13 @@ class MatrixFactorizationModel(
    * rating field. Semantics of score is same as recommendProducts API
    */
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
-    MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num).map {
+    val kernel = ProductKernel()
+    MatrixFactorizationModel.recommendForAll(rank, kernel, userFeatures, productFeatures, num).map {
       case (user, top) =>
         val ratings = top.map { case (product, rating) => Rating(user, product, rating) }
         (user, ratings)
     }
   }
-
 
   /**
    * Recommends topK users for all products.
@@ -167,7 +213,8 @@ class MatrixFactorizationModel(
    * rating field. Semantics of score is same as recommendUsers API
    */
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
-    MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num).map {
+    val kernel = ProductKernel()
+    MatrixFactorizationModel.recommendForAll(rank, kernel, productFeatures, userFeatures, num).map {
       case (product, top) =>
         val ratings = top.map { case (user, rating) => Rating(user, product, rating) }
         (product, ratings)
@@ -193,8 +240,9 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   }
 
   /**
-   * Makes recommendations for all users (or products).
+   * Makes batch user->product, user->user and product->product recommendations
    * @param rank rank
+   * @param kernel kernels for distance calculation where computation is dot decomposable
    * @param srcFeatures src features to receive recommendations
    * @param dstFeatures dst features used to make recommendations
    * @param num number of recommendations for each record
@@ -203,6 +251,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    */
   private def recommendForAll(
       rank: Int,
+      kernel: Kernel,
       srcFeatures: RDD[(Int, Array[Double])],
       dstFeatures: RDD[(Int, Array[Double])],
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
@@ -216,7 +265,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         val output = new Array[(Int, (Int, Double))](m * n)
         var k = 0
         ratings.foreachActive { (i, j, r) =>
-          output(k) = (srcIds(i), (dstIds(j), r))
+          val kernelVal = kernel.compute(srcIds(i), dstIds(j), r)
+          output(k) = (srcIds(i), (dstIds(j), kernelVal))
           k += 1
         }
         output.toSeq
@@ -311,5 +361,4 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       new Path(dataPath(path), "product").toUri.toString
     }
   }
-
 }

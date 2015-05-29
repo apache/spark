@@ -18,11 +18,16 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
+import org.apache.spark.HashPartitioner
 
+import scala.collection.Map
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
+import scala.collection.mutable
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
+import KernelType._
 
 /**
  * :: Experimental ::
@@ -185,5 +190,98 @@ class IndexedRowMatrix(
       }
     }
     mat
+  }
+
+  /**
+   * Computes the row norm of each entry from IndexedRowMatrix
+   * @param norm L1/L2 norm of each row
+   * @return Map of row index and norm
+   */
+  def rowMagnitudes(norm: Int): Map[Long, Double] = {
+    rows.map { indexedRow =>
+      (indexedRow.index, Vectors.norm(indexedRow.vector, norm))
+    }.collectAsMap()
+  }
+
+  /**
+   * row similarity calculation with user defined kernel
+   * @param kernel vector based kernel computation
+   * @param topk topk similar rows to each row
+   * @return CoordinateMatrix of rows similar to every row
+   */
+  def rowSimilarities(
+      kernel: Kernel,
+      topk: Int): CoordinateMatrix = {
+    multiply(rows, kernel, topk)
+  }
+
+  /**
+   * row similarity calculation with cosine kernel
+   * @param topk topk similar rows to each row
+   * @param threshold cosine similarity threshold
+   * @return CoordinateMatrix of rows similar to every row
+   */
+  def rowSimilarities(
+      topk: Int = nRows.toInt,
+      threshold: Double = 1e-4): CoordinateMatrix = {
+    val rowNorms = rowMagnitudes(2)
+    val kernel = CosineKernel(rowNorms, threshold)
+    rowSimilarities(kernel, topk)
+  }
+
+  private def blockify(features: RDD[IndexedRow], blockSize: Int): RDD[(Int, Array[IndexedRow])] = {
+    val featurePartitioner = new HashPartitioner(blockSize)
+    val blockedFeatures = features.map { row =>
+      (featurePartitioner.getPartition(row.index), row)
+    }.groupByKey(blockSize).map {
+      case (index, rows) => (index, rows.toArray)
+    }
+    blockedFeatures.count()
+    blockedFeatures
+  }
+
+  private def multiply(query: RDD[IndexedRow],
+      kernel: Kernel,
+      topk: Int): CoordinateMatrix = {
+    val ord = Ordering[(Float, Long)].on[(Long, Double)](x => (x._2.toFloat, x._1))
+    val defaultParallelism = rows.sparkContext.defaultParallelism
+
+    val queryBlocks = math.max(query.sparkContext.defaultParallelism, query.partitions.size) / 2
+    val dictionaryBlocks = math.max(defaultParallelism, rows.partitions.size) / 2
+
+    val blockedSmall = blockify(query, queryBlocks)
+    val blockedBig = blockify(rows, dictionaryBlocks)
+
+    blockedSmall.setName("blockedSmallMatrix")
+    blockedBig.setName("blockedBigMatrix")
+
+    blockedBig.cache()
+
+    val topkSims = blockedBig.cartesian(blockedSmall).flatMap {
+      case ((bigBlockIndex, bigRows), (smallBlockIndex, smallRows)) =>
+        val buf = mutable.ArrayBuilder.make[(Long, (Long, Double))]
+        for (i <- 0 until bigRows.size; j <- 0 until smallRows.size) {
+          val bigIndex = bigRows(i).index
+          val bigRow = bigRows(i).vector
+          val smallIndex = smallRows(j).index
+          val smallRow = smallRows(j).vector
+          val kernelVal = kernel.compute(smallRow, smallIndex, bigRow, bigIndex)
+          if (kernelVal != 0.0) {
+            val entry = (bigIndex, (smallIndex, kernelVal))
+            buf += entry
+          }
+        }
+        buf.result()
+    }.topByKey(topk)(ord).flatMap { case (i, value) =>
+      value.map { sim =>
+        MatrixEntry(i, sim._1, sim._2)
+      }
+    }.repartition(defaultParallelism)
+
+    blockedBig.unpersist()
+
+    // Materialize the cartesian RDD
+    topkSims.count()
+    new CoordinateMatrix(topkSims)
   }
 }
