@@ -1331,4 +1331,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
+
+  test("SPARK-7952: fix the equality check between boolean type and numeric typegd") {
+    val data = Seq(
+      (1, true),
+      (0, false),
+      (2, true),
+      (2, false),
+      (null, true),
+      (null, false),
+      (0, null),
+      (1, null),
+      (null, null)
+    )
+    val rowRDD = sparkContext.makeRDD(data).map(r => Row(r._1, r._2))
+    val schema = StructType(Seq(StructField("i", IntegerType), StructField("b", BooleanType)))
+    createDataFrame(rowRDD, schema).registerTempTable("t")
+
+    checkAnswer(sql("select i = b from t"),
+      Seq(true, true, false, false, null, null, null, null, null).map(Row(_)))
+    checkAnswer(sql("select i <=> b from t"),
+      Seq(true, true, false, false, false, false, false, false, true).map(Row(_)))
+  }
 }

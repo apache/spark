@@ -76,7 +76,7 @@ trait HiveTypeCoercion {
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
-    BooleanComparisons ::
+    BooleanEqualization ::
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
@@ -482,30 +482,52 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
+   * Changes numeric values to booleans so that expressions like true = 1 can be Evaluated.
    */
-  object BooleanComparisons extends Rule[LogicalPlan] {
-    val trueValues = Seq(1, 1L, 1.toByte, 1.toShort, new java.math.BigDecimal(1)).map(Literal(_))
-    val falseValues = Seq(0, 0L, 0.toByte, 0.toShort, new java.math.BigDecimal(0)).map(Literal(_))
+  object BooleanEqualization extends Rule[LogicalPlan] {
+    val trueValue = Literal(new java.math.BigDecimal(1))
+    val falseValue = Literal(new java.math.BigDecimal(0))
+
+    def isNull(expr: Expression) = EqualNullSafe(expr, Literal.create(null, expr.dataType))
+
+    def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
+      CaseKeyWhen(Cast(numericExpr, DecimalType.Unlimited),
+        Seq(
+          trueValue, booleanExpr,
+          falseValue, Not(booleanExpr),
+          Literal(false)))
+    }
+
+    def transform(booleanExpr: Expression, numericExpr: Expression) = {
+      CaseWhen(Seq(
+        isNull(booleanExpr), Literal.create(null, BooleanType),
+        isNull(numericExpr), Literal.create(null, BooleanType),
+        buildCaseKeyWhen(booleanExpr, numericExpr)
+      ))
+    }
+
+    def transformNullSafe(booleanExpr: Expression, numericExpr: Expression) = {
+      CaseWhen(Seq(
+        And(isNull(booleanExpr), isNull(numericExpr)), Literal(true),
+        isNull(booleanExpr), Literal(false),
+        isNull(numericExpr), Literal(false),
+        buildCaseKeyWhen(booleanExpr, numericExpr)
+      ))
+    }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       // Hive treats (true = 1) as true and (false = 0) as true.
-      case EqualTo(l @ BooleanType(), r) if trueValues.contains(r) => l
-      case EqualTo(l, r @ BooleanType()) if trueValues.contains(l) => r
-      case EqualTo(l @ BooleanType(), r) if falseValues.contains(r) => Not(l)
-      case EqualTo(l, r @ BooleanType()) if falseValues.contains(l) => Not(r)
-
-      // No need to change other EqualTo operators as that actually makes sense for boolean types.
-      case e: EqualTo => e
-      // No need to change the EqualNullSafe operators, too
-      case e: EqualNullSafe => e
-      // Otherwise turn them to Byte types so that there exists and ordering.
-      case p: BinaryComparison if p.left.dataType == BooleanType &&
-                                  p.right.dataType == BooleanType =>
-        p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
+      case EqualTo(l @ BooleanType(), r) if r.dataType.isInstanceOf[NumericType] =>
+        transform(l, r)
+      case EqualTo(l, r @ BooleanType()) if l.dataType.isInstanceOf[NumericType] =>
+        transform(r, l)
+      case EqualNullSafe(l @ BooleanType(), r) if r.dataType.isInstanceOf[NumericType] =>
+        transformNullSafe(l, r)
+      case EqualNullSafe(l, r @ BooleanType()) if l.dataType.isInstanceOf[NumericType] =>
+        transformNullSafe(r, l)
     }
   }
 
