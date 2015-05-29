@@ -254,7 +254,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -311,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>

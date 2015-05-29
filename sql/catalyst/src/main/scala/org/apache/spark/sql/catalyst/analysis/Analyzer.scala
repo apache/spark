@@ -494,7 +494,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) => {
-        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val evaluatedCondition = Alias(havingCondition, "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
 
         Project(aggregate.output,
@@ -515,16 +515,15 @@ class Analyzer(
    *  - concrete attribute references for their output.
    *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
    *
-   * Names for the output [[Attributes]] are extracted from [[Alias]] or [[MultiAlias]] expressions
+   * Names for the output [[Attribute]]s are extracted from [[Alias]] or [[MultiAlias]] expressions
    * that wrap the [[Generator]]. If more than one [[Generator]] is found in a Project, an
    * [[AnalysisException]] is throw.
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case g: Generate if g.resolved == false =>
-          g.copy(
-            generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      case g: Generate if !g.resolved =>
+        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.

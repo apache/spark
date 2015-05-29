@@ -373,7 +373,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         // Uh, bad function name...
         child.castOrNull(c => q"!$c", BooleanType)
 
-      case Add(e1, e2) =>      (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 + $eval2" }
+      case Add(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 + $eval2" }
       case Subtract(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 - $eval2" }
       case Multiply(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 * $eval2" }
       case Divide(e1, e2) =>
@@ -665,7 +665,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def defaultPrimitive(dt: DataType) = dt match {
     case BooleanType => ru.Literal(Constant(false))
     case FloatType => ru.Literal(Constant(-1.0.toFloat))
-    case StringType =>  q"""org.apache.spark.sql.types.UTF8String("<uninit>")"""
+    case StringType => q"""org.apache.spark.sql.types.UTF8String("<uninit>")"""
     case ShortType => ru.Literal(Constant(-1.toShort))
     case LongType => ru.Literal(Constant(-1L))
     case ByteType => ru.Literal(Constant(-1.toByte))

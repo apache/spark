@@ -103,7 +103,7 @@ class SqlLexical extends StdLexical {
     ( identChar ~ (identChar | digit).* ^^
       { case first ~ rest => processIdent((first :: rest).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
-        case i ~ None    => NumericLit(i.mkString)
+        case i ~ None => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
