@@ -175,7 +175,7 @@ public class UnsafeShuffleWriterSuite {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
         return null;
       }
-    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
+    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class), eq(0L));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {

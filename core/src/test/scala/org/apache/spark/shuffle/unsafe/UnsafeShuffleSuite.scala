@@ -25,7 +25,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{HashPartitioner, ShuffleDependency, SparkContext, ShuffleSuite}
+import org.apache.spark._
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.Utils
@@ -40,6 +40,20 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
     // shuffle records.
     conf.set("spark.shuffle.memoryFraction", "0.5")
   }
+
+  override def multipleAttemptConfs: Seq[(String,SparkConf)] = {
+    val kryoAndNoSpillMove = conf.clone()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.shuffle.unsafe.testing.allowSpillMove", "false")
+    val noCompression = kryoAndNoSpillMove.clone()
+      .set("spark.shuffle.compress", "false")
+      .set("spark.file.transferTo","false")
+    Seq(
+      "slow merge path" -> kryoAndNoSpillMove,
+      "filestream based fast merge" -> noCompression
+    )
+  }
+
 
   test("UnsafeShuffleManager properly cleans up files for shuffles that use the new shuffle path") {
     val tmpDir = Utils.createTempDir()
