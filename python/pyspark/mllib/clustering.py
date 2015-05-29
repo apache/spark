@@ -21,7 +21,9 @@ import array as pyarray
 if sys.version > '3':
     xrange = range
 
-from numpy import array
+from math import exp, log
+
+from numpy import array, random, tile
 
 from pyspark import RDD
 from pyspark import SparkContext
@@ -262,6 +264,96 @@ class GaussianMixture(object):
                                           initialModelMu, initialModelSigma)
         mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
+
+
+class StreamingKMeansModel(KMeansModel):
+    """
+    .. note:: Experimental
+    """
+    def __init__(self, clusterCenters, clusterWeights):
+        super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
+        self._clusterWeights = list(clusterWeights)
+
+    def update(self, data, decayFactor, timeUnit):
+        if not isinstance(data, RDD):
+            raise TypeError("data should be of a RDD, got %s." % type(data))
+        decayFactor = float(decayFactor)
+        if timeUnit not in ["batches", "points"]:
+            raise ValueError(
+                "timeUnit should be 'batches' or 'points', got %s." % timeUnit)
+        vectorCenters = [_convert_to_vector(center) for center in self.centers]
+        updatedModel = callMLlibFunc(
+            "updateStreamingKMeansModel", vectorCenters, self._clusterWeights,
+            data, decayFactor, timeUnit)
+        self.centers = array(updatedModel[0])
+        self._clusterWeights = list(updatedModel[1])
+        return self
+
+
+class StreamingKMeans(object):
+    """
+    .. note:: Experimental
+    """
+    def __init__(self, k=2, decayFactor=1.0, timeUnit="batches"):
+        self._k = k
+        self._decayFactor = decayFactor
+        if timeUnit not in ["batches", "points"]:
+            raise ValueError(
+                "timeUnit should be 'batches' or 'points', got %s." % timeUnit)
+        self._timeUnit = timeUnit
+        self.model = None
+
+    def _validate(self, dstream):
+        if self.model is None:
+            raise ValueError(
+                "Initial centers should be set either by setInitialCenters ")
+                "or setRandomCenters.")
+        if not isinstance(dstream, DStream):
+            raise TypeError(
+                "Expected dstream to be of type DStream, "
+                "got type %d" % type(dstream))
+
+    def setK(self, k):
+        self._k = k
+        return self
+
+    def setDecayFactor(self, decayFactor):
+        self._decayFactor = decayFactor
+        return self
+
+    def setHalfLife(self, halfLife, timeUnit):
+        self._timeUnit = timeUnit
+        self._decayFactor = exp(log(0.5) / halfLife)
+        return self
+
+    def setInitialCenters(self, centers, weights):
+        self.model = StreamingKMeansModel(centers, weights)
+        return self
+
+    def setRandomCenters(self, dim, weight, seed):
+        rng = random.RandomState(seed)
+        clusterCenters = rng.randn(self._k, dim)
+        clusterWeights = tile(weight, self._k)
+        self.model = StreamingKMeansModel(clusterCenters, clusterWeights)
+        return self
+
+    def trainOn(self, dstream):
+        self._validate(dstream)
+
+        def update(_, rdd):
+            if rdd:
+                self.model = self.model.update(rdd)
+
+        dstream.foreachRDD(update)
+        return self
+
+    def predictOn(self, dstream):
+        self._validate(dstream)
+        dstream.map(model.predict)
+
+    def predictOnValues(self, dstream):
+        self._validate(dstream)
+        dstream.mapValues(model.predict)
 
 
 def _test():

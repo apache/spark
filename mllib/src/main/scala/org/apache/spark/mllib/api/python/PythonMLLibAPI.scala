@@ -964,6 +964,21 @@ private[python] class PythonMLLibAPI extends Serializable {
       points.asScala.toArray)
   }
 
+  /**
+   * Java stub for the update method of StreamingKMeansModel.
+   */
+  def updateStreamingKMeansModel(
+        clusterCenters: java.util.ArrayList[Vector],
+        clusterWeights: java.util.ArrayList[Double],
+        data: JavaRDD[Vector], decayFactor: Double,
+        timeUnit: String) : JList[Object] = {
+      val model = new StreamingKMeansModel(
+        clusterCenters.asScala.toArray, clusterWeights.asScala.toArray)
+        .update(data, decayFactor, timeUnit)
+      List(model.clusterCenters, model.clusterWeights).
+        map(_.asInstanceOf[Object]).asJava
+  }
+
 }
 
 /**
