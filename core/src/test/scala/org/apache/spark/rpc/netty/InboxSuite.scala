@@ -21,11 +21,11 @@ import java.util.concurrent.{TimeUnit, CountDownLatch}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.mockito.Mockito._
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.rpc.{TestRpcEndpoint, RpcAddress}
 
-class InboxSuite extends FunSuite {
+class InboxSuite extends SparkFunSuite {
 
   test("post") {
     val endpoint = new TestRpcEndpoint
@@ -77,10 +77,10 @@ class InboxSuite extends FunSuite {
 
     val exitLatch = new CountDownLatch(10)
 
-    for(_ <- 0 until 10) {
+    for (_ <- 0 until 10) {
       new Thread {
         override def run(): Unit = {
-          for(_ <- 0 until 100) {
+          for (_ <- 0 until 100) {
             val message = ContentMessage(null, "hi", false, null)
             inbox.post(message)
           }

@@ -370,7 +370,7 @@ class NettyRpcHandler(
   // Store all client addresses and their NettyRpcEnv addresses. Protected by "this".
   private val remoteAddresses = new mutable.HashMap[ClientAddress, RemoteEnvAddress]()
   // Store the connections from other NettyRpcEnv addresses. Protected by "this".
-  private val remoteConnectionCount =  new mutable.HashMap[RemoteEnvAddress, Int]()
+  private val remoteConnectionCount = new mutable.HashMap[RemoteEnvAddress, Int]()
 
   override def receive(
       client: TransportClient, message: Array[Byte], callback: RpcResponseCallback): Unit = {

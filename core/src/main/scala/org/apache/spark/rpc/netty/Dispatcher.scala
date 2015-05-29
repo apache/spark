@@ -50,7 +50,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
     val addr = new NettyRpcAddress(nettyEnv.address.host, nettyEnv.address.port, name)
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
-    nameToEndpoint.put(name, new RpcEndpointPair(endpoint,endpointRef))
+    nameToEndpoint.put(name, new RpcEndpointPair(endpoint, endpointRef))
     endpointToEndpointRef.put(endpoint, endpointRef)
     val inbox = new Inbox(endpointRef, endpoint)
     endpointToInbox.put(endpoint, inbox)

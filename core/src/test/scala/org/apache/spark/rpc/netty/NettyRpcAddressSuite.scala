@@ -17,12 +17,12 @@
 
 package org.apache.spark.rpc.netty
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class NettyRpcAddressSuite extends FunSuite {
+class NettyRpcAddressSuite extends SparkFunSuite {
 
   test("toString") {
-    val addr =  NettyRpcAddress("localhost", 12345, "test")
+    val addr = NettyRpcAddress("localhost", 12345, "test")
     assert(addr.toString === "spark://test@localhost:12345")
   }
 

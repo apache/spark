@@ -24,7 +24,8 @@ import scala.concurrent.{Promise, Future}
 
 private[netty] abstract class NettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
-    override val senderAddress: RpcAddress,needReply: Boolean) extends RpcCallContext{
+    override val senderAddress: RpcAddress,
+    needReply: Boolean) extends RpcCallContext{
 
   protected def send(message: Any): Unit
 
