@@ -45,11 +45,11 @@ class ExpressionTypeCheckingSuite extends FunSuite {
   }
 
   test("check types for unary arithmetic") {
-    checkError(UnaryMinus('b), "operator - need numeric type")
+    checkError(UnaryMinus('b), "operator - accepts numeric type")
     checkAnalysis(Sqrt('b)) // We will cast String to Double for sqrt
-    checkError(Sqrt('c), "function sqrt need numeric type")
-    checkError(Abs('b), "function abs need numeric type")
-    checkError(BitwiseNot('b), "operator ~ need integral type")
+    checkError(Sqrt('c), "function sqrt accepts numeric type")
+    checkError(Abs('b), "function abs accepts numeric type")
+    checkError(BitwiseNot('b), "operator ~ accepts integral type")
   }
 
   test("check types for binary arithmetic") {
@@ -73,18 +73,18 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     checkError(MaxOf('a, 'c), msg)
     checkError(MinOf('a, 'c), msg)
 
-    checkError(Add('c, 'c), "operator + need numeric type")
-    checkError(Subtract('c, 'c), "operator - need numeric type")
-    checkError(Multiply('c, 'c), "operator * need numeric type")
-    checkError(Divide('c, 'c), "operator / need numeric type")
-    checkError(Remainder('c, 'c), "operator % need numeric type")
+    checkError(Add('c, 'c), "operator + accepts numeric type")
+    checkError(Subtract('c, 'c), "operator - accepts numeric type")
+    checkError(Multiply('c, 'c), "operator * accepts numeric type")
+    checkError(Divide('c, 'c), "operator / accepts numeric type")
+    checkError(Remainder('c, 'c), "operator % accepts numeric type")
 
-    checkError(BitwiseAnd('c, 'c), "operator & need integral type")
-    checkError(BitwiseOr('c, 'c), "operator | need integral type")
-    checkError(BitwiseXor('c, 'c), "operator ^ need integral type")
+    checkError(BitwiseAnd('c, 'c), "operator & accepts integral type")
+    checkError(BitwiseOr('c, 'c), "operator | accepts integral type")
+    checkError(BitwiseXor('c, 'c), "operator ^ accepts integral type")
 
-    checkError(MaxOf('d, 'd), "function maxOf need atomic type")
-    checkError(MinOf('d, 'd), "function minOf need atomic type")
+    checkError(MaxOf('d, 'd), "function maxOf accepts non-complex type")
+    checkError(MinOf('d, 'd), "function minOf accepts non-complex type")
   }
 
   test("check types for predicates") {
@@ -104,10 +104,10 @@ class ExpressionTypeCheckingSuite extends FunSuite {
     checkError(GreaterThan('a, 'c), msg)
     checkError(GreaterThanOrEqual('a, 'c), msg)
 
-    checkError(LessThan('d, 'd), "operator < need atomic type")
-    checkError(LessThanOrEqual('d, 'd), "operator <= need atomic type")
-    checkError(GreaterThan('d, 'd), "operator > need atomic type")
-    checkError(GreaterThanOrEqual('d, 'd), "operator >= need atomic type")
+    checkError(LessThan('d, 'd), "operator < accepts non-complex type")
+    checkError(LessThanOrEqual('d, 'd), "operator <= accepts non-complex type")
+    checkError(GreaterThan('d, 'd), "operator > accepts non-complex type")
+    checkError(GreaterThanOrEqual('d, 'd), "operator >= accepts non-complex type")
 
     checkError(If('a, 'a, 'a), "type of predicate expression in If should be boolean")
     checkError(If('c, 'a, 'b), "differing types in If, IntegerType != StringType")

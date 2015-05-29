@@ -28,7 +28,7 @@ object TypeUtils {
     if (t.isInstanceOf[NumericType] || t == NullType) {
       TypeCheckResult.success
     } else {
-      TypeCheckResult.fail(s"$caller need numeric type(int, long, double, etc.), not $t")
+      TypeCheckResult.fail(s"$caller accepts numeric types, not $t")
     }
   }
 
@@ -36,7 +36,7 @@ object TypeUtils {
     if (t.isInstanceOf[IntegralType] || t == NullType) {
       TypeCheckResult.success
     } else {
-      TypeCheckResult.fail(s"$caller need integral type(short, int, long, etc.), not $t")
+      TypeCheckResult.fail(s"$caller accepts integral types, not $t")
     }
   }
 
@@ -44,7 +44,7 @@ object TypeUtils {
     if (t.isInstanceOf[AtomicType] || t == NullType) {
       TypeCheckResult.success
     } else {
-      TypeCheckResult.fail(s"$caller need atomic type(binary, boolean, numeric, etc), not $t")
+      TypeCheckResult.fail(s"$caller accepts non-complex types, not $t")
     }
   }
 
