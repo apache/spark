@@ -68,12 +68,14 @@ class NNLSSuite extends FunSuite {
 
   test("NNLS: nonnegativity constraint active") {
     val n = 5
+    // scalastyle:off
     val ata = new DoubleMatrix(Array(
       Array( 4.377, -3.531, -1.306, -0.139,  3.418),
       Array(-3.531,  4.344,  0.934,  0.305, -2.140),
       Array(-1.306,  0.934,  2.644, -0.203, -0.170),
       Array(-0.139,  0.305, -0.203,  5.883,  1.428),
       Array( 3.418, -2.140, -0.170,  1.428,  4.684)))
+    // scalastyle:on
     val atb = new DoubleMatrix(Array(-1.632, 2.115, 1.094, -1.025, -0.636))
 
     val goodx = Array(0.13025, 0.54506, 0.2874, 0.0, 0.028628)

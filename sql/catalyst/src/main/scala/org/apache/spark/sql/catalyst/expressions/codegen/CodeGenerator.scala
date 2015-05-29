@@ -400,7 +400,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           } else {
             $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm};
           }
-         """
+        """
 
       case Remainder(e1, e2) if e1.dataType != DecimalType() =>
         val eval1 = expressionEvaluator(e1, ctx)
@@ -692,12 +692,34 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
+<<<<<<< HEAD
     case DateType => "Integer"
     case TimestampType => "java.sql.Timestamp"
 //    case udt: UserDefinedType[_] =>
 //      udt.userClass.getCanonicalName
     case _ =>
       "Object"
+=======
+  }
+
+  protected def defaultPrimitive(dt: DataType) = dt match {
+    case BooleanType => ru.Literal(Constant(false))
+    case FloatType => ru.Literal(Constant(-1.0.toFloat))
+    case StringType => q"""org.apache.spark.sql.types.UTF8String("<uninit>")"""
+    case ShortType => ru.Literal(Constant(-1.toShort))
+    case LongType => ru.Literal(Constant(-1L))
+    case ByteType => ru.Literal(Constant(-1.toByte))
+    case DoubleType => ru.Literal(Constant(-1.toDouble))
+    case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"
+    case IntegerType => ru.Literal(Constant(-1))
+    case DateType => ru.Literal(Constant(-1))
+    case _ => ru.Literal(Constant(null))
+  }
+
+  protected def termForType(dt: DataType) = dt match {
+    case n: AtomicType => n.tag
+    case _ => typeTag[Any]
+>>>>>>> 6181937f315480543d28e542d43269cfa591e9d0
   }
 
   /**

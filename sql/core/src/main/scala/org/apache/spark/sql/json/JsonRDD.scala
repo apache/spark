@@ -141,7 +141,7 @@ private[sql] object JsonRDD extends Logging {
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
           case ArrayType(struct: StructType, containsNull) =>
             ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
+          case struct: StructType => nullTypeToStringType(struct)
           case other: DataType => other
         }
         StructField(fieldName, newType, nullable)
@@ -216,7 +216,7 @@ private[sql] object JsonRDD extends Logging {
           case map: Map[_, _] => StructType(Nil)
           // We have an array of arrays. If those element arrays do not have the same
           // element types, we will return ArrayType[StringType].
-          case seq: Seq[_] =>  typeOfArray(seq)
+          case seq: Seq[_] => typeOfArray(seq)
           case value => typeOfPrimitiveValue(value)
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
@@ -406,7 +406,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any = {
     if (value == null) {
       null
     } else {
@@ -434,7 +434,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def asRow(json: Map[String,Any], schema: StructType): Row = {
+  private def asRow(json: Map[String, Any], schema: StructType): Row = {
     // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {

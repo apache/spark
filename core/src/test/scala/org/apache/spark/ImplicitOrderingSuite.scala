@@ -44,11 +44,11 @@ private object ImplicitOrderingSuite {
   class NonOrderedClass {}
 
   class ComparableClass extends Comparable[ComparableClass] {
-    override def compareTo(o: ComparableClass): Int = ???
+    override def compareTo(o: ComparableClass): Int = throw new UnsupportedOperationException
   }
 
   class OrderedClass extends Ordered[OrderedClass] {
-    override def compare(o: OrderedClass): Int = ???
+    override def compare(o: OrderedClass): Int = throw new UnsupportedOperationException
   }
   
   def basicMapExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {

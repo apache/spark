@@ -38,14 +38,14 @@ trait StringRegexExpression extends ExpectsInputTypes {
     case _ => null
   }
 
-  protected def compile(str: String): Pattern = if(str == null) {
+  protected def compile(str: String): Pattern = if (str == null) {
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
     Pattern.compile(escape(str))
   }
 
-  protected def pattern(str: String) = if(cache == null) compile(str) else cache
+  protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)

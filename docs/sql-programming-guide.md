@@ -1939,7 +1939,7 @@ sqlContext.udf.register("strLen", (s: String) => s.length())
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 
-sqlContext.udf().register("strLen", (String s) -> { s.length(); });
+sqlContext.udf().register("strLen", (String s) -> s.length(), DataTypes.IntegerType);
 
 {% endhighlight %}
 </div>

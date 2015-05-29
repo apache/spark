@@ -481,7 +481,7 @@ private[spark] object SparkConf extends Logging {
           "are no longer accepted. To specify the equivalent now, one may use '64k'.")
     )
     
-    Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
+    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
   }
 
   /**

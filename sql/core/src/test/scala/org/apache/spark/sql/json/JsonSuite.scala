@@ -522,7 +522,7 @@ class JsonSuite extends QueryTest {
       Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
         Row(null, """{"field":false}""", null, null, "{}") ::
         Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
-        Row(Seq(7), "{}","""["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil
+        Row(Seq(7), "{}", """["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil
     )
   }
 

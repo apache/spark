@@ -110,7 +110,7 @@ private[nio] class BlockMessage() {
   def getType: Int = typ
   def getId: BlockId = id
   def getData: ByteBuffer = data
-  def getLevel: StorageLevel =  level
+  def getLevel: StorageLevel = level
 
   def toBufferMessage: BufferMessage = {
     val buffers = new ArrayBuffer[ByteBuffer]()

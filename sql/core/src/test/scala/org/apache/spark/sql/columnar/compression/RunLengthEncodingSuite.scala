@@ -26,11 +26,11 @@ import org.apache.spark.sql.types.AtomicType
 
 class RunLengthEncodingSuite extends FunSuite {
   testRunLengthEncoding(new NoopColumnStats, BOOLEAN)
-  testRunLengthEncoding(new ByteColumnStats,    BYTE)
-  testRunLengthEncoding(new ShortColumnStats,   SHORT)
-  testRunLengthEncoding(new IntColumnStats,     INT)
-  testRunLengthEncoding(new LongColumnStats,    LONG)
-  testRunLengthEncoding(new StringColumnStats,  STRING)
+  testRunLengthEncoding(new ByteColumnStats, BYTE)
+  testRunLengthEncoding(new ShortColumnStats, SHORT)
+  testRunLengthEncoding(new IntColumnStats, INT)
+  testRunLengthEncoding(new LongColumnStats, LONG)
+  testRunLengthEncoding(new StringColumnStats, STRING)
 
   def testRunLengthEncoding[T <: AtomicType](
       columnStats: ColumnStats,
