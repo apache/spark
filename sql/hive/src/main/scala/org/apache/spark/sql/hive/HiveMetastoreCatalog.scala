@@ -707,20 +707,20 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: FieldSchema) {
+  implicit class SchemaAttribute(f: HiveColumn) {
     def toAttribute: AttributeReference = AttributeReference(
-      f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      f.name,
+      HiveMetastoreTypes.toDataType(f.hiveType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
-  // Must be a stable value since new attributes are born here.
-  val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
+  /** PartitionKey attributes */
+  val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute)
+  val attributes = table.schema.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
