@@ -876,5 +876,95 @@ bucketedData = bucketizer.transform(dataFrame)
 </div>
 </div>
 
+## ElementwiseProduct
+
+ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
+
+`\[ \begin{pmatrix}
+v_1 \\
+\vdots \\
+v_N
+\end{pmatrix} \circ \begin{pmatrix}
+                    w_1 \\
+                    \vdots \\
+                    w_N
+                    \end{pmatrix}
+= \begin{pmatrix}
+  v_1 w_1 \\
+  \vdots \\
+  v_N w_N
+  \end{pmatrix}
+\]`
+
+[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct) takes the following parameter:
+
+* `scalingVec`: the transforming vector.
+
+This example below demonstrates how to transform vectors using a transforming vector value.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext._
+import org.apache.spark.ml.feature.ElementwiseProduct
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.sql.SQLContext
+
+// Create some vector data; also works for sparse vectors
+val dataFrame = sqlContext.createDataFrame(Seq(
+  ("a", Vectors.dense(1.0, 2.0, 3.0)),
+  ("b", Vectors.dense(4.0, 5.0, 6.0)))).toDF("id", "vector")
+
+val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
+val transformer = new ElementwiseProduct()
+  .setScalingVec(transformingVector)
+  .setInputCol("vector")
+  .setOutputCol("transformedVector")
+
+// Batch transform the vectors to create new column:
+val transformedData = transformer.transform(dataFrame)
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import com.google.common.collect.Lists;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.ElementwiseProduct;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+// Create some vector data; also works for sparse vectors
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
+  RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
+));
+StructType schema = new StructType(new StructField[]{
+  new StructField("id", DataTypes.StringType, false, Metadata.empty()),
+  new StructField("vector", DataTypes.StringType, false, Metadata.empty()),
+});
+DataFrame dataFrame = sqlContext.createDataFrame(jrdd, schema);
+Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
+ElementwiseProduct transformer = new ElementwiseProduct()
+  .setScalingVec(transformingVector)
+  .setInputCol("vector")
+  .setOutputCol("transformedVector");
+// Batch transform the vectors to create new column:
+DataFrame transformedData = transformer.transform(dataFrame);
+
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Selectors
 
