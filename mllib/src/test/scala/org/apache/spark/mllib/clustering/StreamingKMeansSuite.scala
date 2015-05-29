@@ -133,6 +133,13 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     assert(math.abs(c1) ~== 0.8 absTol 0.6)
   }
 
+  test("SPARK-7946 setDecayFactor") {
+    val kMeans = new StreamingKMeans()
+    assert(kMeans.decayFactor === 1.0)
+    kMeans.setDecayFactor(2.0)
+    assert(kMeans.decayFactor === 2.0)
+  }
+
   def StreamingKMeansDataGenerator(
       numPoints: Int,
       numBatches: Int,
