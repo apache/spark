@@ -50,8 +50,6 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
       class SpecificPredicate implements ${typeOf[Predicate]} {
         private final $exprType[] expressions;
         public SpecificPredicate($exprType[] expr) {
-        System.err.println("number of expressions");
-          System.err.println(expr.length);
           expressions = expr;
         }
 
