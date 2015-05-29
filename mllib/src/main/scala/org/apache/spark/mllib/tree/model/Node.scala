@@ -83,7 +83,7 @@ class Node (
   def predict(features: Vector) : Double = {
     if (isLeaf) {
       predict.predict
-    } else{
+    } else {
       if (split.get.featureType == Continuous) {
         if (features(split.get.feature) <= split.get.threshold) {
           leftNode.get.predict(features)
