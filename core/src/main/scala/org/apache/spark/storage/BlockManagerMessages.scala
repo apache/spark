@@ -42,6 +42,7 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
+  case object HasCachedBlocks extends ToBlockManagerSlave
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.

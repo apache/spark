@@ -23,8 +23,11 @@ import scala.collection.mutable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
+import org.apache.spark.executor.ExecutorEndpoint
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler._
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.storage.BlockManagerMessages.HasCachedBlocks
 import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
 
 /**
@@ -150,6 +153,9 @@ private[spark] class ExecutorAllocationManager(
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
+  private lazy val sparkEnv = SparkEnv.get
+
+  private val executorEndpoints = new mutable.HashMap[String, RpcEndpointRef]()
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -239,10 +245,13 @@ private[spark] class ExecutorAllocationManager(
 
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
-      if (expired) {
+      var removed = false
+      val executorEndpoint = executorEndpoints.get(executorId)
+      if (expired && !executorEndpoint.exists(_.askWithRetry[Boolean](HasCachedBlocks))) {
         removeExecutor(executorId)
+        removed = true
       }
-      !expired
+      !removed
     }
   }
 
@@ -388,6 +397,17 @@ private[spark] class ExecutorAllocationManager(
       // however, we are no longer at the lower bound, and so we must mark executor X
       // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
       executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
+      val hostAndPort =
+        sparkEnv.blockManager.master.getRpcHostPortForExecutor(executorId)
+      hostAndPort match {
+        case Some((host, port)) =>
+          executorEndpoints(executorId) =
+            sparkEnv.rpcEnv.setupEndpointRef(
+              SparkEnv.executorActorSystemName,
+              RpcAddress(host, port),
+              ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
+        case None =>
+      }
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
     } else {
       logWarning(s"Duplicate executor $executorId has registered")
@@ -407,6 +427,7 @@ private[spark] class ExecutorAllocationManager(
         logDebug(s"Executor $executorId is no longer pending to " +
           s"be removed (${executorsPendingToRemove.size} left)")
       }
+//      executorEndpoints -= executorId
     } else {
       logWarning(s"Unknown executor $executorId has been removed!")
     }
