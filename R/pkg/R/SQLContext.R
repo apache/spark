@@ -452,7 +452,7 @@ dropTempTable <- function(sqlContext, tableName) {
 #' df <- read.df(sqlContext, "path/to/file.json", source = "json")
 #' }
 
-read.df <- function(sqlContext, path = NULL, source = "parquet", ...) {
+read.df <- function(sqlContext, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
     options[['path']] <- path
