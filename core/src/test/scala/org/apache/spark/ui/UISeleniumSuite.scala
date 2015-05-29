@@ -224,8 +224,10 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
           val shuffleId = shuffleHandle.shuffleId
           val mapId = 0
           val reduceId = taskContext.partitionId()
+          val stageAttemptId = 0
           val message = "Simulated fetch failure"
-          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, message)
+          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, stageAttemptId,
+            message)
         } else {
           x
         }

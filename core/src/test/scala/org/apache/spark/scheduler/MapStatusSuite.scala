@@ -55,7 +55,7 @@ class MapStatusSuite extends FunSuite {
       stddev <- Seq(0.0, 0.01, 0.5, 1.0)
     ) {
       val sizes = Array.fill[Long](numSizes)(abs(round(Random.nextGaussian() * stddev)) + mean)
-      val status = MapStatus(BlockManagerId("a", "b", 10), sizes)
+      val status = MapStatus(BlockManagerId("a", "b", 10), 0, sizes)
       val status1 = compressAndDecompressMapStatus(status)
       for (i <- 0 until numSizes) {
         if (sizes(i) != 0) {
@@ -69,8 +69,9 @@ class MapStatusSuite extends FunSuite {
 
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
-    val status = MapStatus(null, sizes)
+    val status = MapStatus(null, 1, sizes)
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status.stageAttemptId === 1)
     assert(status.getSizeForBlock(10) === 150L)
     assert(status.getSizeForBlock(50) === 150L)
     assert(status.getSizeForBlock(99) === 150L)
@@ -81,10 +82,11 @@ class MapStatusSuite extends FunSuite {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
     val avg = sizes.sum / sizes.filter(_ != 0).length
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes)
+    val status = MapStatus(loc, 1, sizes)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
+    assert(status1.stageAttemptId === 1)
     for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
       if (sizes(i) > 0) {

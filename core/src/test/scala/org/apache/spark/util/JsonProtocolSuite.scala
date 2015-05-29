@@ -150,7 +150,7 @@ class JsonProtocolSuite extends FunSuite {
 
     // BlockId
     testBlockId(RDDBlockId(1, 2))
-    testBlockId(ShuffleBlockId(1, 2, 3))
+    testBlockId(ShuffleBlockId(1, 2, 3, 4))
     testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))

@@ -67,9 +67,9 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
 
     // Make sure blockManager.getBlockData would return the blocks
     val localBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer]))
+      ShuffleBlockId(0, 0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0, 0) -> mock(classOf[ManagedBuffer]))
     localBlocks.foreach { case (blockId, buf) =>
       doReturn(buf).when(blockManager).getBlockData(meq(blockId))
     }
@@ -77,8 +77,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val remoteBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 3, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 4, 0) -> mock(classOf[ManagedBuffer])
+      ShuffleBlockId(0, 3, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 4, 0, 0) -> mock(classOf[ManagedBuffer])
     )
 
     val transfer = createMockTransfer(remoteBlocks)
@@ -126,9 +126,9 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer])
+      ShuffleBlockId(0, 0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0, 0) -> mock(classOf[ManagedBuffer])
     )
 
     // Semaphore to coordinate event sequence in two different threads.
@@ -141,12 +141,12 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
         future {
           // Return the first two blocks, and wait till task completion before returning the 3rd one
           listener.onBlockFetchSuccess(
-            ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+            ShuffleBlockId(0, 0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0, 0)))
           listener.onBlockFetchSuccess(
-            ShuffleBlockId(0, 1, 0).toString, blocks(ShuffleBlockId(0, 1, 0)))
+            ShuffleBlockId(0, 1, 0, 0).toString, blocks(ShuffleBlockId(0, 1, 0, 0)))
           sem.acquire()
           listener.onBlockFetchSuccess(
-            ShuffleBlockId(0, 2, 0).toString, blocks(ShuffleBlockId(0, 2, 0)))
+            ShuffleBlockId(0, 2, 0, 0).toString, blocks(ShuffleBlockId(0, 2, 0, 0)))
         }
       }
     })
@@ -165,20 +165,20 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
 
     // Exhaust the first block, and then it should be released.
     iterator.next()._2.get.foreach(_ => Unit)
-    verify(blocks(ShuffleBlockId(0, 0, 0)), times(1)).release()
+    verify(blocks(ShuffleBlockId(0, 0, 0, 0)), times(1)).release()
 
     // Get the 2nd block but do not exhaust the iterator
     val subIter = iterator.next()._2.get
 
     // Complete the task; then the 2nd block buffer should be exhausted
-    verify(blocks(ShuffleBlockId(0, 1, 0)), times(0)).release()
+    verify(blocks(ShuffleBlockId(0, 1, 0, 0)), times(0)).release()
     taskContext.markTaskCompleted()
-    verify(blocks(ShuffleBlockId(0, 1, 0)), times(1)).release()
+    verify(blocks(ShuffleBlockId(0, 1, 0, 0)), times(1)).release()
 
     // The 3rd block should not be retained because the iterator is already in zombie state
     sem.release()
-    verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).retain()
-    verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).release()
+    verify(blocks(ShuffleBlockId(0, 2, 0, 0)), times(0)).retain()
+    verify(blocks(ShuffleBlockId(0, 2, 0, 0)), times(0)).release()
   }
 
   test("fail all blocks if any of the remote request fails") {
@@ -189,9 +189,9 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer])
+      ShuffleBlockId(0, 0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0, 0) -> mock(classOf[ManagedBuffer])
     )
 
     // Semaphore to coordinate event sequence in two different threads.
@@ -204,11 +204,11 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
         future {
           // Return the first block, and then fail.
           listener.onBlockFetchSuccess(
-            ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+            ShuffleBlockId(0, 0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0, 0)))
           listener.onBlockFetchFailure(
-            ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
+            ShuffleBlockId(0, 1, 0, 0).toString, new BlockNotFoundException("blah"))
           listener.onBlockFetchFailure(
-            ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
+            ShuffleBlockId(0, 2, 0, 0).toString, new BlockNotFoundException("blah"))
           sem.release()
         }
       }

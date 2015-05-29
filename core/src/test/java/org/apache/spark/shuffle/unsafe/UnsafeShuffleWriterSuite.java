@@ -168,14 +168,15 @@ public class UnsafeShuffleWriterSuite {
       }
     );
 
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt(), anyInt()))
+      .thenReturn(mergedOutputFile);
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
         return null;
       }
-    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class), eq(0L));
+    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), anyInt(), any(long[].class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {

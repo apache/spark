@@ -574,8 +574,8 @@ class CleanerTester(
 
   private def getShuffleBlocks(shuffleId: Int): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {
-      case ShuffleBlockId(`shuffleId`, _, _) => true
-      case ShuffleIndexBlockId(`shuffleId`, _, _) => true
+      case ShuffleBlockId(`shuffleId`, _, _, _) => true
+      case ShuffleIndexBlockId(`shuffleId`, _, _, _) => true
       case _ => false
     }, askSlaves = true)
   }

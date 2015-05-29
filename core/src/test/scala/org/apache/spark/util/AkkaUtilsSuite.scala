@@ -103,7 +103,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
@@ -149,7 +149,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
-      BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
@@ -228,7 +228,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
@@ -275,7 +275,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 

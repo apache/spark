@@ -724,16 +724,16 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     try {
       conf.set("spark.shuffle.compress", "true")
       store = makeBlockManager(20000, "exec1")
-      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) <= 100,
+      store.putSingle(ShuffleBlockId(0, 0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0, 0)) <= 100,
         "shuffle_0_0_0 was not compressed")
       store.stop()
       store = null
 
       conf.set("spark.shuffle.compress", "false")
       store = makeBlockManager(20000, "exec2")
-      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) >= 10000,
+      store.putSingle(ShuffleBlockId(0, 0, 0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0, 0)) >= 10000,
         "shuffle_0_0_0 was compressed")
       store.stop()
       store = null

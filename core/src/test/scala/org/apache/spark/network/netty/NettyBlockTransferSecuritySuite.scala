@@ -100,7 +100,7 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
    */
   private def testConnection(conf0: SparkConf, conf1: SparkConf): Try[Unit] = {
     val blockManager = mock[BlockDataManager]
-    val blockId = ShuffleBlockId(0, 1, 2)
+    val blockId = ShuffleBlockId(0, 1, 2, 0)
     val blockString = "Hello, world!"
     val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(blockString.getBytes))
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)

@@ -818,11 +818,11 @@ class DAGSchedulerSuite
         // second attempt
         if (TaskContext.get().asInstanceOf[TaskContextImpl].stageAttemptId == 0) {
           if (idx == 0) {
-            throw new FetchFailedException(aBm, 0, 0, idx,
+            throw new FetchFailedException(aBm, 0, 0, idx, 0,
               cause = new RuntimeException("simulated fetch failure"))
           } else if (idx > 0 && math.random < 0.2) {
             Thread.sleep(5000)
-            throw new FetchFailedException(aBm, 0, 0, idx,
+            throw new FetchFailedException(aBm, 0, 0, idx, 0,
               cause = new RuntimeException("simulated fetch failure"))
           } else {
             // want to make sure plenty of these finish after task 0 fails, and some even finish
@@ -858,7 +858,7 @@ class DAGSchedulerSuite
   }
 
   private def makeMapStatus(host: String, reduces: Int): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(2))
+    MapStatus(makeBlockManagerId(host), 0, Array.fill[Long](reduces)(2))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

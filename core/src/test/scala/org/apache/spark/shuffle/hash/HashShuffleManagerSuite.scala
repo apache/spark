@@ -56,7 +56,7 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     val shuffleBlockResolver =
       SparkEnv.get.shuffleManager.shuffleBlockResolver.asInstanceOf[FileShuffleBlockResolver]
 
-    val shuffle1 = shuffleBlockResolver.forMapTask(1, 1, 1, new JavaSerializer(conf),
+    val shuffle1 = shuffleBlockResolver.forMapTask(1, 1, 0, 1, new JavaSerializer(conf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle1.writers) {
       writer.write("test1", "value")
@@ -69,7 +69,7 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     val shuffle1Segment = shuffle1.writers(0).fileSegment()
     shuffle1.releaseWriters(success = true)
 
-    val shuffle2 = shuffleBlockResolver.forMapTask(1, 2, 1, new JavaSerializer(conf),
+    val shuffle2 = shuffleBlockResolver.forMapTask(1, 2, 0, 1, new JavaSerializer(conf),
       new ShuffleWriteMetrics)
 
     for (writer <- shuffle2.writers) {
@@ -88,7 +88,7 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
     // of block based on remaining data in file : which could mess things up when there is
     // concurrent read and writes happening to the same shuffle group.
 
-    val shuffle3 = shuffleBlockResolver.forMapTask(1, 3, 1, new JavaSerializer(testConf),
+    val shuffle3 = shuffleBlockResolver.forMapTask(1, 3, 0, 1, new JavaSerializer(testConf),
       new ShuffleWriteMetrics)
     for (writer <- shuffle3.writers) {
       writer.write("test3", "value")
@@ -98,10 +98,10 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
       writer.commitAndClose()
     }
     // check before we register.
-    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0)))
+    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
     shuffle3.releaseWriters(success = true)
-    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0)))
-    shuffleBlockResolver.removeShuffle(1)
+    checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
+    shuffleBlockResolver.removeShuffle((1,0))
   }
 
   def writeToFile(file: File, numBytes: Int) {
