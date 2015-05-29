@@ -175,7 +175,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
       TypeCheckResult.fail(
-        s"differing types in BinaryComparison, ${left.dataType} != ${right.dataType}")
+        s"differing types in ${this.getClass.getSimpleName}, ${left.dataType} != ${right.dataType}")
     } else {
       TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
     }
