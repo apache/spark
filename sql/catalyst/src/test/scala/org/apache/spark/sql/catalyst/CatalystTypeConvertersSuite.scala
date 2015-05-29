@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
-class CatalystTypeConvertersSuite extends FunSuite {
+class CatalystTypeConvertersSuite extends SparkFunSuite {
 
   private val simpleTypes: Seq[DataType] = Seq(
     StringType,
