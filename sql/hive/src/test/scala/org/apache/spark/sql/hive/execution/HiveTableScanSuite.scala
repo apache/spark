@@ -76,7 +76,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
      
     TestHive.sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE timestamp_query_null")
     assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect() 
-      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
   }
 

@@ -64,18 +64,18 @@ class ProactiveClosureSerializationSuite extends SparkFunSuite with SharedSparkC
   }
 
   private def xmap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.map(y=>uc.op(y))
+    x.map(y => uc.op(y))
 
   private def xflatMap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.flatMap(y=>Seq(uc.op(y)))
+    x.flatMap(y => Seq(uc.op(y)))
 
   private def xfilter(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.filter(y=>uc.pred(y))
+    x.filter(y => uc.pred(y))
 
   private def xmapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitions(_.map(y=>uc.op(y)))
+    x.mapPartitions(_.map(y => uc.op(y)))
 
   private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitionsWithIndex((_, it) => it.map(y=>uc.op(y)))
+    x.mapPartitionsWithIndex((_, it) => it.map(y => uc.op(y)))
   
 }

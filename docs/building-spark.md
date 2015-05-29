@@ -176,7 +176,7 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 # Building Spark with IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IDESetup).
 
 # Running Java 8 Test Suites
 

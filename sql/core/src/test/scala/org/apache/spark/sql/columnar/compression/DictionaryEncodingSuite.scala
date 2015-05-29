@@ -26,8 +26,8 @@ import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.AtomicType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
-  testDictionaryEncoding(new IntColumnStats,    INT)
-  testDictionaryEncoding(new LongColumnStats,   LONG)
+  testDictionaryEncoding(new IntColumnStats, INT)
+  testDictionaryEncoding(new LongColumnStats, LONG)
   testDictionaryEncoding(new StringColumnStats, STRING)
 
   def testDictionaryEncoding[T <: AtomicType](

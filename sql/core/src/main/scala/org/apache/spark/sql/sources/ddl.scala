@@ -130,7 +130,7 @@ private[sql] class DDLParser(
         }
     }
 
-  protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+  protected lazy val tableCols: Parser[Seq[StructField]] = "(" ~> repsep(column, ",") <~ ")"
 
   /*
    * describe [extended] table avroTable
@@ -138,7 +138,7 @@ private[sql] class DDLParser(
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
-      case e ~ db ~ tbl  =>
+      case e ~ db ~ tbl =>
         val tblIdentifier = db match {
           case Some(dbName) =>
             Seq(dbName, tbl)
@@ -171,7 +171,7 @@ private[sql] class DDLParser(
   }
 
   protected lazy val pair: Parser[(String, String)] =
-    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
+    optionName ~ stringLit ^^ { case k ~ v => (k, v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
@@ -239,7 +239,7 @@ private[sql] object ResolvedDataSource {
             Some(partitionColumnsSchema(schema, partitionColumns))
           }
 
-          val caseInsensitiveOptions= new CaseInsensitiveMap(options)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray

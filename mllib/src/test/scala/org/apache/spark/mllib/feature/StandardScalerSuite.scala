@@ -359,7 +359,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     withClue("model needs std and mean vectors to be equal size when both are provided") {
       intercept[IllegalArgumentException] {
-        val model = new StandardScalerModel(Vectors.dense(0.0), Vectors.dense(0.0,1.0))
+        val model = new StandardScalerModel(Vectors.dense(0.0), Vectors.dense(0.0, 1.0))
       }
     }
   }

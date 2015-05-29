@@ -83,7 +83,7 @@ class PythonMLLibAPISuite extends SparkFunSuite {
 
     val smt = new SparseMatrix(
       3, 3, Array(0, 2, 3, 5), Array(0, 2, 1, 0, 2), Array(0.9, 1.2, 3.4, 5.7, 8.9),
-      isTransposed=true)
+      isTransposed = true)
     val nsmt = SerDe.loads(SerDe.dumps(smt)).asInstanceOf[SparseMatrix]
     assert(smt.toArray === nsmt.toArray)
   }

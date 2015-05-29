@@ -102,7 +102,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val setAcc = sc.accumulableCollection(mutable.HashSet[Int]())
       val bufferAcc = sc.accumulableCollection(mutable.ArrayBuffer[Int]())
-      val mapAcc = sc.accumulableCollection(mutable.HashMap[Int,String]())
+      val mapAcc = sc.accumulableCollection(mutable.HashMap[Int, String]())
       val d = sc.parallelize((1 to maxI) ++ (1 to maxI))
       d.foreach {
         x => {setAcc += x; bufferAcc += x; mapAcc += (x -> x.toString)}

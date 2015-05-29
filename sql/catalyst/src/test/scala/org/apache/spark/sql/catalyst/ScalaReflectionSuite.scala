@@ -252,7 +252,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     }
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
+    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1, 2, 3))))
   }
 
   test("convert PrimitiveData to catalyst") {

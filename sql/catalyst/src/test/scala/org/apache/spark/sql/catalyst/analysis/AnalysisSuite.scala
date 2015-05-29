@@ -156,7 +156,7 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
       caseSensitive: Boolean = true): Unit = {
     test(name) {
       val error = intercept[AnalysisException] {
-        if(caseSensitive) {
+        if (caseSensitive) {
           caseSensitiveAnalyze(plan)
         } else {
           caseInsensitiveAnalyze(plan)

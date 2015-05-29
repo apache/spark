@@ -273,7 +273,7 @@ abstract class HiveComparisonTest
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
-          case (queryString, i)  =>
+          case (queryString, i) =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
             new File(answerCache, cachedAnswerName)
         }
@@ -304,7 +304,7 @@ abstract class HiveComparisonTest
             // other DDL has not been executed yet.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
-              case ((queryString, i), hiveQuery, cachedAnswerFile)=>
+              case ((queryString, i), hiveQuery, cachedAnswerFile) =>
                 try {
                   // Hooks often break the harness and don't really affect our test anyway, don't
                   // even try running them.

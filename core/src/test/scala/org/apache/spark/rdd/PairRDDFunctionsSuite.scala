@@ -510,17 +510,17 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("lookup") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     assert(pairs.partitioner === None)
     assert(pairs.lookup(1) === Seq(2))
-    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(5) === Seq(6, 7))
     assert(pairs.lookup(-1) === Seq())
 
   }
 
   test("lookup with partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2
@@ -531,12 +531,12 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(5) === Seq(6, 7))
     assert(shuffled.lookup(-1) === Seq())
   }
 
   test("lookup with bad partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2

@@ -45,7 +45,7 @@ object SVMSuite {
     nPoints: Int,
     seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights : _*)
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
@@ -90,7 +90,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = svm.run(testRDD)
 
     val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
 
@@ -116,7 +116,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -126,8 +126,8 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = svm.run(testRDD)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -144,7 +144,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
@@ -158,8 +158,8 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = svm.run(testRDD, initialWeights)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData,2)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -176,7 +176,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
 
     val testRDDInvalid = testRDD.map { lp =>

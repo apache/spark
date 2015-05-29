@@ -167,7 +167,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
             "Each training+validation set combined should contain all of the data.")
         }
         // K fold cross validation should only have each element in the validation set exactly once
-        assert(foldedRdds.map(_._2).reduce((x,y) => x.union(y)).collect().sorted ===
+        assert(foldedRdds.map(_._2).reduce((x, y) => x.union(y)).collect().sorted ===
           data.collect().sorted)
       }
     }

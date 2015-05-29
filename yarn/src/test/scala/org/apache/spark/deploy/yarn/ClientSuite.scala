@@ -203,7 +203,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
   def getFieldValue2[A: ClassTag, A1: ClassTag, B](
         clazz: Class[_],
         field: String,
-        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B): B = {
+        defaults: => B)(mapTo: A => B)(mapTo1: A1 => B): B = {
     Try(clazz.getField(field)).map(_.get(null)).map {
       case v: A => mapTo(v)
       case v1: A1 => mapTo1(v1)

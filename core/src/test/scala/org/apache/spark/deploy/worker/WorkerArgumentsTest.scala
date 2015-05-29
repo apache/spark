@@ -65,7 +65,7 @@ class WorkerArgumentsTest extends SparkFunSuite {
       }
     }
     val conf = new MySparkConf()
-    val workerArgs =  new WorkerArguments(args, conf)
+    val workerArgs = new WorkerArguments(args, conf)
     assert(workerArgs.memory === 5120)
   }
 

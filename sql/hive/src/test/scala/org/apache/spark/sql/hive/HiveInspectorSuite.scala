@@ -78,10 +78,10 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     Literal(java.sql.Date.valueOf("2014-09-23")) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
-    Literal(Array[Byte](1,2,3)) ::
-    Literal.create(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
-    Literal.create(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
-    Literal.create(Row(1,2.0d,3.0f),
+    Literal(Array[Byte](1, 2, 3)) ::
+    Literal.create(Seq[Int](1, 2, 3), ArrayType(IntegerType)) ::
+    Literal.create(Map[Int, Int](1 -> 2, 2 -> 1), MapType(IntegerType, IntegerType)) ::
+    Literal.create(Row(1, 2.0d, 3.0f),
       StructType(StructField("c1", IntegerType) ::
       StructField("c2", DoubleType) ::
       StructField("c3", FloatType) :: Nil)) ::
@@ -111,8 +111,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        java.util.Arrays.asList(fields.map(f => f.name) :_*),
-        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) :_*))
+        java.util.Arrays.asList(fields.map(f => f.name) : _*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) : _*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {

@@ -28,7 +28,7 @@ private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Comman
 }
 
 private[sql] class SuperLongKeywordTestParser extends AbstractSparkSQLParser {
-  protected val EXECUTE   = Keyword("THISISASUPERLONGKEYWORDTEST")
+  protected val EXECUTE = Keyword("THISISASUPERLONGKEYWORDTEST")
 
   override protected lazy val start: Parser[LogicalPlan] = set
 
@@ -39,7 +39,7 @@ private[sql] class SuperLongKeywordTestParser extends AbstractSparkSQLParser {
 }
 
 private[sql] class CaseInsensitiveTestParser extends AbstractSparkSQLParser {
-  protected val EXECUTE   = Keyword("EXECUTE")
+  protected val EXECUTE = Keyword("EXECUTE")
 
   override protected lazy val start: Parser[LogicalPlan] = set
 

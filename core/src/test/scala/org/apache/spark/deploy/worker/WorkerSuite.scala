@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 class WorkerSuite extends SparkFunSuite with Matchers {
 
   def cmd(javaOpts: String*): Command = {
-    Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts:_*))
+    Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts : _*))
   }
   def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 

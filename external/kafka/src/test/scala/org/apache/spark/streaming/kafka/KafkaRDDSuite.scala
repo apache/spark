@@ -65,7 +65,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
-    val rdd =  KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
+    val rdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
       sc, kafkaParams, offsetRanges)
 
     val received = rdd.map(_._2).collect.toSet

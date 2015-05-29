@@ -55,7 +55,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.synchronized {
       assert(FailureSuiteState.tasksRun === 4)
     }
-    assert(results.toList === List(1,4,9))
+    assert(results.toList === List(1, 4, 9))
     FailureSuiteState.clear()
   }
 

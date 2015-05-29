@@ -43,8 +43,8 @@ class ExpressionEvaluationBaseSuite extends SparkFunSuite {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if(actual != expected) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+    if (actual != expected) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
@@ -126,37 +126,37 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   booleanLogicTest("AND", _ && _,
-    (true,  true,  true) ::
-    (true,  false, false) ::
-    (true,  null,  null) ::
-    (false, true,  false) ::
+    (true, true, true) ::
+    (true, false, false) ::
+    (true, null, null) ::
+    (false, true, false) ::
     (false, false, false) ::
-    (false, null,  false) ::
-    (null,  true,  null) ::
-    (null,  false, false) ::
-    (null,  null,  null) :: Nil)
+    (false, null, false) ::
+    (null, true, null) ::
+    (null, false, false) ::
+    (null, null, null) :: Nil)
 
   booleanLogicTest("OR", _ || _,
-    (true,  true,  true) ::
-    (true,  false, true) ::
-    (true,  null,  true) ::
-    (false, true,  true) ::
+    (true, true, true) ::
+    (true, false, true) ::
+    (true, null, true) ::
+    (false, true, true) ::
     (false, false, false) ::
-    (false, null,  null) ::
-    (null,  true,  true) ::
-    (null,  false, null) ::
-    (null,  null,  null) :: Nil)
+    (false, null, null) ::
+    (null, true, true) ::
+    (null, false, null) ::
+    (null, null, null) :: Nil)
 
   booleanLogicTest("=", _ === _,
-    (true,  true,  true) ::
-    (true,  false, false) ::
-    (true,  null,  null) ::
-    (false, true,  false) ::
+    (true, true, true) ::
+    (true, false, false) ::
+    (true, null, null) ::
+    (false, true, false) ::
     (false, false, true) ::
-    (false, null,  null) ::
-    (null,  true,  null) ::
-    (null,  false, null) ::
-    (null,  null,  null) :: Nil)
+    (false, null, null) ::
+    (null, true, null) ::
+    (null, false, null) ::
+    (null, null, null) :: Nil)
 
   def booleanLogicTest(
       name: String,
@@ -164,7 +164,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       truthTable: Seq[(Any, Any, Any)]) {
     test(s"3VL $name") {
       truthTable.foreach {
-        case (l,r,answer) =>
+        case (l, r, answer) =>
           val expr = op(Literal.create(l, BooleanType), Literal.create(r, BooleanType))
           checkEvaluation(expr, answer)
       }
@@ -928,7 +928,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(getStructField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(getStructField(BoundReference(2, typeS, nullable = true), "a").nullable === true)
     assert(getStructField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
       === false)
 

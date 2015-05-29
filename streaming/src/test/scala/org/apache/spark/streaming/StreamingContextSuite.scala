@@ -732,7 +732,9 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
-    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    while (!SlowTestReceiver.receivedAllRecords) {
+      Thread.sleep(100)
+    }
     // no clean to be done, the receiving thread should stop on it own
   }
 }

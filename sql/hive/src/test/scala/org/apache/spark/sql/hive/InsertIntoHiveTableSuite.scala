@@ -160,7 +160,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
     )
-    assert(listFolders(tmpDir,List()).sortBy(_.toString()) == expected.sortBy(_.toString))
+    assert(listFolders(tmpDir, List()).sortBy(_.toString()) == expected.sortBy(_.toString))
     sql("DROP TABLE table_with_partition")
     sql("DROP TABLE tmp_table")
   }

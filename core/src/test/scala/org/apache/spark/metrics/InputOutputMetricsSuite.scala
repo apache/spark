@@ -263,7 +263,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
     val tmpRdd = sc.textFile(tmpFilePath, numPartitions)
 
-    val firstSize= runAndReturnBytesRead {
+    val firstSize = runAndReturnBytesRead {
       aRdd.count()
     }
     val secondSize = runAndReturnBytesRead {
@@ -433,10 +433,10 @@ class OldCombineTextRecordReaderWrapper(
 /**
  * Hadoop 2 has a version of this, but we can't use it for backwards compatibility
  */
-class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable,Text] {
+class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable, Text] {
   def createRecordReader(split: NewInputSplit, context: TaskAttemptContext)
   : NewRecordReader[LongWritable, Text] = {
-    new NewCombineFileRecordReader[LongWritable,Text](split.asInstanceOf[NewCombineFileSplit],
+    new NewCombineFileRecordReader[LongWritable, Text](split.asInstanceOf[NewCombineFileSplit],
       context, classOf[NewCombineTextRecordReaderWrapper])
   }
 }

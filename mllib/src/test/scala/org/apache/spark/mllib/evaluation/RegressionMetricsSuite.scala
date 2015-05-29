@@ -25,7 +25,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("regression metrics") {
     val predictionAndObservations = sc.parallelize(
-      Seq((2.5,3.0),(0.0,-0.5),(2.0,2.0),(8.0,7.0)), 2)
+      Seq((2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)), 2)
     val metrics = new RegressionMetrics(predictionAndObservations)
     assert(metrics.explainedVariance ~== 0.95717 absTol 1E-5,
       "explained variance regression score mismatch")
@@ -38,7 +38,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("regression metrics with complete fitting") {
     val predictionAndObservations = sc.parallelize(
-      Seq((3.0,3.0),(0.0,0.0),(2.0,2.0),(8.0,8.0)), 2)
+      Seq((3.0, 3.0), (0.0, 0.0), (2.0, 2.0), (8.0, 8.0)), 2)
     val metrics = new RegressionMetrics(predictionAndObservations)
     assert(metrics.explainedVariance ~== 1.0 absTol 1E-5,
       "explained variance regression score mismatch")
