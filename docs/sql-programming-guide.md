@@ -11,6 +11,7 @@ title: Spark SQL and DataFrames
 
 Spark SQL is a Spark module for structured data processing. It provides a programming abstraction called DataFrames and can also act as distributed SQL query engine.
 
+For how to enable Hive support, please refer to the [Hive Tables](#hive-tables) section.
 
 # DataFrames
 
@@ -906,7 +907,7 @@ new data.
   <td>
     Ignore mode means that when saving a DataFrame to a data source, if data already exists,
     the save operation is expected to not save the contents of the DataFrame and to not
-    change the existing data.  This is similar to a `CREATE TABLE IF NOT EXISTS` in SQL.
+    change the existing data.  This is similar to a <code>CREATE TABLE IF NOT EXISTS</code> in SQL.
   </td>
 </tr>
 </table>
@@ -1030,7 +1031,7 @@ teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND a
 teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
 for (teenName in collect(teenNames)) {
   cat(teenName, "\n")
-} 
+}
 {% endhighlight %}
 
 </div>
@@ -1502,7 +1503,7 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 <div data-lang="python"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. 
+adds support for finding tables in the MetaStore and writing queries using HiveQL.
 {% highlight python %}
 # sc is an existing SparkContext.
 from pyspark.sql import HiveContext
@@ -1537,6 +1538,82 @@ results = sqlContext.sql("FROM src SELECT key, value").collect()
 </div>
 </div>
 
+### Interacting with Different Versions of Hive Metastore
+
+One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
+which enables Spark SQL to access metadata of Hive tables.  Starting from Spark 1.2.0, Spark SQL can
+talk to two versions of Hive metastore, either 0.12.0 or 0.13.1, default to the latter.  However, to
+switch to desired Hive metastore version, users have to rebuild the assembly jar with proper profile
+flags (either `-Phive-0.12.0` or `-Phive-0.13.1`), which is quite inconvenient.
+
+Starting from 1.4.0, users no longer need to rebuild the assembly jar to switch Hive metastore
+version.  Instead, configuration properties described in the table below can be used to specify
+desired Hive metastore version.  Currently, supported versions are still limited to 0.13.1 and
+0.12.0, but we are working on a more generalized mechanism to support a wider range of versions.
+
+Internally, Spark SQL 1.4.0 uses two Hive clients, one for executing native Hive commands like `SET`
+and `DESCRIBE`, the other dedicated for communicating with Hive metastore.  The former uses Hive
+jars of version 0.13.1, which are bundled with Spark 1.4.0.  The latter uses Hive jars of the
+version specified by users.  An isolated classloader is used here to avoid dependency conflicts.
+
+<table class="table">
+  <tr><th>Property Name</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.sql.hive.metastore.version</code></td>
+    <td>
+      The version of the hive client that will be used to communicate with the metastore.  Available
+      options are <code>0.12.0</code> and <code>0.13.1</code>.  Defaults to <code>0.13.1</code>.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>spark.sql.hive.metastore.jars</code></td>
+    <td>
+      The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
+      property can be one of three options:
+      <ol>
+        <li><code>builtin</code></li>
+        Use Hive 0.13.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        enabled.  When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
+        either <code>0.13.1</code> or not defined.
+        <li><code>maven</code></li>
+        Use Hive jars of specified version downloaded from Maven repositories.
+        <li>A classpath in the standard format for both Hive and Hadoop.</li>
+      </ol>
+      Defaults to <code>builtin</code>.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
+
+    <td>
+      <p>
+        A comma separated list of class prefixes that should be loaded using the classloader that is
+        shared between Spark SQL and a specific version of Hive. An example of classes that should
+        be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+        to be shared are those that interact with classes that are already shared.  For example,
+        custom appenders that are used by log4j.
+      </p>
+      <p>
+        Defaults to <code>com.mysql.jdbc,org.postgresql,com.microsoft.sqlserver,oracle.jdbc</code>.
+      </p>
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>spark.sql.hive.metastore.barrierPrefixes</code></td>
+    <td>
+      <p>
+        A comma separated list of class prefixes that should explicitly be reloaded for each version
+        of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+        prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).
+      </p>
+      <p>Defaults to empty.</p>
+    </td>
+  </tr>
+</table>
+
 ## JDBC To Other Databases
 
 Spark SQL also includes a data source that can read data from other databases using JDBC.  This
@@ -1570,7 +1647,7 @@ the Data Sources API.  The following options are supported:
   <tr>
     <td><code>dbtable</code></td>
     <td>
-      The JDBC table that should be read.  Note that anything that is valid in a `FROM` clause of
+      The JDBC table that should be read.  Note that anything that is valid in a <code>FROM</code> clause of
       a SQL query can be used.  For example, instead of a full table you could also use a
       subquery in parentheses.
     </td>
@@ -1714,7 +1791,7 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
       statistics are only supported for Hive Metastore tables where the command
-      `ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan` has been run.
+      <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
     </td>
   </tr>
   <tr>
@@ -1737,7 +1814,9 @@ that these options will be deprecated in future release as more optimizations ar
 
 # Distributed SQL Engine
 
-Spark SQL can also act as a distributed query engine using its JDBC/ODBC or command-line interface. In this mode, end-users or applications can interact with Spark SQL directly to run SQL queries, without the need to write any code.
+Spark SQL can also act as a distributed query engine using its JDBC/ODBC or command-line interface.
+In this mode, end-users or applications can interact with Spark SQL directly to run SQL queries,
+without the need to write any code.
 
 ## Running the Thrift JDBC/ODBC server
 
