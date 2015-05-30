@@ -202,6 +202,11 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
     sys.error(s"BinaryComparisons must either override eval or evalInternal")
 }
 
+object BinaryComparison {
+  def unapply(b: BinaryComparison): Option[(Expression, Expression)] =
+    Some((b.left, b.right))
+}
+
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
 

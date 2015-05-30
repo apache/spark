@@ -323,6 +323,7 @@ trait HiveTypeCoercion {
    *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
    *   sum(e1)      p1 + 10                                 s1
    *   avg(e1)      p1 + 4                                  s1 + 4
+   *   compare      max(p1, p2)                             max(s1, s2)
    *
    * Catalyst also has unlimited-precision decimals. For those, all ops return unlimited precision.
    *
@@ -441,21 +442,10 @@ trait HiveTypeCoercion {
             DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           )
 
-        case LessThan(e1 @ DecimalType.Expression(p1, s1),
-                      e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-                             e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
-                         e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-                                e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+        case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
+                                  e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          val resultType = DecimalType(max(p1, p2), max(s1, s2))
+          b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
