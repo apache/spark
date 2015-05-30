@@ -93,6 +93,21 @@ class HiveUdfSuite extends QueryTest {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
   }
 
+  test("Max/Min on named_struct") {
+    assert(sql(
+      """
+        |SELECT max(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src 
+      """.stripMargin).head() === Row("val_498"))
+    assert(sql(
+      """
+        |SELECT min(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src 
+      """.stripMargin).head() === Row("val_0"))
+  }
+
   test("SPARK-6409 UDAFAverage test") {
     sql(s"CREATE TEMPORARY FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
     checkAnswer(
