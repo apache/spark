@@ -482,7 +482,7 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Changes numeric values to booleans so that expressions like true = 1 can be Evaluated.
+   * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
   object BooleanEqualization extends Rule[LogicalPlan] {
     val trueValue = Literal(new java.math.BigDecimal(1))
@@ -519,7 +519,8 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Hive treats (true = 1) as true and (false = 0) as true.
+      // Hive treats (true = 1) as true and (false = 0) as true,
+      // all other cases are considered as false.
       case EqualTo(l @ BooleanType(), r) if r.dataType.isInstanceOf[NumericType] =>
         transform(l, r)
       case EqualTo(l, r @ BooleanType()) if l.dataType.isInstanceOf[NumericType] =>
