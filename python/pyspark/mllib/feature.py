@@ -68,6 +68,8 @@ class Normalizer(VectorTransformer):
     For `p` = float('inf'), max(abs(vector)) will be used as norm for
     normalization.
 
+    :param p: Normalization in L^p^ space, p = 2 by default.
+
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)
@@ -82,9 +84,6 @@ class Normalizer(VectorTransformer):
     DenseVector([0.0, 0.5, 1.0])
     """
     def __init__(self, p=2.0):
-        """
-        :param p: Normalization in L^p^ space, p = 2 by default.
-        """
         assert p >= 1.0, "p should be greater than 1.0"
         self.p = float(p)
 
@@ -94,7 +93,7 @@ class Normalizer(VectorTransformer):
 
         :param vector: vector or RDD of vector to be normalized.
         :return: normalized vector. If the norm of the input is zero, it
-                will return the input vector.
+                 will return the input vector.
         """
         sc = SparkContext._active_spark_context
         assert sc is not None, "SparkContext should be initialized first"
@@ -164,6 +163,13 @@ class StandardScaler(object):
     variance using column summary statistics on the samples in the
     training set.
 
+    :param withMean: False by default. Centers the data with mean
+                     before scaling. It will build a dense output, so this
+                     does not work on sparse input and will raise an
+                     exception.
+    :param withStd: True by default. Scales the data to unit
+                    standard deviation.
+
     >>> vs = [Vectors.dense([-2.0, 2.3, 0]), Vectors.dense([3.8, 0.0, 1.9])]
     >>> dataset = sc.parallelize(vs)
     >>> standardizer = StandardScaler(True, True)
@@ -174,14 +180,6 @@ class StandardScaler(object):
     DenseVector([0.7071, -0.7071, 0.7071])
     """
     def __init__(self, withMean=False, withStd=True):
-        """
-        :param withMean: False by default. Centers the data with mean
-                 before scaling. It will build a dense output, so this
-                 does not work on sparse input and will raise an
-                 exception.
-        :param withStd: True by default. Scales the data to unit
-                 standard deviation.
-        """
         if not (withMean or withStd):
             warnings.warn("Both withMean and withStd are false. The model does nothing.")
         self.withMean = withMean
@@ -193,7 +191,7 @@ class StandardScaler(object):
         for later scaling.
 
         :param data: The data used to compute the mean and variance
-                 to build the transformation model.
+                     to build the transformation model.
         :return: a StandardScalarModel
         """
         dataset = dataset.map(_convert_to_vector)
@@ -223,6 +221,8 @@ class ChiSqSelector(object):
 
     Creates a ChiSquared feature selector.
 
+    :param numTopFeatures: number of features that selector will select.
+
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
@@ -236,9 +236,6 @@ class ChiSqSelector(object):
     DenseVector([5.0])
     """
     def __init__(self, numTopFeatures):
-        """
-        :param numTopFeatures: number of features that selector will select.
-        """
         self.numTopFeatures = int(numTopFeatures)
 
     def fit(self, data):
@@ -246,9 +243,9 @@ class ChiSqSelector(object):
         Returns a ChiSquared feature selector.
 
         :param data: an `RDD[LabeledPoint]` containing the labeled dataset
-                 with categorical features. Real-valued features will be
-                 treated as categorical for each distinct value.
-                 Apply feature discretizer before using this function.
+                     with categorical features. Real-valued features will be
+                     treated as categorical for each distinct value.
+                     Apply feature discretizer before using this function.
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
         return ChiSqSelectorModel(jmodel)
@@ -263,15 +260,14 @@ class HashingTF(object):
 
     Note: the terms must be hashable (can not be dict/set/list...).
 
+    :param numFeatures: number of features (default: 2^20)
+
     >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
     SparseVector(100, {...})
     """
     def __init__(self, numFeatures=1 << 20):
-        """
-        :param numFeatures: number of features (default: 2^20)
-        """
         self.numFeatures = numFeatures
 
     def indexOf(self, term):
@@ -311,7 +307,7 @@ class IDFModel(JavaVectorTransformer):
               Call transform directly on the RDD instead.
 
         :param x: an RDD of term frequency vectors or a term frequency
-                 vector
+                  vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
         if isinstance(x, RDD):
@@ -342,6 +338,9 @@ class IDF(object):
     `minDocFreq`). For terms that are not in at least `minDocFreq`
     documents, the IDF is found as 0, resulting in TF-IDFs of 0.
 
+    :param minDocFreq: minimum of documents in which a term
+                       should appear for filtering
+
     >>> n = 4
     >>> freqs = [Vectors.sparse(n, (1, 3), (1.0, 2.0)),
     ...          Vectors.dense([0.0, 1.0, 2.0, 3.0]),
@@ -362,10 +361,6 @@ class IDF(object):
     SparseVector(4, {1: 0.0, 3: 0.5754})
     """
     def __init__(self, minDocFreq=0):
-        """
-        :param minDocFreq: minimum of documents in which a term
-                           should appear for filtering
-        """
         self.minDocFreq = minDocFreq
 
     def fit(self, dataset):
