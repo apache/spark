@@ -75,7 +75,8 @@ class RegressionMetrics(JavaModelWrapper):
     """
     Evaluator for regression.
 
-    :param predictionAndObservations: an RDD of (prediction, observation) pairs.
+    :param predictionAndObservations: an RDD of (prediction,
+                                      observation) pairs.
 
     >>> predictionAndObservations = sc.parallelize([
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
@@ -274,7 +275,8 @@ class RankingMetrics(JavaModelWrapper):
     """
     Evaluator for ranking algorithms.
 
-    :param predictionAndLabels: an RDD of (predicted ranking, ground truth set) pairs.
+    :param predictionAndLabels: an RDD of (predicted ranking,
+                                ground truth set) pairs.
 
     >>> predictionAndLabels = sc.parallelize([
     ...     ([1, 6, 2, 7, 8, 3, 9, 10, 4, 5], [1, 2, 3, 4, 5]),
@@ -344,7 +346,8 @@ class MultilabelMetrics(JavaModelWrapper):
     Evaluator for multilabel classification.
 
     :param predictionAndLabels: an RDD of (predictions, labels) pairs,
-                                both are non-null Arrays, each with unique elements.
+                                both are non-null Arrays, each with
+                                unique elements.
 
     >>> predictionAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),

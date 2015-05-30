@@ -91,7 +91,7 @@ class Normalizer(VectorTransformer):
         """
         Applies unit length normalization on a vector.
 
-        :param   vector: vector or RDD of vector to be normalized.
+        :param vector: vector or RDD of vector to be normalized.
         :return: normalized vector. If the norm of the input is zero, it
                  will return the input vector.
         """
@@ -167,8 +167,8 @@ class StandardScaler(object):
                      before scaling. It will build a dense output, so this
                      does not work on sparse input and will raise an
                      exception.
-    :param withStd:  True by default. Scales the data to unit
-                     standard deviation.
+    :param withStd: True by default. Scales the data to unit
+                    standard deviation.
 
     >>> vs = [Vectors.dense([-2.0, 2.3, 0]), Vectors.dense([3.8, 0.0, 1.9])]
     >>> dataset = sc.parallelize(vs)
