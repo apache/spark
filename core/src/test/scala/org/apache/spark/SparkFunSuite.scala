@@ -17,12 +17,14 @@
 
 package org.apache.spark
 
+// scalastyle:off
 import org.scalatest.{FunSuite, Outcome}
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
 private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
+// scalastyle:on
 
   /**
    * Log the suite name and the test name before and after each test.
