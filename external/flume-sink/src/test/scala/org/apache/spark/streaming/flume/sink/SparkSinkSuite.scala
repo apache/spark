@@ -31,10 +31,9 @@ import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.event.EventBuilder
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+import org.scalatest.FunSuite
 
-import org.apache.spark.SparkFunSuite
-
-class SparkSinkSuite extends SparkFunSuite {
+class SparkSinkSuite extends FunSuite {
   val eventsPerBatch = 1000
   val channelCapacity = 5000
 
