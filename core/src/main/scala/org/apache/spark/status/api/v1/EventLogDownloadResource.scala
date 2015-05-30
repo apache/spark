@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.HistoryServer
 
 @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
 private[v1] class EventLogDownloadResource(
@@ -36,43 +35,34 @@ private[v1] class EventLogDownloadResource(
 
   @GET
   def getEventLogs(): Response = {
-    uIRoot match {
-      case hs: HistoryServer =>
-        try {
-          val fileName = {
-            attemptId match {
-              case Some(id) => s"eventLogs-$appId-$id.zip"
-              case None => s"eventLogs-$appId.zip"
-            }
-          }
-
-          val stream = new StreamingOutput {
-            override def write(output: OutputStream) = {
-              val zipStream = new ZipOutputStream(output)
-              try {
-                hs.writeEventLogs(appId, attemptId, zipStream)
-              } finally {
-                zipStream.close()
-              }
-
-            }
-          }
-
-          Response.ok(stream)
-            .header("Content-Disposition", s"attachment; filename=$fileName")
-            .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
-            .build()
-
-        } catch {
-          case NonFatal(e) =>
-            Response.serverError()
-              .entity(s"Event logs are not available for app: $appId.")
-              .status(Response.Status.SERVICE_UNAVAILABLE)
-              .build()
+    try {
+      val fileName = {
+        attemptId match {
+          case Some(id) => s"eventLogs-$appId-$id.zip"
+          case None => s"eventLogs-$appId.zip"
         }
-      case _ =>
+      }
+
+      val stream = new StreamingOutput {
+        override def write(output: OutputStream) = {
+          val zipStream = new ZipOutputStream(output)
+          try {
+            uIRoot.writeEventLogs(appId, attemptId, zipStream)
+          } finally {
+            zipStream.close()
+          }
+
+        }
+      }
+
+      Response.ok(stream)
+        .header("Content-Disposition", s"attachment; filename=$fileName")
+        .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
+        .build()
+    } catch {
+      case NonFatal(e) =>
         Response.serverError()
-          .entity("Event logs are only available through the history server.")
+          .entity(s"Event logs are not available for app: $appId.")
           .status(Response.Status.SERVICE_UNAVAILABLE)
           .build()
     }

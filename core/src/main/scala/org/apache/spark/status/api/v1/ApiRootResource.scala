@@ -205,10 +205,13 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
-  def writeEventLogs(
-      appId: String,
-      attemptId: Option[String],
-      zipStream: ZipOutputStream): Unit = { }
+
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
+    Response.serverError()
+      .entity("Event logs are only available through the history server.")
+      .status(Response.Status.SERVICE_UNAVAILABLE)
+      .build()
+  }
 
   /**
    * Get the spark UI with the given appID, and apply a function
