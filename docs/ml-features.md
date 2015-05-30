@@ -905,10 +905,8 @@ This example below demonstrates how to transform vectors using a transforming ve
 <div class="codetabs">
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.SQLContext
 
 // Create some vector data; also works for sparse vectors
 val dataFrame = sqlContext.createDataFrame(Seq(
@@ -930,8 +928,8 @@ val transformedData = transformer.transform(dataFrame)
 <div data-lang="java">
 {% highlight java %}
 import com.google.common.collect.Lists;
+
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.ElementwiseProduct;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -949,10 +947,10 @@ JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
   RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
 ));
-StructType schema = new StructType(new StructField[]{
-  new StructField("id", DataTypes.StringType, false, Metadata.empty()),
-  new StructField("vector", DataTypes.StringType, false, Metadata.empty()),
-});
+List<StructField> fields = new ArrayList<StructField>(2);
+fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
+fields.add(DataTypes.createStructField("vector", DataTypes.StringType, false));
+StructType schema = DataTypes.createStructType(fields);
 DataFrame dataFrame = sqlContext.createDataFrame(jrdd, schema);
 Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
 ElementwiseProduct transformer = new ElementwiseProduct()
