@@ -16,7 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.io.OutputStream
+import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
@@ -208,7 +208,7 @@ private[spark] trait UIRoot {
   def writeEventLogs(
       appId: String,
       attemptId: Option[String],
-      outputStream: OutputStream): Unit = { }
+      zipStream: ZipOutputStream): Unit = { }
 
   /**
    * Get the spark UI with the given appID, and apply a function

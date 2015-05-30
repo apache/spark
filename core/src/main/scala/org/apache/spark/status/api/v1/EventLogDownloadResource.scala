@@ -17,6 +17,7 @@
 package org.apache.spark.status.api.v1
 
 import java.io.OutputStream
+import java.util.zip.ZipOutputStream
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
@@ -46,7 +47,15 @@ private[v1] class EventLogDownloadResource(
           }
 
           val stream = new StreamingOutput {
-            override def write(output: OutputStream) = hs.writeEventLogs(appId, attemptId, output)
+            override def write(output: OutputStream) = {
+              val zipStream = new ZipOutputStream(output)
+              try {
+                hs.writeEventLogs(appId, attemptId, zipStream)
+              } finally {
+                zipStream.close()
+              }
+
+            }
           }
 
           Response.ok(stream)

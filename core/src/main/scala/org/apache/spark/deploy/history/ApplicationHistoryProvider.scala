@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.OutputStream
+import java.util.zip.ZipOutputStream
 
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
@@ -71,6 +71,6 @@ private[history] abstract class ApplicationHistoryProvider {
    * @throws SparkException if the logs for the app id cannot be found.
    */
   @throws(classOf[SparkException])
-  def writeEventLogs(appId: String, attemptId: Option[String], outputStream: OutputStream): Unit
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
 }

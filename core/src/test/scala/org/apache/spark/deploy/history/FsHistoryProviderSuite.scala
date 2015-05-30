@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history
 import java.io.{BufferedOutputStream, FileInputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipOutputStream
 
 import scala.io.Source
 
@@ -356,13 +357,15 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
         Utils.chmod700(outDir)
         Utils.chmod700(unzipDir)
         val outFile = new File(outDir, s"file$i.zip")
-        val outputStream = new FileOutputStream(outFile)
+        val outputStream = new ZipOutputStream(new FileOutputStream(outFile))
         provider.writeEventLogs("downloadApp1", Some(s"attempt$i"), outputStream)
         HistoryTestUtils.unzipToDir(new FileInputStream(outFile), unzipDir)
-        unzipDir.listFiles().foreach { log =>
-          val inFile = logs.find(_.getName == log.getName).get
-          val expStream = new FileInputStream(inFile)
-          val resultStream = new FileInputStream(log)
+        val actualFiles = unzipDir.listFiles()
+        assert(actualFiles.length == 1)
+        actualFiles.foreach { actualFile =>
+          val expFile = logs.find(_.getName == actualFile.getName).get
+          val expStream = new FileInputStream(expFile)
+          val resultStream = new FileInputStream(actualFile)
           try {
             val input = IOUtils.toString(expStream)
             val out = IOUtils.toString(resultStream)

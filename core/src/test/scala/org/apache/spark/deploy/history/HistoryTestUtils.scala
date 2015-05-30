@@ -23,20 +23,34 @@ object HistoryTestUtils {
 
   def unzipToDir(inputStream: InputStream, dir: File): Unit = {
     val unzipStream = new ZipInputStream(inputStream)
-    val buffer = new Array[Byte](64 * 1024 * 1024)
-    var nextEntry = unzipStream.getNextEntry
-    while(nextEntry != null) {
-      val file = new File(dir, nextEntry.getName)
-      val outputStream = new BufferedOutputStream(new FileOutputStream(file))
-      var dataRemains = true
-      while (dataRemains) {
-        val read = unzipStream.read(buffer)
-        if (read != -1) outputStream.write(buffer, 0, read)
-        else dataRemains = false
+    try {
+      val buffer = new Array[Byte](64 * 1024 * 1024)
+      var nextEntry = unzipStream.getNextEntry
+      while (nextEntry != null) {
+        var file: File = null
+        if (nextEntry.isDirectory) {
+          val newDir = new File(dir, nextEntry.getName)
+          newDir.mkdirs()
+        } else {
+          val splits = nextEntry.getName.split("/")
+          if (splits.length == 2) {
+            file = new File(new File(dir, splits(0)), splits(1))
+          } else {
+            file = new File(dir, nextEntry.getName)
+          }
+          val outputStream = new BufferedOutputStream(new FileOutputStream(file))
+          var dataRemains = true
+          while (dataRemains) {
+            val read = unzipStream.read(buffer)
+            if (read != -1) outputStream.write(buffer, 0, read)
+            else dataRemains = false
+          }
+          outputStream.close()
+        }
+        nextEntry = unzipStream.getNextEntry
       }
-      outputStream.close()
-      nextEntry = unzipStream.getNextEntry
+    } finally {
+      unzipStream.close()
     }
-    unzipStream.close()
   }
 }

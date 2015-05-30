@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.OutputStream
 import java.util.NoSuchElementException
+import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
@@ -177,8 +177,8 @@ class HistoryServer(
   override def writeEventLogs(
       appId: String,
       attemptId: Option[String],
-      outputStream: OutputStream): Unit = {
-    provider.writeEventLogs(appId, attemptId, outputStream)
+      zipStream: ZipOutputStream): Unit = {
+    provider.writeEventLogs(appId, attemptId, zipStream)
   }
 
   /**

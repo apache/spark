@@ -16,13 +16,9 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{ BufferedOutputStream, FileOutputStream, File, FileInputStream,
-  FileWriter, InputStream, IOException}
+import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
-import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
-
-import scala.util.control.NonFatal
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
@@ -153,21 +149,43 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   test("download all logs for app with multiple attempts") {
-    doDownloadTest(None)
+    doDownloadTest("local-1430917381535", None)
   }
 
   test("download one log for app with multiple attempts") {
-    (1 to 2).foreach { attemptId => doDownloadTest(Some(attemptId)) }
+    (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
+  }
+
+  test("download legacy logs - all attempts") {
+    doDownloadTest("local-1426533911241", None, legacy = true)
+  }
+
+  test("download legacy logs - single  attempts") {
+    (1 to 2). foreach {
+      attemptId => doDownloadTest("local-1426533911241", Some(attemptId), legacy = true)
+    }
   }
 
   // Test that the files are downloaded correctly, and validate them.
-  def doDownloadTest(attemptId: Option[Int]): Unit = {
+  def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
+
+    def validateFile(expStream: FileInputStream, actualStream: FileInputStream): Unit = {
+      try {
+        val expected = IOUtils.toString(expStream)
+        val actual = IOUtils.toString(actualStream)
+        actual should be(expected)
+      } finally {
+        Seq(expStream, actualStream).foreach { s =>
+          Utils.tryWithSafeFinally(s.close())()
+        }
+      }
+    }
 
     val url = attemptId match {
       case Some(id) =>
-        new URL(s"${generateURL("applications/local-1430917381535")}/$id/logs")
+        new URL(s"${generateURL(s"applications/$appId")}/$id/logs")
       case None =>
-        new URL(s"${generateURL("applications/local-1430917381535")}/logs")
+        new URL(s"${generateURL(s"applications/$appId")}/logs")
     }
 
     val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
@@ -175,30 +193,36 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     inputStream should not be None
     error should be (None)
 
-    def validateFile(fileName: String, tempDir: File): Unit = {
-      val inStream = new FileInputStream(new File(logDir, fileName))
-      val outStream = new FileInputStream(new File(tempDir, fileName))
-      try {
-        val exp = IOUtils.toString(inStream)
-        val input = IOUtils.toString(outStream)
-        input should be(exp)
-      } finally {
-        Seq(inStream, outStream).foreach { s =>
-          Utils.tryWithSafeFinally(s.close())()
-        }
-      }
-    }
-
     val dir = Utils.createTempDir()
     try {
       Utils.chmod700(dir)
       HistoryTestUtils.unzipToDir(inputStream.get, dir)
-      val files = dir.listFiles()
+      val unzippedContent = dir.listFiles()
       attemptId match {
-        case Some(_) => files.length should be (1)
-        case None => files.length should be (2)
+        case Some(_) => unzippedContent.length should be (1)
+        case None => unzippedContent.length should be (2)
       }
-      validateFile(files.head.getName, dir)
+
+      // If these are legacy files, then each of the unzipped contents is actually a legacy log dir.
+      if (legacy) {
+        unzippedContent.foreach { legacyDir =>
+          assert(legacyDir.isDirectory)
+          val logFiles = legacyDir.listFiles()
+          logFiles.length should be (3)
+          logFiles.foreach { f =>
+            val actualStream = new FileInputStream(f)
+            val expectedStream =
+              new FileInputStream(new File(new File(logDir, legacyDir.getName), f.getName))
+            validateFile(expectedStream, actualStream)
+          }
+        }
+      } else {
+        unzippedContent.foreach { f =>
+          val actualStream = new FileInputStream(f)
+          val expectedStream = new FileInputStream(new File(logDir, f.getName))
+          validateFile(expectedStream, actualStream)
+        }
+      }
     } finally {
       Utils.deleteRecursively(dir)
     }

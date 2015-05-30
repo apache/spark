@@ -22,7 +22,6 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
-import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
@@ -775,42 +774,6 @@ private[spark] object Utils extends Logging {
   /** Used by unit tests. Do not call from other places. */
   private[spark] def clearLocalRootDirs(): Unit = {
     localRootDirs = null
-  }
-
-  /**
-   * This method compresses the files passed in, and writes the compressed data out into the
-   * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
-   * the name of the file being compressed.
-   */
-  private[spark] def zipFilesToStream(
-      files: Seq[Path],
-      hadoopConf: Configuration,
-      outputStream: OutputStream): Unit = {
-    val fs = FileSystem.get(hadoopConf)
-    val buffer = new Array[Byte](64 * 1024)
-    val zipStream = Some(new ZipOutputStream(outputStream))
-    try {
-      files.foreach { remotePath =>
-        val inputStream = Some(fs.open(remotePath, 1 * 1024 * 1024)) // 1MB Buffer
-        try {
-          zipStream.get.putNextEntry(new ZipEntry(remotePath.getName))
-          var dataRemaining = true
-          while (dataRemaining) {
-            val length = inputStream.get.read(buffer)
-            if (length != -1) {
-              zipStream.get.write(buffer, 0, length)
-            } else {
-              dataRemaining = false
-            }
-          }
-          zipStream.get.closeEntry()
-        } finally {
-          inputStream.foreach(_.close())
-        }
-      }
-    } finally {
-      zipStream.foreach(_.close())
-    }
   }
 
   /**

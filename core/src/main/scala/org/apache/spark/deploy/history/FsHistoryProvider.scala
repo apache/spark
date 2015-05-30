@@ -17,15 +17,14 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{OutputStream, FileOutputStream, File, BufferedInputStream,
-  FileNotFoundException, IOException, InputStream}
+import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
 import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
@@ -225,43 +224,58 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def writeEventLogs(
       appId: String,
       attemptId: Option[String],
-      outputStream: OutputStream): Unit = {
+      zipStream: ZipOutputStream): Unit = {
+
+    /**
+     * This method compresses the files passed in, and writes the compressed data out into the
+     * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
+     * the name of the file being compressed.
+     */
+    def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
+      val fs = FileSystem.get(hadoopConf)
+      val buffer = new Array[Byte](64 * 1024)
+      val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
+      try {
+        outputStream.putNextEntry(new ZipEntry(entryName))
+        var dataRemaining = true
+        while (dataRemaining) {
+          val length = inputStream.read(buffer)
+          if (length != -1) {
+            outputStream.write(buffer, 0, length)
+          } else {
+            dataRemaining = false
+          }
+        }
+        outputStream.closeEntry()
+      } finally {
+        inputStream.close()
+      }
+    }
 
     applications.get(appId) match {
       case Some(appInfo) =>
-        val dirsToClear = new mutable.ArrayBuffer[File]()
         try {
           // If no attempt is specified, or there is no attemptId for attempts, return all attempts
-          val pathsToZip = appInfo.attempts.filter { attempt =>
+          appInfo.attempts.filter { attempt =>
             attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
-          }.map { attempt =>
+          }.foreach { attempt =>
             val logPath = new Path(logDir, attempt.logPath)
+            // If this is a legacy directory, then add the directory to the zipStream and add
+            // each file to that directory.
             if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
-              val localDir = Utils.createTempDir()
-              Utils.chmod700(localDir)
-              dirsToClear += localDir
-              val outputFile = new File(localDir, logPath.getName)
-              val outputStream = new FileOutputStream(outputFile)
               val files = fs.listFiles(logPath, false)
-              val paths = new mutable.ArrayBuffer[Path]()
+              zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
+              zipStream.closeEntry()
               while (files.hasNext) {
-                paths += files.next().getPath
+                val file = files.next().getPath
+                zipFileToStream(file, attempt.logPath + Path.SEPARATOR + file.getName, zipStream)
               }
-              Utils.zipFilesToStream(paths, hadoopConf, outputStream)
-              new Path(outputFile.toURI)
             } else {
-              new Path(logDir, attempt.logPath)
+              zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
             }
           }
-          Utils.zipFilesToStream(pathsToZip, hadoopConf, outputStream)
         } finally {
-          dirsToClear.foreach { dir =>
-            try {
-              Utils.deleteRecursively(dir)
-            } catch {
-              case NonFatal(e) => logWarning(s"Error while attempting to delete $dir.")
-            }
-          }
+          zipStream.close()
         }
       case None => throw new SparkException(s"Logs for $appId not found.")
     }
