@@ -344,7 +344,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation("abdef" cast TimestampType, null)
     checkEvaluation("12.65" cast DecimalType.Unlimited, Decimal(12.65))
 
-    checkEvaluation(Literal(1) cast LongType, 1)
+    checkEvaluation(Literal(1) cast LongType, 1:Long)
     checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
     checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
@@ -363,13 +363,13 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
+      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5:Long)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType), 0)
+      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType), 0:Short)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
       TimestampType, ByteType), DecimalType.Unlimited), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0)
+      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0:Short)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)

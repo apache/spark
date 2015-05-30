@@ -106,7 +106,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val result = create(in)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
-          logInfo(s"Code generated expression $in in $timeMs ms")
+          logWarning(s"Code generated expression $in in $timeMs ms")
           result
         }
       })
@@ -154,7 +154,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
-  protected def newCodeGenContext(): CodeGenContext = {
+  def newCodeGenContext(): CodeGenContext = {
     new CodeGenContext(new mutable.ArrayBuffer[Expression]())
   }
 
@@ -590,7 +590,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         logError(s"No rules to generate $e")
         ctx.references += e
         s"""
-          // expression: ${e}
+          /* expression: ${e} */
           Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
           boolean $nullTerm = $objectTerm == null;
           ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
@@ -678,7 +678,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case IntegerType => "-1"
     case DateType => "-1"
     case DecimalType() => "null"
-    case StringType =>  "null"
+    case StringType => "null"
     case _ => "null"
   }
 
