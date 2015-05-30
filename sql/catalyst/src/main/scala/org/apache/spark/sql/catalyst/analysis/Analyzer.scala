@@ -644,14 +644,16 @@ class Analyzer(
     }
 
     /**
-     * From a Seq of [[NamedExpression]]s, extract window expressions and
-     * other regular expressions.
+     * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
+     * other regular expressions that do not contain any window expression.
      */
-    def extract(
+    def extractRegularExpressions(
         expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
-      // First, we simple partition the input expressions to two part, one having
-      // WindowExpressions and another one without WindowExpressions.
-      val (windowExpressions, regularExpressions) = expressions.partition(hasWindowFunction)
+      // First, we partition the input expressions to two part. For the first part,
+      // every expression in it contain at least one WindowExpression.
+      // Expressions in the second part do not have any WindowExpression.
+      val (expressionsWithWindowFunctions, regularExpressions) =
+        expressions.partition(hasWindowFunction)
 
       // Then, we need to extract those regular expressions used in the WindowExpression.
       // For example, when we have col1 - Sum(col2 + col3) OVER (PARTITION BY col4 ORDER BY col5),
@@ -678,8 +680,8 @@ class Analyzer(
           withName.toAttribute
       }
 
-      // Now, we extract expressions from windowExpressions by using extractExpr.
-      val newWindowExpressions = windowExpressions.map {
+      // Now, we extract regular expressions from expressionsWithWindowFunctions by using extractExpr.
+      val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
@@ -705,36 +707,77 @@ class Analyzer(
         }.asInstanceOf[NamedExpression]
       }
 
-      (newWindowExpressions, regularExpressions ++ extractedExprBuffer)
+      (newExpressionsWithWindowFunctions, regularExpressions ++ extractedExprBuffer)
     }
 
     /**
      * Adds operators for Window Expressions. Every Window operator handles a single Window Spec.
      */
-    def addWindow(windowExpressions: Seq[NamedExpression], child: LogicalPlan): LogicalPlan = {
-      // First, we group window expressions based on their Window Spec.
-      val groupedWindowExpression = windowExpressions.groupBy { expr =>
-        val windowSpec = expr.collectFirst {
+    def addWindow(
+        expressionsWithWindowFunctions: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
+      // First, we need to extract all WindowExpressions from expressionsWithWindowFunctions
+      // and put those extracted WindowExpressions to extractedWindowExprBuffer.
+      // This step is needed because it is possible that an expression contains multiple
+      // WindowExpressions with different Window Specs.
+      // After extracting WindowExpressions, we need to construct a project list to generate
+      // expressionsWithWindowFunctions based on extractedWindowExprBuffer.
+      // For example, for "sum(a) over (...) / sum(b) over (...)", we will first extract
+      // "sum(a) over (...)" and "sum(b) over (...)" out, and assign "_we0" as the alias to
+      // "sum(a) over (...)" and "_we1" as the alias to "sum(b) over (...)".
+      // Then, the projectList will be [_we0/_we1].
+      val extractedWindowExprBuffer = new ArrayBuffer[NamedExpression]()
+      val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
+        // We need to use transformDown because we want to trigger
+        // "case alias @ Alias(window: WindowExpression, _)" first.
+        _.transformDown {
+          case alias @ Alias(window: WindowExpression, _) =>
+            // If a WindowExpression has an assigned alias, just use it.
+            extractedWindowExprBuffer += alias
+            alias.toAttribute
+          case window: WindowExpression =>
+            // If there is no alias assigned to the WindowExpressions. We create an
+            // internal column.
+            val withName = Alias(window, s"_we${extractedWindowExprBuffer.length}")()
+            extractedWindowExprBuffer += withName
+            withName.toAttribute
+        }.asInstanceOf[NamedExpression]
+      }
+
+      // Second, we group extractedWindowExprBuffer based on their Window Spec.
+      val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
+        val distinctWindowSpec = expr.collect {
           case window: WindowExpression => window.windowSpec
+        }.distinct
+
+        // We do a final check and see if we only have a single Window Spec defined in an
+        // expressions.
+        if (distinctWindowSpec.length == 0 ) {
+          failAnalysis(s"$expr does not have any WindowExpression.")
+        } else if (distinctWindowSpec.length > 1) {
+          failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
+            s"Please file a bug report with this error message, stack trace, and the query.")
+        } else {
+          distinctWindowSpec.head
         }
-        windowSpec.getOrElse(
-          failAnalysis(s"$windowExpressions does not have any WindowExpression."))
       }.toSeq
 
-      // For every Window Spec, we add a Window operator and set currentChild as the child of it.
+      // Third, for every Window Spec, we add a Window operator and set currentChild as the
+      // child of it.
       var currentChild = child
       var i = 0
-      while (i < groupedWindowExpression.size) {
-        val (windowSpec, windowExpressions) = groupedWindowExpression(i)
+      while (i < groupedWindowExpressions.size) {
+        val (windowSpec, windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
         currentChild = Window(currentChild.output, windowExpressions, windowSpec, currentChild)
 
-        // Move to next WindowExpression.
+        // Move to next Window Spec.
         i += 1
       }
 
-      // We return the top operator.
-      currentChild
+      // Finally, we create a Project to output currentChild's output
+      // newExpressionsWithWindowFunctions.
+      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
     }
 
     // We have to use transformDown at here to make sure the rule of
@@ -746,7 +789,7 @@ class Analyzer(
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extractRegularExpressions(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.
@@ -763,7 +806,7 @@ class Analyzer(
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extractRegularExpressions(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add Window operators.
@@ -777,7 +820,7 @@ class Analyzer(
       // have been resolved.
       case p @ Project(projectList, child)
         if hasWindowFunction(projectList) && !p.expressions.exists(!_.resolved) =>
-        val (windowExpressions, regularExpressions) = extract(projectList)
+        val (windowExpressions, regularExpressions) = extractRegularExpressions(projectList)
         // We add a project to get all needed expressions for window expressions from the child
         // of the original Project operator.
         val withProject = Project(regularExpressions, child)
