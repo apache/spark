@@ -105,7 +105,7 @@ private[spark] class ExecutorAllocationManager(
     "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
   private val cachedExecutorTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.executorIdleTimeout", s"${Long.MaxValue / 60}s")
+    "spark.dynamicAllocation.executorIdleTimeout", s"${Long.MaxValue / 1000}s")
 
   val executorsWithCachedBlocks = new mutable.HashSet[String]()
 
