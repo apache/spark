@@ -63,4 +63,11 @@ class SqlParserSuite extends SparkFunSuite {
     assert(TestCommand("NotRealCommand") === parser.parse("execute NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser.parse("exEcute NotRealCommand"))
   }
+
+  test("cross join") {
+    val parser = new SqlParser
+    assert(parser("SELECT * FROM t1, t2") === parser("SELECT * FROM t1 CROSS JOIN t2"))
+    intercept[RuntimeException](parser("SELECT * FROM t1 CROSS JOIN t2 ON t1.a = t2.a"))
+  }
+
 }

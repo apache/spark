@@ -61,6 +61,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
+  protected val CROSS = Keyword("CROSS")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -171,7 +172,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
   protected lazy val relations: Parser[LogicalPlan] =
-    ( relation ~ rep1("," ~> relation) ^^ {
+    ( relation ~ rep1(("," | CROSS ~ JOIN) ~> relation) ^^ {
         case r1 ~ joins => joins.foldLeft(r1) { case(lhs, r) => Join(lhs, r, Inner, None) } }
     | relation
     )
