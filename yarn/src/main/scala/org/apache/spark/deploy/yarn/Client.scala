@@ -825,6 +825,9 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
+    // Clean up staging director as some appStagingDir can not be deleted when job is failed or
+    // killed, Please see SPARK-7705 for details.
+    cleanupStagingDir()
     val appId = submitApplication()
     if (fireAndForget) {
       val report = getApplicationReport(appId)
@@ -847,6 +850,27 @@ private[spark] class Client(
       if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
         throw new SparkException(s"The final status of application $appId is undefined")
       }
+    }
+  }
+
+  private def cleanupStagingDir(): Unit = {
+    val fs = FileSystem.get(hadoopConf)
+    try {
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      if (!preserveFiles) {
+        val stagingDirPath = new Path(fs.getHomeDirectory, SPARK_STAGING)
+        if (stagingDirPath == null) {
+          return
+        } else {
+          fs.listStatus(stagingDirPath).foreach{ fileStatus =>
+            logInfo("Deleting application staging directory " + fileStatus.getPath)
+            fs.delete(fileStatus.getPath, true)
+          }
+        }
+      }
+    } catch {
+      case ioe: IOException =>
+        logError("Failed to cleanup staging dir.", ioe)
     }
   }
 }

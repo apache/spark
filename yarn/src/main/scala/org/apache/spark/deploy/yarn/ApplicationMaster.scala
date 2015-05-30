@@ -121,11 +121,9 @@ private[spark] class ApplicationMaster(
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
+            cleanupStagingDir(fs)
           }
         }
-
-        // Clean up staging directory when AppMaster exit at any final application status
-        cleanupStagingDir(fs)
       }
 
       // Call this to force generation of secret so it gets populated into the
