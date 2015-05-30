@@ -680,7 +680,8 @@ class Analyzer(
           withName.toAttribute
       }
 
-      // Now, we extract regular expressions from expressionsWithWindowFunctions by using extractExpr.
+      // Now, we extract regular expressions from expressionsWithWindowFunctions
+      // by using extractExpr.
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
