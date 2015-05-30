@@ -497,10 +497,9 @@ trait HiveTypeCoercion {
     }
 
     private def transform(booleanExpr: Expression, numericExpr: Expression) = {
-      CaseWhen(Seq(
-        Or(IsNull(booleanExpr), IsNull(numericExpr)), Literal.create(null, BooleanType),
-        buildCaseKeyWhen(booleanExpr, numericExpr)
-      ))
+      If(Or(IsNull(booleanExpr), IsNull(numericExpr)),
+        Literal.create(null, BooleanType),
+        buildCaseKeyWhen(booleanExpr, numericExpr))
     }
 
     private def transformNullSafe(booleanExpr: Expression, numericExpr: Expression) = {
