@@ -50,6 +50,8 @@ private[spark] object SQLConf {
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
   val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
+  val PRE_AGGREGATION = "spark.sql.preAggregation.enable"
+
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -165,6 +167,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * to HashJoin.
    */
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
+
+  /**
+   * The execution.HashAggregation will be apply by default
+   */
+  private[spark] def preAggregationEnabled: Boolean =
+    getConf(PRE_AGGREGATION, "true").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode

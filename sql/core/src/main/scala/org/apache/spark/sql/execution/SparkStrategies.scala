@@ -119,6 +119,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object HashAggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // We can cancel the map aggregation due to GC problems
+      case logical.Aggregate(groupingExpressions, aggregateExpressions, child)
+        if !sqlContext.conf.preAggregationEnabled =>
+        execution.Aggregate(
+          partial = false,
+          groupingExpressions,
+          aggregateExpressions,
+          planLater(child)) :: Nil
+
       // Aggregations that can be performed in two phases, before and after the shuffle.
 
       // Cases where all aggregates can be codegened.
