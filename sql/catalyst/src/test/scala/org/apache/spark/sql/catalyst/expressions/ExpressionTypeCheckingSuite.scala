@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -24,10 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.StringType
 
-import org.scalatest.FunSuite
-
-
-class ExpressionTypeCheckingSuite extends FunSuite {
+class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   val testRelation = LocalRelation(
     'intField.int,
