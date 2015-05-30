@@ -372,6 +372,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
+    checkEvaluation(Literal(true) cast StringType, "true")
+    checkEvaluation(Literal(false) cast StringType, "false")
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
     checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
     checkEvaluation("23" cast DoubleType, 23d)
