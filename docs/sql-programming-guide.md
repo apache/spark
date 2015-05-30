@@ -1541,78 +1541,66 @@ results = sqlContext.sql("FROM src SELECT key, value").collect()
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
-which enables Spark SQL to access metadata of Hive tables.  Starting from Spark 1.2.0, Spark SQL can
-talk to two versions of Hive metastore, either 0.12.0 or 0.13.1, default to the latter.  However, to
-switch to desired Hive metastore version, users have to rebuild the assembly jar with proper profile
-flags (either `-Phive-0.12.0` or `-Phive-0.13.1`), which is quite inconvenient.
+which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
 
-Starting from 1.4.0, users no longer need to rebuild the assembly jar to switch Hive metastore
-version.  Instead, configuration properties described in the table below can be used to specify
-desired Hive metastore version.  Currently, supported versions are still limited to 0.13.1 and
-0.12.0, but we are working on a more generalized mechanism to support a wider range of versions.
-
-Internally, Spark SQL 1.4.0 uses two Hive clients, one for executing native Hive commands like `SET`
-and `DESCRIBE`, the other dedicated for communicating with Hive metastore.  The former uses Hive
-jars of version 0.13.1, which are bundled with Spark 1.4.0.  The latter uses Hive jars of the
-version specified by users.  An isolated classloader is used here to avoid dependency conflicts.
+Internally, Spark SQL uses two Hive clients, one for executing native Hive commands like `SET`
+and `DESCRIBE`, the other dedicated for communicating with Hive metastore. The former uses Hive
+jars of version 0.13.1, which are bundled with Spark 1.4.0. The latter uses Hive jars of the
+version specified by users. An isolated classloader is used here to avoid dependency conflicts.
 
 <table class="table">
-  <tr><th>Property Name</th><th>Meaning</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
+    <td><code>0.13.1</code></td>
     <td>
-      The version of the hive client that will be used to communicate with the metastore.  Available
-      options are <code>0.12.0</code> and <code>0.13.1</code>.  Defaults to <code>0.13.1</code>.
+      Version of the Hive metastore. Available
+      options are <code>0.12.0</code> and <code>0.13.1</code>. Support for more versions is coming in the future.
     </td>
   </tr>
-
   <tr>
     <td><code>spark.sql.hive.metastore.jars</code></td>
+    <td><code>builtin</code></td>
     <td>
-      The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
+      Location of the jars that should be used to instantiate the HiveMetastoreClient. This
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
         Use Hive 0.13.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
-        enabled.  When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
+        enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
         either <code>0.13.1</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories.
         <li>A classpath in the standard format for both Hive and Hadoop.</li>
       </ol>
-      Defaults to <code>builtin</code>.
     </td>
   </tr>
-
   <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
-
+    <td><code>com.mysql.jdbc,<br/>org.postgresql,<br/>com.microsoft.sqlserver,<br/>oracle.jdbc</code></td>
     <td>
       <p>
         A comma separated list of class prefixes that should be loaded using the classloader that is
         shared between Spark SQL and a specific version of Hive. An example of classes that should
         be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
-        to be shared are those that interact with classes that are already shared.  For example,
+        to be shared are those that interact with classes that are already shared. For example,
         custom appenders that are used by log4j.
-      </p>
-      <p>
-        Defaults to <code>com.mysql.jdbc,org.postgresql,com.microsoft.sqlserver,oracle.jdbc</code>.
       </p>
     </td>
   </tr>
-
   <tr>
     <td><code>spark.sql.hive.metastore.barrierPrefixes</code></td>
+    <td><code>(empty)</code></td>
     <td>
       <p>
         A comma separated list of class prefixes that should explicitly be reloaded for each version
-        of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+        of Hive that Spark SQL is communicating with. For example, Hive UDFs that are declared in a
         prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).
       </p>
-      <p>Defaults to empty.</p>
     </td>
   </tr>
 </table>
+
 
 ## JDBC To Other Databases
 
