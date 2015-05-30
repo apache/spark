@@ -529,6 +529,7 @@ val transformedData2 = data.map(x => transformer.transform(x))
 
 <div data-lang="java">
 {% highlight java %}
+import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.feature.ElementwiseProduct;
