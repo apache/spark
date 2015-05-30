@@ -62,7 +62,7 @@ class Analyzer(
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  lazy val batches = Seq(
+  lazy val batches:Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution ::
       WindowsSubstitution ::
