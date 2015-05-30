@@ -159,4 +159,11 @@
     </parameters>
   </check>
   <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
+  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of FunSuited directly -->
+  <check level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+   <parameters>
+    <parameter name="regex">^FunSuite[A-Za-z]*$</parameter>
+   </parameters>
+   <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
+  </check>
 </scalastyle>
