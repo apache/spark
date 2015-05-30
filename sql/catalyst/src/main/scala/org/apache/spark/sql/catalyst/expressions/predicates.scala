@@ -341,7 +341,7 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
         orderings match {
           case Left(ordering) =>
             ordering.lt(evalE1, evalE2)
-          case Right((idx, ordering))=> 
+          case Right((idx, ordering)) => 
             val evalE1Row = evalE1.asInstanceOf[Row]
             val evalE2Row = evalE2.asInstanceOf[Row]
             ordering.gt(evalE1Row(idx), evalE2Row(idx))
