@@ -77,7 +77,6 @@ trait HiveTypeCoercion {
     PromoteStrings ::
     DecimalPrecision ::
     BooleanComparisons ::
-    BooleanCasts ::
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
@@ -507,32 +506,6 @@ trait HiveTypeCoercion {
       case p: BinaryComparison if p.left.dataType == BooleanType &&
                                   p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
-    }
-  }
-
-  /**
-   * Casts to/from [[BooleanType]] are transformed into comparisons since
-   * the JVM does not consider Booleans to be numeric types.
-   */
-  object BooleanCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-      // Skip if the type is boolean type already. Note that this extra cast should be removed
-      // by optimizer.SimplifyCasts.
-      case Cast(e, BooleanType) if e.dataType == BooleanType => e
-      // DateType should be null if be cast to boolean.
-      case Cast(e, BooleanType) if e.dataType == DateType => Cast(e, BooleanType)
-      // If the data type is not boolean and is being cast boolean, turn it into a comparison
-      // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
-      case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
-      // Stringify boolean if casting to StringType.
-      // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
-      case Cast(e, StringType) if e.dataType == BooleanType =>
-        If(e, Literal("true"), Literal("false"))
-      // Turn true into 1, and false into 0 if casting boolean into other types.
-      case Cast(e, dataType) if e.dataType == BooleanType =>
-        Cast(If(e, Literal(1), Literal(0)), dataType)
     }
   }
 
