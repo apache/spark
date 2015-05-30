@@ -1579,9 +1579,8 @@ class ChartModelView(DataProfilingMixin, ModelView):
         'sql',
         'default_params',)
     column_list = (
-        'label', 'conn_id', 'chart_type', 'owner', 'last_modified',
-        'show_datatable', 'show_sql',)
-    column_formatters = dict(label=label_link)
+        'label', 'conn_id', 'chart_type', 'owner', 'last_modified',)
+    column_formatters = dict(label=label_link, last_modified=datetime_f)
     column_default_sort = ('last_modified', True)
     create_template = 'airflow/chart/create.html'
     edit_template = 'airflow/chart/edit.html'
