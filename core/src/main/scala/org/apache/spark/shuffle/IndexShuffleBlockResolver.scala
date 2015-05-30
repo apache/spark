@@ -74,12 +74,16 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
    * end of the output file. This will be used by getBlockLocation to figure out where each block
    * begins and ends.
    * */
-  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
+  def writeIndexFile(
+      shuffleId: Int,
+      mapId: Int,
+      lengths: Array[Long],
+      initialFileLength: Long): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
     Utils.tryWithSafeFinally {
       // We take in lengths of each block, need to convert it to offsets.
-      var offset = 0L
+      var offset = initialFileLength
       out.writeLong(offset)
       for (length <- lengths) {
         offset += length

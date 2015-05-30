@@ -30,3 +30,13 @@ class SparkException(message: String, cause: Throwable)
  */
 private[spark] class SparkDriverExecutionException(cause: Throwable)
   extends SparkException("Execution error", cause)
+
+/**
+ * Exception indicating an error internal to Spark -- it is in an inconsistent state, not due
+ * to any error by the user
+ */
+class SparkIllegalStateException(message: String, cause: Throwable)
+  extends SparkException(message, cause) {
+
+  def this(message: String) = this(message, null)
+}
