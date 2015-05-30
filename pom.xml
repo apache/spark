@@ -1226,16 +1226,7 @@
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
             <fork>true</fork>
-            <compilerId>javac-with-errorprone</compilerId>
-            <forceJavacCompilerUse>true</forceJavacCompilerUse>
           </configuration>
-          <dependencies>
-            <dependency>
-              <groupId>org.codehaus.plexus</groupId>
-              <artifactId>plexus-compiler-javac-errorprone</artifactId>
-              <version>2.5</version>
-            </dependency>
-          </dependencies>
         </plugin>
         <!-- Surefire runs all Java tests -->
         <plugin>
@@ -1654,6 +1645,32 @@
             <configuration>
               <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
             </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- Use google error prone to detect Java mistakes -->
+    <profile>
+      <id>ep-tests</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.3</version>
+            <configuration>
+              <compilerId>javac-with-errorprone</compilerId>
+              <forceJavacCompilerUse>true</forceJavacCompilerUse>
+              <showWarnings>true</showWarnings>
+            </configuration>
+            <dependencies>
+              <dependency>
+                <groupId>org.codehaus.plexus</groupId>
+                <artifactId>plexus-compiler-javac-errorprone</artifactId>
+                <version>2.5</version>
+              </dependency>
+            </dependencies>
           </plugin>
         </plugins>
       </build>
