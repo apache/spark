@@ -38,6 +38,7 @@ else:
 
 from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
+from pyspark.mllib.clustering import StreamingKMeans
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.regression import LabeledPoint
@@ -48,6 +49,7 @@ from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler
 from pyspark.mllib.feature import ElementwiseProduct
 from pyspark.serializers import PickleSerializer
+from pyspark.streaming import StreamingContext
 from pyspark.sql import SQLContext
 
 _have_scipy = False
@@ -861,6 +863,44 @@ class ElementwiseProductTests(MLlibTestCase):
         self.assertEqual(eprod.transform(densevec), DenseVector([12, 10, 6]))
         self.assertEqual(
             eprod.transform(sparsevec), SparseVector(3, [0], [3]))
+
+
+class StreamingKMeansTest(MLlibTestCase):
+    def test_model_params(self):
+        stkm = StreamingKMeans()
+        stkm.setK(5).setDecayFactor(0.0)
+        self.assertEquals(stkm._k, 5)
+        self.assertEquals(stkm._decayFactor, 0.0)
+
+        # Model not set yet.
+        self.assertIsNone(stkm.model)
+        self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
+
+        stkm.setInitialCenters([[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0])
+        self.assertEqual(stkm.model.centers, [[0.0, 0.0], [1.0, 1.0]])
+        self.assertEqual(stkm.model.getClusterWeights, [1.0, 1.0])
+
+    def test_model(self):
+        stkm = StreamingKMeans()
+        initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
+        weights = [1.0, 1.0, 1.0, 1.0]
+        stkm.setInitialCenters(initCenters, weights)
+
+        offsets = [[0, 0.1], [0, -0.1], [0.1, 0], [-0.1, 0]]
+        batches = []
+
+        for offset in offsets:
+            batches.append([[offset[0] + center[0], offset[1] + center[1]]
+                            for center in initCenters])
+
+        batches = [self.sc.parallelize(batch, 1) for batch in batches]
+        ssc = StreamingContext(self.sc, 2.0)
+        input_stream = ssc.queueStream(batches)
+        stkm.trainOn(input_stream)
+        ssc.start()
+        finalModel = stkm.model
+        self.assertEqual(finalModel.centers, initCenters)
+        # self.assertEqual(finalModel.getClusterWeights, [5.0, 5.0, 5.0, 5.0])
 
 
 if __name__ == "__main__":

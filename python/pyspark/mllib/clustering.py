@@ -28,9 +28,10 @@ from numpy import array, random, tile
 from pyspark import RDD
 from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
+from pyspark.streaming import DStream
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture']
 
@@ -269,14 +270,46 @@ class GaussianMixture(object):
 class StreamingKMeansModel(KMeansModel):
     """
     .. note:: Experimental
+
+    >>> initCenters, initWeights = [[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0]
+    >>> stkm = StreamingKMeansModel(initCenters, initWeights)
+    >>> data = sc.parallelize([[-0.1, -0.1], [0.1, 0.1],
+    ...                        [0.9, 0.9], [1.1, 1.1]])
+    >>> stkm = stkm.update(data, 1.0, "batches")
+    >>> stkm.centers
+    array([[ 0.,  0.],
+           [ 1.,  1.]])
+    >>> stkm.predict([-0.1, -0.1]) == stkm.predict([0.1, 0.1]) == 0
+    True
+    >>> stkm.predict([0.9, 0.9]) == stkm.predict([1.1, 1.1]) == 1
+    True
+    >>> stkm.getClusterWeights
+    [3.0, 3.0]
+    >>> decayFactor = 0.0
+    >>> data = sc.parallelize([DenseVector([1.5, 1.5]), DenseVector([0.2, 0.2])])
+    >>> stkm = stkm.update(data, 0.0, "batches")
+    >>> stkm.centers
+    array([[ 0.2,  0.2],
+           [ 1.5,  1.5]])
+    >>> stkm.getClusterWeights
+    [1.0, 1.0]
+    >>> stkm.predict([0.2, 0.2])
+    0
+    >>> stkm.predict([1.5, 1.5])
+    1
     """
     def __init__(self, clusterCenters, clusterWeights):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)
 
+    @property
+    def getClusterWeights(self):
+        return self._clusterWeights
+
     def update(self, data, decayFactor, timeUnit):
         if not isinstance(data, RDD):
             raise TypeError("data should be of a RDD, got %s." % type(data))
+        data = data.map(_convert_to_vector)
         decayFactor = float(decayFactor)
         if timeUnit not in ["batches", "points"]:
             raise ValueError(
@@ -306,7 +339,7 @@ class StreamingKMeans(object):
     def _validate(self, dstream):
         if self.model is None:
             raise ValueError(
-                "Initial centers should be set either by setInitialCenters ")
+                "Initial centers should be set either by setInitialCenters "
                 "or setRandomCenters.")
         if not isinstance(dstream, DStream):
             raise TypeError(
@@ -342,18 +375,18 @@ class StreamingKMeans(object):
 
         def update(_, rdd):
             if rdd:
-                self.model = self.model.update(rdd)
+                self.model = self.model.update(rdd, self._decayFactor, self._timeUnit)
 
         dstream.foreachRDD(update)
         return self
 
     def predictOn(self, dstream):
         self._validate(dstream)
-        dstream.map(model.predict)
+        dstream.map(self.model.predict)
 
     def predictOnValues(self, dstream):
         self._validate(dstream)
-        dstream.mapValues(model.predict)
+        dstream.mapValues(self.model.predict)
 
 
 def _test():
