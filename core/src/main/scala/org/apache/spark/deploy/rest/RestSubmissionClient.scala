@@ -277,8 +277,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   private def getBaseUrl(master: String): String = {
     var masterUrl = master
     supportedMasterPrefixes.foreach { prefix =>
-      if (master.startsWith(prefix)) {
-        masterUrl = master.stripPrefix(prefix)
+      if (masterUrl.startsWith(prefix)) {
+        masterUrl = masterUrl.stripPrefix(prefix)
       }
     }
     masterUrl = masterUrl.stripSuffix("/")
