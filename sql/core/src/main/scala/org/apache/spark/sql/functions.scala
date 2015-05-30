@@ -187,7 +187,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -326,168 +326,135 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Window function: returns the lag value of current row of the expression,
-   * null when the current row extends before the beginning of the window.
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(columnName: String): Column = {
-    lag(columnName, 1)
+  def lag(e: Column, offset: Int): Column = {
+    lag(e, offset, null)
   }
 
   /**
-   * Window function: returns the lag value of current row of the column,
-   * null when the current row extends before the beginning of the window.
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(e: Column): Column = {
-    lag(e, 1)
+  def lag(columnName: String, offset: Int): Column = {
+    lag(columnName, offset, null)
   }
 
   /**
-   * Window function: returns the lag values of current row of the expression,
-   * null when the current row extends before the beginning of the window.
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(e: Column, count: Int): Column = {
-    lag(e, count, null)
+  def lag(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lag(Column(columnName), offset, defaultValue)
   }
 
   /**
-   * Window function: returns the lag values of current row of the column,
-   * null when the current row extends before the beginning of the window.
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(columnName: String, count: Int): Column = {
-    lag(columnName, count, null)
+  def lag(e: Column, offset: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
   }
 
   /**
-   * Window function: returns the lag values of current row of the column,
-   * given default value when the current row extends before the beginning
-   * of the window.
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(columnName: String, count: Int, defaultValue: Any): Column = {
-    lag(Column(columnName), count, defaultValue)
+  def lead(columnName: String, offset: Int): Column = {
+    lead(columnName, offset, null)
   }
 
   /**
-   * Window function: returns the lag values of current row of the expression,
-   * given default value when the current row extends before the beginning
-   * of the window.
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(e: Column, count: Int, defaultValue: Any): Column = {
-    UnresolvedWindowFunction("lag", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
+  def lead(e: Column, offset: Int): Column = {
+    lead(e, offset, null)
   }
 
   /**
-   * Window function: returns the lead value of current row of the column,
-   * null when the current row extends before the end of the window.
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lead(columnName: String): Column = {
-    lead(columnName, 1)
+  def lead(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lead(Column(columnName), offset, defaultValue)
   }
 
   /**
-   * Window function: returns the lead value of current row of the expression,
-   * null when the current row extends before the end of the window.
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lead(e: Column): Column = {
-    lead(e, 1)
+  def lead(e: Column, offset: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
   }
 
   /**
-   * Window function: returns the lead values of current row of the column,
-   * null when the current row extends before the end of the window.
+   * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+   * partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+   *
+   * This is equivalent to the NTILE function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
    */
-  def lead(columnName: String, count: Int): Column = {
-    lead(columnName, count, null)
+  def ntile(n: Int): Column = {
+    UnresolvedWindowFunction("ntile", lit(n).expr :: Nil)
   }
 
   /**
-   * Window function: returns the lead values of current row of the expression,
-   * null when the current row extends before the end of the window.
+   * Window function: returns a sequential number starting at 1 within a window partition.
    *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(e: Column, count: Int): Column = {
-    lead(e, count, null)
-  }
-
-  /**
-   * Window function: returns the lead values of current row of the column,
-   * given default value when the current row extends before the end of the window.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(columnName: String, count: Int, defaultValue: Any): Column = {
-    lead(Column(columnName), count, defaultValue)
-  }
-
-  /**
-   * Window function: returns the lead values of current row of the expression,
-   * given default value when the current row extends before the end of the window.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def lead(e: Column, count: Int, defaultValue: Any): Column = {
-    UnresolvedWindowFunction("lead", e.expr :: Literal(count) :: Literal(defaultValue) :: Nil)
-  }
-
-  /**
-   * NTILE for specified expression.
-   * NTILE allows easy calculation of tertiles, quartiles, deciles and other
-   * common summary statistics. This function divides an ordered partition into a specified
-   * number of groups called buckets and assigns a bucket number to each row in the partition.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def ntile(e: Column): Column = {
-    UnresolvedWindowFunction("ntile", e.expr :: Nil)
-  }
-
-  /**
-   * NTILE for specified column.
-   * NTILE allows easy calculation of tertiles, quartiles, deciles and other
-   * common summary statistics. This function divides an ordered partition into a specified
-   * number of groups called buckets and assigns a bucket number to each row in the partition.
-   *
-   * @group window_funcs
-   * @since 1.4.0
-   */
-  def ntile(columnName: String): Column = {
-    ntile(Column(columnName))
-  }
-
-  /**
-   * Assigns a unique number (sequentially, starting from 1, as defined by ORDER BY) to each
-   * row within the partition.
+   * This is equivalent to the ROW_NUMBER function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
@@ -497,10 +464,14 @@ object functions {
   }
 
   /**
-   * The difference between RANK and DENSE_RANK is that DENSE_RANK leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using DENSE_RANK
+   * Window function: returns the rank of rows within a window partition, without any gaps.
+   *
+   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using denseRank
    * and had three people tie for second place, you would say that all three were in second
    * place and that the next person came in third.
+   *
+   * This is equivalent to the DENSE_RANK function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
@@ -510,10 +481,14 @@ object functions {
   }
 
   /**
-   * The difference between RANK and DENSE_RANK is that DENSE_RANK leaves no gaps in ranking
-   * sequence when there are ties. That is, if you were ranking a competition using DENSE_RANK
+   * Window function: returns the rank of rows within a window partition.
+   *
+   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using denseRank
    * and had three people tie for second place, you would say that all three were in second
    * place and that the next person came in third.
+   *
+   * This is equivalent to the RANK function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
@@ -523,10 +498,16 @@ object functions {
   }
 
   /**
-   * CUME_DIST (defined as the inverse of percentile in some statistical books) computes
-   * the position of a specified value relative to a set of values.
-   * To compute the CUME_DIST of a value x in a set S of size N, you use the formula:
-   * CUME_DIST(x) = number of values in S coming before and including x in the specified order / N
+   * Window function: returns the cumulative distribution of values within a window partition,
+   * i.e. the fraction of rows that are below the current row.
+   *
+   * {{{
+   *   N = total number of rows in the partition
+   *   cumeDist(x) = number of values before (and including) x / N
+   * }}}
+   *
+   *
+   * This is equivalent to the CUME_DIST function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0
@@ -536,10 +517,14 @@ object functions {
   }
 
   /**
-   * PERCENT_RANK is similar to CUME_DIST, but it uses rank values rather than row counts
-   * in its numerator.
-   * The formula:
-   * (rank of row in its partition - 1) / (number of rows in the partition - 1)
+   * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+   *
+   * This is computed by:
+   * {{{
+   *   (rank of row in its partition - 1) / (number of rows in the partition - 1)
+   * }}}
+   *
+   * This is equivalent to the PERCENT_RANK function in SQL.
    *
    * @group window_funcs
    * @since 1.4.0

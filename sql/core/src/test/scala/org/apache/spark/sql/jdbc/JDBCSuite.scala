@@ -21,14 +21,15 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
-import org.scalatest.{FunSuite, BeforeAndAfter}
+import org.scalatest.BeforeAndAfter
 import TestSQLContext._
 import TestSQLContext.implicits._
 
-class JDBCSuite extends FunSuite with BeforeAndAfter {
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
@@ -429,8 +430,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0,"",1,null) == Some(LongType))
-    assert(agg.getCatalystType(1,"",1,null) == Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, null) == Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null) == Some(StringType))
   }
 
 }

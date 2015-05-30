@@ -262,7 +262,7 @@ class StreamingContext private[streaming] (
    *
    * Note: Return statements are NOT allowed in the given body.
    */
-  private def withNamedScope[U](name: String)(body: => U): U = {
+  private[streaming] def withNamedScope[U](name: String)(body: => U): U = {
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
@@ -461,7 +461,7 @@ class StreamingContext private[streaming] (
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
-      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
+      directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
       require(bytes.length == recordLength, "Byte array does not have correct length. " +

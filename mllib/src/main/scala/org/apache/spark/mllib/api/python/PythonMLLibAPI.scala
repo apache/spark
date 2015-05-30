@@ -392,7 +392,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       wt: Vector,
       mu: Array[Object],
-      si: Array[Object]):  RDD[Vector]  = {
+      si: Array[Object]): RDD[Vector] = {
 
       val weight = wt.toArray
       val mean = mu.map(_.asInstanceOf[DenseVector])
@@ -428,7 +428,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -459,7 +459,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -1242,7 +1242,7 @@ private[spark] object SerDe extends Serializable {
   }
 
   /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
-  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]]  = {
+  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]] = {
     rdd.map(x => Array(x._1, x._2))
   }
 

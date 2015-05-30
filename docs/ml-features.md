@@ -789,6 +789,180 @@ scaledData = scalerModel.transform(dataFrame)
 </div>
 </div>
 
+## Bucketizer
+
+`Bucketizer` transforms a column of continuous features to a column of feature buckets, where the buckets are specified by users. It takes a parameter:
+
+* `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
+
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+
+Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
+
+More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+
+The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.ml.feature.Bucketizer
+import org.apache.spark.sql.DataFrame
+
+val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
+
+val data = Array(-0.5, -0.3, 0.0, 0.2)
+val dataFrame = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+
+val bucketizer = new Bucketizer()
+  .setInputCol("features")
+  .setOutputCol("bucketedFeatures")
+  .setSplits(splits)
+
+// Transform original data into its bucket index.
+val bucketedData = bucketizer.transform(dataFrame)
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
+
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(-0.5),
+  RowFactory.create(-0.3),
+  RowFactory.create(0.0),
+  RowFactory.create(0.2)
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
+});
+DataFrame dataFrame = jsql.createDataFrame(data, schema);
+
+Bucketizer bucketizer = new Bucketizer()
+  .setInputCol("features")
+  .setOutputCol("bucketedFeatures")
+  .setSplits(splits);
+
+// Transform original data into its bucket index.
+DataFrame bucketedData = bucketizer.transform(dataFrame);
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.ml.feature import Bucketizer
+
+splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]
+
+data = [(-0.5,), (-0.3,), (0.0,), (0.2,)]
+dataFrame = sqlContext.createDataFrame(data, ["features"])
+
+bucketizer = Bucketizer(splits=splits, inputCol="features", outputCol="bucketedFeatures")
+
+# Transform original data into its bucket index.
+bucketedData = bucketizer.transform(dataFrame)
+{% endhighlight %}
+</div>
+</div>
+
+## ElementwiseProduct
+
+ElementwiseProduct multiplies each input vector by a provided "weight" vector, using element-wise multiplication. In other words, it scales each column of the dataset by a scalar multiplier.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
+
+`\[ \begin{pmatrix}
+v_1 \\
+\vdots \\
+v_N
+\end{pmatrix} \circ \begin{pmatrix}
+                    w_1 \\
+                    \vdots \\
+                    w_N
+                    \end{pmatrix}
+= \begin{pmatrix}
+  v_1 w_1 \\
+  \vdots \\
+  v_N w_N
+  \end{pmatrix}
+\]`
+
+[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct) takes the following parameter:
+
+* `scalingVec`: the transforming vector.
+
+This example below demonstrates how to transform vectors using a transforming vector value.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.ml.feature.ElementwiseProduct
+import org.apache.spark.mllib.linalg.Vectors
+
+// Create some vector data; also works for sparse vectors
+val dataFrame = sqlContext.createDataFrame(Seq(
+  ("a", Vectors.dense(1.0, 2.0, 3.0)),
+  ("b", Vectors.dense(4.0, 5.0, 6.0)))).toDF("id", "vector")
+
+val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
+val transformer = new ElementwiseProduct()
+  .setScalingVec(transformingVector)
+  .setInputCol("vector")
+  .setOutputCol("transformedVector")
+
+// Batch transform the vectors to create new column:
+val transformedData = transformer.transform(dataFrame)
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.ElementwiseProduct;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+// Create some vector data; also works for sparse vectors
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
+  RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
+));
+List<StructField> fields = new ArrayList<StructField>(2);
+fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
+fields.add(DataTypes.createStructField("vector", DataTypes.StringType, false));
+StructType schema = DataTypes.createStructType(fields);
+DataFrame dataFrame = sqlContext.createDataFrame(jrdd, schema);
+Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
+ElementwiseProduct transformer = new ElementwiseProduct()
+  .setScalingVec(transformingVector)
+  .setInputCol("vector")
+  .setOutputCol("transformedVector");
+// Batch transform the vectors to create new column:
+DataFrame transformedData = transformer.transform(dataFrame);
+
+{% endhighlight %}
+</div>
+</div>
 
 # Feature Selectors
 

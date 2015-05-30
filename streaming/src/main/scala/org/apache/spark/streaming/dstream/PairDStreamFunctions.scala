@@ -32,7 +32,7 @@ import org.apache.spark.streaming.StreamingContext.rddToFileName
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.
  */
-class PairDStreamFunctions[K, V](self: DStream[(K,V)])
+class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
   extends Serializable
 {

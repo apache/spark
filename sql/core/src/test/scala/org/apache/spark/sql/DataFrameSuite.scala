@@ -59,7 +59,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("rename nested groupby") {
-    val df = Seq((1,(1,1))).toDF()
+    val df = Seq((1, (1, 1))).toDF()
 
     checkAnswer(
       df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
@@ -211,23 +211,23 @@ class DataFrameSuite extends QueryTest {
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
-      Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
 
     checkAnswer(
       testData2.orderBy(asc("a"), desc("b")),
-      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+      Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
-      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+      Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.desc),
-      Seq(Row(3,2), Row(3,1), Row(2,2), Row(2,1), Row(1,2), Row(1,1)))
+      Seq(Row(3, 2), Row(3, 1), Row(2, 2), Row(2, 1), Row(1, 2), Row(1, 1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.asc),
-      Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
+      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
       arrayData.toDF().orderBy('data.getItem(0).asc),
@@ -331,7 +331,7 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       df,
       testData.collect().toSeq)
-    assert(df.schema.map(_.name) === Seq("key","value"))
+    assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
   test("withColumnRenamed") {
@@ -364,24 +364,24 @@ class DataFrameSuite extends QueryTest {
 
   test("describe") {
     val describeTestData = Seq(
-      ("Bob",   16, 176),
+      ("Bob", 16, 176),
       ("Alice", 32, 164),
       ("David", 60, 192),
-      ("Amy",   24, 180)).toDF("name", "age", "height")
+      ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   "4",               "4"),
-      Row("mean",    "33.0",            "178.0"),
-      Row("stddev",  "16.583123951777", "10.0"),
-      Row("min",     "16",              "164"),
-      Row("max",     "60",              "192"))
+      Row("count", "4", "4"),
+      Row("mean", "33.0", "178.0"),
+      Row("stddev", "16.583123951777", "10.0"),
+      Row("min", "16", "164"),
+      Row("max", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count",   "0",  "0"),
-      Row("mean",    null, null),
-      Row("stddev",  null, null),
-      Row("min",     null, null),
-      Row("max",     null, null))
+      Row("count", "0", "0"),
+      Row("mean", null, null),
+      Row("stddev", null, null),
+      Row("min", null, null),
+      Row("max", null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 

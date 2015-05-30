@@ -56,7 +56,7 @@ private[spark] case class PythonUDF(
 
   def nullable: Boolean = true
 
-  override def eval(input: Row): PythonUDF.this.EvaluatedType = {
+  override def eval(input: Row): Any = {
     sys.error("PythonUDFs can not be directly evaluated.")
   }
 }

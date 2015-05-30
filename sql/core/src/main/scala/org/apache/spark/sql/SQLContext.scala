@@ -27,8 +27,6 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import com.google.common.reflect.TypeToken
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -300,7 +298,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args :_*))
+        new ColumnName(sc.s(args : _*))
       }
     }
 
@@ -392,7 +390,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
     DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
@@ -1011,7 +1009,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
+    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }

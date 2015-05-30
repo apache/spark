@@ -19,14 +19,13 @@ package org.apache.spark
 
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, isA}
-import org.scalatest.FunSuite
 
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 
-class MapOutputTrackerSuite extends FunSuite {
+class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,

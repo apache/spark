@@ -21,9 +21,11 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.math3.distribution.PoissonDistribution
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
-class RandomSamplerSuite extends FunSuite with Matchers {
+import org.apache.spark.SparkFunSuite
+
+class RandomSamplerSuite extends SparkFunSuite with Matchers {
   /**
    * My statistical testing methodology is to run a Kolmogorov-Smirnov (KS) test
    * between the random samplers and simple reference samplers (known to work correctly).

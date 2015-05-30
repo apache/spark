@@ -21,7 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -68,7 +68,7 @@ class MyRDD(
 class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite
-  extends FunSuiteLike with BeforeAndAfter with LocalSparkContext with Timeouts {
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -318,7 +318,7 @@ class DAGSchedulerSuite
   }
 
   test("cache location preferences w/ dependency") {
-    val baseRdd = new MyRDD(sc, 1, Nil)
+    val baseRdd = new MyRDD(sc, 1, Nil).cache()
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     cacheLocations(baseRdd.id -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
@@ -331,7 +331,7 @@ class DAGSchedulerSuite
   }
 
   test("regression test for getCacheLocs") {
-    val rdd = new MyRDD(sc, 3, Nil)
+    val rdd = new MyRDD(sc, 3, Nil).cache()
     cacheLocations(rdd.id -> 0) =
       Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
     cacheLocations(rdd.id -> 1) =
@@ -342,13 +342,40 @@ class DAGSchedulerSuite
     assert(locs === Seq(Seq("hostA", "hostB"), Seq("hostB", "hostC"), Seq("hostC", "hostD")))
   }
 
+  /**
+   * This test ensures that if a particular RDD is cached, RDDs earlier in the dependency chain
+   * are not computed. It constructs the following chain of dependencies:
+   * +---+ shuffle +---+    +---+    +---+
+   * | A |<--------| B |<---| C |<---| D |
+   * +---+         +---+    +---+    +---+
+   * Here, B is derived from A by performing a shuffle, C has a one-to-one dependency on B,
+   * and D similarly has a one-to-one dependency on C. If none of the RDDs were cached, this
+   * set of RDDs would result in a two stage job: one ShuffleMapStage, and a ResultStage that
+   * reads the shuffled data from RDD A. This test ensures that if C is cached, the scheduler
+   * doesn't perform a shuffle, and instead computes the result using a single ResultStage
+   * that reads C's cached data.
+   */
+  test("getMissingParentStages should consider all ancestor RDDs' cache statuses") {
+    val rddA = new MyRDD(sc, 1, Nil)
+    val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, null)))
+    val rddC = new MyRDD(sc, 1, List(new OneToOneDependency(rddB))).cache()
+    val rddD = new MyRDD(sc, 1, List(new OneToOneDependency(rddC)))
+    cacheLocations(rddC.id -> 0) =
+      Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
+    submit(rddD, Array(0))
+    assert(scheduler.runningStages.size === 1)
+    // Make sure that the scheduler is running the final result stage.
+    // Because C is cached, the shuffle map stage to compute A does not need to be run.
+    assert(scheduler.runningStages.head.isInstanceOf[ResultStage])
+  }
+
   test("avoid exponential blowup when getting preferred locs list") {
     // Build up a complex dependency graph with repeated zip operations, without preferred locations
     var rdd: RDD[_] = new MyRDD(sc, 1, Nil)
     (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
     // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
     failAfter(10 seconds) {
-      val preferredLocs = scheduler.getPreferredLocs(rdd,0)
+      val preferredLocs = scheduler.getPreferredLocs(rdd, 0)
       // No preferred locations are returned.
       assert(preferredLocs.length === 0)
     }
@@ -607,8 +634,8 @@ class DAGSchedulerSuite
     val listener1 = new FailureRecordingJobListener()
     val listener2 = new FailureRecordingJobListener()
 
-    submit(reduceRdd1, Array(0, 1), listener=listener1)
-    submit(reduceRdd2, Array(0, 1), listener=listener2)
+    submit(reduceRdd1, Array(0, 1), listener = listener1)
+    submit(reduceRdd2, Array(0, 1), listener = listener2)
 
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
@@ -678,9 +705,9 @@ class DAGSchedulerSuite
   }
 
   test("cached post-shuffle") {
-    val shuffleOneRdd = new MyRDD(sc, 2, Nil)
+    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
     val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
     submit(finalRdd, Array(0))

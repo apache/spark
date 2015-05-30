@@ -25,10 +25,9 @@ import org.apache.spark.sql.types._
  * input format, therefore these functions extend `ExpectsInputTypes`.
  * @param name The short name of the function
  */
-abstract class MathematicalExpression(f: Double => Double, name: String)
+abstract class UnaryMathExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with ExpectsInputTypes {
   self: Product =>
-  type EvaluatedType = Any
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -47,46 +46,44 @@ abstract class MathematicalExpression(f: Double => Double, name: String)
   }
 }
 
-case class Acos(child: Expression) extends MathematicalExpression(math.acos, "ACOS")
+case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
-case class Asin(child: Expression) extends MathematicalExpression(math.asin, "ASIN")
+case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
-case class Atan(child: Expression) extends MathematicalExpression(math.atan, "ATAN")
+case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
-case class Cbrt(child: Expression) extends MathematicalExpression(math.cbrt, "CBRT")
+case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
-case class Ceil(child: Expression) extends MathematicalExpression(math.ceil, "CEIL")
+case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL")
 
-case class Cos(child: Expression) extends MathematicalExpression(math.cos, "COS")
+case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
-case class Cosh(child: Expression) extends MathematicalExpression(math.cosh, "COSH")
+case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
-case class Exp(child: Expression) extends MathematicalExpression(math.exp, "EXP")
+case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
-case class Expm1(child: Expression) extends MathematicalExpression(math.expm1, "EXPM1")
+case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
-case class Floor(child: Expression) extends MathematicalExpression(math.floor, "FLOOR")
+case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
 
-case class Log(child: Expression) extends MathematicalExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 
-case class Log10(child: Expression) extends MathematicalExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends MathematicalExpression(math.log1p, "LOG1P")
+case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
 
-case class Rint(child: Expression) extends MathematicalExpression(math.rint, "ROUND")
+case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND")
 
-case class Signum(child: Expression) extends MathematicalExpression(math.signum, "SIGNUM")
+case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
-case class Sin(child: Expression) extends MathematicalExpression(math.sin, "SIN")
+case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
-case class Sinh(child: Expression) extends MathematicalExpression(math.sinh, "SINH")
+case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
-case class Tan(child: Expression) extends MathematicalExpression(math.tan, "TAN")
+case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
-case class Tanh(child: Expression) extends MathematicalExpression(math.tanh, "TANH")
+case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
-case class ToDegrees(child: Expression) 
-  extends MathematicalExpression(math.toDegrees, "DEGREES")
+case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES")
 
-case class ToRadians(child: Expression) 
-  extends MathematicalExpression(math.toRadians, "RADIANS")
+case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS")

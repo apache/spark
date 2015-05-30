@@ -101,7 +101,7 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
 
 
   @Path("applications/{appId}/stages")
-  def getStages(@PathParam("appId") appId: String): AllStagesResource= {
+  def getStages(@PathParam("appId") appId: String): AllStagesResource = {
     uiRoot.withSparkUI(appId, None) { ui =>
       new AllStagesResource(ui)
     }
@@ -110,14 +110,14 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   @Path("applications/{appId}/{attemptId}/stages")
   def getStages(
       @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllStagesResource= {
+      @PathParam("attemptId") attemptId: String): AllStagesResource = {
     uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
       new AllStagesResource(ui)
     }
   }
 
   @Path("applications/{appId}/stages/{stageId: \\d+}")
-  def getStage(@PathParam("appId") appId: String): OneStageResource= {
+  def getStage(@PathParam("appId") appId: String): OneStageResource = {
     uiRoot.withSparkUI(appId, None) { ui =>
       new OneStageResource(ui)
     }
@@ -171,7 +171,7 @@ private[spark] object ApiRootResource {
   def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
-    val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
+    val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
       "com.sun.jersey.api.core.PackagesResourceConfig")
     holder.setInitParameter("com.sun.jersey.config.property.packages",

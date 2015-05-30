@@ -124,7 +124,7 @@ private[sql] object InferSchema {
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
           case ArrayType(struct: StructType, containsNull) =>
             ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
+          case struct: StructType => nullTypeToStringType(struct)
           case other: DataType => other
         }
 

@@ -208,7 +208,7 @@ object KinesisWordProducerASL {
       recordsPerSecond: Int,
       wordsPerRecord: Int): Seq[(String, Int)] = {
 
-    val randomWords = List("spark","you","are","my","father")
+    val randomWords = List("spark", "you", "are", "my", "father")
     val totals = scala.collection.mutable.Map[String, Int]()
   
     // Create the low-level Kinesis Client from the AWS Java SDK.

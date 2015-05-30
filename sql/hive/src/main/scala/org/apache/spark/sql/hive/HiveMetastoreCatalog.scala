@@ -516,17 +516,19 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
       : LogicalPlan = {
       val childOutputDataTypes = child.output.map(_.dataType)
+      val numDynamicPartitions = p.partition.values.count(_.isEmpty)
       val tableOutputDataTypes =
-        (table.attributes ++ table.partitionKeys).take(child.output.length).map(_.dataType)
+        (table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions))
+          .take(child.output.length).map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
-        p
+        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
         childOutputDataTypes.zip(tableOutputDataTypes)
           .forall { case (left, right) => left.sameType(right) }) {
         // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
         // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite, p.ifNotExists)
+        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
       } else {
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
@@ -544,13 +546,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = ???
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   override def unregisterAllTables(): Unit = {}
 }
@@ -561,7 +567,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
  * because Hive table doesn't have nullability for ARRAY, MAP, STRUCT types.
  */
 private[hive] case class InsertIntoHiveTable(
-    table: LogicalPlan,
+    table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
     overwrite: Boolean,
@@ -571,7 +577,13 @@ private[hive] case class InsertIntoHiveTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = child.output
 
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
+  val numDynamicPartitions = partition.values.count(_.isEmpty)
+
+  // This is the expected schema of the table prepared to be inserted into,
+  // including dynamic partition columns.
+  val tableOutput = table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions)
+
+  override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }
@@ -699,25 +711,25 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: FieldSchema) {
+  implicit class SchemaAttribute(f: HiveColumn) {
     def toAttribute: AttributeReference = AttributeReference(
-      f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      f.name,
+      HiveMetastoreTypes.toDataType(f.hiveType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
-  // Must be a stable value since new attributes are born here.
-  val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
+  /** PartitionKey attributes */
+  val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute)
+  val attributes = table.schema.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o,o)))
+  val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)

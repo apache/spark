@@ -25,14 +25,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.Utils
 
-class RDDSuite extends FunSuite with SharedSparkContext {
+class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("basic operations") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
@@ -338,10 +336,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("coalesced RDDs with locality") {
-    val data3 = sc.makeRDD(List((1,List("a","c")), (2,List("a","b","c")), (3,List("b"))))
+    val data3 = sc.makeRDD(List((1, List("a", "c")), (2, List("a", "b", "c")), (3, List("b"))))
     val coal3 = data3.coalesce(3)
     val list3 = coal3.partitions.flatMap(_.asInstanceOf[CoalescedRDDPartition].preferredLocation)
-    assert(list3.sorted === Array("a","b","c"), "Locality preferences are dropped")
+    assert(list3.sorted === Array("a", "b", "c"), "Locality preferences are dropped")
 
     // RDD with locality preferences spread (non-randomly) over 6 machines, m0 through m5
     val data = sc.makeRDD((1 to 9).map(i => (i, (i to (i + 2)).map{ j => "m" + (j%6)})))
@@ -591,8 +589,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sc.emptyRDD.isEmpty())
     assert(sc.parallelize(Seq[Int]()).isEmpty())
     assert(!sc.parallelize(Seq(1)).isEmpty())
-    assert(sc.parallelize(Seq(1,2,3), 3).filter(_ < 0).isEmpty())
-    assert(!sc.parallelize(Seq(1,2,3), 3).filter(_ > 1).isEmpty())
+    assert(sc.parallelize(Seq(1, 2, 3), 3).filter(_ < 0).isEmpty())
+    assert(!sc.parallelize(Seq(1, 2, 3), 3).filter(_ > 1).isEmpty())
   }
 
   test("sample preserves partitioner") {
@@ -609,49 +607,49 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val data = sc.parallelize(1 to n, 2)
 
     for (num <- List(5, 20, 100)) {
-      val sample = data.takeSample(withReplacement=false, num=num)
+      val sample = data.takeSample(withReplacement = false, num = num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=false, 20, seed)
+      val sample = data.takeSample(withReplacement = false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size === 20)  // Elements are distinct
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=false, 100, seed)
+      val sample = data.takeSample(withReplacement = false, 100, seed)
       assert(sample.size === 100)        // Got only 100 elements
       assert(sample.toSet.size === 100)  // Elements are distinct
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 20, seed)
+      val sample = data.takeSample(withReplacement = true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
-      val sample = data.takeSample(withReplacement=true, num=20)
+      val sample = data.takeSample(withReplacement = true, num = 20)
       assert(sample.size === 20)        // Got exactly 100 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
-      val sample = data.takeSample(withReplacement=true, num=n)
+      val sample = data.takeSample(withReplacement = true, num = n)
       assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, n, seed)
+      val sample = data.takeSample(withReplacement = true, n, seed)
       assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      val sample = data.takeSample(withReplacement = true, 2 * n, seed)
       assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
@@ -691,7 +689,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("sortByKey") {
-    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+    val data = sc.parallelize(Seq("5|50|A", "4|60|C", "6|40|B"))
 
     val col1 = Array("4|60|C", "5|50|A", "6|40|B")
     val col2 = Array("6|40|B", "5|50|A", "4|60|C")
@@ -703,7 +701,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("sortByKey ascending parameter") {
-    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+    val data = sc.parallelize(Seq("5|50|A", "4|60|C", "6|40|B"))
 
     val asc = Array("4|60|C", "5|50|A", "6|40|B")
     val desc = Array("6|40|B", "5|50|A", "4|60|C")
@@ -764,9 +762,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("intersection strips duplicates in an input") {
-    val a = sc.parallelize(Seq(1,2,3,3))
-    val b = sc.parallelize(Seq(1,1,2,3))
-    val intersection = Array(1,2,3)
+    val a = sc.parallelize(Seq(1, 2, 3, 3))
+    val b = sc.parallelize(Seq(1, 1, 2, 3))
+    val intersection = Array(1, 2, 3)
 
     assert(a.intersection(b).collect().sorted === intersection)
     assert(b.intersection(a).collect().sorted === intersection)

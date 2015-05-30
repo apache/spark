@@ -105,10 +105,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: HadoopFsRelation), part, query, overwrite, false) if part.isEmpty =>
+      l @ LogicalRelation(t: HadoopFsRelation), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      execution.ExecutedCommand(
-        InsertIntoHadoopFsRelation(t, query, Array.empty[String], mode)) :: Nil
+      execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
     case _ => Nil
   }
@@ -310,7 +309,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       output: Seq[Attribute],
       rdd: RDD[Row]): SparkPlan = {
     val converted = if (relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
       rdd
     }
