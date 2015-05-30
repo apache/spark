@@ -825,11 +825,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    *
-   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   * @param maxPartitions A suggestion value of the maximal splitting number for input data.
    */
   def wholeTextFiles(
       path: String,
-      minPartitions: Int = defaultMinPartitions): RDD[(String, String)] = withScope {
+      maxPartitions: Int = defaultMinPartitions): RDD[(String, String)] = withScope {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
@@ -842,7 +842,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[String],
       classOf[String],
       updateConf,
-      minPartitions).setName(path)
+      maxPartitions).setName(path)
   }
 
 
@@ -871,14 +871,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   * @param maxPartitions A suggestion value of the maximal splitting number for input data.
    *
    * @note Small files are preferred; very large files may cause bad performance.
    */
   @Experimental
   def binaryFiles(
       path: String,
-      minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
+      maxPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
     assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
@@ -891,7 +891,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[String],
       classOf[PortableDataStream],
       updateConf,
-      minPartitions).setName(path)
+      maxPartitions).setName(path)
   }
 
   /**

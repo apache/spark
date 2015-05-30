@@ -51,13 +51,13 @@ private[spark] class WholeTextFileInputFormat
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API,
    * which is set through setMaxSplitSize
    */
-  def setMinPartitions(context: JobContext, minPartitions: Int) {
+  def setMaxPartitions(context: JobContext, maxPartitions: Int) {
     val files = listStatus(context)
     val totalLen = files.map { file =>
       if (file.isDir) 0L else file.getLen
     }.sum
     val maxSplitSize = Math.ceil(totalLen * 1.0 /
-      (if (minPartitions == 0) 1 else minPartitions)).toLong
+      (if (maxPartitions == 0) 1 else maxPartitions)).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 }

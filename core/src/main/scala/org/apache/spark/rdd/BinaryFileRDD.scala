@@ -29,7 +29,7 @@ private[spark] class BinaryFileRDD[T](
     keyClass: Class[String],
     valueClass: Class[T],
     @transient conf: Configuration,
-    minPartitions: Int)
+    maxPartitions: Int)
   extends NewHadoopRDD[String, T](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
@@ -40,7 +40,7 @@ private[spark] class BinaryFileRDD[T](
       case _ =>
     }
     val jobContext = newJobContext(conf, jobId)
-    inputFormat.setMinPartitions(jobContext, minPartitions)
+    inputFormat.setMaxPartitions(jobContext, maxPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
