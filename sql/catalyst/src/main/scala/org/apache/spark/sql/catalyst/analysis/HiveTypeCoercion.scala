@@ -488,9 +488,9 @@ trait HiveTypeCoercion {
     val trueValue = Literal(new java.math.BigDecimal(1))
     val falseValue = Literal(new java.math.BigDecimal(0))
 
-    def isNull(expr: Expression) = EqualNullSafe(expr, Literal.create(null, expr.dataType))
+    private def isNull(expr: Expression) = EqualNullSafe(expr, Literal.create(null, expr.dataType))
 
-    def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
+    private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
       CaseKeyWhen(Cast(numericExpr, DecimalType.Unlimited),
         Seq(
           trueValue, booleanExpr,
@@ -498,7 +498,7 @@ trait HiveTypeCoercion {
           Literal(false)))
     }
 
-    def transform(booleanExpr: Expression, numericExpr: Expression) = {
+    private def transform(booleanExpr: Expression, numericExpr: Expression) = {
       CaseWhen(Seq(
         isNull(booleanExpr), Literal.create(null, BooleanType),
         isNull(numericExpr), Literal.create(null, BooleanType),
@@ -506,7 +506,7 @@ trait HiveTypeCoercion {
       ))
     }
 
-    def transformNullSafe(booleanExpr: Expression, numericExpr: Expression) = {
+    private def transformNullSafe(booleanExpr: Expression, numericExpr: Expression) = {
       CaseWhen(Seq(
         And(isNull(booleanExpr), isNull(numericExpr)), Literal(true),
         isNull(booleanExpr), Literal(false),
