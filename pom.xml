@@ -1226,7 +1226,16 @@
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
             <fork>true</fork>
+            <compilerId>javac-with-errorprone</compilerId>
+            <forceJavacCompilerUse>true</forceJavacCompilerUse>
           </configuration>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.plexus</groupId>
+              <artifactId>plexus-compiler-javac-errorprone</artifactId>
+              <version>2.5</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <!-- Surefire runs all Java tests -->
         <plugin>
