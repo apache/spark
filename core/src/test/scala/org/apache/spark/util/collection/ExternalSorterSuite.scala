@@ -19,11 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.PrivateMethodTester
-
 import scala.util.Random
-
-import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
