@@ -52,7 +52,7 @@
  </check>
  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
- <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="false"></check>
+ <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
   <parameters>
    <parameter name="maxLineLength"><![CDATA[100]]></parameter>
@@ -159,5 +159,13 @@
     <parameter name="regex">^FunSuite[A-Za-z]*$</parameter>
    </parameters>
    <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
+  </check>
+
+  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+    <parameters><parameter name="regex">^println$</parameter></parameters>
+    <customMessage><![CDATA[Are you sure you want to println? If yes, wrap the code block with
+      // scalastyle:off println
+      println(...)
+      // scalastyle:on println]]></customMessage>
   </check>
 </scalastyle>
