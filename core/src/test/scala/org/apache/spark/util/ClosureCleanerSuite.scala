@@ -203,7 +203,7 @@ object TestObjectWithNestedReturns {
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
-      nums.map {x => 
+      nums.map {x =>
         // this return is fine since it will not transfer control outside the closure
         def foo(): Int = { return 5; 1 }
         foo()

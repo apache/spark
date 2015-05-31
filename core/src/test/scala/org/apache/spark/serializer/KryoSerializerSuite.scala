@@ -63,7 +63,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     assert(thrown3.getMessage.contains(kryoBufferProperty))
     assert(!thrown3.getMessage.contains(kryoBufferMaxProperty))
   }
-  
+
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {

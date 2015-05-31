@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 /* A trivial (but unserializable) container for trivial functions */
 class UnserializableClass {
   def op[T](x: T): String = x.toString
-  
+
   def pred[T](x: T): Boolean = x.toString.length % 2 == 0
 }
 
@@ -47,7 +47,7 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
   // iterating over a map from transformation names to functions that perform that
   // transformation on a given RDD, creating one test case for each
 
-  for (transformation <- 
+  for (transformation <-
       Map("map" -> xmap _,
           "flatMap" -> xflatMap _,
           "filter" -> xfilter _,
@@ -60,24 +60,24 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
       val ex = intercept[SparkException] {
         xf(data, uc)
       }
-      assert(ex.getMessage.contains("Task not serializable"), 
+      assert(ex.getMessage.contains("Task not serializable"),
         s"RDD.$name doesn't proactively throw NotSerializableException")
     }
   }
 
-  private def xmap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  private def xmap(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.map(y => uc.op(y))
 
-  private def xflatMap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  private def xflatMap(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.flatMap(y => Seq(uc.op(y)))
 
-  private def xfilter(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  private def xfilter(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.filter(y => uc.pred(y))
 
-  private def xmapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  private def xmapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.mapPartitions(_.map(y => uc.op(y)))
 
-  private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.mapPartitionsWithIndex((_, it) => it.map(y => uc.op(y)))
-  
+
 }

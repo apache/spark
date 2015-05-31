@@ -29,11 +29,11 @@ class MemoryUtilsSuite extends FunSuite with MockitoSugar {
 
     val sc = mock[SparkContext]
     when(sc.conf).thenReturn(sparkConf)
-    
+
     // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(sc.executorMemory).thenReturn(512)
     assert(MemoryUtils.calculateTotalMemory(sc) === 896)
-    
+
     // 384 < sc.executorMemory * 0.1 => 4096 + (4096 * 0.1) = 4505.6
     when(sc.executorMemory).thenReturn(4096)
     assert(MemoryUtils.calculateTotalMemory(sc) === 4505)

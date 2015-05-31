@@ -76,7 +76,7 @@ class RandomSamplerSuite extends FunSuite with Matchers {
   }
 
   // Returns iterator over gap lengths between samples.
-  // This function assumes input data is integers sampled from the sequence of 
+  // This function assumes input data is integers sampled from the sequence of
   // increasing integers: {0, 1, 2, ...}.  This works because that is how I generate them,
   // and the samplers preserve their input order
   def gaps(data: Iterator[Int]): Iterator[Int] = {
