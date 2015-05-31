@@ -233,7 +233,7 @@ object CatalystTypeConverters {
     case other => other
   }
 
-  /** 
+  /**
    * Converts Catalyst types used internally in rows to standard Scala types
    * This method is slow, and for batch conversion you should be using converter
    * produced by createToScalaConverter.

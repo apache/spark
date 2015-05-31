@@ -1209,7 +1209,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   /**
-   * Used for testing math functions for DataFrames. 
+   * Used for testing math functions for DataFrames.
    * @param c The DataFrame function
    * @param f The functions in scala.math
    * @param domain The set of values to run the function with
@@ -1217,7 +1217,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
    * @tparam T Generic type for primitives
    */
   def unaryMathFunctionEvaluation[@specialized(Int, Double, Float, Long) T](
-      c: Expression => Expression, 
+      c: Expression => Expression,
       f: T => T,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
       expectNull: Boolean = false): Unit = {
