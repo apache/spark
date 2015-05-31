@@ -165,7 +165,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
     ruleTest(be,
       EqualNullSafe(Literal(true), Literal(0)),
-      Or(IsNull(Literal(true)), Literal(true))
+      And(IsNotNull(Literal(true)), Not(Literal(true)))
     )
   }
 }
