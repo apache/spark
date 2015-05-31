@@ -100,7 +100,7 @@ class DataTypeTests(unittest.TestCase):
         lt2 = pickle.loads(pickle.dumps(LongType()))
         self.assertEquals(lt, lt2)
 
-    # regression test for SPARK-
+    # regression test for SPARK-7978
     def test_decimal_type(self):
         t1 = DecimalType()
         t2 = DecimalType(10, 2)
