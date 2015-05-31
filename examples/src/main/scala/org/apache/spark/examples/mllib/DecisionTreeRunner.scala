@@ -354,7 +354,7 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    *
-   * This is just for demo purpose. In general, don't copy this code because it is no very efficient
+   * This is just for demo purpose. In general, don't copy this code because it is NOT efficient
    * due to the use of structural types, which leads to one reflection call per record.
    */
   // scalastyle:off structural.type
