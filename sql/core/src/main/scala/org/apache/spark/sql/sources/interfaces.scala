@@ -93,7 +93,7 @@ trait SchemaRelationProvider {
 }
 
 /**
- * ::DeveloperApi::
+ * ::Experimental::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
  * USING clause specified (to specify the implemented [[HadoopFsRelationProvider]]), a user defined
@@ -115,6 +115,7 @@ trait SchemaRelationProvider {
  *
  * @since 1.4.0
  */
+@Experimental
 trait HadoopFsRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
