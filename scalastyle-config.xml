@@ -50,6 +50,9 @@
  */]]></parameter>
   </parameters>
  </check>
+
+  <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
+
  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="false"></check>
