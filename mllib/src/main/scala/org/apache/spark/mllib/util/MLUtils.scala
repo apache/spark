@@ -82,6 +82,8 @@ object MLUtils {
           val value = indexAndValue(1).toDouble
           (index, value)
         }.unzip
+        require(indices.size == 0 || indices(0) >= 0,
+          "indices should be one-based in LIBSVM format")
         (label, indices.toArray, values.toArray)
       }
 
