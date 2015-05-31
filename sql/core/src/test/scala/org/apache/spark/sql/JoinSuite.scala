@@ -167,10 +167,10 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     val y = testData2.where($"a" === 1).as("y")
     checkAnswer(
       x.join(y).where($"x.a" === $"y.a"),
-      Row(1,1,1,1) ::
-      Row(1,1,1,2) ::
-      Row(1,2,1,1) ::
-      Row(1,2,1,2) :: Nil
+      Row(1, 1, 1, 1) ::
+      Row(1, 1, 1, 2) ::
+      Row(1, 2, 1, 1) ::
+      Row(1, 2, 1, 2) :: Nil
     )
   }
 

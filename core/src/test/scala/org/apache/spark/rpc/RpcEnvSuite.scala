@@ -24,15 +24,15 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
 /**
  * Common tests for an RpcEnv implementation.
  */
-abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
+abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
 
@@ -42,7 +42,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    if(env != null) {
+    if (env != null) {
       env.shutdown()
     }
   }
@@ -75,7 +75,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote" ,13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "send-remotely")
     try {
@@ -100,8 +100,8 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     }
     val rpcEndpointRef = env.setupEndpoint("send-ref", endpoint)
 
-    val newRpcEndpointRef = rpcEndpointRef.askWithReply[RpcEndpointRef]("Hello")
-    val reply = newRpcEndpointRef.askWithReply[String]("Echo")
+    val newRpcEndpointRef = rpcEndpointRef.askWithRetry[RpcEndpointRef]("Hello")
+    val reply = newRpcEndpointRef.askWithRetry[String]("Echo")
     assert("Echo" === reply)
   }
 
@@ -115,7 +115,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
         }
       }
     })
-    val reply = rpcEndpointRef.askWithReply[String]("hello")
+    val reply = rpcEndpointRef.askWithRetry[String]("hello")
     assert("hello" === reply)
   }
 
@@ -134,7 +134,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-remotely")
     try {
-      val reply = rpcEndpointRef.askWithReply[String]("hello")
+      val reply = rpcEndpointRef.askWithRetry[String]("hello")
       assert("hello" === reply)
     } finally {
       anotherEnv.shutdown()
@@ -162,7 +162,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
       val e = intercept[Exception] {
-        rpcEndpointRef.askWithReply[String]("hello", 1 millis)
+        rpcEndpointRef.askWithRetry[String]("hello", 1 millis)
       }
       assert(e.isInstanceOf[TimeoutException] || e.getCause.isInstanceOf[TimeoutException])
     } finally {
@@ -338,7 +338,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("call receive in sequence") {
     // If a RpcEnv implementation breaks the `receive` contract, hope this test can expose it
-    for(i <- 0 until 100) {
+    for (i <- 0 until 100) {
       @volatile var result = 0
       val endpointRef = env.setupEndpoint(s"receive-in-sequence-$i", new ThreadSafeRpcEndpoint {
         override val rpcEnv = env
@@ -399,7 +399,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val f = endpointRef.sendWithReply[String]("Hi")
+    val f = endpointRef.ask[String]("Hi")
     val ack = Await.result(f, 5 seconds)
     assert("ack" === ack)
 
@@ -419,7 +419,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "sendWithReply-remotely")
     try {
-      val f = rpcEndpointRef.sendWithReply[String]("hello")
+      val f = rpcEndpointRef.ask[String]("hello")
       val ack = Await.result(f, 5 seconds)
       assert("ack" === ack)
     } finally {
@@ -437,7 +437,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val f = endpointRef.sendWithReply[String]("Hi")
+    val f = endpointRef.ask[String]("Hi")
     val e = intercept[SparkException] {
       Await.result(f, 5 seconds)
     }
@@ -460,7 +460,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-remotely-error")
     try {
-      val f = rpcEndpointRef.sendWithReply[String]("hello")
+      val f = rpcEndpointRef.ask[String]("hello")
       val e = intercept[SparkException] {
         Await.result(f, 5 seconds)
       }
@@ -529,7 +529,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-unserializable-error")
     try {
-      val f = rpcEndpointRef.sendWithReply[String]("hello")
+      val f = rpcEndpointRef.ask[String]("hello")
       intercept[TimeoutException] {
         Await.result(f, 1 seconds)
       }

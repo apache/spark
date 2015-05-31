@@ -160,7 +160,7 @@ class GaussianMixture private (
     var llhp = 0.0            // previous log-likelihood
     
     var iter = 0
-    while(iter < maxIterations && Math.abs(llh-llhp) > convergenceTol) {
+    while (iter < maxIterations && math.abs(llh-llhp) > convergenceTol) {
       // create and broadcast curried cluster contribution function
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
       
@@ -211,7 +211,7 @@ class GaussianMixture private (
 private object ExpectationSum {
   def zero(k: Int, d: Int): ExpectationSum = {
     new ExpectationSum(0.0, Array.fill(k)(0.0), 
-      Array.fill(k)(BDV.zeros(d)), Array.fill(k)(BreezeMatrix.zeros(d,d)))
+      Array.fill(k)(BDV.zeros(d)), Array.fill(k)(BreezeMatrix.zeros(d, d)))
   }
   
   // compute cluster contributions for each input point

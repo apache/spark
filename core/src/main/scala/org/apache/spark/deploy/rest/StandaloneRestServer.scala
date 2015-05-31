@@ -18,26 +18,16 @@
 package org.apache.spark.deploy.rest
 
 import java.io.File
-import java.net.InetSocketAddress
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-
-import scala.io.Source
+import javax.servlet.http.HttpServletResponse
 
 import akka.actor.ActorRef
-import com.fasterxml.jackson.core.JsonProcessingException
-import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
-import org.eclipse.jetty.util.thread.QueuedThreadPool
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
-
-import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
+import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
- * A server that responds to requests submitted by the [[StandaloneRestClient]].
+ * A server that responds to requests submitted by the [[RestSubmissionClient]].
  * This is intended to be embedded in the standalone Master and used in cluster mode only.
  *
  * This server responds with different HTTP codes depending on the situation:
@@ -54,173 +44,31 @@ import org.apache.spark.deploy.ClientArguments._
  *
  * @param host the address this server should bind to
  * @param requestedPort the port this server will attempt to bind to
+ * @param masterConf the conf used by the Master
  * @param masterActor reference to the Master actor to which requests can be sent
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
- * @param masterConf the conf used by the Master
  */
 private[deploy] class StandaloneRestServer(
     host: String,
     requestedPort: Int,
+    masterConf: SparkConf,
     masterActor: ActorRef,
-    masterUrl: String,
-    masterConf: SparkConf)
-  extends Logging {
+    masterUrl: String)
+  extends RestSubmissionServer(host, requestedPort, masterConf) {
 
-  import StandaloneRestServer._
-
-  private var _server: Option[Server] = None
-
-  // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
-  protected val baseContext = s"/$PROTOCOL_VERSION/submissions"
-  protected val contextToServlet = Map[String, StandaloneRestServlet](
-    s"$baseContext/create/*" -> new SubmitRequestServlet(masterActor, masterUrl, masterConf),
-    s"$baseContext/kill/*" -> new KillRequestServlet(masterActor, masterConf),
-    s"$baseContext/status/*" -> new StatusRequestServlet(masterActor, masterConf),
-    "/*" -> new ErrorServlet // default handler
-  )
-
-  /** Start the server and return the bound port. */
-  def start(): Int = {
-    val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
-    _server = Some(server)
-    logInfo(s"Started REST server for submitting applications on port $boundPort")
-    boundPort
-  }
-
-  /**
-   * Map the servlets to their corresponding contexts and attach them to a server.
-   * Return a 2-tuple of the started server and the bound port.
-   */
-  private def doStart(startPort: Int): (Server, Int) = {
-    val server = new Server(new InetSocketAddress(host, startPort))
-    val threadPool = new QueuedThreadPool
-    threadPool.setDaemon(true)
-    server.setThreadPool(threadPool)
-    val mainHandler = new ServletContextHandler
-    mainHandler.setContextPath("/")
-    contextToServlet.foreach { case (prefix, servlet) =>
-      mainHandler.addServlet(new ServletHolder(servlet), prefix)
-    }
-    server.setHandler(mainHandler)
-    server.start()
-    val boundPort = server.getConnectors()(0).getLocalPort
-    (server, boundPort)
-  }
-
-  def stop(): Unit = {
-    _server.foreach(_.stop())
-  }
-}
-
-private[rest] object StandaloneRestServer {
-  val PROTOCOL_VERSION = StandaloneRestClient.PROTOCOL_VERSION
-  val SC_UNKNOWN_PROTOCOL_VERSION = 468
-}
-
-/**
- * An abstract servlet for handling requests passed to the [[StandaloneRestServer]].
- */
-private[rest] abstract class StandaloneRestServlet extends HttpServlet with Logging {
-
-  /**
-   * Serialize the given response message to JSON and send it through the response servlet.
-   * This validates the response before sending it to ensure it is properly constructed.
-   */
-  protected def sendResponse(
-      responseMessage: SubmitRestProtocolResponse,
-      responseServlet: HttpServletResponse): Unit = {
-    val message = validateResponse(responseMessage, responseServlet)
-    responseServlet.setContentType("application/json")
-    responseServlet.setCharacterEncoding("utf-8")
-    responseServlet.getWriter.write(message.toJson)
-  }
-
-  /**
-   * Return any fields in the client request message that the server does not know about.
-   *
-   * The mechanism for this is to reconstruct the JSON on the server side and compare the
-   * diff between this JSON and the one generated on the client side. Any fields that are
-   * only in the client JSON are treated as unexpected.
-   */
-  protected def findUnknownFields(
-      requestJson: String,
-      requestMessage: SubmitRestProtocolMessage): Array[String] = {
-    val clientSideJson = parse(requestJson)
-    val serverSideJson = parse(requestMessage.toJson)
-    val Diff(_, _, unknown) = clientSideJson.diff(serverSideJson)
-    unknown match {
-      case j: JObject => j.obj.map { case (k, _) => k }.toArray
-      case _ => Array.empty[String] // No difference
-    }
-  }
-
-  /** Return a human readable String representation of the exception. */
-  protected def formatException(e: Throwable): String = {
-    val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
-    s"$e\n$stackTraceString"
-  }
-
-  /** Construct an error message to signal the fact that an exception has been thrown. */
-  protected def handleError(message: String): ErrorResponse = {
-    val e = new ErrorResponse
-    e.serverSparkVersion = sparkVersion
-    e.message = message
-    e
-  }
-
-  /**
-   * Parse a submission ID from the relative path, assuming it is the first part of the path.
-   * For instance, we expect the path to take the form /[submission ID]/maybe/something/else.
-   * The returned submission ID cannot be empty. If the path is unexpected, return None.
-   */
-  protected def parseSubmissionId(path: String): Option[String] = {
-    if (path == null || path.isEmpty) {
-      None
-    } else {
-      path.stripPrefix("/").split("/").headOption.filter(_.nonEmpty)
-    }
-  }
-
-  /**
-   * Validate the response to ensure that it is correctly constructed.
-   *
-   * If it is, simply return the message as is. Otherwise, return an error response instead
-   * to propagate the exception back to the client and set the appropriate error code.
-   */
-  private def validateResponse(
-      responseMessage: SubmitRestProtocolResponse,
-      responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
-    try {
-      responseMessage.validate()
-      responseMessage
-    } catch {
-      case e: Exception =>
-        responseServlet.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
-        handleError("Internal server error: " + formatException(e))
-    }
-  }
+  protected override val submitRequestServlet =
+    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf)
+  protected override val killRequestServlet =
+    new StandaloneKillRequestServlet(masterActor, masterConf)
+  protected override val statusRequestServlet =
+    new StandaloneStatusRequestServlet(masterActor, masterConf)
 }
 
 /**
  * A servlet for handling kill requests passed to the [[StandaloneRestServer]].
  */
-private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
-  extends StandaloneRestServlet {
-
-  /**
-   * If a submission ID is specified in the URL, have the Master kill the corresponding
-   * driver and return an appropriate response to the client. Otherwise, return error.
-   */
-  protected override def doPost(
-      request: HttpServletRequest,
-      response: HttpServletResponse): Unit = {
-    val submissionId = parseSubmissionId(request.getPathInfo)
-    val responseMessage = submissionId.map(handleKill).getOrElse {
-      response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-      handleError("Submission ID is missing in kill request.")
-    }
-    sendResponse(responseMessage, response)
-  }
+private[rest] class StandaloneKillRequestServlet(masterActor: ActorRef, conf: SparkConf)
+  extends KillRequestServlet {
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
     val askTimeout = RpcUtils.askTimeout(conf)
@@ -238,23 +86,8 @@ private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
 /**
  * A servlet for handling status requests passed to the [[StandaloneRestServer]].
  */
-private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
-  extends StandaloneRestServlet {
-
-  /**
-   * If a submission ID is specified in the URL, request the status of the corresponding
-   * driver from the Master and include it in the response. Otherwise, return error.
-   */
-  protected override def doGet(
-      request: HttpServletRequest,
-      response: HttpServletResponse): Unit = {
-    val submissionId = parseSubmissionId(request.getPathInfo)
-    val responseMessage = submissionId.map(handleStatus).getOrElse {
-      response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-      handleError("Submission ID is missing in status request.")
-    }
-    sendResponse(responseMessage, response)
-  }
+private[rest] class StandaloneStatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
+  extends StatusRequestServlet {
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val askTimeout = RpcUtils.askTimeout(conf)
@@ -276,71 +109,11 @@ private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
 /**
  * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
  */
-private[rest] class SubmitRequestServlet(
+private[rest] class StandaloneSubmitRequestServlet(
     masterActor: ActorRef,
     masterUrl: String,
     conf: SparkConf)
-  extends StandaloneRestServlet {
-
-  /**
-   * Submit an application to the Master with parameters specified in the request.
-   *
-   * The request is assumed to be a [[SubmitRestProtocolRequest]] in the form of JSON.
-   * If the request is successfully processed, return an appropriate response to the
-   * client indicating so. Otherwise, return error instead.
-   */
-  protected override def doPost(
-      requestServlet: HttpServletRequest,
-      responseServlet: HttpServletResponse): Unit = {
-    val responseMessage =
-      try {
-        val requestMessageJson = Source.fromInputStream(requestServlet.getInputStream).mkString
-        val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
-        // The response should have already been validated on the client.
-        // In case this is not true, validate it ourselves to avoid potential NPEs.
-        requestMessage.validate()
-        handleSubmit(requestMessageJson, requestMessage, responseServlet)
-      } catch {
-        // The client failed to provide a valid JSON, so this is not our fault
-        case e @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
-          responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-          handleError("Malformed request: " + formatException(e))
-      }
-    sendResponse(responseMessage, responseServlet)
-  }
-
-  /**
-   * Handle the submit request and construct an appropriate response to return to the client.
-   *
-   * This assumes that the request message is already successfully validated.
-   * If the request message is not of the expected type, return error to the client.
-   */
-  private def handleSubmit(
-      requestMessageJson: String,
-      requestMessage: SubmitRestProtocolMessage,
-      responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
-    requestMessage match {
-      case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = RpcUtils.askTimeout(conf)
-        val driverDescription = buildDriverDescription(submitRequest)
-        val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
-        val submitResponse = new CreateSubmissionResponse
-        submitResponse.serverSparkVersion = sparkVersion
-        submitResponse.message = response.message
-        submitResponse.success = response.success
-        submitResponse.submissionId = response.driverId.orNull
-        val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
-        if (unknownFields.nonEmpty) {
-          // If there are fields that the server does not know about, warn the client
-          submitResponse.unknownFields = unknownFields
-        }
-        submitResponse
-      case unexpected =>
-        responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-        handleError(s"Received message of unexpected type ${unexpected.messageType}.")
-    }
-  }
+  extends SubmitRequestServlet {
 
   /**
    * Build a driver description from the fields specified in the submit request.
@@ -389,50 +162,37 @@ private[rest] class SubmitRequestServlet(
     new DriverDescription(
       appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
   }
-}
 
-/**
- * A default servlet that handles error cases that are not captured by other servlets.
- */
-private class ErrorServlet extends StandaloneRestServlet {
-  private val serverVersion = StandaloneRestServer.PROTOCOL_VERSION
-
-  /** Service a faulty request by returning an appropriate error message to the client. */
-  protected override def service(
-      request: HttpServletRequest,
-      response: HttpServletResponse): Unit = {
-    val path = request.getPathInfo
-    val parts = path.stripPrefix("/").split("/").filter(_.nonEmpty).toList
-    var versionMismatch = false
-    var msg =
-      parts match {
-        case Nil =>
-          // http://host:port/
-          "Missing protocol version."
-        case `serverVersion` :: Nil =>
-          // http://host:port/correct-version
-          "Missing the /submissions prefix."
-        case `serverVersion` :: "submissions" :: tail =>
-          // http://host:port/correct-version/submissions/*
-          "Missing an action: please specify one of /create, /kill, or /status."
-        case unknownVersion :: tail =>
-          // http://host:port/unknown-version/*
-          versionMismatch = true
-          s"Unknown protocol version '$unknownVersion'."
-        case _ =>
-          // never reached
-          s"Malformed path $path."
-      }
-    msg += s" Please submit requests through http://[host]:[port]/$serverVersion/submissions/..."
-    val error = handleError(msg)
-    // If there is a version mismatch, include the highest protocol version that
-    // this server supports in case the client wants to retry with our version
-    if (versionMismatch) {
-      error.highestProtocolVersion = serverVersion
-      response.setStatus(StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
-    } else {
-      response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+  /**
+   * Handle the submit request and construct an appropriate response to return to the client.
+   *
+   * This assumes that the request message is already successfully validated.
+   * If the request message is not of the expected type, return error to the client.
+   */
+  protected override def handleSubmit(
+      requestMessageJson: String,
+      requestMessage: SubmitRestProtocolMessage,
+      responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
+    requestMessage match {
+      case submitRequest: CreateSubmissionRequest =>
+        val askTimeout = RpcUtils.askTimeout(conf)
+        val driverDescription = buildDriverDescription(submitRequest)
+        val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
+          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+        val submitResponse = new CreateSubmissionResponse
+        submitResponse.serverSparkVersion = sparkVersion
+        submitResponse.message = response.message
+        submitResponse.success = response.success
+        submitResponse.submissionId = response.driverId.orNull
+        val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
+        if (unknownFields.nonEmpty) {
+          // If there are fields that the server does not know about, warn the client
+          submitResponse.unknownFields = unknownFields
+        }
+        submitResponse
+      case unexpected =>
+        responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+        handleError(s"Received message of unexpected type ${unexpected.messageType}.")
     }
-    sendResponse(error, response)
   }
 }

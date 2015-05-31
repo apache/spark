@@ -72,7 +72,7 @@ if (numBroadcastVars > 0) {
   for (bcast in seq(1:numBroadcastVars)) {
     bcastId <- SparkR:::readInt(inputCon)
     value <- unserialize(SparkR:::readRaw(inputCon))
-    setBroadcastValue(bcastId, value)
+    SparkR:::setBroadcastValue(bcastId, value)
   }
 }
 

@@ -34,7 +34,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
@@ -75,6 +75,8 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
+  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -89,20 +91,18 @@ private[spark] class ApplicationMaster(
 
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
+        // Propagate the attempt if, so that in case of event logging,
+        // different attempt's logs gets created in different directory
+        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
       val fs = FileSystem.get(yarnConf)
 
-      Utils.addShutdownHook { () =>
-        // If the SparkContext is still registered, shut it down as a best case effort in case
-        // users do not call sc.stop or do System.exit().
-        val sc = sparkContextRef.get()
-        if (sc != null) {
-          logInfo("Invoking sc stop from shutdown hook")
-          sc.stop()
-        }
+      // This shutdown hook should run *after* the SparkContext is shut down.
+      Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1) { () =>
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
         val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
@@ -130,6 +130,15 @@ private[spark] class ApplicationMaster(
       // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
+
+      // If the credentials file config is present, we must periodically renew tokens. So create
+      // a new AMDelegationTokenRenewer
+      if (sparkConf.contains("spark.yarn.credentials.file")) {
+        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
+        // If a principal and keytab have been set, use that to create new credentials for executors
+        // periodically
+        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
+      }
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -195,6 +204,7 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
+        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
       }
     }
   }
@@ -210,18 +220,25 @@ private[spark] class ApplicationMaster(
     sparkContextRef.compareAndSet(sc, null)
   }
 
-  private def registerAM(uiAddress: String, securityMgr: SecurityManager) = {
+  private def registerAM(_rpcEnv: RpcEnv, uiAddress: String, securityMgr: SecurityManager) = {
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
+    val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
-    allocator = client.register(yarnConf,
-      if (sc != null) sc.getConf else sparkConf,
+    val _sparkConf = if (sc != null) sc.getConf else sparkConf
+    val driverUrl = _rpcEnv.uriOf(
+        SparkEnv.driverActorSystemName,
+        RpcAddress(_sparkConf.get("spark.driver.host"), _sparkConf.get("spark.driver.port").toInt),
+        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    allocator = client.register(driverUrl,
+      yarnConf,
+      _sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
       historyAddress,
@@ -241,12 +258,12 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
-    val driverEndpont = rpcEnv.setupEndpointRef(
+    val driverEndpoint = rpcEnv.setupEndpointRef(
       SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
-      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpont, isClusterMode))
+      rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverEndpoint, isClusterMode))
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -268,16 +285,17 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
-      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      registerAM(rpcEnv, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, 0, sparkConf, securityMgr)
+    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()
-    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
+    registerAM(rpcEnv, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -288,11 +306,14 @@ private[spark] class ApplicationMaster(
     val expiryInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
 
     // we want to be reasonably responsive without causing too many requests to RM.
-    val schedulerInterval =
-      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "5s")
+    val heartbeatInterval = math.max(0, math.min(expiryInterval / 2,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "3s")))
 
-    // must be <= expiryInterval / 2.
-    val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
+    // we want to check more frequently for pending containers
+    val initialAllocationInterval = math.min(heartbeatInterval,
+      sparkConf.getTimeAsMs("spark.yarn.scheduler.initial-allocation.interval", "200ms"))
+
+    var nextAllocationInterval = initialAllocationInterval
 
     // The number of failures in a row until Reporter thread give up
     val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
@@ -318,15 +339,27 @@ private[spark] class ApplicationMaster(
               if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
-                    s"${failureCount} time(s) from Reporter thread.")
-
+                    s"$failureCount time(s) from Reporter thread.")
               } else {
-                logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
+                logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
               }
             }
           }
           try {
-            Thread.sleep(interval)
+            val numPendingAllocate = allocator.getNumPendingAllocate
+            val sleepInterval =
+              if (numPendingAllocate > 0) {
+                val currentAllocationInterval =
+                  math.min(heartbeatInterval, nextAllocationInterval)
+                nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
+                currentAllocationInterval
+              } else {
+                nextAllocationInterval = initialAllocationInterval
+                heartbeatInterval
+              }
+            logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+                     s"Sleeping for $sleepInterval.")
+            Thread.sleep(sleepInterval)
           } catch {
             case e: InterruptedException =>
           }
@@ -337,7 +370,8 @@ private[spark] class ApplicationMaster(
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
-    logInfo("Started progress reporter thread - sleep time : " + interval)
+    logInfo(s"Started progress reporter thread with (heartbeat : $heartbeatInterval, " +
+            s"initial allocation : $initialAllocationInterval) intervals")
     t
   }
 
@@ -500,6 +534,7 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
+
     }
 
     override def receive: PartialFunction[Any, Unit] = {

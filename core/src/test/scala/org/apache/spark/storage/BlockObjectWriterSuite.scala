@@ -18,21 +18,19 @@ package org.apache.spark.storage
 
 import java.io.File
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
-class BlockObjectWriterSuite extends FunSuite {
+class BlockObjectWriterSuite extends SparkFunSuite {
   test("verify write metrics") {
     val file = new File(Utils.createTempDir(), "somefile")
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
       new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
-    writer.write(Long.box(20))
+    writer.write(Long.box(20), Long.box(30))
     // Record metrics update on every write
     assert(writeMetrics.shuffleRecordsWritten === 1)
     // Metrics don't update on every write
@@ -40,7 +38,7 @@ class BlockObjectWriterSuite extends FunSuite {
     // After 32 writes, metrics should update
     for (i <- 0 until 32) {
       writer.flush()
-      writer.write(Long.box(i))
+      writer.write(Long.box(i), Long.box(i))
     }
     assert(writeMetrics.shuffleBytesWritten > 0)
     assert(writeMetrics.shuffleRecordsWritten === 33)
@@ -54,7 +52,7 @@ class BlockObjectWriterSuite extends FunSuite {
     val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
       new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
-    writer.write(Long.box(20))
+    writer.write(Long.box(20), Long.box(30))
     // Record metrics update on every write
     assert(writeMetrics.shuffleRecordsWritten === 1)
     // Metrics don't update on every write
@@ -62,7 +60,7 @@ class BlockObjectWriterSuite extends FunSuite {
     // After 32 writes, metrics should update
     for (i <- 0 until 32) {
       writer.flush()
-      writer.write(Long.box(i))
+      writer.write(Long.box(i), Long.box(i))
     }
     assert(writeMetrics.shuffleBytesWritten > 0)
     assert(writeMetrics.shuffleRecordsWritten === 33)

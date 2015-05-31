@@ -21,7 +21,7 @@ import java.io.{File, FileWriter, PrintWriter}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang.math.RandomUtils
+import org.apache.commons.lang3.RandomUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -36,14 +36,14 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombi
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit => NewInputSplit,
   RecordReader => NewRecordReader}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.Utils
 
-class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
+class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
 
   @transient var tmpDir: File = _
@@ -60,7 +60,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(tmpFile))
     for (x <- 1 to numRecords) {
-      pw.println(RandomUtils.nextInt(numBuckets))
+      pw.println(RandomUtils.nextInt(0, numBuckets))
     }
     pw.close()
 
@@ -263,7 +263,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
 
     val tmpRdd = sc.textFile(tmpFilePath, numPartitions)
 
-    val firstSize= runAndReturnBytesRead {
+    val firstSize = runAndReturnBytesRead {
       aRdd.count()
     }
     val secondSize = runAndReturnBytesRead {
@@ -433,10 +433,10 @@ class OldCombineTextRecordReaderWrapper(
 /**
  * Hadoop 2 has a version of this, but we can't use it for backwards compatibility
  */
-class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable,Text] {
+class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable, Text] {
   def createRecordReader(split: NewInputSplit, context: TaskAttemptContext)
   : NewRecordReader[LongWritable, Text] = {
-    new NewCombineFileRecordReader[LongWritable,Text](split.asInstanceOf[NewCombineFileSplit],
+    new NewCombineFileRecordReader[LongWritable, Text](split.asInstanceOf[NewCombineFileSplit],
       context, classOf[NewCombineTextRecordReaderWrapper])
   }
 }

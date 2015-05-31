@@ -16,11 +16,10 @@
  */
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
-import org.apache.spark.{SharedSparkContext, SparkConf, LocalSparkContext, SparkContext}
+import org.apache.spark._
 
 
-class FlatmapIteratorSuite extends FunSuite with LocalSparkContext {
+class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
   /* Tests the ability of Spark to deal with user provided iterators from flatMap
    * calls, that may generate more data then available memory. In any
    * memory based persistance Spark will unroll the iterator into an ArrayBuffer
@@ -59,10 +58,10 @@ class FlatmapIteratorSuite extends FunSuite with LocalSparkContext {
       .set("spark.serializer.objectStreamReset", "10")
     sc = new SparkContext(sconf)
     val expand_size = 500
-    val data = sc.parallelize(Seq(1,2)).
+    val data = sc.parallelize(Seq(1, 2)).
       flatMap(x => Stream.range(1, expand_size).
-      map(y => "%d: string test %d".format(y,x)))
-    var persisted = data.persist(StorageLevel.MEMORY_ONLY_SER)
+      map(y => "%d: string test %d".format(y, x)))
+    val persisted = data.persist(StorageLevel.MEMORY_ONLY_SER)
     assert(persisted.filter(_.startsWith("1:")).count()===2)
   }
 

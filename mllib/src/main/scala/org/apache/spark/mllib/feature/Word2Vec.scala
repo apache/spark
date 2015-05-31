@@ -49,7 +49,7 @@ private case class VocabWord(
   var cn: Int,
   var point: Array[Int],
   var code: Array[Int],
-  var codeLen:Int
+  var codeLen: Int
 )
 
 /**
@@ -158,6 +158,9 @@ class Word2Vec extends Serializable with Logging {
       .sortWith((a, b) => a.cn > b.cn)
     
     vocabSize = vocab.length
+    require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
+      "the setting of minCount, which could be large enough to remove all your words in sentences.")
+
     var a = 0
     while (a < vocabSize) {
       vocabHash += vocab(a).word -> a
@@ -466,7 +469,7 @@ class Word2VecModel private[mllib] (
     val norm1 = blas.snrm2(n, v1, 1)
     val norm2 = blas.snrm2(n, v2, 1)
     if (norm1 == 0 || norm2 == 0) return 0.0
-    blas.sdot(n, v1, 1, v2,1) / norm1 / norm2
+    blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
   }
 
   override protected def formatVersion = "1.0"
@@ -497,7 +500,7 @@ class Word2VecModel private[mllib] (
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector,num)
+    findSynonyms(vector, num)
   }
 
   /**
@@ -556,7 +559,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataFrame = sqlContext.parquetFile(dataPath)
+      val dataFrame = sqlContext.read.parquet(dataPath)
 
       val dataArray = dataFrame.select("word", "vector").collect()
 
@@ -580,7 +583,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 

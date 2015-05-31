@@ -21,7 +21,6 @@ import org.apache.spark.sql.types._
 
 /** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
-  override type EvaluatedType = Any
 
   override def dataType: DataType = LongType
   override def foldable: Boolean = child.foldable
@@ -40,7 +39,6 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 
 /** Create a Decimal from an unscaled Long value */
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
-  override type EvaluatedType = Decimal
 
   override def dataType: DataType = DecimalType(precision, scale)
   override def foldable: Boolean = child.foldable

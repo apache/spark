@@ -26,15 +26,14 @@ import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, TaskContextImpl}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContextImpl}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.serializer.TestSerializer
 
-class ShuffleBlockFetcherIteratorSuite extends FunSuite {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
   // Some of the tests are quite tricky because we are testing the cleanup behavior
   // in the presence of faults.
 
@@ -89,7 +88,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     )
 
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContextImpl(0, 0, 0, 0),
+      new TaskContextImpl(0, 0, 0, 0, null),
       transfer,
       blockManager,
       blocksByAddress,
@@ -154,7 +153,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
-    val taskContext = new TaskContextImpl(0, 0, 0, 0)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, null)
     val iterator = new ShuffleBlockFetcherIterator(
       taskContext,
       transfer,
@@ -217,7 +216,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
-    val taskContext = new TaskContextImpl(0, 0, 0, 0)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, null)
     val iterator = new ShuffleBlockFetcherIterator(
       taskContext,
       transfer,

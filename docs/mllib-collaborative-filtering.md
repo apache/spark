@@ -107,7 +107,8 @@ other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
-val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
+val lambda = 0.01
+val model = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
 {% endhighlight %}
 </div>
 
@@ -216,7 +217,7 @@ model = ALS.train(ratings, rank, numIterations)
 testdata = ratings.map(lambda p: (p[0], p[1]))
 predictions = model.predictAll(testdata).map(lambda r: ((r[0], r[1]), r[2]))
 ratesAndPreds = ratings.map(lambda r: ((r[0], r[1]), r[2])).join(predictions)
-MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x + y) / ratesAndPreds.count()
+MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).mean()
 print("Mean Squared Error = " + str(MSE))
 
 # Save and load model

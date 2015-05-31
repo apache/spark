@@ -23,6 +23,7 @@ import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
@@ -46,7 +47,7 @@ class LogisticRegressionModel (
     val numFeatures: Int,
     val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
-  with Saveable {
+  with Saveable with PMMLExportable {
 
   if (numClasses == 2) {
     require(weights.size == numFeatures,
@@ -162,7 +163,7 @@ class LogisticRegressionModel (
   override protected def formatVersion: String = "1.0"
 
   override def toString: String = {
-    s"${super.toString}, numClasses = ${numClasses}, threshold = ${threshold.get}"
+    s"${super.toString}, numClasses = ${numClasses}, threshold = ${threshold.getOrElse("None")}"
   }
 }
 

@@ -32,7 +32,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.apache.spark.deploy.master.{RecoveryState, SparkCuratorUtil}
+import org.apache.spark.deploy.master.RecoveryState
 import org.apache.spark.util.Utils
 
 /**
@@ -65,7 +65,7 @@ private object FaultToleranceTest extends App with Logging {
   private val workers = ListBuffer[TestWorkerInfo]()
   private var sc: SparkContext = _
 
-  private val zk =  SparkCuratorUtil.newClient(conf)
+  private val zk = SparkCuratorUtil.newClient(conf)
 
   private var numPassed = 0
   private var numFailed = 0

@@ -47,10 +47,7 @@ abstract class DataType {
    *     ...
    * }}}
    */
-  private[sql] def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType == this => true
-    case _ => false
-  }
+  private[sql] def unapply(e: Expression): Boolean = e.dataType == this
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
@@ -137,10 +134,7 @@ private[sql] object IntegralType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
 }
 
 
@@ -157,10 +151,7 @@ private[sql] object FractionalType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 }
 
 
@@ -280,7 +271,7 @@ object DataType {
 
     protected lazy val structField: Parser[StructField] =
       ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable  =>
+        case name ~ tpe ~ nullable =>
           StructField(name, tpe, nullable = nullable)
       }
 

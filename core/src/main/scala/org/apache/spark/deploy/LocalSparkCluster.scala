@@ -43,15 +43,21 @@ class LocalSparkCluster(
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
+  // exposed for testing
+  var masterWebUIPort = -1
 
   def start(): Array[String] = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     // Disable REST server on Master in this mode unless otherwise specified
-    val _conf = conf.clone().setIfMissing("spark.master.rest.enabled", "false")
+    val _conf = conf.clone()
+      .setIfMissing("spark.master.rest.enabled", "false")
+      .set("spark.shuffle.service.enabled", "false")
 
     /* Start the Master */
-    val (masterSystem, masterPort, _, _) = Master.startSystemAndActor(localHostname, 0, 0, _conf)
+    val (masterSystem, masterPort, webUiPort, _) =
+      Master.startSystemAndActor(localHostname, 0, 0, _conf)
+    masterWebUIPort = webUiPort
     masterActorSystems += masterSystem
     val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + masterPort
     val masters = Array(masterUrl)

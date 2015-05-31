@@ -17,9 +17,7 @@
 
 package org.apache.spark.serializer
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{SharedSparkContext, SparkException}
+import org.apache.spark.{SharedSparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 
 /* A trivial (but unserializable) container for trivial functions */
@@ -29,7 +27,7 @@ class UnserializableClass {
   def pred[T](x: T): Boolean = x.toString.length % 2 == 0
 }
 
-class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContext {
+class ProactiveClosureSerializationSuite extends SparkFunSuite with SharedSparkContext {
 
   def fixture: (RDD[String], UnserializableClass) = {
     (sc.parallelize(0 until 1000).map(_.toString), new UnserializableClass)
@@ -66,18 +64,18 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
   }
 
   private def xmap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.map(y=>uc.op(y))
+    x.map(y => uc.op(y))
 
   private def xflatMap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.flatMap(y=>Seq(uc.op(y)))
+    x.flatMap(y => Seq(uc.op(y)))
 
   private def xfilter(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.filter(y=>uc.pred(y))
+    x.filter(y => uc.pred(y))
 
   private def xmapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitions(_.map(y=>uc.op(y)))
+    x.mapPartitions(_.map(y => uc.op(y)))
 
   private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitionsWithIndex((_, it) => it.map(y=>uc.op(y)))
+    x.mapPartitionsWithIndex((_, it) => it.map(y => uc.op(y)))
   
 }

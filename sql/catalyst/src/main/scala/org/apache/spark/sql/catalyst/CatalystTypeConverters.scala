@@ -23,6 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**

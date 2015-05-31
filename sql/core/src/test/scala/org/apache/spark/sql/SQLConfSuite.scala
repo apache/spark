@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuiteLike
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 
 /* Implicits */
 import TestSQLContext._
 
-class SQLConfSuite extends QueryTest with FunSuiteLike {
+class SQLConfSuite extends QueryTest {
 
   val testKey = "test.key.0"
   val testVal = "test.val.0"

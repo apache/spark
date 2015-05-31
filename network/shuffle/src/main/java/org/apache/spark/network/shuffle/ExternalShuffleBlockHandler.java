@@ -46,18 +46,18 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
 public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
-  private final ExternalShuffleBlockManager blockManager;
+  private final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
   public ExternalShuffleBlockHandler(TransportConf conf) {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager(conf));
+    this(new OneForOneStreamManager(), new ExternalShuffleBlockResolver(conf));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
   ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
-      ExternalShuffleBlockManager blockManager) {
+      ExternalShuffleBlockResolver blockManager) {
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }

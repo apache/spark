@@ -17,11 +17,9 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.rdd.RDD
 
-class ImplicitOrderingSuite extends FunSuite with LocalSparkContext {
+class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
   // Tests that PairRDDFunctions grabs an implicit Ordering in various cases where it should.
   test("basic inference of Orderings"){
     sc = new SparkContext("local", "test")
@@ -44,11 +42,11 @@ private object ImplicitOrderingSuite {
   class NonOrderedClass {}
 
   class ComparableClass extends Comparable[ComparableClass] {
-    override def compareTo(o: ComparableClass): Int = ???
+    override def compareTo(o: ComparableClass): Int = throw new UnsupportedOperationException
   }
 
   class OrderedClass extends Ordered[OrderedClass] {
-    override def compare(o: OrderedClass): Int = ???
+    override def compare(o: OrderedClass): Int = throw new UnsupportedOperationException
   }
   
   def basicMapExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {

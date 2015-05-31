@@ -20,8 +20,7 @@ package org.apache.spark.mllib.tree
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
 
 
-class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests examining individual elements of training
@@ -859,7 +858,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object DecisionTreeSuite extends FunSuite {
+object DecisionTreeSuite extends SparkFunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
@@ -998,7 +997,7 @@ object DecisionTreeSuite extends FunSuite {
         node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
           categories = List(0.0, 1.0)))
     }
-    // TODO: The information gain stats should be consistent with the same info stored in children.
+    // TODO: The information gain stats should be consistent with info in children: SPARK-7131
     node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
       leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
     node
@@ -1006,9 +1005,9 @@ object DecisionTreeSuite extends FunSuite {
 
   /**
    * Create a tree model.  This is deterministic and contains a variety of node and feature types.
-   * TODO: Update this to be a correct tree (with matching probabilities, impurities, etc.)
+   * TODO: Update to be a correct tree (with matching probabilities, impurities, etc.): SPARK-7131
    */
-  private[mllib] def createModel(algo: Algo): DecisionTreeModel = {
+  private[spark] def createModel(algo: Algo): DecisionTreeModel = {
     val topNode = createInternalNode(id = 1, Continuous)
     val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
     val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))

@@ -635,12 +635,11 @@ private[nio] class ConnectionManager(
         val message = securityMsgResp.toBufferMessage
         if (message == null) throw new IOException("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
-      } catch  {
-        case e: Exception => {
+      } catch {
+        case e: Exception =>
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
           throw new IOException("Error evaluating sasl response: ", e)
-        }
       }
     }
   }
@@ -656,7 +655,7 @@ private[nio] class ConnectionManager(
         connection.synchronized {
           if (connection.sparkSaslServer == null) {
             logDebug("Creating sasl Server")
-            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager)
+            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager, false)
           }
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
@@ -800,7 +799,7 @@ private[nio] class ConnectionManager(
     if (!conn.isSaslComplete()) {
       conn.synchronized {
         if (conn.sparkSaslClient == null) {
-          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager)
+          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager, false)
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()

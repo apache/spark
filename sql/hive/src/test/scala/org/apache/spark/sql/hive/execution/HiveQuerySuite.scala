@@ -20,16 +20,16 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -52,13 +52,31 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2 
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
+
+  createQueryTest("Test UDTF.close in Lateral Views",
+     """
+       |SELECT key, cc
+       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
+     """.stripMargin, false) // false mean we have to keep the temp function in registry
+
+  createQueryTest("Test UDTF.close in SELECT",
+     "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
 
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
@@ -91,13 +109,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generator in projection") {
+  test("multiple generators in projection") {
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)), key FROM src").collect()
+      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
     }
 
     intercept[AnalysisException] {
-      sql("SELECT explode(map(key, value)) as k1, k2, key FROM src").collect()
+      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
     }
   }
 
@@ -397,6 +415,25 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |INSERT OVERWRITE TABLE createdtable SELECT * FROM src WHERE key = 86;
       |SELECT * FROM createdtable;
     """.stripMargin)
+
+  test("SPARK-7270: consider dynamic partition when comparing table output") {
+    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+
+    val analyzedPlan = sql(
+      """
+        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+        |SELECT 'a', 'c' from ptest
+      """.stripMargin).queryExecution.analyzed
+
+    assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      var hasCast = false
+      analyzedPlan.collect {
+        case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+      }
+      hasCast
+    }
+  }
 
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
@@ -900,7 +937,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |DROP TABLE IF EXISTS dynamic_part_table;
     """.stripMargin)
 
-  test("Dynamic partition folder layout") {
+  ignore("Dynamic partition folder layout") {
     sql("DROP TABLE IF EXISTS dynamic_part_table")
     sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")

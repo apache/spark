@@ -40,7 +40,7 @@ object DenseGaussianMixture {
 
   private def run(inputFile: String, k: Int, convergenceTol: Double, maxIterations: Int) {
     val conf = new SparkConf().setAppName("Gaussian Mixture Model EM example")
-    val ctx  = new SparkContext(conf)
+    val ctx = new SparkContext(conf)
     
     val data = ctx.textFile(inputFile).map { line =>
       Vectors.dense(line.trim.split(' ').map(_.toDouble))

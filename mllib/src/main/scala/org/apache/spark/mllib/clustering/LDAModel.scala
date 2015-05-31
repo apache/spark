@@ -203,7 +203,7 @@ class DistributedLDAModel private (
 
   import LDA._
 
-  private[clustering] def this(state: LDA.EMOptimizer, iterationTimes: Array[Double]) = {
+  private[clustering] def this(state: EMLDAOptimizer, iterationTimes: Array[Double]) = {
     this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
       state.topicConcentration, iterationTimes)
   }

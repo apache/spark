@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ThreadUtils
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Row, Expression}
@@ -64,13 +64,19 @@ case class BroadcastHashJoin(
     val input: Array[Row] = buildPlan.execute().map(_.copy()).collect()
     val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
     sparkContext.broadcast(hashed)
-  }
+  }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       hashJoin(streamedIter, broadcastRelation.value)
     }
   }
+}
+
+object BroadcastHashJoin {
+
+  private val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
 }
