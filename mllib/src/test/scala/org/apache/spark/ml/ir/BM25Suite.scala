@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.ir
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Row, SQLContext}
 
-class BM25Suite extends FunSuite with MLlibTestSparkContext {
+class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
 
