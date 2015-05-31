@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions extends Logging {
-  
+
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)

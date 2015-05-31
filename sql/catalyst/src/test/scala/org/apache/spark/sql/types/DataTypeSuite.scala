@@ -71,7 +71,7 @@ class DataTypeSuite extends SparkFunSuite {
 
   test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
-      StructField("a", LongType) :: 
+      StructField("a", LongType) ::
       StructField("b", FloatType) :: Nil)
 
     val mapped = StructType.fieldsMap(struct.fields)
@@ -90,7 +90,7 @@ class DataTypeSuite extends SparkFunSuite {
 
     val right = StructType(List())
     val merged = left.merge(right)
-    
+
     assert(merged === left)
   }
 
@@ -133,7 +133,7 @@ class DataTypeSuite extends SparkFunSuite {
 
     val right = StructType(
       StructField("b", LongType) :: Nil)
-    
+
     intercept[SparkException] {
       left.merge(right)
     }

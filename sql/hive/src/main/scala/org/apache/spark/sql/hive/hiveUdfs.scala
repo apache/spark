@@ -555,12 +555,12 @@ private[hive] case class HiveUdafFunction(
     } else {
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
-  
+
   private val inspectors = exprs.map(toInspector).toArray
-    
-  private val function = { 
+
+  private val function = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
-    resolver.getEvaluator(parameterInfo) 
+    resolver.getEvaluator(parameterInfo)
   }
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
@@ -575,7 +575,7 @@ private[hive] case class HiveUdafFunction(
 
   @transient
   protected lazy val cached = new Array[AnyRef](exprs.length)
-  
+
   def update(input: Row): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))

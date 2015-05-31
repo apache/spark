@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DataFrameStatSuite extends SparkFunSuite  {
-  
+
   val sqlCtx = TestSQLContext
   def toLetter(i: Int): String = (i + 97).toChar.toString
 

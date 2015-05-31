@@ -240,7 +240,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
       testData.collect().toSeq
     )
-    
+
     // test difference type of field
     sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
     checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
