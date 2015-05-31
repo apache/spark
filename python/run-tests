@@ -76,6 +76,8 @@ function run_sql_tests() {
     run_test "pyspark.sql.dataframe"
     run_test "pyspark.sql.group"
     run_test "pyspark.sql.functions"
+    run_test "pyspark.sql.readwriter"
+    run_test "pyspark.sql.window"
     run_test "pyspark.sql.tests"
 }
 
