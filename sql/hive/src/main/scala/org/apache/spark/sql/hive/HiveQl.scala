@@ -57,7 +57,7 @@ private[hive] case object NativePlaceholder extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-case class CreateTableAsSelect(
+private[hive] case class CreateTableAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
