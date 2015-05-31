@@ -43,7 +43,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
-   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
    *
    * @param col1 the name of the column
