@@ -48,7 +48,7 @@ class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Binarize continuous features with setter") {
     val threshold: Double = 0.2
-    val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0) 
+    val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0)
     val dataFrame: DataFrame = sqlContext.createDataFrame(
         data.zip(thresholdBinarized)).toDF("feature", "expected")
 
