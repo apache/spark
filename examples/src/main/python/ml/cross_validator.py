@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
     hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
-    lr = LogisticRegression(maxIter=10, regParam=0.001)
+    lr = LogisticRegression(maxIter=10)
     pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 
     # We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     crossval = CrossValidator(estimator=pipeline,
                               estimatorParamMaps=paramGrid,
                               evaluator=BinaryClassificationEvaluator(),
-                              numFolds=2)
+                              numFolds=2) # use 3+ folds in practice
 
     # Run cross-validation, and choose the best set of parameters.
     cvModel = crossval.fit(training)
