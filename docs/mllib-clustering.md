@@ -47,7 +47,7 @@ Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasin
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -62,11 +62,11 @@ val clusters = KMeans.train(parsedData, numClusters, numIterations)
 // Evaluate clustering by computing Within Set Sum of Squared Errors
 val WSSSE = clusters.computeCost(parsedData)
 println("Within Set Sum of Squared Errors = " + WSSSE)
-{% endhighlight %}
 
 // Save and load model
 clusters.save(sc, "myModelPath")
 val sameModel = KMeansModel.load(sc, "myModelPath")
+{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -132,7 +132,7 @@ Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by in
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight python %}
-from pyspark.mllib.clustering import KMeans
+from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
 from math import sqrt
 
@@ -324,12 +324,12 @@ Calling `PowerIterationClustering.run` returns a
 which contains the computed clustering assignments.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.PowerIterationClustering
+import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 val similarities: RDD[(Long, Long, Double)] = ...
 
-val pic = new PowerIteartionClustering()
+val pic = new PowerIterationClustering()
   .setK(3)
   .setMaxIterations(20)
 val model = pic.run(similarities)

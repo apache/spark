@@ -60,7 +60,7 @@ Model is created using the training set and a mean squared error is calculated f
 labels and real labels in the test set.
 
 {% highlight scala %}
-import org.apache.spark.mllib.regression.IsotonicRegression
+import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
 
 val data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
 
