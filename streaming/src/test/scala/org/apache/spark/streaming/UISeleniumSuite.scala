@@ -28,9 +28,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 
-
-
-
 /**
  * Selenium tests for the Spark Web UI.
  */
@@ -197,4 +194,3 @@ class UISeleniumSuite
     }
   }
 }
-  
