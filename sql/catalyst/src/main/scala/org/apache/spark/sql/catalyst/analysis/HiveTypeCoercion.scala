@@ -485,15 +485,14 @@ trait HiveTypeCoercion {
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
   object BooleanEqualization extends Rule[LogicalPlan] {
-    val trueValue = Literal(new java.math.BigDecimal(1))
-    val falseValue = Literal(new java.math.BigDecimal(0))
+    val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, new java.math.BigDecimal(1))
+    val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, new java.math.BigDecimal(0))
 
     private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
-      CaseKeyWhen(Cast(numericExpr, DecimalType.Unlimited),
-        Seq(
-          trueValue, booleanExpr,
-          falseValue, Not(booleanExpr),
-          Literal(false)))
+      CaseKeyWhen(numericExpr, Seq(
+        Literal(trueValues.head), booleanExpr,
+        Literal(falseValues.head), Not(booleanExpr),
+        Literal(false)))
     }
 
     private def transform(booleanExpr: Expression, numericExpr: Expression) = {
@@ -516,13 +515,32 @@ trait HiveTypeCoercion {
 
       // Hive treats (true = 1) as true and (false = 0) as true,
       // all other cases are considered as false.
-      case EqualTo(l @ BooleanType(), r) if r.dataType.isInstanceOf[NumericType] =>
-        transform(l, r)
-      case EqualTo(l, r @ BooleanType()) if l.dataType.isInstanceOf[NumericType] =>
+
+      // We may simplify the expression if one side is literal numeric values
+      case EqualTo(l @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => l
+      case EqualTo(l @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Not(l)
+      case EqualTo(Literal(value, _: NumericType), r @ BooleanType())
+        if trueValues.contains(value) => r
+      case EqualTo(Literal(value, _: NumericType), r @ BooleanType())
+        if falseValues.contains(value) => Not(r)
+      case EqualNullSafe(l @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => And(IsNotNull(l), l)
+      case EqualNullSafe(l @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Or(IsNull(l), l)
+      case EqualNullSafe(Literal(value, _: NumericType), r @ BooleanType())
+        if trueValues.contains(value) => And(IsNotNull(r), r)
+      case EqualNullSafe(Literal(value, _: NumericType), r @ BooleanType())
+        if falseValues.contains(value) => Or(IsNull(r), r)
+
+      case EqualTo(l @ BooleanType(), r @ NumericType()) =>
+        transform(l , r)
+      case EqualTo(l @ NumericType(), r @ BooleanType()) =>
         transform(r, l)
-      case EqualNullSafe(l @ BooleanType(), r) if r.dataType.isInstanceOf[NumericType] =>
+      case EqualNullSafe(l @ BooleanType(), r @ NumericType()) =>
         transformNullSafe(l, r)
-      case EqualNullSafe(l, r @ BooleanType()) if l.dataType.isInstanceOf[NumericType] =>
+      case EqualNullSafe(l @ NumericType(), r @ BooleanType()) =>
         transformNullSafe(r, l)
     }
   }
@@ -624,7 +642,7 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual =>
+      case cw: CaseWhenLike if cw.childrenResolved && !cw.valueTypesEqual =>
         logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
         val commonType = cw.valueTypes.reduce { (v1, v2) =>
           findTightestCommonType(v1, v2).getOrElse(sys.error(
@@ -643,6 +661,23 @@ trait HiveTypeCoercion {
           case CaseKeyWhen(key, _) =>
             CaseKeyWhen(key, transformedBranches)
         }
+
+      case ckw: CaseKeyWhen if ckw.childrenResolved && !ckw.resolved =>
+        val commonType = (ckw.key +: ckw.whenList).map(_.dataType).reduce { (v1, v2) =>
+          findTightestCommonType(v1, v2).getOrElse(sys.error(
+            s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
+        }
+        val transformedBranches = ckw.branches.sliding(2, 2).map {
+          case Seq(when, then) if when.dataType != commonType =>
+            Seq(Cast(when, commonType), then)
+          case s => s
+        }.reduce(_ ++ _)
+        val transformedKey = if (ckw.key.dataType != commonType) {
+          Cast(ckw.key, commonType)
+        } else {
+          ckw.key
+        }
+        CaseKeyWhen(transformedKey, transformedBranches)
     }
   }
 

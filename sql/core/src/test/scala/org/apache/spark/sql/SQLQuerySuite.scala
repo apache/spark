@@ -1334,24 +1334,21 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     withTempTable("t") {
-      Seq(
-        (1, true),
-        (0, false),
-        (2, true),
-        (2, false),
-        (null, true),
-        (null, false),
-        (0, null),
-        (1, null),
-        (null, null)
-      ).map { case (i, b) =>
-        (i.asInstanceOf[Integer], b.asInstanceOf[java.lang.Boolean])
-      }.toDF("i", "b").registerTempTable("t")
+      // numeric field i, boolean field j, result of i = j, result of i <=> j
+      Seq[(Integer, java.lang.Boolean, java.lang.Boolean, java.lang.Boolean)](
+        (1, true, true, true),
+        (0, false, true, true),
+        (2, true, false, false),
+        (2, false, false, false),
+        (null, true, null, false),
+        (null, false, null, false),
+        (0, null, null, false),
+        (1, null, null, false),
+        (null, null, null, true)
+      ).toDF("i", "b", "r1", "r2").registerTempTable("t")
 
-      checkAnswer(sql("select i = b from t"),
-        Seq(true, true, false, false, null, null, null, null, null).map(Row(_)))
-      checkAnswer(sql("select i <=> b from t"),
-        Seq(true, true, false, false, false, false, false, false, true).map(Row(_)))
+      checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
+      checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
     }
   }
 }
