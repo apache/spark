@@ -110,7 +110,7 @@ of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
 However, L1 regularization can help promote sparsity in weights leading to smaller and more interpretable models, the latter of which can be useful for feature selection.
-[Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
+[Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
 ### Optimization
