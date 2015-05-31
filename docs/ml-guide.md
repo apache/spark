@@ -176,11 +176,11 @@ There are now several algorithms in the Pipelines API which are not in the lower
 
 ## Linear Methods with Elastic Net Regularization
 
-In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-linear-methods.html) for details. In `spark.ml`, we add the [Elastic net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf), which is a hybrid of L1 and L2 regularization. Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
+In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-linear-methods.html) for details. In `spark.ml`, we also include Pipelines API for [Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid of L1 and L2 regularization proposed in [this paper](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf). Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
 `\[
 \alpha \lambda_1\|\wv\|_1 + (1-\alpha) \frac{\lambda_2}{2}\|\wv\|_2, \alpha \in [0, 1].
 \]`
-By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement both linear regression and logistic regression with elastic net regularization in `spark.ml`.
+By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement Pipelines API for both linear regression and logistic regression with elastic net regularization.
 
 **Examples**
 
