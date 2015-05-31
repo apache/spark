@@ -161,11 +161,3 @@
    <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
   </check>
 </scalastyle>
-mId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
-    <parameters><parameter name="regex">^println$</parameter></parameters>
-    <customMessage><![CDATA[Are you sure you want to println? If yes, wrap the code block with
-      // scalastyle:off println
-      println(...)
-      // scalastyle:on println]]></customMessage>
-  </check>
-</scalastyle>
