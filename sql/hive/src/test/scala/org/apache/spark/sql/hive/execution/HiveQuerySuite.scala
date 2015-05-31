@@ -57,7 +57,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
       """
-        |CREATE TEMPORARY FUNCTION udtf_count2 
+        |CREATE TEMPORARY FUNCTION udtf_count2
         |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
       """.stripMargin)
   }
