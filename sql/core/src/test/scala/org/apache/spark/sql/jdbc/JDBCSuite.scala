@@ -67,7 +67,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
- 
+
     sql(
       s"""
         |CREATE TEMPORARY TABLE fetchtwo
@@ -75,7 +75,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         fetchSize '2')
       """.stripMargin.replaceAll("\n", " "))
- 
+
     sql(
       s"""
         |CREATE TEMPORARY TABLE parts
@@ -208,7 +208,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(1) === 2)
     assert(ids(2) === 3)
   }
- 
+
   test("SELECT second field when fetchSize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)

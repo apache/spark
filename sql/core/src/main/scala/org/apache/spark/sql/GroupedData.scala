@@ -249,7 +249,7 @@ class GroupedData protected[sql](
   def mean(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Average)
   }
- 
+
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.

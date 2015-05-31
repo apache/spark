@@ -24,7 +24,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * A Random distribution generating expression.
- * TODO: This can be made generic to generate any type of random distribution, or any type of  
+ * TODO: This can be made generic to generate any type of random distribution, or any type of
  * StructType.
  *
  * Since this expression is stateful, it cannot be a case object.

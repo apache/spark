@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String) 
+abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
   type EvaluatedType = Any
   override def symbol: String = null
