@@ -228,7 +228,7 @@ private[spark] object BLAS extends Serializable with Logging {
     }
     _nativeBLAS
   }
- 
+
   /**
    * A := alpha * x * x^T^ + A
    * @param alpha a real scalar that will be multiplied to x * x^T^.
@@ -264,7 +264,7 @@ private[spark] object BLAS extends Serializable with Logging {
         j += 1
       }
       i += 1
-    }    
+    }
   }
 
   private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
@@ -505,7 +505,7 @@ private[spark] object BLAS extends Serializable with Logging {
     nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,
       y.values, 1)
   }
- 
+
   /**
    * y := alpha * A * x + beta * y
    * For `DenseMatrix` A and `SparseVector` x.
@@ -557,7 +557,7 @@ private[spark] object BLAS extends Serializable with Logging {
       }
     }
   }
- 
+
   /**
    * y := alpha * A * x + beta * y
    * For `SparseMatrix` A and `SparseVector` x.
