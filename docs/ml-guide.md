@@ -289,7 +289,7 @@ LogisticRegressionModel model1 = lr.fit(training);
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-System.out.println("Model 1 was fit using parameters: " + model1.fittingParamMap());
+System.out.println("Model 1 was fit using parameters: " + model1.extractParamMap());
 
 // We may alternatively specify parameters using a ParamMap.
 ParamMap paramMap = new ParamMap();
@@ -305,7 +305,7 @@ ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
-System.out.println("Model 2 was fit using parameters: " + model2.fittingParamMap());
+System.out.println("Model 2 was fit using parameters: " + model2.extractParamMap());
 
 // Prepare test documents.
 List<LabeledPoint> localTest = Lists.newArrayList(
