@@ -97,7 +97,7 @@ private[hive] object IsolatedClientLoader {
  *                    true unless loading the version of hive that is on Sparks classloader.
  * @param rootClassLoader The system root classloader.
  * @param baseClassLoader The spark classloader that is used to load shared classes.  Must not know
- *                        about hive classes.
+ *                        about Hive classes.
  */
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
