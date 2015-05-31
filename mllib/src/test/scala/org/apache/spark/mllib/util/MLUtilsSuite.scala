@@ -27,6 +27,7 @@ import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
+import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
@@ -106,6 +107,23 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     assert(multiclassPoints(1).label === 0.0)
     assert(multiclassPoints(2).label === 0.0)
 
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws SparkException when passing a zero-based vector") {
+    val lines =
+      """
+        |0
+        |0 0:4.0 4:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, Charsets.US_ASCII)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      val pointsWithoutNumFeatures = loadLibSVMFile(sc, path).collect()
+    }
     Utils.deleteRecursively(tempDir)
   }
 
