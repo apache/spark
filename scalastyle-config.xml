@@ -97,7 +97,7 @@
  <!-- <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="true"></check> -->
  <!-- <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="true"></check> -->
   <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>
- <!-- <check level="error" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="true"></check> -->
+  <check level="error" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="true"></check>
  <!-- <check level="error" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="true"></check> -->
  <!-- <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true"> -->
  <!--  <parameters> -->
