@@ -596,7 +596,7 @@ private[hive] case class MetastoreRelation
 
   self: Product =>
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
         tableName == relation.tableName &&
