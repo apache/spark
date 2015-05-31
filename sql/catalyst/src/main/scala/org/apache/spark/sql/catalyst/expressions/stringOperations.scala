@@ -211,7 +211,7 @@ case class EndsWith(left: Expression, right: Expression)
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
-  
+
   type EvaluatedType = Any
 
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
  */
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
-  
+
   override def foldable: Boolean = children.forall(_.foldable)
 
   lazy val childTypes = children.map(_.dataType).distinct
