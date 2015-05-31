@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -79,10 +79,9 @@ private[ir] trait BM25Base extends Params with HasInputCol with HasOutputCol {
   /**
    * Validate and transform the input schema.
    */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, map(outputCol), DoubleType)
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), DoubleType)
   }
 }
 
@@ -91,7 +90,9 @@ private[ir] trait BM25Base extends Params with HasInputCol with HasOutputCol {
  * Compute Okapi BM25 scores (BM25) for ranking given a collection of documents.
  */
 @AlphaComponent
-final class BM25 extends Estimator[BM25Model] with BM25Base {
+final class BM25(override val uid: String) extends Estimator[BM25Model] with BM25Base {
+
+  def this() = this(Identifiable.randomUID("bm25"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -99,18 +100,15 @@ final class BM25 extends Estimator[BM25Model] with BM25Base {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): BM25Model = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val idf = new feature.IDF(map(minDocFreq)).fit(input)
-    val model = new BM25Model(this, map, idf)
-    Params.inheritValues(map, this, model)
-    model
+  override def fit(dataset: DataFrame): BM25Model = {
+    transformSchema(dataset.schema, logging = true)
+    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val idf = new feature.IDF($(minDocFreq)).fit(input)
+    copyValues(new BM25Model(uid, idf)).setParent(this)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }
 
@@ -120,8 +118,7 @@ final class BM25 extends Estimator[BM25Model] with BM25Base {
  */
 @AlphaComponent
 class BM25Model private[ml] (
-    override val parent: BM25,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     idfModel: feature.IDFModel)
   extends Model[BM25Model] with BM25Base {
 
@@ -131,9 +128,8 @@ class BM25Model private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val k1 = getK1
     val b = getB
     val avgDl = idfModel.avgDl.getOrElse(0.0)
@@ -173,10 +169,10 @@ class BM25Model private[ml] (
             s"Only sparse and dense vectors are supported but got ${other.getClass}.")
       }
     }
-    dataset.withColumn(map(outputCol), bm25(col(map(inputCol))))
+    dataset.withColumn($(outputCol), bm25(col($(inputCol))))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }

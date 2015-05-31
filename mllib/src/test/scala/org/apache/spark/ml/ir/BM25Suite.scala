@@ -25,15 +25,12 @@ import org.apache.spark.sql.{Row, SQLContext}
 
 class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
-
   @transient var k1: Double = _
   @transient var b: Double = _
   @transient var avgDl: Double = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
   }
 
   def scoring(
@@ -71,6 +68,7 @@ class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("compute BM25 with default parameter") {
+    val sqlContext = new SQLContext(sc)
     val numOfFeatures = 4
     val data = Array(
       Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
@@ -109,6 +107,7 @@ class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("compute BM25 with setter") {
+    val sqlContext = new SQLContext(sc)
     val numOfFeatures = 4
     val data = Array(
       Vectors.sparse(numOfFeatures, Array(1, 3), Array(1.0, 2.0)),
