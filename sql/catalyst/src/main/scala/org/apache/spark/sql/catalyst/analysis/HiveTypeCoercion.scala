@@ -130,7 +130,7 @@ trait HiveTypeCoercion {
    * the appropriate numeric equivalent.
    */
   object ConvertNaNs extends Rule[LogicalPlan] {
-    private val stringNaN = Literal("NaN")
+    private val StringNaN = Literal("NaN")
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan => q transformExpressions {
@@ -138,20 +138,20 @@ trait HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         /* Double Conversions */
-        case b: BinaryExpression if b.left == stringNaN && b.right.dataType == DoubleType =>
-          b.makeCopy(Array(b.right, Literal(Double.NaN)))
-        case b: BinaryExpression if b.left.dataType == DoubleType && b.right == stringNaN =>
-          b.makeCopy(Array(Literal(Double.NaN), b.left))
-        case b: BinaryExpression if b.left == stringNaN && b.right == stringNaN =>
-          b.makeCopy(Array(Literal(Double.NaN), b.left))
+        case b @ BinaryExpression(StringNaN, r @ DoubleType()) =>
+          b.makeCopy(Array(r, Literal(Double.NaN)))
+        case b @ BinaryExpression(l @ DoubleType(), StringNaN) =>
+          b.makeCopy(Array(Literal(Double.NaN), l))
 
         /* Float Conversions */
-        case b: BinaryExpression if b.left == stringNaN && b.right.dataType == FloatType =>
+        case b @ BinaryExpression(StringNaN, r @ FloatType()) =>
           b.makeCopy(Array(b.right, Literal(Float.NaN)))
-        case b: BinaryExpression if b.left.dataType == FloatType && b.right == stringNaN =>
-          b.makeCopy(Array(Literal(Float.NaN), b.left))
-        case b: BinaryExpression if b.left == stringNaN && b.right == stringNaN =>
-          b.makeCopy(Array(Literal(Float.NaN), b.left))
+        case b @ BinaryExpression(l @ FloatType(), StringNaN) =>
+          b.makeCopy(Array(Literal(Float.NaN), l))
+
+        /* Use float NaN by default to avoid unnecessary type widening */
+        case b @ BinaryExpression(l @ StringNaN, StringNaN) =>
+          b.makeCopy(Array(Literal(Float.NaN), l))
       }
     }
   }
@@ -227,12 +227,12 @@ trait HiveTypeCoercion {
         // Skip nodes who's children have not been resolved yet.
         case e if !e.childrenResolved => e
 
-        case b: BinaryExpression if b.left.dataType != b.right.dataType =>
-          findTightestCommonTypeOfTwo(b.left.dataType, b.right.dataType).map { widestType =>
+        case b @ BinaryExpression(l, r) if l.dataType != r.dataType =>
+          findTightestCommonType(l.dataType, r.dataType).map { widestType =>
             val newLeft =
-              if (b.left.dataType == widestType) b.left else Cast(b.left, widestType)
+              if (l.dataType == widestType) l else Cast(l, widestType)
             val newRight =
-              if (b.right.dataType == widestType) b.right else Cast(b.right, widestType)
+              if (r.dataType == widestType) r else Cast(r, widestType)
             b.makeCopy(Array(newLeft, newRight))
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
       }
@@ -247,57 +247,42 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a: BinaryArithmetic if a.left.dataType == StringType =>
-        a.makeCopy(Array(Cast(a.left, DoubleType), a.right))
-      case a: BinaryArithmetic if a.right.dataType == StringType =>
-        a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
+      case a @ BinaryArithmetic(l @ StringType(), r) =>
+        a.makeCopy(Array(Cast(l, DoubleType), r))
+      case a @ BinaryArithmetic(l, r @ StringType()) =>
+        a.makeCopy(Array(l, Cast(r, DoubleType)))
 
       // we should cast all timestamp/date/string compare into string compare
-      case p: BinaryComparison if p.left.dataType == StringType &&
-                                  p.right.dataType == DateType =>
-        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
-      case p: BinaryComparison if p.left.dataType == DateType &&
-                                  p.right.dataType == StringType =>
-        p.makeCopy(Array(Cast(p.left, StringType), p.right))
-      case p: BinaryComparison if p.left.dataType == StringType &&
-                                  p.right.dataType == TimestampType =>
-        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
-      case p: BinaryComparison if p.left.dataType == TimestampType &&
-                                  p.right.dataType == StringType =>
-        p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
-      case p: BinaryComparison if p.left.dataType == TimestampType &&
-                                  p.right.dataType == DateType =>
-        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
-      case p: BinaryComparison if p.left.dataType == DateType &&
-                                  p.right.dataType == TimestampType =>
-        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
+      case p @ BinaryComparison(l @ StringType(), r @ DateType()) =>
+        p.makeCopy(Array(l, Cast(r, StringType)))
+      case p @ BinaryComparison(l @ DateType(), r @ StringType()) =>
+        p.makeCopy(Array(Cast(l, StringType), r))
+      case p @ BinaryComparison(l @ StringType(), r @ TimestampType()) =>
+        p.makeCopy(Array(Cast(l, TimestampType), r))
+      case p @ BinaryComparison(l @ TimestampType(), r @ StringType()) =>
+        p.makeCopy(Array(l, Cast(r, TimestampType)))
+      case p @ BinaryComparison(l @ TimestampType(), r @ DateType()) =>
+        p.makeCopy(Array(Cast(l, StringType), Cast(r, StringType)))
+      case p @ BinaryComparison(l @ DateType(), r @ TimestampType()) =>
+        p.makeCopy(Array(Cast(l, StringType), Cast(r, StringType)))
 
-      case p: BinaryComparison if p.left.dataType == StringType &&
-                                  p.right.dataType != StringType =>
-        p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
-      case p: BinaryComparison if p.left.dataType != StringType &&
-                                  p.right.dataType == StringType =>
-        p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
+      case p @ BinaryComparison(l @ StringType(), r) if r.dataType != StringType =>
+        p.makeCopy(Array(Cast(l, DoubleType), r))
+      case p @ BinaryComparison(l, r @ StringType()) if l.dataType != StringType =>
+        p.makeCopy(Array(l, Cast(r, DoubleType)))
 
-      case i @ In(a, b) if a.dataType == DateType &&
-                           b.forall(_.dataType == StringType) =>
+      case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a, b) if a.dataType == TimestampType &&
-                           b.forall(_.dataType == StringType) =>
+      case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
-      case i @ In(a, b) if a.dataType == DateType &&
-                           b.forall(_.dataType == TimestampType) =>
+      case i @ In(a @ DateType(), b) if b.forall(_.dataType == TimestampType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == TimestampType &&
-                           b.forall(_.dataType == DateType) =>
+      case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
-      case Sum(e) if e.dataType == StringType =>
-        Sum(Cast(e, DoubleType))
-      case Average(e) if e.dataType == StringType =>
-        Average(Cast(e, DoubleType))
-      case Sqrt(e) if e.dataType == StringType =>
-        Sqrt(Cast(e, DoubleType))
+      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Sqrt(e @ StringType()) => Sqrt(Cast(e, DoubleType))
     }
   }
 
@@ -467,16 +452,16 @@ trait HiveTypeCoercion {
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b: BinaryExpression if b.left.dataType != b.right.dataType =>
-          (b.left.dataType, b.right.dataType) match {
+        case b @ BinaryExpression(l, r) if l.dataType != r.dataType =>
+          (l.dataType, r.dataType) match {
             case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(Cast(b.left, intTypeToFixed(t)), b.right))
+              b.makeCopy(Array(Cast(l, intTypeToFixed(t)), r))
             case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(b.left, Cast(b.right, intTypeToFixed(t))))
+              b.makeCopy(Array(l, Cast(r, intTypeToFixed(t))))
             case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-              b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
+              b.makeCopy(Array(l, Cast(r, DoubleType)))
             case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-              b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
+              b.makeCopy(Array(Cast(l, DoubleType), r))
             case _ =>
               b
           }

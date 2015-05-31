@@ -218,6 +218,10 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
+private[sql] object BinaryComparison {
+  def unapply(e: BinaryComparison): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<=>"
 
