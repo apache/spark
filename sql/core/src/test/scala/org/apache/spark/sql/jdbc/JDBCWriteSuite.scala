@@ -20,13 +20,14 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{SaveMode, Row}
 import org.apache.spark.sql.test._
 import org.apache.spark.sql.types._
 
-class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
+class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null
   val url1 = "jdbc:h2:mem:testdb3"

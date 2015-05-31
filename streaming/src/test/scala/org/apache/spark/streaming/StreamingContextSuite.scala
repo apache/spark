@@ -25,16 +25,16 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
+import org.scalatest.{Assertions, BeforeAndAfter}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 
-class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName

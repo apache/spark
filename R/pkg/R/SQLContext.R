@@ -457,6 +457,11 @@ read.df <- function(sqlContext, path = NULL, source = NULL, ...) {
   if (!is.null(path)) {
     options[['path']] <- path
   }
+  if (is.null(source)) {
+    sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+    source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
+                          "org.apache.spark.sql.parquet")
+  }
   sdf <- callJMethod(sqlContext, "load", source, options)
   dataFrame(sdf)
 }

@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -30,7 +29,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
-class OneVsRestSuite extends FunSuite with MLlibTestSparkContext {
+class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
   @transient var rdd: RDD[LabeledPoint] = _

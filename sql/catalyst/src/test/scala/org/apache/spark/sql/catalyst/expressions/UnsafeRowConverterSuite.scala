@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Arrays
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
-class UnsafeRowConverterSuite extends FunSuite with Matchers {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with only primitive types") {
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)

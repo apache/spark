@@ -21,19 +21,18 @@ import java.io.File
 
 import scala.io.Source
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
+class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")

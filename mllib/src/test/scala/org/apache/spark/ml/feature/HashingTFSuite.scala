@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -26,7 +25,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
+class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     val hashingTF = new HashingTF

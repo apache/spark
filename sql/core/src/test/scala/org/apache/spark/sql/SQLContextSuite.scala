@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.TestSQLContext
 
-class SQLContextSuite extends FunSuite with BeforeAndAfterAll {
+class SQLContextSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val testSqlContext = TestSQLContext
   private val testSparkContext = TestSQLContext.sparkContext

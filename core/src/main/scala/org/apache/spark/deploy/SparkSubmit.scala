@@ -428,6 +428,8 @@ object SparkSubmit {
       OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = "spark.executor.cores"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, CLIENT, sysProp = "spark.yarn.keytab"),
 
       // Yarn cluster only
       OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
@@ -440,10 +442,8 @@ object SparkSubmit {
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
       OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
-
-      // Yarn client or cluster
-      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, clOption = "--principal"),
-      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, clOption = "--keytab"),
+      OptionAssigner(args.principal, YARN, CLUSTER, clOption = "--principal"),
+      OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,

@@ -262,7 +262,7 @@ private[sql] class JDBCRDD(
   }
 
   private def escapeSql(value: String): String =
-    if (value == null) null else  StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
