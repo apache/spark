@@ -114,6 +114,9 @@
  <!--   <parameter name="maximum"><![CDATA[10]]></parameter> -->
  <!--  </parameters> -->
  <!-- </check> -->
+
+  <check level="error" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="true"></check>
+
  <check level="error" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="true"></check>
  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="false"></check>
  <check level="error" class="org.scalastyle.scalariform.IfBraceChecker" enabled="true">
