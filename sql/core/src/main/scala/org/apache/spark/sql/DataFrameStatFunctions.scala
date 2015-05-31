@@ -35,6 +35,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col2 the name of the second column
    * @return the covariance of the two columns.
    *
+   * {{{
+   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *      (3, 3))).toDF("key", "value")
+   *    df.stat.cov("key", "value")
+   * }}}
+   *
    * @since 1.4.0
    */
   def cov(col1: String, col2: String): Double = {
@@ -43,12 +49,18 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
-   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
    *
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
    * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * {{{
+   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *      (3, 3))).toDF("key", "value")
+   *    df.stat.corr("key", "value", "pearson")
+   * }}}
    *
    * @since 1.4.0
    */
@@ -64,6 +76,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col1 the name of the column
    * @param col2 the name of the column to calculate the correlation against
    * @return The Pearson Correlation Coefficient as a Double.
+   *
+   * {{{
+   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *      (3, 3))).toDF("key", "value")
+   *    df.stat.corr("key", "value")
+   * }}}
    *
    * @since 1.4.0
    */
@@ -85,6 +103,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *             of the DataFrame.
    * @return A DataFrame containing for the contingency table.
    *
+   * {{{
+   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *      (3, 3))).toDF(“key”, “value”)
+   *    val ct = df.stat.crosstab("key", "value")
+   *    ct.show()
+   * }}}
+   *
    * @since 1.4.0
    */
   def crosstab(col1: String, col2: String): DataFrame = {
@@ -101,6 +126,18 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
    *                than 1e-4.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * {{{
+   *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
+   *    // "a" and "b"
+   *    val freqSingles = df.stat.freqItems(Array("a", "b"), 0.4)
+   *    freqSingles.show()
+   *    // find the pair of items with a frequency greater than 0.1 in columns "a" and "b"
+   *    val pairDf = df.select(struct("a", "b").as("a-b"))
+   *    val freqPairs = pairDf.stat.freqItems(Array("a-b"), 0.1)
+   *    freqPairs.show()
+   * }}}
+   *
    *
    * @since 1.4.0
    */
@@ -130,6 +167,17 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
+   *
+   * {{{
+   *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
+   *    // "a" and "b"
+   *    val freqSingles = df.stat.freqItems(Seq("a", "b"), 0.4)
+   *    freqSingles.show()
+   *    // find the pair of items with a frequency greater than 0.1 in columns "a" and "b"
+   *    val pairDf = df.select(struct("a", "b").as("a-b"))
+   *    val freqPairs = pairDf.stat.freqItems(Seq("a-b"), 0.1)
+   *    freqPairs.show()
+   * }}}
    *
    * @since 1.4.0
    */
