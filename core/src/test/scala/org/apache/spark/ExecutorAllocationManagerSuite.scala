@@ -751,7 +751,9 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 2)
   }
 
-  private def createSparkContext(minExecutors: Int = 1, maxExecutors: Int = 5,
+  private def createSparkContext(
+      minExecutors: Int = 1,
+      maxExecutors: Int = 5,
       initialExecutors: Int = 1): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")

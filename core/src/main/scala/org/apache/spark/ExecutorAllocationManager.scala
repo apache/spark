@@ -151,8 +151,12 @@ private[spark] class ExecutorAllocationManager(
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
-  // Flag to measure whether numExecutorTarget could be adjusted
-  val numTargetExecutorAdjustable = new AtomicBoolean(false)
+  // Whether we are still waiting for the initial set of executors to be allocated.
+  // While this is true, we will not cancel outstanding executor requests. This is
+  // set to false when:
+  //   (1) a stage is submitted, or
+  //   (2) an executor idle timeout has elapsed.
+  @volatile private var initializing: Boolean = true
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -244,7 +248,7 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
       if (expired) {
-        numTargetExecutorAdjustable.compareAndSet(false, true)
+        initializing = false
         removeExecutor(executorId)
       }
       !expired
@@ -486,7 +490,7 @@ private[spark] class ExecutorAllocationManager(
     private var numRunningTasks: Int = _
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-      numTargetExecutorAdjustable.compareAndSet(false, true)
+      initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
