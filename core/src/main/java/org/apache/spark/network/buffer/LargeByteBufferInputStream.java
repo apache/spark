@@ -14,62 +14,75 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.network.buffer;
 
-package org.apache.spark.network.buffer
+import java.io.InputStream;
 
-import java.io.InputStream
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Reads data from a LargeByteBuffer, and optionally cleans it up using buffer.dispose()
  * when the stream is closed (e.g. to close a memory-mapped file).
  */
-private[spark]
-class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: Boolean = false)
-  extends InputStream {
+public class LargeByteBufferInputStream extends InputStream {
 
-  override def read(): Int = {
+  LargeByteBuffer buffer;
+  final boolean dispose;
+
+  public LargeByteBufferInputStream(LargeByteBuffer buffer, boolean dispose) {
+    this.buffer = buffer;
+    this.dispose = dispose;
+  }
+
+  public LargeByteBufferInputStream(LargeByteBuffer buffer) {
+    this(buffer, false);
+  }
+
+
+  public int read() {
     if (buffer == null || buffer.remaining() == 0) {
-      -1
+      return -1;
     } else {
-      buffer.get() & 0xFF
+      return buffer.get() & 0xFF;
     }
   }
 
-  override def read(dest: Array[Byte]): Int = {
-    read(dest, 0, dest.length)
+  public int read(byte[] dest) {
+    return read(dest, 0, dest.length);
   }
 
-  override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
+  public int read(byte[] dest, int offset, int length) {
     if (buffer == null || buffer.remaining() == 0) {
-      -1
+      return -1;
     } else {
-      val amountToGet = math.min(buffer.remaining(), length).toInt
-      buffer.get(dest, offset, amountToGet)
-      amountToGet
+      int amountToGet = (int) Math.min(buffer.remaining(), length);
+      buffer.get(dest, offset, amountToGet);
+      return amountToGet;
     }
   }
 
-  override def skip(bytes: Long): Long = {
+  public long skip(long toSkip) {
     if (buffer != null) {
-      buffer.skip(bytes)
+      return buffer.skip(toSkip);
     } else {
-      0L
+      return 0L;
     }
   }
 
   // only for testing
-  private[buffer] var disposed = false
+  @VisibleForTesting
+  boolean disposed = false;
 
   /**
    * Clean up the buffer, and potentially dispose of it
    */
-  override def close() {
+  public void close() {
     if (buffer != null) {
       if (dispose) {
-        buffer.dispose()
-        disposed = true
+        buffer.dispose();
+        disposed = true;
       }
-      buffer = null
+      buffer = null;
     }
   }
 }

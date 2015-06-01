@@ -17,13 +17,10 @@
 package org.apache.spark.network.buffer
 
 import java.io.{FileInputStream, FileOutputStream, OutputStream, File}
-import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.junit.Assert._
 import org.scalatest.{FunSuite, Matchers}
-
-import org.apache.spark.network.buffer.{LargeByteBuffer, LargeByteBufferHelper, WrappedLargeByteBuffer}
 
 class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
 
@@ -44,7 +41,7 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
 
       val channel = new FileInputStream(testFile).getChannel
       val buf = LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, 0, len)
-      val in = new LargeByteBufferInputStream(buf, dispose = true)
+      val in = new LargeByteBufferInputStream(buf, true)
 
       val read = new Array[Byte](buffer.length)
       (0 until (len / buffer.length).toInt).foreach { idx =>
@@ -67,8 +64,7 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
   test("dispose on close") {
     // don't need to read to the end -- dispose anytime we close
     val data = new Array[Byte](10)
-    val in = new LargeByteBufferInputStream(LargeByteBufferHelper.asLargeByteBuffer(data),
-      dispose = true)
+    val in = new LargeByteBufferInputStream(LargeByteBufferHelper.asLargeByteBuffer(data), true)
     in.disposed should be (false)
     in.close()
     in.disposed should be (true)
