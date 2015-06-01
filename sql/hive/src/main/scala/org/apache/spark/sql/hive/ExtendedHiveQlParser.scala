@@ -22,6 +22,7 @@ import scala.language.implicitConversions
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
+import org.apache.spark.sql.execution.ShowTablesCommand
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
@@ -34,7 +35,12 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
   protected val FILE = Keyword("FILE")
   protected val JAR = Keyword("JAR")
 
-  protected lazy val start: Parser[LogicalPlan] = dfs | addJar | addFile | hiveQl
+  protected val IN      = Keyword("IN")
+  protected val SHOW    = Keyword("SHOW")
+  protected val TABLES  = Keyword("TABLES")
+
+
+  protected lazy val start: Parser[LogicalPlan] = dfs | addJar | addFile | showInHive | hiveQl
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     restInput ^^ {
@@ -54,5 +60,10 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
   private lazy val addJar: Parser[LogicalPlan] =
     ADD ~ JAR ~> restInput ^^ {
       case input => AddJar(input.trim)
+    }
+
+  private lazy val showInHive: Parser[LogicalPlan] =
+    SHOW ~ TABLES ~> (IN ~> ident).? ~ opt(stringLit) ^^ {
+      case dbName ~ reg => {println("aaa:" + reg + "|dbName:" + dbName);ShowTablesCommand(dbName)}
     }
 }
