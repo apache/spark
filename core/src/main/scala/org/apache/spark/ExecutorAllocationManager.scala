@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 
