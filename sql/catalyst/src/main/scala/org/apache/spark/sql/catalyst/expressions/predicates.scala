@@ -171,6 +171,27 @@ case class Or(left: Expression, right: Expression)
 
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
+
+  lazy val orderingsAndIndex: Seq[(Ordering[Any], Int)] = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: AtomicType => Seq(i.ordering.asInstanceOf[Ordering[Any]]).zipWithIndex
+      case s: StructType =>
+        val atomicFields = s.fields.filter(_.dataType.isInstanceOf[AtomicType])
+        if (atomicFields.isEmpty) {
+          sys.error(s"Fields in $s do not support ordered operations")
+        } else {
+          atomicFields.map(_.dataType.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]])
+            .zipWithIndex
+        }
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
@@ -210,29 +231,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  lazy val orderings: Either[Ordering[Any], (Int, Ordering[Any])] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => Left(i.ordering.asInstanceOf[Ordering[Any]])
-      case s: StructType =>
-        var i = -1 
-        val f = s.fields.find { f =>
-         i += 1
-         f.dataType.isInstanceOf[AtomicType]
-        }
-        if (f == None) {
-          sys.error(s"Fields in $s do not support ordered operations")
-        } else {
-          val a = f.get.dataType.asInstanceOf[AtomicType]
-          Right((i, a.ordering.asInstanceOf[Ordering[Any]]))
-        }
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
-
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
@@ -242,13 +240,18 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
       if (evalE2 == null) {
         null
       } else {
-        orderings match {
-          case Left(ordering) =>
-            ordering.lt(evalE1, evalE2)
-          case Right((idx, ordering)) =>
-            val evalE1Row = evalE1.asInstanceOf[Row]
-            val evalE2Row = evalE2.asInstanceOf[Row]
-            ordering.lt(evalE1Row(idx), evalE2Row(idx))
+        if (orderingsAndIndex.length == 1) {
+          orderingsAndIndex(0)._1.lt(evalE1, evalE2)
+        } else {
+          // For struct, we need to compare them by order of fields
+          val evalE1Row = evalE1.asInstanceOf[Row]
+          val evalE2Row = evalE2.asInstanceOf[Row]
+          orderingsAndIndex.foreach { ordering =>
+            val idx = ordering._2
+            val cmp = ordering._1.compare(evalE1Row(idx), evalE2Row(idx))
+            if (cmp != 0) return cmp < 0
+          }
+          false
         }
       }
     }
@@ -258,29 +261,6 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  lazy val orderings: Either[Ordering[Any], (Int, Ordering[Any])] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => Left(i.ordering.asInstanceOf[Ordering[Any]])
-      case s: StructType =>
-        var i = -1 
-        val f = s.fields.find { f =>
-         i += 1
-         f.dataType.isInstanceOf[AtomicType]
-        }
-        if (f == None) {
-          sys.error(s"Fields in $s do not support ordered operations")
-        } else {
-          val a = f.get.dataType.asInstanceOf[AtomicType]
-          Right((i, a.ordering.asInstanceOf[Ordering[Any]]))
-        }
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
-
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
@@ -290,13 +270,12 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
       if (evalE2 == null) {
         null
       } else {
-        orderings match {
-          case Left(ordering) =>
-            ordering.lt(evalE1, evalE2)
-          case Right((idx, ordering)) =>
-            val evalE1Row = evalE1.asInstanceOf[Row]
-            val evalE2Row = evalE2.asInstanceOf[Row]
-            ordering.lteq(evalE1Row(idx), evalE2Row(idx))
+        if (orderingsAndIndex.length == 1) {
+          orderingsAndIndex(0)._1.lteq(evalE1, evalE2)
+        } else {
+          val evalE1Row = evalE1.asInstanceOf[Row]
+          val evalE2Row = evalE2.asInstanceOf[Row]
+          orderingsAndIndex(0)._1.lteq(evalE1Row(0), evalE2Row(0))
         }
       }
     }
@@ -305,29 +284,6 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
-
-  lazy val orderings: Either[Ordering[Any], (Int, Ordering[Any])] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => Left(i.ordering.asInstanceOf[Ordering[Any]])
-      case s: StructType =>
-        var i = -1 
-        val f = s.fields.find { f =>
-         i += 1
-         f.dataType.isInstanceOf[AtomicType]
-        }
-        if (f == None) {
-          sys.error(s"Fields in $s do not support ordered operations")
-        } else {
-          val a = f.get.dataType.asInstanceOf[AtomicType]
-          Right((i, a.ordering.asInstanceOf[Ordering[Any]]))
-        }
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -338,13 +294,18 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
       if (evalE2 == null) {
         null
       } else {
-        orderings match {
-          case Left(ordering) =>
-            ordering.lt(evalE1, evalE2)
-          case Right((idx, ordering)) => 
-            val evalE1Row = evalE1.asInstanceOf[Row]
-            val evalE2Row = evalE2.asInstanceOf[Row]
-            ordering.gt(evalE1Row(idx), evalE2Row(idx))
+        if (orderingsAndIndex.length == 1) {
+          orderingsAndIndex(0)._1.gt(evalE1, evalE2)
+        } else {
+          // For struct, we need to compare them by order of fields
+          val evalE1Row = evalE1.asInstanceOf[Row]
+          val evalE2Row = evalE2.asInstanceOf[Row]
+          orderingsAndIndex.foreach { ordering =>
+            val idx = ordering._2
+            val cmp = ordering._1.compare(evalE1Row(idx), evalE2Row(idx))
+            if (cmp != 0) return cmp > 0
+          }
+          false
         }
       }
     }
@@ -353,29 +314,6 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
-
-  lazy val orderings: Either[Ordering[Any], (Int, Ordering[Any])] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => Left(i.ordering.asInstanceOf[Ordering[Any]])
-      case s: StructType =>
-        var i = -1 
-        val f = s.fields.find { f =>
-         i += 1
-         f.dataType.isInstanceOf[AtomicType]
-        }
-        if (f == None) {
-          sys.error(s"Fields in $s do not support ordered operations")
-        } else {
-          val a = f.get.dataType.asInstanceOf[AtomicType]
-          Right((i, a.ordering.asInstanceOf[Ordering[Any]]))
-        }
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -386,13 +324,12 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
       if (evalE2 == null) {
         null
       } else {
-        orderings match {
-          case Left(ordering) =>
-            ordering.lt(evalE1, evalE2)
-          case Right((idx, ordering)) =>
-            val evalE1Row = evalE1.asInstanceOf[Row]
-            val evalE2Row = evalE2.asInstanceOf[Row]
-            ordering.gteq(evalE1Row(idx), evalE2Row(idx))
+        if (orderingsAndIndex.length == 1) {
+          orderingsAndIndex(0)._1.gteq(evalE1, evalE2)
+        } else {
+          val evalE1Row = evalE1.asInstanceOf[Row]
+          val evalE2Row = evalE2.asInstanceOf[Row]
+          orderingsAndIndex(0)._1.gteq(evalE1Row(0), evalE2Row(0))
         }
       }
     }
