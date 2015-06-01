@@ -37,6 +37,19 @@ object CatalystTypeConverters {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
+  private def isPrimitive(dataType: DataType): Boolean = {
+    dataType match {
+      case BooleanType => true
+      case ByteType => true
+      case ShortType => true
+      case IntegerType => true
+      case LongType => true
+      case FloatType => true
+      case DoubleType => true
+      case _ => false
+    }
+  }
+
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
@@ -73,15 +86,17 @@ object CatalystTypeConverters {
      * and Options.
      */
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
-      maybeScalaValue match {
-        case opt: Option[ScalaInputType] =>
-          if (opt.isDefined) {
-            toCatalystImpl(opt.get)
-          } else {
-            null.asInstanceOf[CatalystType]
-          }
-        case null => null.asInstanceOf[CatalystType]
-        case scalaValue: ScalaInputType => toCatalystImpl(scalaValue)
+      if (maybeScalaValue == null) {
+        null.asInstanceOf[CatalystType]
+      } else if (maybeScalaValue.isInstanceOf[Option[ScalaInputType]]) {
+        val opt = maybeScalaValue.asInstanceOf[Option[ScalaInputType]]
+        if (opt.isDefined) {
+          toCatalystImpl(opt.get)
+        } else {
+          null.asInstanceOf[CatalystType]
+        }
+      } else {
+        toCatalystImpl(maybeScalaValue.asInstanceOf[ScalaInputType])
       }
     }
 
@@ -272,46 +287,37 @@ object CatalystTypeConverters {
     }
   }
 
-  private object BooleanConverter extends CatalystTypeConverter[Boolean, Any, Any] {
+  private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
+    final override def toScala(catalystValue: Any): Any = catalystValue
+    final override def toCatalystImpl(scalaValue: T): Any = scalaValue
+  }
+
+  private object BooleanConverter extends PrimitiveConverter[Boolean] {
     override def toScalaImpl(row: Row, column: Int): Boolean = row.getBoolean(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Boolean): Boolean = scalaValue
   }
 
-  private object ByteConverter extends CatalystTypeConverter[Byte, Any, Any] {
+  private object ByteConverter extends PrimitiveConverter[Byte] {
     override def toScalaImpl(row: Row, column: Int): Byte = row.getByte(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Byte): Byte = scalaValue
   }
 
-  private object ShortConverter extends CatalystTypeConverter[Short, Any, Any] {
+  private object ShortConverter extends PrimitiveConverter[Short] {
     override def toScalaImpl(row: Row, column: Int): Short = row.getShort(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Short): Short = scalaValue
   }
 
-  private object IntConverter extends CatalystTypeConverter[Int, Any, Any] {
+  private object IntConverter extends PrimitiveConverter[Int] {
     override def toScalaImpl(row: Row, column: Int): Int = row.getInt(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Int): Int = scalaValue
   }
 
-  private object LongConverter extends CatalystTypeConverter[Long, Any, Any] {
+  private object LongConverter extends PrimitiveConverter[Long] {
     override def toScalaImpl(row: Row, column: Int): Long = row.getLong(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Long): Long = scalaValue
   }
 
-  private object FloatConverter extends CatalystTypeConverter[Float, Any, Any] {
+  private object FloatConverter extends PrimitiveConverter[Float] {
     override def toScalaImpl(row: Row, column: Int): Float = row.getFloat(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Float): Float = scalaValue
   }
 
-  private object DoubleConverter extends CatalystTypeConverter[Double, Any, Any] {
+  private object DoubleConverter extends PrimitiveConverter[Double] {
     override def toScalaImpl(row: Row, column: Int): Double = row.getDouble(column)
-    override def toScala(catalystValue: Any): Any = catalystValue
-    override def toCatalystImpl(scalaValue: Double): Double = scalaValue
   }
 
   /**
@@ -330,7 +336,25 @@ object CatalystTypeConverters {
    * call this function once to get a converter, and apply it to every row.
    */
   private[sql] def createToCatalystConverter(dataType: DataType): Any => Any = {
-    getConverterForType(dataType).toCatalyst
+    if (isPrimitive(dataType)) {
+      // Although the `else` branch here is capable of handling inbound conversion of primitives,
+      // we add some special-case handling for those types here. The motivation for this relates to
+      // Java method invocation costs: if we have rows that consist entirely of primitive columns,
+      // then returning the same conversion function for all of the columns means that the call site
+      // will be monomorphic instead of polymorphic. In microbenchmarks, this actually resulted in
+      // a measurable performance impact. Note that this optimization will be unnecessary if we
+      // use code generation to construct Scala Row -> Catalyst Row converters.
+      def convert(maybeScalaValue: Any): Any = {
+        if (maybeScalaValue.isInstanceOf[Option[Any]]) {
+          maybeScalaValue.asInstanceOf[Option[Any]].orNull
+        } else {
+          maybeScalaValue
+        }
+      }
+      convert
+    } else {
+      getConverterForType(dataType).toCatalyst
+    }
   }
 
   /**
