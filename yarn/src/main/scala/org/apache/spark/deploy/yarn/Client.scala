@@ -813,8 +813,8 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    // Clean up staging director as some appStagingDir can not be deleted when job is failed or
-    // killed, Please see SPARK-7705 for details.
+    // Cleanup staging director as some appStagingDir can not be deleted when job is failed or
+    // killed, please see SPARK-7705 for details.
     cleanupStagingDir()
     val appId = submitApplication()
     if (fireAndForget) {
