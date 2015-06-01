@@ -3,10 +3,25 @@
 
 {% block tail %}
     {{ super() }}
+    <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
     <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
     <script src="/ck/static/chartkick.js"></script>
+    <script>
+      // We blur task_ids in demo mode
+    $( document ).ready(function() {
+      if ("{{ demo_mode }}" == "True") {
+          d3.select("svg")
+            .append("filter")
+            .attr("id", "blur-effect-1")
+            .append("feGaussianBlur")
+            .attr("stdDeviation", 3);
+          d3.selectAll("g.highcharts-legend-item text").style("filter", "url(#blur-effect-1)");
+      }
+    });
+    </script>
     <div class="container">
       {% line_chart data with height=height library=chart_options%}
+
     </div>
 
 {% endblock %}

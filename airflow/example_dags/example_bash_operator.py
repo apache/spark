@@ -1,10 +1,12 @@
 from airflow.operators import BashOperator, DummyOperator
 from airflow.models import DAG
-from datetime import datetime
+from datetime import datetime, timedelta
 
+seven_days_ago = datetime.combine(datetime.today() - timedelta(7),
+                                  datetime.min.time())
 args = {
     'owner': 'airflow',
-    'start_date': datetime(2015, 1, 1),
+    'start_date': seven_days_ago,
 }
 
 dag = DAG(dag_id='example_bash_operator', default_args=args)
