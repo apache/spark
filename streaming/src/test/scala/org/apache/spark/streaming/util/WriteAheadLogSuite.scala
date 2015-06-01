@@ -28,15 +28,15 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
+class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
 
   import WriteAheadLogSuite._
-  
+
   val hadoopConf = new Configuration()
   var tempDir: File = null
   var testDir: String = null
@@ -359,7 +359,7 @@ object WriteAheadLogSuite {
     ): FileBasedWriteAheadLog = {
     if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1)
-    
+
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
       manualClock.advance(500)

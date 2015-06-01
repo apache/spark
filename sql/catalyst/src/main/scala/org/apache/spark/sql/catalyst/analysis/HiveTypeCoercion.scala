@@ -77,7 +77,6 @@ trait HiveTypeCoercion {
     PromoteStrings ::
     DecimalPrecision ::
     BooleanComparisons ::
-    BooleanCasts ::
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
@@ -296,6 +295,9 @@ trait HiveTypeCoercion {
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         i.makeCopy(Array(a, b.map(Cast(_, a.dataType))))
     }
@@ -508,32 +510,6 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Casts to/from [[BooleanType]] are transformed into comparisons since
-   * the JVM does not consider Booleans to be numeric types.
-   */
-  object BooleanCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-      // Skip if the type is boolean type already. Note that this extra cast should be removed
-      // by optimizer.SimplifyCasts.
-      case Cast(e, BooleanType) if e.dataType == BooleanType => e
-      // DateType should be null if be cast to boolean.
-      case Cast(e, BooleanType) if e.dataType == DateType => Cast(e, BooleanType)
-      // If the data type is not boolean and is being cast boolean, turn it into a comparison
-      // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
-      case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
-      // Stringify boolean if casting to StringType.
-      // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
-      case Cast(e, StringType) if e.dataType == BooleanType =>
-        If(e, Literal("true"), Literal("false"))
-      // Turn true into 1, and false into 0 if casting boolean into other types.
-      case Cast(e, dataType) if e.dataType == BooleanType =>
-        Cast(If(e, Literal(1), Literal(0)), dataType)
-    }
-  }
-
-  /**
    * When encountering a cast from a string representing a valid fractional number to an integral
    * type the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
    * truncated version of this number.
@@ -558,8 +534,7 @@ trait HiveTypeCoercion {
 
       case a @ CreateArray(children) if !a.resolved =>
         val commonType = a.childTypes.reduce(
-          (a,b) =>
-            findTightestCommonType(a,b).getOrElse(StringType))
+          (a, b) => findTightestCommonType(a, b).getOrElse(StringType))
         CreateArray(
           children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
 
@@ -631,7 +606,7 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual  =>
+      case cw: CaseWhenLike if !cw.resolved && cw.childrenResolved && !cw.valueTypesEqual =>
         logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
         val commonType = cw.valueTypes.reduce { (v1, v2) =>
           findTightestCommonType(v1, v2).getOrElse(sys.error(

@@ -59,7 +59,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("rename nested groupby") {
-    val df = Seq((1,(1,1))).toDF()
+    val df = Seq((1, (1, 1))).toDF()
 
     checkAnswer(
       df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
@@ -211,23 +211,23 @@ class DataFrameSuite extends QueryTest {
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
-      Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
 
     checkAnswer(
       testData2.orderBy(asc("a"), desc("b")),
-      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+      Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
-      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+      Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.desc),
-      Seq(Row(3,2), Row(3,1), Row(2,2), Row(2,1), Row(1,2), Row(1,1)))
+      Seq(Row(3, 2), Row(3, 1), Row(2, 2), Row(2, 1), Row(1, 2), Row(1, 1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.asc),
-      Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
+      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
       arrayData.toDF().orderBy('data.getItem(0).asc),
@@ -331,7 +331,7 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       df,
       testData.collect().toSeq)
-    assert(df.schema.map(_.name) === Seq("key","value"))
+    assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
   test("withColumnRenamed") {
@@ -364,30 +364,35 @@ class DataFrameSuite extends QueryTest {
 
   test("describe") {
     val describeTestData = Seq(
-      ("Bob",   16, 176),
+      ("Bob", 16, 176),
       ("Alice", 32, 164),
       ("David", 60, 192),
-      ("Amy",   24, 180)).toDF("name", "age", "height")
+      ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   4,               4),
-      Row("mean",    33.0,            178.0),
-      Row("stddev",  16.583123951777, 10.0),
-      Row("min",     16,              164),
-      Row("max",     60,              192))
+      Row("count", "4", "4"),
+      Row("mean", "33.0", "178.0"),
+      Row("stddev", "16.583123951777", "10.0"),
+      Row("min", "16", "164"),
+      Row("max", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count",   0,    0),
-      Row("mean",    null, null),
-      Row("stddev",  null, null),
-      Row("min",     null, null),
-      Row("max",     null, null))
+      Row("count", "0", "0"),
+      Row("mean", null, null),
+      Row("stddev", null, null),
+      Row("min", null, null),
+      Row("max", null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
     val describeTwoCols = describeTestData.describe("age", "height")
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeTwoCols.collect().foreach { row =>
+      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
+      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+    }
 
     val describeAllCols = describeTestData.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
@@ -460,14 +465,14 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+    val df = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
       """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = TestSQLContext.jsonRDD(TestSQLContext.sparkContext.makeRDD(
+    val df2 = TestSQLContext.read.json(TestSQLContext.sparkContext.makeRDD(
       """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
@@ -531,5 +536,45 @@ class DataFrameSuite extends QueryTest {
     // make sure df have at most two Projects
     val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
     assert(!p.child.isInstanceOf[Project])
+  }
+
+  test("SPARK-7150 range api") {
+    // numSlice is greater than length
+    val res1 = TestSQLContext.range(0, 10, 1, 15).select("id")
+    assert(res1.count == 10)
+    assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
+
+    val res2 = TestSQLContext.range(3, 15, 3, 2).select("id")
+    assert(res2.count == 4)
+    assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
+
+    val res3 = TestSQLContext.range(1, -2).select("id")
+    assert(res3.count == 0)
+
+    // start is positive, end is negative, step is negative
+    val res4 = TestSQLContext.range(1, -2, -2, 6).select("id")
+    assert(res4.count == 2)
+    assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
+
+    // start, end, step are negative
+    val res5 = TestSQLContext.range(-3, -8, -2, 1).select("id")
+    assert(res5.count == 3)
+    assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
+
+    // start, end are negative, step is positive
+    val res6 = TestSQLContext.range(-8, -4, 2, 1).select("id")
+    assert(res6.count == 2)
+    assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
+
+    val res7 = TestSQLContext.range(-10, -9, -20, 1).select("id")
+    assert(res7.count == 0)
+
+    val res8 = TestSQLContext.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
+    assert(res8.count == 3)
+    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
+
+    val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
+    assert(res9.count == 2)
+    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
   }
 }

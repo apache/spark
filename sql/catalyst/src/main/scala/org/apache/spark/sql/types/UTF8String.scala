@@ -203,7 +203,7 @@ object UTF8String {
   def apply(s: String): UTF8String = {
     if (s != null) {
       new UTF8String().set(s)
-    } else{
+    } else {
       null
     }
   }

@@ -119,7 +119,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       "failedStages" -> failedStages.size
     )
   }
-  
+
   // These collections may grow arbitrarily, but once Spark becomes idle they should shrink back to
   // some bound based on the `spark.ui.retainedStages` and `spark.ui.retainedJobs` settings:
   private[spark] def getSizesOfSoftSizeLimitedCollections: Map[String, Int] = {

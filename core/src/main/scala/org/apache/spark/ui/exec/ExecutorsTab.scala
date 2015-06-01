@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.ExceptionFailure
+import org.apache.spark.{ExceptionFailure, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -71,6 +71,16 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
     val uiData = executorIdToData(eid)
     uiData.finishTime = Some(executorRemoved.time)
     uiData.finishReason = Some(executorRemoved.reason)
+  }
+
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+    applicationStart.driverLogs.foreach { logs =>
+      val storageStatus = storageStatusList.find { s =>
+        s.blockManagerId.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER ||
+        s.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER
+      }
+      storageStatus.foreach { s => executorToLogUrls(s.blockManagerId.executorId) = logs.toMap }
+    }
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {

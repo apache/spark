@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[GBTClassifier]].
  */
-class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import GBTClassifierSuite.compareAPIs
 

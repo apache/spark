@@ -25,9 +25,6 @@ import org.apache.spark.sql.types._
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
 
-  /** The narrowest possible type that is produced when this expression is evaluated. */
-  type EvaluatedType <: Any
-
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
@@ -44,7 +41,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): EvaluatedType
+  def eval(input: Row = null): Any
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -76,6 +73,19 @@ abstract class Expression extends TreeNode[Expression] {
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
+
+  /**
+   * Returns true when two expressions will always compute the same result, even if they differ
+   * cosmetically (i.e. capitalization of names in attributes may be different).
+   */
+  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    val elements1 = this.productIterator.toSeq
+    val elements2 = other.asInstanceOf[Product].productIterator.toSeq
+    elements1.length == elements2.length && elements1.zip(elements2).forall {
+      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+      case (i1, i2) => i1 == i2
+    }
+  }
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
@@ -104,8 +114,7 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 // not like a real expressions.
 case class GroupExpression(children: Seq[Expression]) extends Expression {
   self: Product =>
-  type EvaluatedType = Seq[Any]
-  override def eval(input: Row): EvaluatedType = throw new UnsupportedOperationException
+  override def eval(input: Row): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = false
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException

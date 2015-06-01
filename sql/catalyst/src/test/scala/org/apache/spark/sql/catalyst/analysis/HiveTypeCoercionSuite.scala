@@ -104,22 +104,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 
-  test("boolean casts") {
-    val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
-    def ruleTest(initial: Expression, transformed: Expression) {
-      val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      comparePlans(
-        booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)),
-        Project(Seq(Alias(transformed, "a")()), testRelation))
-    }
-    // Remove superflous boolean -> boolean casts.
-    ruleTest(Cast(Literal(true), BooleanType), Literal(true))
-    // Stringify boolean when casting to string.
-    ruleTest(
-      Cast(Literal(false), StringType),
-      If(Literal(false), Literal("true"), Literal("false")))
-  }
-
   test("coalesce casts") {
     val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
     def ruleTest(initial: Expression, transformed: Expression) {

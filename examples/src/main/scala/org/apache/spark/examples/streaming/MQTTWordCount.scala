@@ -40,7 +40,7 @@ object MQTTPublisher {
     StreamingExamples.setStreamingLogLevels()
 
     val Seq(brokerUrl, topic) = args.toSeq
-    
+
     var client: MqttClient = null
 
     try {
@@ -49,7 +49,7 @@ object MQTTPublisher {
 
       client.connect()
 
-      val msgtopic  = client.getTopic(topic)
+      val msgtopic = client.getTopic(topic)
       val msgContent = "hello mqtt demo for spark streaming"
       val message = new MqttMessage(msgContent.getBytes("utf-8"))
 
@@ -59,10 +59,10 @@ object MQTTPublisher {
           println(s"Published data. topic: ${msgtopic.getName()}; Message: $message")
         } catch {
           case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
-            Thread.sleep(10) 
+            Thread.sleep(10)
             println("Queue is full, wait for to consume data from the message queue")
-        }  
-      }      
+        }
+      }
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
     } finally {
@@ -107,7 +107,7 @@ object MQTTWordCount {
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
     val words = lines.flatMap(x => x.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
-    
+
     wordCounts.print()
     ssc.start()
     ssc.awaitTermination()

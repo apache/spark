@@ -150,11 +150,12 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 # Algorithm Guides
 
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines.
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
 **Pipelines API Algorithm Guides**
 
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Ensembles](ml-ensembles.html)
 
 
 # Code Examples
@@ -237,7 +238,7 @@ model2.transform(test.toDF)
   .select("features", "label", "myProbability", "prediction")
   .collect()
   .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-    println("($features, $label) -> prob=$prob, prediction=$prediction")
+    println(s"($features, $label) -> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
@@ -391,7 +392,7 @@ model.transform(test.toDF)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println("($id, $text) --> prob=$prob, prediction=$prediction")
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
