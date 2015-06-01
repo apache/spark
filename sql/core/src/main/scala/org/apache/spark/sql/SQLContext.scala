@@ -707,11 +707,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group dataframe
    */
   @Experimental
-  def range(end: Long): DataFrame = {
-    createDataFrame(
-      sparkContext.range(0, end).map(Row(_)),
-      StructType(StructField("id", LongType, nullable = false) :: Nil))
-  }
+  def range(end: Long): DataFrame = range(0,end)
   
   /**
    * :: Experimental ::
