@@ -22,11 +22,8 @@ import java.io.File
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
-
 
 class KryoClosureSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
