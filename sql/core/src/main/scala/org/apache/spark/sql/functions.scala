@@ -187,7 +187,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -1299,7 +1299,7 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
-    
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -21,13 +21,11 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
-class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
+class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging {
   var checkpointDir: File = _
   val partitioner = new HashPartitioner(2)
 
@@ -218,10 +216,10 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val pairRDD = generateFatPairRDD()
     pairRDD.checkpoint()
     val unionRDD = new PartitionerAwareUnionRDD(sc, Array(pairRDD))
-    val partitionBeforeCheckpoint =  serializeDeserialize(
+    val partitionBeforeCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     pairRDD.count()
-    val partitionAfterCheckpoint =  serializeDeserialize(
+    val partitionAfterCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
     assert(
       partitionBeforeCheckpoint.parents.head.getClass !=

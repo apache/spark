@@ -148,12 +148,12 @@ class DataFrameAggregateSuite extends QueryTest {
   test("null count") {
     checkAnswer(
       testData3.groupBy('a).agg(count('b)),
-      Seq(Row(1,0), Row(2, 1))
+      Seq(Row(1, 0), Row(2, 1))
     )
 
     checkAnswer(
       testData3.groupBy('a).agg(count('a + 'b)),
-      Seq(Row(1,0), Row(2, 1))
+      Seq(Row(1, 0), Row(2, 1))
     )
 
     checkAnswer(

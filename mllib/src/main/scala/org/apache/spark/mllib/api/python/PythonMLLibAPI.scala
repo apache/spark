@@ -392,14 +392,14 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       wt: Vector,
       mu: Array[Object],
-      si: Array[Object]):  RDD[Vector]  = {
+      si: Array[Object]): RDD[Vector] = {
 
       val weight = wt.toArray
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
       val gaussians = Array.tabulate(weight.length){
         i => new MultivariateGaussian(mean(i), sigma(i))
-      }      
+      }
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data).map(Vectors.dense)
   }
@@ -428,7 +428,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -459,7 +459,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -494,7 +494,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
     new Normalizer(p).transform(rdd)
   }
-  
+
   /**
    * Java stub for StandardScaler.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
@@ -1242,7 +1242,7 @@ private[spark] object SerDe extends Serializable {
   }
 
   /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
-  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]]  = {
+  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]] = {
     rdd.map(x => Array(x._1, x._2))
   }
 

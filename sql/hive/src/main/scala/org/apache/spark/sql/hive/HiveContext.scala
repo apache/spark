@@ -189,24 +189,22 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
           s"or change $HIVE_METASTORE_VERSION to $hiveExecutionVersion.")
       }
-      // We recursively add all jars in the class loader chain,
-      // starting from the given urlClassLoader.
-      def addJars(urlClassLoader: URLClassLoader): Array[URL] = {
-        val jarsInParent = urlClassLoader.getParent match {
-          case parent: URLClassLoader => addJars(parent)
-          case other => Array.empty[URL]
-        }
 
-        urlClassLoader.getURLs ++ jarsInParent
+      // We recursively find all jars in the class loader chain,
+      // starting from the given classLoader.
+      def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
+        case null => Array.empty[URL]
+        case urlClassLoader: URLClassLoader =>
+          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
+        case other => allJars(other.getParent)
       }
 
-      val jars = Utils.getContextOrSparkClassLoader match {
-        case urlClassLoader: URLClassLoader => addJars(urlClassLoader)
-        case other =>
-          throw new IllegalArgumentException(
-            "Unable to locate hive jars to connect to metastore " +
-            s"using classloader ${other.getClass.getName}. " +
-            "Please set spark.sql.hive.metastore.jars")
+      val classLoader = Utils.getContextOrSparkClassLoader
+      val jars = allJars(classLoader)
+      if (jars.length == 0) {
+        throw new IllegalArgumentException(
+          "Unable to locate hive jars to connect to metastore. " +
+            "Please set spark.sql.hive.metastore.jars.")
       }
 
       logInfo(
@@ -356,9 +354,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    hiveconf.set(key, value)
     executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
+    // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
+    // this setConf will be called in the constructor of the SQLContext.
+    // Also, calling hiveconf will create a default session containing a HiveConf, which
+    // will interfer with the creation of executionHive (which is a lazy val). So,
+    // we put hiveconf.set at the end of this method.
+    hiveconf.set(key, value)
   }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
@@ -527,7 +530,7 @@ private[hive] object HiveContext {
     val propMap: HashMap[String, String] = HashMap()
     // We have to mask all properties in hive-site.xml that relates to metastore data source
     // as we used a local metastore here.
-    HiveConf.ConfVars.values().foreach { confvar  =>
+    HiveConf.ConfVars.values().foreach { confvar =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
         propMap.put(confvar.varname, confvar.defaultVal)
       }
@@ -550,7 +553,7 @@ private[hive] object HiveContext {
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_,_], MapType(kType, vType, _)) =>
+    case (map: Map[_, _], MapType(kType, vType, _)) =>
       map.map {
         case (key, value) =>
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))

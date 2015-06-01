@@ -34,10 +34,10 @@ import org.apache.spark.sql.{SQLContext, Row}
 /**
  * :: Experimental ::
  *
- * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points 
- * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
- * the respective mean and covariance for each Gaussian distribution i=1..k. 
- * 
+ * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
+ * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are
+ * the respective mean and covariance for each Gaussian distribution i=1..k.
+ *
  * @param weights Weights for each Gaussian distribution in the mixture, where weights(i) is
  *                the weight for Gaussian i, and weights.sum == 1
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
@@ -45,9 +45,9 @@ import org.apache.spark.sql.{SQLContext, Row}
  */
 @Experimental
 class GaussianMixtureModel(
-  val weights: Array[Double], 
+  val weights: Array[Double],
   val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable{
-  
+
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
   override protected def formatVersion = "1.0"
@@ -64,20 +64,20 @@ class GaussianMixtureModel(
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
-  
+
   /**
    * Given the input vectors, return the membership value of each vector
-   * to all mixture components. 
+   * to all mixture components.
    */
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
     val bcDists = sc.broadcast(gaussians)
     val bcWeights = sc.broadcast(weights)
-    points.map { x => 
+    points.map { x =>
       computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
   }
-  
+
   /**
    * Compute the partial assignments for each vector
    */
@@ -89,7 +89,7 @@ class GaussianMixtureModel(
     val p = weights.zip(dists).map {
       case (weight, dist) => MLUtils.EPSILON + weight * dist.pdf(pt)
     }
-    val pSum = p.sum 
+    val pSum = p.sum
     for (i <- 0 until k) {
       p(i) /= pSum
     }

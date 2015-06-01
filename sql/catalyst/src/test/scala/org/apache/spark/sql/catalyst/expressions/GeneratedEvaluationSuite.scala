@@ -41,9 +41,9 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
           """.stripMargin)
     }
 
-    val actual  = plan(inputRow).apply(0)
-    if(actual != expected) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+    val actual = plan(inputRow).apply(0)
+    if (actual != expected) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }

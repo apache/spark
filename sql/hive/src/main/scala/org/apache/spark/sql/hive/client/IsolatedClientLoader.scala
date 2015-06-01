@@ -90,14 +90,14 @@ private[hive] object IsolatedClientLoader {
  *    `ClientInterface`, unless `isolationOn` is set to `false`.
  *
  * @param version The version of hive on the classpath.  used to pick specific function signatures
- *                that are not compatibile accross versions.
+ *                that are not compatible across versions.
  * @param execJars A collection of jar files that must include hive and hadoop.
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
- * @param rootClassLoader The system root classloader.  Must not know about hive classes.
- * @param baseClassLoader The spark classloader that is used to load shared classes.
- *
+ * @param rootClassLoader The system root classloader.
+ * @param baseClassLoader The spark classloader that is used to load shared classes.  Must not know
+ *                        about Hive classes.
  */
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
@@ -110,7 +110,7 @@ private[hive] class IsolatedClientLoader(
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
-  // Check to make sure that the root classloader does not know about Hive.
+  // Check to make sure that the base classloader does not know about Hive.
   assert(Try(baseClassLoader.loadClass("org.apache.hive.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */

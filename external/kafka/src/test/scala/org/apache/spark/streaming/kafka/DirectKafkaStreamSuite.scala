@@ -28,10 +28,10 @@ import scala.language.postfixOps
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
@@ -39,7 +39,7 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite
-  extends FunSuite
+  extends SparkFunSuite
   with BeforeAndAfter
   with BeforeAndAfterAll
   with Eventually

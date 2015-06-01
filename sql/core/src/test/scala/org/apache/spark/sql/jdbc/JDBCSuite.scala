@@ -21,14 +21,15 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
-import org.scalatest.{FunSuite, BeforeAndAfter}
+import org.scalatest.BeforeAndAfter
 import TestSQLContext._
 import TestSQLContext.implicits._
 
-class JDBCSuite extends FunSuite with BeforeAndAfter {
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
@@ -67,7 +68,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
- 
+
     sql(
       s"""
         |CREATE TEMPORARY TABLE fetchtwo
@@ -75,7 +76,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         fetchSize '2')
       """.stripMargin.replaceAll("\n", " "))
- 
+
     sql(
       s"""
         |CREATE TEMPORARY TABLE parts
@@ -208,7 +209,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(1) === 2)
     assert(ids(2) === 3)
   }
- 
+
   test("SELECT second field when fetchSize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
@@ -429,8 +430,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0,"",1,null) == Some(LongType))
-    assert(agg.getCatalystType(1,"",1,null) == Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, null) == Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null) == Some(StringType))
   }
 
 }

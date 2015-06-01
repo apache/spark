@@ -38,14 +38,14 @@ trait StringRegexExpression extends ExpectsInputTypes {
     case _ => null
   }
 
-  protected def compile(str: String): Pattern = if(str == null) {
+  protected def compile(str: String): Pattern = if (str == null) {
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
     Pattern.compile(escape(str))
   }
 
-  protected def pattern(str: String) = if(cache == null) compile(str) else cache
+  protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -133,7 +133,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
  * A function that converts the characters of a string to uppercase.
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: UTF8String): UTF8String = v.toUpperCase()
 
   override def toString: String = s"Upper($child)"
@@ -143,7 +143,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  * A function that converts the characters of a string to lowercase.
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: UTF8String): UTF8String = v.toLowerCase()
 
   override def toString: String = s"Lower($child)"
@@ -223,7 +223,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   @inline
   def slicePos(startPos: Int, sliceLen: Int, length: () => Int): (Int, Int) = {
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
-    // negative indices for start positions. If a start index i is greater than 0, it 
+    // negative indices for start positions. If a start index i is greater than 0, it
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.

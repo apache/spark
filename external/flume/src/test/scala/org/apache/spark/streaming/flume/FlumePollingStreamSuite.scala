@@ -31,16 +31,16 @@ import org.apache.flume.conf.Configurables
 import org.apache.flume.event.EventBuilder
 import org.scalatest.concurrent.Eventually._
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
 import org.apache.spark.util.{ManualClock, Utils}
 
-class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging {
+class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
   val batchCount = 5
   val eventsPerBatch = 100

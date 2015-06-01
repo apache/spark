@@ -52,6 +52,7 @@ private[sql] object JDBCRDD extends Logging {
       scale: Int,
       signed: Boolean): DataType = {
     val answer = sqlType match {
+      // scalastyle:off
       case java.sql.Types.ARRAY         => null
       case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType.Unlimited }
       case java.sql.Types.BINARY        => BinaryType
@@ -92,7 +93,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
-      case _ => null
+      case _                            => null
+      // scalastyle:on
     }
 
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
@@ -260,7 +262,7 @@ private[sql] class JDBCRDD(
   }
 
   private def escapeSql(value: String): String =
-    if (value == null) null else  StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -302,7 +304,7 @@ private[sql] class JDBCRDD(
 
   // Each JDBC-to-Catalyst conversion corresponds to a tag defined here so that
   // we don't have to potentially poke around in the Metadata once for every
-  // row.  
+  // row.
   // Is there a better way to do this?  I'd rather be using a type that
   // contains only the tags I define.
   abstract class JDBCConversion
@@ -323,19 +325,19 @@ private[sql] class JDBCRDD(
    */
   def getConversions(schema: StructType): Array[JDBCConversion] = {
     schema.fields.map(sf => sf.dataType match {
-      case BooleanType           => BooleanConversion
-      case DateType              => DateConversion
+      case BooleanType => BooleanConversion
+      case DateType => DateConversion
       case DecimalType.Unlimited => DecimalConversion(None)
-      case DecimalType.Fixed(d)  => DecimalConversion(Some(d))
-      case DoubleType            => DoubleConversion
-      case FloatType             => FloatConversion
-      case IntegerType           => IntegerConversion
-      case LongType              =>
+      case DecimalType.Fixed(d) => DecimalConversion(Some(d))
+      case DoubleType => DoubleConversion
+      case FloatType => FloatConversion
+      case IntegerType => IntegerConversion
+      case LongType =>
         if (sf.metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-      case StringType            => StringConversion
-      case TimestampType         => TimestampConversion
-      case BinaryType            => BinaryConversion
-      case _                     => throw new IllegalArgumentException(s"Unsupported field $sf")
+      case StringType => StringConversion
+      case TimestampType => TimestampConversion
+      case BinaryType => BinaryConversion
+      case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
     }).toArray
   }
 
@@ -376,8 +378,8 @@ private[sql] class JDBCRDD(
         while (i < conversions.length) {
           val pos = i + 1
           conversions(i) match {
-            case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            case DateConversion       =>
+            case BooleanConversion => mutableRow.setBoolean(i, rs.getBoolean(pos))
+            case DateConversion =>
               // DateUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
@@ -407,14 +409,14 @@ private[sql] class JDBCRDD(
               } else {
                 mutableRow.update(i, Decimal(decimalVal))
               }
-            case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
-            case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
-            case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
-            case LongConversion       => mutableRow.setLong(i, rs.getLong(pos))
+            case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
+            case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
+            case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
+            case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion     => mutableRow.setString(i, rs.getString(pos))
-            case TimestampConversion  => mutableRow.update(i, rs.getTimestamp(pos))
-            case BinaryConversion     => mutableRow.update(i, rs.getBytes(pos))
+            case StringConversion => mutableRow.setString(i, rs.getString(pos))
+            case TimestampConversion => mutableRow.update(i, rs.getTimestamp(pos))
+            case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
             case BinaryLongConversion => {
               val bytes = rs.getBytes(pos)
               var ans = 0L

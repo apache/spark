@@ -62,12 +62,12 @@ private[spark] abstract class WebUI(
     tab.pages.foreach(attachPage)
     tabs += tab
   }
-  
+
   def detachTab(tab: WebUITab) {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
-  
+
   def detachPage(page: WebUIPage) {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }

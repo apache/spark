@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.sources
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ResolvedDataSourceSuite extends FunSuite {
+class ResolvedDataSourceSuite extends SparkFunSuite {
 
   test("builtin sources") {
     assert(ResolvedDataSource.lookupDataSource("jdbc") ===
