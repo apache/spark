@@ -24,7 +24,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * A Random distribution generating expression.
- * TODO: This can be made generic to generate any type of random distribution, or any type of  
+ * TODO: This can be made generic to generate any type of random distribution, or any type of
  * StructType.
  *
  * Since this expression is stateful, it cannot be a case object.
@@ -37,8 +37,6 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    * reset every time we serialize and deserialize it.
    */
   @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
-
-  override type EvaluatedType = Double
 
   override def nullable: Boolean = false
 

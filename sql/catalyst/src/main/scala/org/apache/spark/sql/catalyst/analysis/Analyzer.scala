@@ -494,7 +494,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) => {
-        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val evaluatedCondition = Alias(havingCondition, "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
 
         Project(aggregate.output,
@@ -515,16 +515,15 @@ class Analyzer(
    *  - concrete attribute references for their output.
    *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
    *
-   * Names for the output [[Attributes]] are extracted from [[Alias]] or [[MultiAlias]] expressions
+   * Names for the output [[Attribute]]s are extracted from [[Alias]] or [[MultiAlias]] expressions
    * that wrap the [[Generator]]. If more than one [[Generator]] is found in a Project, an
    * [[AnalysisException]] is throw.
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case g: Generate if g.resolved == false =>
-          g.copy(
-            generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      case g: Generate if !g.resolved =>
+        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -561,6 +560,21 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name)
+          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+          // Assume the default name given by parser is "_c[0-9]+",
+          // TODO in long term, move the naming logic from Parser to Analyzer.
+          // In projection, Parser gave default name for TGF as does for normal UDF,
+          // but the TGF probably have multiple output columns/names.
+          //    e.g. SELECT explode(map(key, value)) FROM src;
+          // Let's simply ignore the default given name for this case.
+          Some((g, Nil))
+        }
+        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+          // If not given the default names, and the TGF with multiple output columns
+          failAnalysis(
+            s"""Expect multiple names given for ${g.getClass.getName},
+               |but only single name '${name}' specified""".stripMargin)
         case Alias(g: Generator, name) => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) => Some(g, names)
         case _ => None

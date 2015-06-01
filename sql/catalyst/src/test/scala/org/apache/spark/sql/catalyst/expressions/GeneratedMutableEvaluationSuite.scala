@@ -53,7 +53,7 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
         """.stripMargin)
     }
     if (actual != expectedRow) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }

@@ -38,6 +38,8 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("ml"),
+            // SPARK-7910 Adding a method to get the partioner to JavaRDD,
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner"),
             // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
             // These are needed if checking against the sbt build, since they are part of
@@ -133,7 +135,10 @@ object MimaExcludes {
               "org.apache.spark.sql.parquet.TestGroupWriteSupport"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CachedData$"),
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.CacheManager"),
+            // TODO: Remove the following rule once ParquetTest has been moved to src/test.
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTest")
           ) ++ Seq(
             // SPARK-7530 Added StreamingContext.getState()
             ProblemFilters.exclude[MissingMethodProblem](

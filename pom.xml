@@ -1753,22 +1753,6 @@
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
-    <profile>
-      <id>hive-0.12.0</id>
-      <properties>
-        <hive.version>0.12.0-protobuf-2.5</hive.version>
-        <hive.version.short>0.12.0</hive.version.short>
-        <derby.version>10.4.2.0</derby.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>hive-0.13.1</id>
-      <properties>
-        <hive.version>0.13.1a</hive.version>
-        <hive.version.short>0.13.1</hive.version.short>
-        <derby.version>10.10.1.1</derby.version>
-      </properties>
-    </profile>
 
     <profile>
       <id>scala-2.10</id>
@@ -1799,9 +1783,9 @@
         <property><name>scala-2.11</name></property>
       </activation>
       <properties>
-        <scala.version>2.11.2</scala.version>
+        <scala.version>2.11.6</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <jline.version>2.12</jline.version>
+        <jline.version>2.12.1</jline.version>
         <jline.groupid>jline</jline.groupid>
       </properties>
     </profile>

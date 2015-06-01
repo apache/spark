@@ -19,14 +19,13 @@ package org.apache.spark.mllib.regression
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
 
-class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
+class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 20000
