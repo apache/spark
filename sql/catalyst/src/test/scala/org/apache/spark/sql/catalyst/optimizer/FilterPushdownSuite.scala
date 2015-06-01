@@ -196,14 +196,14 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
 
     val originalQuery = {
       x.join(y, Inner)
-       .where(("x.a".attr === 1 && "y.d".attr === "x.b".attr) || 
+       .where(("x.a".attr === 1 && "y.d".attr === "x.b".attr) ||
               ("x.a".attr === 1 && "y.d".attr === "x.c".attr))
     }
 
