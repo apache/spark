@@ -41,7 +41,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
     val listener = new SaveExecutorInfo
     sc.addSparkListener(listener)
 
-    // This test will if check the number of executors received by "SparkListener" is same as the
+    // This test will check if the number of executors received by "SparkListener" is same as the
     // number of all executors, so we need to wait until all executors are up
     sc.jobProgressListener.waitUntilExecutorsUp(2, 10000)
 
