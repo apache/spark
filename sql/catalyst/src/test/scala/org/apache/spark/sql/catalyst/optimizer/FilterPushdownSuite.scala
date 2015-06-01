@@ -202,7 +202,7 @@ class FilterPushdownSuite extends PlanTest {
     val y = testRelation1.subquery('y)
 
     val originalQuery = {
-      x.join(y, Inner)
+      x.join(y)
        .where(("x.a".attr === 1 && "y.d".attr === "x.b".attr) ||
               ("x.a".attr === 1 && "y.d".attr === "x.c".attr))
     }
