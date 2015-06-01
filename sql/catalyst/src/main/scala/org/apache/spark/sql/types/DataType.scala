@@ -165,6 +165,9 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  /**
+   * @deprecated As of 1.2.0, replaced by `DataType.fromJson()`
+   */
   @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 

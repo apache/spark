@@ -37,9 +37,9 @@ import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils
 
@@ -405,7 +405,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
   }
 }
 
-abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")

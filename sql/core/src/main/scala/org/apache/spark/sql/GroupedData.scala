@@ -40,22 +40,22 @@ private[sql] object GroupedData {
   /**
    * The Grouping Type
    */
-  trait GroupType
+  private[sql] trait GroupType
 
   /**
    * To indicate it's the GroupBy
    */
-  object GroupByType extends GroupType
+  private[sql] object GroupByType extends GroupType
 
   /**
    * To indicate it's the CUBE
    */
-  object CubeType extends GroupType
+  private[sql] object CubeType extends GroupType
 
   /**
    * To indicate it's the ROLLUP
    */
-  object RollupType extends GroupType
+  private[sql] object RollupType extends GroupType
 }
 
 /**
@@ -249,7 +249,7 @@ class GroupedData protected[sql](
   def mean(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Average)
   }
- 
+
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.

@@ -17,12 +17,12 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 
-class WorkerSuite extends FunSuite with Matchers {
+class WorkerSuite extends SparkFunSuite with Matchers {
 
   def cmd(javaOpts: String*): Command = {
     Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts : _*))

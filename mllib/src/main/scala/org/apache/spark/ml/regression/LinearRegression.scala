@@ -321,7 +321,7 @@ private class LeastSquaresAggregator(
     }
     (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
   }
-  
+
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
 
   private val gradientSumArray = Array.ofDim[Double](dim)

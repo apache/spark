@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -44,7 +44,7 @@ import org.apache.spark.storage.ShuffleIndexBlockId
  * config options, in particular, a different shuffle manager class
  */
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[HashShuffleManager])
-  extends FunSuite with BeforeAndAfter with LocalSparkContext
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
   implicit val defaultTimeout = timeout(10000 millis)
   val conf = new SparkConf()

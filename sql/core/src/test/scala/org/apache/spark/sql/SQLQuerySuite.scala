@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.{SQLTestUtils, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 
 import org.apache.spark.sql.types._
@@ -32,12 +32,12 @@ import org.apache.spark.sql.types._
 /** A SQL Dialect for testing purpose, and it can not be nested type */
 class MyDialect extends DefaultParserDialect
 
-class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
+class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   // Make sure the tables are loaded.
   TestData
 
-  import org.apache.spark.sql.test.TestSQLContext.implicits._
-  val sqlCtx = TestSQLContext
+  val sqlContext = TestSQLContext
+  import sqlContext.implicits._
 
   test("SPARK-6743: no columns from cache") {
     Seq(
@@ -923,7 +923,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(values(0).toInt, values(1), values(2).toBoolean, v4)
     }
 
-    val df1 = sqlCtx.createDataFrame(rowRDD1, schema1)
+    val df1 = createDataFrame(rowRDD1, schema1)
     df1.registerTempTable("applySchema1")
     checkAnswer(
       sql("SELECT * FROM applySchema1"),
@@ -953,7 +953,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    val df2 = sqlCtx.createDataFrame(rowRDD2, schema2)
+    val df2 = createDataFrame(rowRDD2, schema2)
     df2.registerTempTable("applySchema2")
     checkAnswer(
       sql("SELECT * FROM applySchema2"),
@@ -978,7 +978,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
     }
 
-    val df3 = sqlCtx.createDataFrame(rowRDD3, schema2)
+    val df3 = createDataFrame(rowRDD3, schema2)
     df3.registerTempTable("applySchema3")
 
     checkAnswer(
@@ -1023,7 +1023,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       .build()
     val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
-    val personWithMeta = sqlCtx.createDataFrame(person.rdd, schemaWithMeta)
+    val personWithMeta = createDataFrame(person.rdd, schemaWithMeta)
     def validateMetadata(rdd: DataFrame): Unit = {
       assert(rdd.schema("name").metadata.getString(docKey) == docValue)
     }
@@ -1338,5 +1338,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       .registerTempTable("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+  }
+
+  test("SPARK-7952: fix the equality check between boolean and numeric types") {
+    withTempTable("t") {
+      // numeric field i, boolean field j, result of i = j, result of i <=> j
+      Seq[(Integer, java.lang.Boolean, java.lang.Boolean, java.lang.Boolean)](
+        (1, true, true, true),
+        (0, false, true, true),
+        (2, true, false, false),
+        (2, false, false, false),
+        (null, true, null, false),
+        (null, false, null, false),
+        (0, null, null, false),
+        (1, null, null, false),
+        (null, null, null, true)
+      ).toDF("i", "b", "r1", "r2").registerTempTable("t")
+
+      checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
+      checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
+    }
   }
 }

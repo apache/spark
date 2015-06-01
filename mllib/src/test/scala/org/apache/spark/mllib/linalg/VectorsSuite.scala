@@ -20,12 +20,11 @@ package org.apache.spark.mllib.linalg
 import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class VectorsSuite extends FunSuite {
+class VectorsSuite extends SparkFunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
   val n = 4
@@ -215,13 +214,13 @@ class VectorsSuite extends FunSuite {
 
       val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
 
-      // SparseVector vs. SparseVector 
-      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8) 
+      // SparseVector vs. SparseVector
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. SparseVector
       assert(Vectors.sqdist(denseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. DenseVector
       assert(Vectors.sqdist(denseVector1, denseVector2) ~== squaredDist relTol 1E-8)
-    }    
+    }
   }
 
   test("foreachActive") {

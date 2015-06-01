@@ -155,7 +155,7 @@ private[sql] class ParquetRelation2(
     meta
   }
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
