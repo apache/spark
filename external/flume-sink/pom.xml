@@ -47,6 +47,10 @@
           <groupId>com.google.guava</groupId>
           <artifactId>guava</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -56,6 +60,10 @@
         <exclusion>
           <groupId>com.google.guava</groupId>
           <artifactId>guava</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
