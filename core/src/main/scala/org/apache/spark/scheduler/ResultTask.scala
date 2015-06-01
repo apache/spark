@@ -24,7 +24,6 @@ import java.io._
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.KryoSerializer
 
 /**
  * A task that sends back the output to the driver application.

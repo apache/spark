@@ -143,7 +143,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       taskBinary.value
     }
     ser.deserialize[T](ByteBuffer.wrap(taskBuffer), Thread.currentThread.getContextClassLoader)
-  }  
+  }
 }
 
 /**

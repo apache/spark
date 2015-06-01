@@ -24,14 +24,14 @@ import com.google.common.io.Files
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 
-class KryoClosureSerializerSuite extends FunSuite with SharedSparkContext {
+class KryoClosureSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.closure.serializer", "org.apache.spark.serializer.KryoSerializer")
-  
+
   test("accumulator kryo serialization") {
     val accum = sc.accumulator(0)
     val rdd = sc.parallelize(0 until 3)
