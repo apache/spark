@@ -725,7 +725,6 @@ class SparseVector(
       -1
     } else {
 
-      //grab first active index and value by default
       var maxIdx = indices(0)
       var maxValue = values(0)
 
@@ -736,9 +735,14 @@ class SparseVector(
         }
       }
 
-      // look for inactive values incase all active node values are negative
+      // look for inactive values in case all active node values are negative
       if(size != values.size && maxValue <= 0){
-        maxIdx = calcInactiveIdx(0)
+        val firstInactiveIdx = calcFirstInactiveIdx(0)
+        if(maxValue == 0){
+          if(firstInactiveIdx >= maxIdx) maxIdx else maxIdx = firstInactiveIdx
+        }else{
+          maxIdx = firstInactiveIdx
+        }
         maxValue = 0
       }
       maxIdx
@@ -751,12 +755,12 @@ class SparseVector(
    * @param idx starting index of computation
    * @return index of first inactive node
    */
-  private[SparseVector] def calcInactiveIdx(idx: Int): Int = {
+  private[SparseVector] def calcFirstInactiveIdx(idx: Int): Int = {
     if (idx < size) {
       if (!indices.contains(idx)) {
         idx
       } else {
-        calcInactiveIdx(idx + 1)
+        calcFirstInactiveIdx(idx + 1)
       }
     } else {
       -1
