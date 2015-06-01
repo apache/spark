@@ -121,19 +121,7 @@ private[spark] class Client(
     } catch {
       case e: Throwable =>
         if (appId != null) {
-          val appStagingDir = getAppStagingDir(appId)
-          try {
-            val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-            val stagingDirPath = new Path(appStagingDir)
-            val fs = FileSystem.get(hadoopConf)
-            if (!preserveFiles && fs.exists(stagingDirPath)) {
-              logInfo("Deleting staging directory " + stagingDirPath)
-              fs.delete(stagingDirPath, true)
-            }
-          } catch {
-            case ioe: IOException =>
-              logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
-          }
+          cleanupStagingDir(appId)
         }
         throw e
     }
@@ -853,24 +841,33 @@ private[spark] class Client(
     }
   }
 
-  private def cleanupStagingDir(): Unit = {
-    val fs = FileSystem.get(hadoopConf)
+  /**
+   * Cleanup application staging directory if applicationId is given, or cleanup all subdirectory
+   * of SPARK_STAGING directory.
+   */
+  private def cleanupStagingDir(appId: ApplicationId = null): Unit = {
+    val stagingDirPath =  if (appId != null) {
+      new Path(getAppStagingDir(appId))
+    } else {
+      new Path(SPARK_STAGING)
+    }
     try {
+      val fs = FileSystem.get(hadoopConf)
       val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-      if (!preserveFiles) {
-        val stagingDirPath = new Path(fs.getHomeDirectory, SPARK_STAGING)
-        if (stagingDirPath == null) {
-          return
+      if (!preserveFiles && fs.exists(stagingDirPath)) {
+        if (appId != null) {
+          logInfo(s"Deleting application staging directory $stagingDirPath")
+          fs.delete(stagingDirPath, true)
         } else {
-          fs.listStatus(stagingDirPath).foreach{ fileStatus =>
-            logInfo("Deleting application staging directory " + fileStatus.getPath)
+          fs.listStatus(stagingDirPath).foreach { fileStatus =>
+            logInfo(s"Deleting application staging directory ${fileStatus.getPath}")
             fs.delete(fileStatus.getPath, true)
           }
         }
       }
     } catch {
       case ioe: IOException =>
-        logError("Failed to cleanup staging dir.", ioe)
+        logWarning("Failed to cleanup staging dir.", ioe)
     }
   }
 }
