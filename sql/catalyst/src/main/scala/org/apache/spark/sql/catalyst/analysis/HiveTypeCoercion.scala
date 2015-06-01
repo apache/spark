@@ -138,20 +138,20 @@ trait HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         /* Double Conversions */
-        case b @ BinaryExpression(StringNaN, r @ DoubleType()) =>
-          b.makeCopy(Array(r, Literal(Double.NaN)))
-        case b @ BinaryExpression(l @ DoubleType(), StringNaN) =>
-          b.makeCopy(Array(Literal(Double.NaN), l))
+        case b @ BinaryExpression(StringNaN, right @ DoubleType()) =>
+          b.makeCopy(Array(Literal(Double.NaN), right))
+        case b @ BinaryExpression(left @ DoubleType(), StringNaN) =>
+          b.makeCopy(Array(left, Literal(Double.NaN)))
 
         /* Float Conversions */
-        case b @ BinaryExpression(StringNaN, r @ FloatType()) =>
-          b.makeCopy(Array(b.right, Literal(Float.NaN)))
-        case b @ BinaryExpression(l @ FloatType(), StringNaN) =>
-          b.makeCopy(Array(Literal(Float.NaN), l))
+        case b @ BinaryExpression(StringNaN, right @ FloatType()) =>
+          b.makeCopy(Array(Literal(Float.NaN), right))
+        case b @ BinaryExpression(left @ FloatType(), StringNaN) =>
+          b.makeCopy(Array(left, Literal(Float.NaN)))
 
         /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryExpression(l @ StringNaN, StringNaN) =>
-          b.makeCopy(Array(Literal(Float.NaN), l))
+        case b @ BinaryExpression(left @ StringNaN, StringNaN) =>
+          b.makeCopy(Array(left, Literal(Float.NaN)))
       }
     }
   }
@@ -193,12 +193,16 @@ trait HiveTypeCoercion {
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
             findTightestCommonTypeOfTwo(l.dataType, r.dataType).map { widestType =>
               val newLeft =
-                if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
+                if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
               val newRight =
-                if (r.dataType == widestType) r else Alias(Cast(r, widestType), r.name)()
+                if (rhs.dataType == widestType) rhs else Alias(Cast(rhs, widestType), rhs.name)()
 
               (newLeft, newRight)
-            }.getOrElse((l, r)) // If there is no applicable conversion, leave expression unchanged.
+            }.getOrElse {
+              // If there is no applicable conversion, leave expression unchanged.
+              (lhs, rhs)
+            }
+
           case other => other
         }
 
@@ -227,12 +231,12 @@ trait HiveTypeCoercion {
         // Skip nodes who's children have not been resolved yet.
         case e if !e.childrenResolved => e
 
-        case b @ BinaryExpression(l, r) if l.dataType != r.dataType =>
-          findTightestCommonType(l.dataType, r.dataType).map { widestType =>
+        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
+          findTightestCommonType(left.dataType, right.dataType).map { widestType =>
             val newLeft =
-              if (l.dataType == widestType) l else Cast(l, widestType)
+              if (left.dataType == widestType) left else Cast(left, widestType)
             val newRight =
-              if (r.dataType == widestType) r else Cast(r, widestType)
+              if (right.dataType == widestType) right else Cast(right, widestType)
             b.makeCopy(Array(newLeft, newRight))
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
       }
@@ -247,29 +251,29 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(l @ StringType(), r) =>
-        a.makeCopy(Array(Cast(l, DoubleType), r))
-      case a @ BinaryArithmetic(l, r @ StringType()) =>
-        a.makeCopy(Array(l, Cast(r, DoubleType)))
+      case a @ BinaryArithmetic(left @ StringType(), r) =>
+        a.makeCopy(Array(Cast(left, DoubleType), r))
+      case a @ BinaryArithmetic(left, right @ StringType()) =>
+        a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // we should cast all timestamp/date/string compare into string compare
-      case p @ BinaryComparison(l @ StringType(), r @ DateType()) =>
-        p.makeCopy(Array(l, Cast(r, StringType)))
-      case p @ BinaryComparison(l @ DateType(), r @ StringType()) =>
-        p.makeCopy(Array(Cast(l, StringType), r))
-      case p @ BinaryComparison(l @ StringType(), r @ TimestampType()) =>
-        p.makeCopy(Array(Cast(l, TimestampType), r))
-      case p @ BinaryComparison(l @ TimestampType(), r @ StringType()) =>
-        p.makeCopy(Array(l, Cast(r, TimestampType)))
-      case p @ BinaryComparison(l @ TimestampType(), r @ DateType()) =>
-        p.makeCopy(Array(Cast(l, StringType), Cast(r, StringType)))
-      case p @ BinaryComparison(l @ DateType(), r @ TimestampType()) =>
-        p.makeCopy(Array(Cast(l, StringType), Cast(r, StringType)))
+      case p @ BinaryComparison(left @ StringType(), right @ DateType()) =>
+        p.makeCopy(Array(left, Cast(right, StringType)))
+      case p @ BinaryComparison(left @ DateType(), right @ StringType()) =>
+        p.makeCopy(Array(Cast(left, StringType), right))
+      case p @ BinaryComparison(left @ StringType(), right @ TimestampType()) =>
+        p.makeCopy(Array(Cast(left, TimestampType), right))
+      case p @ BinaryComparison(left @ TimestampType(), right @ StringType()) =>
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
+      case p @ BinaryComparison(left @ TimestampType(), right @ DateType()) =>
+        p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
+      case p @ BinaryComparison(left @ DateType(), right @ TimestampType()) =>
+        p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
 
-      case p @ BinaryComparison(l @ StringType(), r) if r.dataType != StringType =>
-        p.makeCopy(Array(Cast(l, DoubleType), r))
-      case p @ BinaryComparison(l, r @ StringType()) if l.dataType != StringType =>
-        p.makeCopy(Array(l, Cast(r, DoubleType)))
+      case p @ BinaryComparison(left @ StringType(), right) if right.dataType != StringType =>
+        p.makeCopy(Array(Cast(left, DoubleType), right))
+      case p @ BinaryComparison(left, right @ StringType()) if left.dataType != StringType =>
+        p.makeCopy(Array(left, Cast(right, DoubleType)))
 
       case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
         i.makeCopy(Array(Cast(a, StringType), b))
@@ -364,22 +368,22 @@ trait HiveTypeCoercion {
       // fix decimal precision for union
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
-          case (l, r) if l.dataType != r.dataType =>
-            (l.dataType, r.dataType) match {
+          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+            (lhs.dataType, rhs.dataType) match {
               case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
                 // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
                 // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
                 val fixedType = DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2), max(s1, s2))
-                (Alias(Cast(l, fixedType), l.name)(), Alias(Cast(r, fixedType), r.name)())
+                (Alias(Cast(lhs, fixedType), lhs.name)(), Alias(Cast(rhs, fixedType), rhs.name)())
               case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-                (Alias(Cast(l, intTypeToFixed(t)), l.name)(), r)
+                (Alias(Cast(lhs, intTypeToFixed(t)), lhs.name)(), rhs)
               case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-                (l, Alias(Cast(r, intTypeToFixed(t)), r.name)())
+                (lhs, Alias(Cast(rhs, intTypeToFixed(t)), rhs.name)())
               case (t, DecimalType.Fixed(p, s)) if floatTypeToFixed.contains(t) =>
-                (Alias(Cast(l, floatTypeToFixed(t)), l.name)(), r)
+                (Alias(Cast(lhs, floatTypeToFixed(t)), lhs.name)(), rhs)
               case (DecimalType.Fixed(p, s), t) if floatTypeToFixed.contains(t) =>
-                (l, Alias(Cast(r, floatTypeToFixed(t)), r.name)())
-              case _ => (l, r)
+                (lhs, Alias(Cast(rhs, floatTypeToFixed(t)), rhs.name)())
+              case _ => (lhs, rhs)
             }
           case other => other
         }
@@ -452,16 +456,16 @@ trait HiveTypeCoercion {
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b @ BinaryExpression(l, r) if l.dataType != r.dataType =>
-          (l.dataType, r.dataType) match {
+        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
+          (left.dataType, right.dataType) match {
             case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(Cast(l, intTypeToFixed(t)), r))
+              b.makeCopy(Array(Cast(left, intTypeToFixed(t)), right))
             case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-              b.makeCopy(Array(l, Cast(r, intTypeToFixed(t))))
+              b.makeCopy(Array(left, Cast(right, intTypeToFixed(t))))
             case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-              b.makeCopy(Array(l, Cast(r, DoubleType)))
+              b.makeCopy(Array(left, Cast(right, DoubleType)))
             case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-              b.makeCopy(Array(Cast(l, DoubleType), r))
+              b.makeCopy(Array(Cast(left, DoubleType), right))
             case _ =>
               b
           }
@@ -510,31 +514,31 @@ trait HiveTypeCoercion {
       // all other cases are considered as false.
 
       // We may simplify the expression if one side is literal numeric values
-      case EqualTo(l @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => l
-      case EqualTo(l @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => Not(l)
-      case EqualTo(Literal(value, _: NumericType), r @ BooleanType())
-        if trueValues.contains(value) => r
-      case EqualTo(Literal(value, _: NumericType), r @ BooleanType())
-        if falseValues.contains(value) => Not(r)
-      case EqualNullSafe(l @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => And(IsNotNull(l), l)
-      case EqualNullSafe(l @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => And(IsNotNull(l), Not(l))
-      case EqualNullSafe(Literal(value, _: NumericType), r @ BooleanType())
-        if trueValues.contains(value) => And(IsNotNull(r), r)
-      case EqualNullSafe(Literal(value, _: NumericType), r @ BooleanType())
-        if falseValues.contains(value) => And(IsNotNull(r), Not(r))
+      case EqualTo(left @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => left
+      case EqualTo(left @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Not(left)
+      case EqualTo(Literal(value, _: NumericType), right @ BooleanType())
+        if trueValues.contains(value) => right
+      case EqualTo(Literal(value, _: NumericType), right @ BooleanType())
+        if falseValues.contains(value) => Not(right)
+      case EqualNullSafe(left @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => And(IsNotNull(left), left)
+      case EqualNullSafe(left @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => And(IsNotNull(left), Not(left))
+      case EqualNullSafe(Literal(value, _: NumericType), right @ BooleanType())
+        if trueValues.contains(value) => And(IsNotNull(right), right)
+      case EqualNullSafe(Literal(value, _: NumericType), right @ BooleanType())
+        if falseValues.contains(value) => And(IsNotNull(right), Not(right))
 
-      case EqualTo(l @ BooleanType(), r @ NumericType()) =>
-        transform(l , r)
-      case EqualTo(l @ NumericType(), r @ BooleanType()) =>
-        transform(r, l)
-      case EqualNullSafe(l @ BooleanType(), r @ NumericType()) =>
-        transformNullSafe(l, r)
-      case EqualNullSafe(l @ NumericType(), r @ BooleanType()) =>
-        transformNullSafe(r, l)
+      case EqualTo(left @ BooleanType(), right @ NumericType()) =>
+        transform(left , right)
+      case EqualTo(left @ NumericType(), right @ BooleanType()) =>
+        transform(right, left)
+      case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
+        transformNullSafe(left, right)
+      case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
+        transformNullSafe(right, left)
     }
   }
 
