@@ -151,6 +151,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(StreamingContext.getActive().isEmpty)
   }
 
+  test("start failure should stop internal components") {
+    ssc = new StreamingContext(conf, batchDuration)
+    val inputStream = addInputStream(ssc)
+    val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+      Some(values.sum + state.getOrElse(0))
+    }
+    inputStream.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
+    // Require that the start fails because checkpoint directory was not set
+    intercept[Exception] {
+      ssc.start()
+    }
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(ssc.scheduler.isStarted === false)
+  }
+
+
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()

@@ -126,6 +126,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop.post(ErrorReported(msg, e))
   }
 
+  def isStarted(): Boolean = eventLoop != null
+
   private def processEvent(event: JobSchedulerEvent) {
     try {
       event match {
