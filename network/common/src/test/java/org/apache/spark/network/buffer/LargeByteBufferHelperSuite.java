@@ -16,10 +16,10 @@
  */
 package org.apache.spark.network.buffer;
 
-import org.junit.Test;
-
 import java.io.*;
 import java.nio.channels.FileChannel;
+
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -28,44 +28,47 @@ public class LargeByteBufferHelperSuite {
   @Test
   public void testMapFile() throws IOException {
     File testFile = File.createTempFile("large-byte-buffer-test", ".bin");
-    testFile.deleteOnExit();
-    OutputStream out = new FileOutputStream(testFile);
-    byte[] buffer = new byte[1 << 16];
-    long len = 3L << 30;
-    assertTrue(len > Integer.MAX_VALUE);  // its 1.5x Integer.MAX_VALUE, just a sanity check
-    for (int i = 0; i < buffer.length; i++) {
-      buffer[i] = (byte) i;
-    }
-    for (int i = 0; i < len / buffer.length; i++) {
-      out.write(buffer);
-    }
-    out.close();
-
-    FileChannel in = new FileInputStream(testFile).getChannel();
-
-    //fail quickly on bad bounds
     try {
-      LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, 0, len + 1);
-      fail("expected exception");
-    } catch (IOException ioe) {
-    }
-    try {
-      LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, -1, 10);
-      fail("expected exception");
-    } catch (IllegalArgumentException iae) {
-    }
-
-    //now try to read from the buffer
-    LargeByteBuffer buf = LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, 0, len);
-    assertEquals(len, buf.size());
-    byte[] read = new byte[buffer.length];
-    for (int i = 0; i < len / buffer.length; i++) {
-      buf.get(read, 0, buffer.length);
-      // assertArrayEquals() is really slow
-      for (int j = 0; j < buffer.length; j++) {
-        if (read[j] != (byte)(j))
-          fail("bad byte at (i,j) = (" + i + "," + j + ")");
+      testFile.deleteOnExit();
+      OutputStream out = new FileOutputStream(testFile);
+      byte[] buffer = new byte[1 << 16];
+      long len = ((long)buffer.length) + Integer.MAX_VALUE + 1;
+      for (int i = 0; i < buffer.length; i++) {
+        buffer[i] = (byte) i;
       }
+      for (int i = 0; i < len / buffer.length; i++) {
+        out.write(buffer);
+      }
+      out.close();
+
+      FileChannel in = new FileInputStream(testFile).getChannel();
+
+      //fail quickly on bad bounds
+      try {
+        LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, 0, len + 1);
+        fail("expected exception");
+      } catch (IOException ioe) {
+      }
+      try {
+        LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, -1, 10);
+        fail("expected exception");
+      } catch (IllegalArgumentException iae) {
+      }
+
+      //now try to read from the buffer
+      LargeByteBuffer buf = LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, 0, len);
+      assertEquals(len, buf.size());
+      byte[] read = new byte[buffer.length];
+      for (int i = 0; i < len / buffer.length; i++) {
+        buf.get(read, 0, buffer.length);
+        // assertArrayEquals() is really slow
+        for (int j = 0; j < buffer.length; j++) {
+          if (read[j] != (byte) (j))
+            fail("bad byte at (i,j) = (" + i + "," + j + ")");
+        }
+      }
+    } finally {
+      testFile.delete();
     }
   }
 

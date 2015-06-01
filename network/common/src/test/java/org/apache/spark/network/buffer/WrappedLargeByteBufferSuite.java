@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
 
 public class WrappedLargeByteBufferSuite {
 
-  byte[] data = new byte[500];
+  private byte[] data = new byte[500];
   {
     new Random(1234).nextBytes(data);
   }
@@ -159,6 +159,18 @@ public class WrappedLargeByteBufferSuite {
       fail("expected exception");
     } catch (BufferUnderflowException bue) {
     }
+    b.rewind();
+    b.skip(495);
+    assertEquals(data[495], b.get());
+    assertEquals(data[496], b.get());
+    assertEquals(data[497], b.get());
+    assertEquals(data[498], b.get());
+    assertEquals(data[499], b.get());
+    try {
+      b.get();
+      fail("expected exception");
+    } catch (BufferUnderflowException bue) {
+    }
   }
 
   @Test
@@ -239,6 +251,11 @@ public class WrappedLargeByteBufferSuite {
       fail("expected exception");
     } catch (IllegalArgumentException ex) {
     }
+  }
+
+  @Test
+  public void positionsIndependentAfterConstructor() {
+    fail("TODO");
   }
 
   @Test(expected=IllegalArgumentException.class)

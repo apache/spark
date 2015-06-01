@@ -16,28 +16,34 @@
 */
 package org.apache.spark.network.buffer;
 
-import com.google.common.annotations.VisibleForTesting;
-import sun.nio.ch.DirectBuffer;
-
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
+import sun.nio.ch.DirectBuffer;
+
+/**
+ * A {@link org.apache.spark.network.buffer.LargeByteBuffer} which may contain multiple
+ * {@link java.nio.ByteBuffer}s.  In order to support <code>asByteBuffer</code>, all
+ * of the underlying ByteBuffers must have size equal to
+ * {@link org.apache.spark.network.buffer.LargeByteBufferHelper#MAX_CHUNK_SIZE} (except that last
+ * one).  The underlying ByteBuffers may be on-heap, direct, or memory-mapped.
+ */
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @VisibleForTesting
-  public final ByteBuffer[] underlying;
+  final ByteBuffer[] underlying;
 
   private final long size;
   /**
    * each sub-ByteBuffer (except for the last one) must be exactly this size.  Note that this
-   * class *really* expects this to be LargeByteBufferHelper.MAX_CHUNK.  The only reason it isn't
+   * class *really* expects this to be LargeByteBufferHelper.MAX_CHUNK_SIZE.  The only reason it isn't
    * is so that we can do tests without creating ginormous buffers.  Public methods force it to
-   * be LargeByteBufferHelper.MAX_CHUNK
+   * be LargeByteBufferHelper.MAX_CHUNK_SIZE
    */
   private final int subBufferSize;
   private long _pos;
@@ -46,9 +52,18 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   @VisibleForTesting
   ByteBuffer currentBuffer;
 
-
+  /**
+   * Construct a WrappedLargeByteBuffer from the given ByteBuffers.  Each of the ByteBuffers must
+   * have size equal to {@link org.apache.spark.network.buffer.LargeByteBufferHelper#MAX_CHUNK_SIZE}
+   * except for the final one.  The buffers are <code>duplicate</code>d, so the position of the
+   * given buffers and the returned buffer will be independent, though the underlying data will be
+   * shared.
+   * <p/>
+   * The <code>position</code> of the returned buffer is determined by the position of the given
+   * buffers. TODO
+   */
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
-    this(underlying, LargeByteBufferHelper.MAX_CHUNK);
+    this(underlying, LargeByteBufferHelper.MAX_CHUNK_SIZE);
   }
 
   /**
@@ -69,6 +84,13 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     long sum = 0L;
     boolean startFound = false;
     long initialPosition = -1;
+
+    // figure out the position in this LargeByteBuffer, by looking at the positions of the each
+    // of the given ByteBuffers.  The ByteBuffers need to have positions that are consistent
+    // with each other.  Eg., say we have 5 ByteBuffers, and the position is somewhere in the
+    // middle of ByteBuffer 2.  Then ByteBuffers 0 & 1 must have position == capacity,
+    // and ByteBuffers 3 & 4 must have position == 0
+
     for (int i = 0; i < underlying.length; i++) {
       ByteBuffer b = underlying[i];
       if (i != underlying.length -1 && b.capacity() != subBufferSize) {
@@ -137,6 +159,9 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public byte get() {
+    if (remaining() < 1L) {
+      throw new BufferUnderflowException();
+    }
     byte r = currentBuffer.get();
     _pos += 1;
     updateCurrentBuffer();
@@ -160,7 +185,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     if (n < 0) {
       final long moveTotal = Math.min(-n, _pos);
       long toMove = moveTotal;
-      // move backwards -- set the position to 0 of every buffer's we go back
+      // move backwards and update the position of every buffer as we go
       if (currentBuffer != null) {
         currentBufferIdx += 1;
       }
@@ -176,7 +201,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     } else if (n > 0) {
       final long moveTotal = Math.min(n, remaining());
       long toMove = moveTotal;
-      // move forwards -- set the position to the end of every buffer as we go forwards
+      // move forwards and update the position of every buffer as we go
       currentBufferIdx -= 1;
       while (toMove > 0) {
         currentBufferIdx += 1;
@@ -213,7 +238,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0l;
+    long written = 0L;
     for (; currentBufferIdx < underlying.length; currentBufferIdx++) {
       currentBuffer = underlying[currentBufferIdx];
       written += currentBuffer.remaining();
@@ -240,7 +265,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
   }
 
   @VisibleForTesting
-  public List<ByteBuffer> nioBuffers() {
+  List<ByteBuffer> nioBuffers() {
     return Arrays.asList(underlying);
   }
 

@@ -29,37 +29,39 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
 
   test("read from large mapped file") {
     val testFile = File.createTempFile("large-buffer-input-stream-test",".bin")
-    testFile.deleteOnExit()
 
-    val out: OutputStream = new FileOutputStream(testFile)
-    val buffer: Array[Byte] = new Array[Byte](1 << 16)
-    val len: Long = 3L << 30
-    assertTrue(len > Integer.MAX_VALUE)
-    (0 until buffer.length).foreach { idx =>
-      buffer(idx) = idx.toByte
-    }
-    (0 until (len / buffer.length).toInt).foreach { idx =>
-      out.write(buffer)
-    }
-    out.close
-
-    val channel = new FileInputStream(testFile).getChannel
-    val buf = LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, 0, len)
-    val in = new LargeByteBufferInputStream(buf, dispose = true)
-
-    val read = new Array[Byte](buffer.length)
-    (0 until (len / buffer.length).toInt).foreach { idx =>
-      in.disposed should be (false)
-      in.read(read) should be (read.length)
-      (0 until buffer.length).foreach { arrIdx =>
-        assertEquals(buffer(arrIdx), read(arrIdx))
+    try {
+      val out: OutputStream = new FileOutputStream(testFile)
+      val buffer: Array[Byte] = new Array[Byte](1 << 16)
+      val len: Long = buffer.length.toLong + Integer.MAX_VALUE + 1
+      (0 until buffer.length).foreach { idx =>
+        buffer(idx) = idx.toByte
       }
+      (0 until (len / buffer.length).toInt).foreach { idx =>
+        out.write(buffer)
+      }
+      out.close
+
+      val channel = new FileInputStream(testFile).getChannel
+      val buf = LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, 0, len)
+      val in = new LargeByteBufferInputStream(buf, dispose = true)
+
+      val read = new Array[Byte](buffer.length)
+      (0 until (len / buffer.length).toInt).foreach { idx =>
+        in.disposed should be(false)
+        in.read(read) should be(read.length)
+        (0 until buffer.length).foreach { arrIdx =>
+          assertEquals(buffer(arrIdx), read(arrIdx))
+        }
+      }
+      in.disposed should be(false)
+      in.read(read) should be(-1)
+      in.disposed should be(false)
+      in.close()
+      in.disposed should be(true)
+    } finally {
+      testFile.delete()
     }
-    in.disposed should be (false)
-    in.read(read) should be (-1)
-    in.disposed should be (false)
-    in.close()
-    in.disposed should be (true)
   }
 
   test("dispose on close") {
@@ -73,7 +75,6 @@ class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
   }
 
   test("io stream roundtrip") {
-
     val out = new LargeByteBufferOutputStream(128)
     (0 until 200).foreach{idx => out.write(idx)}
     out.close()

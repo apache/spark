@@ -16,27 +16,32 @@
  */
 package org.apache.spark.network.buffer;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
 
+import com.google.common.annotations.VisibleForTesting;
+
+/**
+ * Utils for creating {@link org.apache.spark.network.buffer.LargeByteBuffer}s, either from
+ * pre-allocated byte arrays, ByteBuffers, or by memory mapping a file.
+ */
 public class LargeByteBufferHelper {
 
-  public static final int MAX_CHUNK = Integer.MAX_VALUE - 1000000;
+  // netty can't quite send msgs that are a full 2GB -- they need to be slightly smaller
+  // not sure what the exact limit is, but 200 seems OK.
+  public static final int MAX_CHUNK_SIZE = Integer.MAX_VALUE - 200;
 
   public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
     return new WrappedLargeByteBuffer(new ByteBuffer[] { buffer } );
   }
 
   public static LargeByteBuffer asLargeByteBuffer(byte[] bytes) {
-    return new WrappedLargeByteBuffer(new ByteBuffer[] { ByteBuffer.wrap(bytes) } );
+    return asLargeByteBuffer(ByteBuffer.wrap(bytes));
   }
 
   public static LargeByteBuffer allocate(long size) {
-    return allocate(size, MAX_CHUNK);
+    return allocate(size, MAX_CHUNK_SIZE);
   }
 
   @VisibleForTesting
@@ -50,30 +55,27 @@ public class LargeByteBufferHelper {
       remaining -= nextSize;
       chunks[i] = next;
     }
-    if (remaining != 0) throw new IllegalStateException("remaining = " + remaining);
+    if (remaining != 0) {
+      throw new IllegalStateException("remaining = " + remaining);
+    }
     return new WrappedLargeByteBuffer(chunks, maxChunk);
   }
 
 
   public static LargeByteBuffer mapFile(
-    FileChannel channel,
-    FileChannel.MapMode mode,
-    long offset,
-    long length
+      FileChannel channel,
+      FileChannel.MapMode mode,
+      long offset,
+      long length
   ) throws IOException {
-    int maxChunk = MAX_CHUNK;
-    ArrayList<Long> offsets = new ArrayList<Long>();
-    long curOffset = offset;
+    int chunksNeeded = (int) ((length  - 1) / MAX_CHUNK_SIZE) + 1;
+    ByteBuffer[] chunks = new ByteBuffer[chunksNeeded];
+    long curPos = offset;
     long end = offset + length;
-    while (curOffset < end) {
-      offsets.add(curOffset);
-      int chunkLength = (int) Math.min((end - curOffset), maxChunk);
-      curOffset += chunkLength;
-    }
-    offsets.add(end);
-    ByteBuffer[] chunks = new ByteBuffer[offsets.size() - 1];
-    for (int i = 0; i < offsets.size() - 1; i++) {
-      chunks[i] = channel.map(mode, offsets.get(i), offsets.get(i + 1) - offsets.get(i));
+    for (int i = 0; i < chunksNeeded; i++) {
+      long nextPos = Math.min(curPos + MAX_CHUNK_SIZE, end);
+      chunks[i] = channel.map(mode, curPos, nextPos - curPos);
+      curPos = nextPos;
     }
     return new WrappedLargeByteBuffer(chunks);
   }

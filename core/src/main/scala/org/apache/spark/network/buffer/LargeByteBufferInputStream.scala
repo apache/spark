@@ -51,8 +51,7 @@ class LargeByteBufferInputStream(private var buffer: LargeByteBuffer, dispose: B
 
   override def skip(bytes: Long): Long = {
     if (buffer != null) {
-      val skipped = buffer.skip(bytes)
-      skipped
+      buffer.skip(bytes)
     } else {
       0L
     }
