@@ -182,7 +182,7 @@ class HistoryServer(
 
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
       true
     } catch {
       case e: Exception => e.getCause() match {

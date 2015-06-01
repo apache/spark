@@ -31,7 +31,7 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{UIHandlerCollection, Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -210,7 +210,7 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
+    val collection = new UIHandlerCollection
     collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
 
