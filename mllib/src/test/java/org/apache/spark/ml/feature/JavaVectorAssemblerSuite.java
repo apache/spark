@@ -72,6 +72,6 @@ public class JavaVectorAssemblerSuite {
     DataFrame output = assembler.transform(dataset);
     Assert.assertEquals(
       Vectors.sparse(6, new int[] {1, 2, 4, 5}, new double[] {1.0, 2.0, 3.0, 10.0}),
-      output.first().<Vector>getAs(0));
+      output.select("features").first().<Vector>getAs(0));
   }
 }
