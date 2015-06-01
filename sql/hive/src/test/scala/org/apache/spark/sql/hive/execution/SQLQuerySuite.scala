@@ -368,13 +368,13 @@ class SQLQuerySuite extends QueryTest {
     sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
     checkAnswer(
       sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from src").collect())
+      sql("select key, value from mytable1").collect())
     sql("DROP TABLE gen__tmp")
 
     sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
     checkAnswer(
       sql("SELECT a, b from gen__tmp"),
-      sql("select cast(key as double), cast(value as double) from src").collect())
+      sql("select cast(key as double), cast(value as double) from mytable1").collect())
     sql("DROP TABLE gen__tmp")
 
     sql("drop table mytable1")
