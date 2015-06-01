@@ -50,12 +50,11 @@ object SpreadingActivation extends Logging {
    * @param startNodes a list of [[VertexId]] that represents the starting nodes
    * @param maxIteration the maximum number of iterations of Spreading Activation
    * @param threshold a threshold that it used to filter out impulses that just has a minimal impact
-   * @param edgeDirection the direction of the impulses. Is not allowed to be
-   *                      [[EdgeDirection.Either]]
+   * @param edgeDirection the direction of the impulses. Is not allowed to be `EdgeDirection.Either`
    * @param activationFunc a function that calculated the activation for a neighbour. The old power
    *                       of the impulse, the degree of the vertex and the edge attributes are
    *                       given as input parameters
-   * @return a [[RDD]] that exists of a tuple with a vertex id and a map. The vertex id represents
+   * @return a RDD that contains tuples with a vertex id and a map. The vertex id represents
    *         the id in the graph. The map provides the result for this node for every starting node.
    */
   def run[VD: ClassTag, ED: ClassTag](
