@@ -71,13 +71,18 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
+    <!--
+      Dependencies explicitly added in test as they have been excluded from
+      Flume dependency (to avoid runtime problems when running with
+      Spark) but unit tests need it.
+    -->
     <dependency>
-      <!--
-        Netty explicitly added in test as it has been excluded from
-        Flume dependency (to avoid runtime problems when running with
-        Spark) but unit tests need it. Version of Netty on which
-        Flume 1.4.0 depends on is "3.4.0.Final" .
-      -->
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <!-- Version of Netty on which Flume 1.4.0 depends on is "3.4.0.Final" . -->
       <groupId>io.netty</groupId>
       <artifactId>netty</artifactId>
       <version>3.4.0.Final</version>
