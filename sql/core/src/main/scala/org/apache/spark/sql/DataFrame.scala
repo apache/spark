@@ -115,7 +115,7 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient private var _queryExecution: SQLContext#QueryExecution)
+    @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
   extends RDDApi[Row] with Serializable {
 
   /**
@@ -133,8 +133,6 @@ class DataFrame private[sql](
       qe
     })
   }
-
-  @DeveloperApi def queryExecution: SQLContext#QueryExecution = _queryExecution
 
   @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
@@ -1304,7 +1302,8 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   override def persist(): this.type = {
-    persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+    sqlContext.cacheManager.cacheQuery(this)
+    this
   }
 
   /**
@@ -1319,7 +1318,6 @@ class DataFrame private[sql](
    */
   override def persist(newLevel: StorageLevel): this.type = {
     sqlContext.cacheManager.cacheQuery(this, None, newLevel)
-    this._queryExecution = new sqlContext.QueryExecution(this.queryExecution.logical)
     this
   }
 
@@ -1329,7 +1327,6 @@ class DataFrame private[sql](
    */
   override def unpersist(blocking: Boolean): this.type = {
     sqlContext.cacheManager.tryUncacheQuery(this, blocking)
-    this._queryExecution = new sqlContext.QueryExecution(this.queryExecution.logical)
     this
   }
 
