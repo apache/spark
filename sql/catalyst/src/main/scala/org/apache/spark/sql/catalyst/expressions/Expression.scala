@@ -45,11 +45,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
-   * and `false` if it still contains any unresolved placeholders. Implementations of expressions
-   * should override this if the resolution of this type of expression involves more than just
-   * the resolution of its children.
+   * and input data types checking passed, and `false` if it still contains any unresolved
+   * placeholders or has data types mismatch.
+   * Implementations of expressions should override this if the resolution of this type of
+   * expression involves more than just the resolution of its children and type checking.
    */
-  lazy val resolved: Boolean = childrenResolved && !checkInputDataTypes().hasError
+  lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is
@@ -88,18 +89,19 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Check the input data types, returns `TypeCheckResult.success` if it's valid,
-   * or return a `TypeCheckResult` with an error message if invalid.
+   * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
+   * or returns a `TypeCheckResult` with an error message if invalid.
+   * Note: it's not valid to call this method until `childrenResolved == true`
    * TODO: we should remove the default implementation and implement it for all
    * expressions with proper error message.
    */
-  def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.success
+  def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
-  def symbol: String = sys.error(s"BinaryExpressions must either override toString or symbol")
+  def symbol: String = sys.error(s"BinaryExpressions must override either toString or symbol")
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -137,9 +139,9 @@ trait ExpectsInputTypes {
 
   def expectedChildTypes: Seq[DataType]
 
-  override def checkInputDataTypes: TypeCheckResult = {
+  override def checkInputDataTypes(): TypeCheckResult = {
     // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
     // so type mismatch error won't be reported here, but for underling `Cast`s.
-    TypeCheckResult.success
+    TypeCheckResult.TypeCheckSuccess
   }
 }

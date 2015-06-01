@@ -62,10 +62,12 @@ trait CheckAnalysis {
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
-          case e: Expression if e.checkInputDataTypes.hasError =>
-            e.failAnalysis(
-              s"cannot resolve '${e.prettyString}' due to data type mismatch: " +
-              e.checkInputDataTypes.errorMessage)
+          case e: Expression if e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.failAnalysis(
+                  s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
+            }
 
           case c: Cast if !c.resolved =>
             failAnalysis(

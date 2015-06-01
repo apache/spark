@@ -103,8 +103,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(GreaterThan('intField, 'stringField))
     assertSuccess(GreaterThanOrEqual('intField, 'stringField))
 
-    assertErrorForDifferingTypes(EqualTo('intField, 'booleanField))
-    assertErrorForDifferingTypes(EqualNullSafe('intField, 'booleanField))
+    // We will transform EqualTo with numeric and boolean types to CaseKeyWhen
+    assertSuccess(EqualTo('intField, 'booleanField))
+    assertSuccess(EqualNullSafe('intField, 'booleanField))
+
+    assertError(EqualTo('intField, 'complexField), "differing types")
+    assertError(EqualNullSafe('intField, 'complexField), "differing types")
+
     assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))

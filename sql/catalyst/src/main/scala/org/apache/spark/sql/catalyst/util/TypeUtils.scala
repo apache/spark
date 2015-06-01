@@ -26,25 +26,25 @@ import org.apache.spark.sql.types._
 object TypeUtils {
   def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
     if (t.isInstanceOf[NumericType] || t == NullType) {
-      TypeCheckResult.success
+      TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.fail(s"$caller accepts numeric types, not $t")
+      TypeCheckResult.TypeCheckFailure(s"$caller accepts numeric types, not $t")
     }
   }
 
   def checkForBitwiseExpr(t: DataType, caller: String): TypeCheckResult = {
     if (t.isInstanceOf[IntegralType] || t == NullType) {
-      TypeCheckResult.success
+      TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.fail(s"$caller accepts integral types, not $t")
+      TypeCheckResult.TypeCheckFailure(s"$caller accepts integral types, not $t")
     }
   }
 
   def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
     if (t.isInstanceOf[AtomicType] || t == NullType) {
-      TypeCheckResult.success
+      TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.fail(s"$caller accepts non-complex types, not $t")
+      TypeCheckResult.TypeCheckFailure(s"$caller accepts non-complex types, not $t")
     }
   }
 

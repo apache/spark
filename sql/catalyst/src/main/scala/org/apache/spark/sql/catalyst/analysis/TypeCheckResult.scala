@@ -19,15 +19,27 @@ package org.apache.spark.sql.catalyst.analysis
 
 /**
  * Represents the result of `Expression.checkInputDataTypes`.
- * We will throw `AnalysisException` in `CheckAnalysis` if error message is not null.
- * Use [[TypeCheckResult.success]] and [[TypeCheckResult.fail]] to instantiate this.
- *
+ * We will throw `AnalysisException` in `CheckAnalysis` if `isFailure` is true.
  */
-class TypeCheckResult private (val errorMessage: String) extends AnyVal {
-  def hasError: Boolean = errorMessage != null
+trait TypeCheckResult {
+  def isFailure: Boolean = !isSuccess
+  def isSuccess: Boolean
 }
 
 object TypeCheckResult {
-  val success: TypeCheckResult = new TypeCheckResult(null)
-  def fail(msg: String): TypeCheckResult = new TypeCheckResult(msg)
+
+  /**
+   * Represents the successful result of `Expression.checkInputDataTypes`.
+   */
+  object TypeCheckSuccess extends TypeCheckResult {
+    def isSuccess: Boolean = true
+  }
+
+  /**
+   * Represents the failing result of `Expression.checkInputDataTypes`,
+   * with a error message to show the reason of failure.
+   */
+  case class TypeCheckFailure(message: String) extends TypeCheckResult {
+    def isSuccess: Boolean = false
+  }
 }

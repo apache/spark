@@ -174,7 +174,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
-      TypeCheckResult.fail(
+      TypeCheckResult.TypeCheckFailure(
         s"differing types in ${this.getClass.getSimpleName} " +
         s"(${left.dataType} and ${right.dataType}).")
     } else {
@@ -199,7 +199,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   }
 
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =
-    sys.error(s"BinaryComparisons must either override eval or evalInternal")
+    sys.error(s"BinaryComparisons must override either eval or evalInternal")
 }
 
 object BinaryComparison {
@@ -210,7 +210,7 @@ object BinaryComparison {
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
 
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.success
+  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
   protected override def evalInternal(l: Any, r: Any) = {
     if (left.dataType != BinaryType) l == r
@@ -220,9 +220,10 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
 
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<=>"
+
   override def nullable: Boolean = false
 
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.success
+  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -289,13 +290,13 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
-      TypeCheckResult.fail(
+      TypeCheckResult.TypeCheckFailure(
         s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
     } else if (trueValue.dataType != falseValue.dataType) {
-      TypeCheckResult.fail(
+      TypeCheckResult.TypeCheckFailure(
         s"differing types in If (${trueValue.dataType} and ${falseValue.dataType}).")
     } else {
-      TypeCheckResult.success
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 
@@ -326,16 +327,16 @@ trait CaseWhenLike extends Expression {
     branches.sliding(2, 2).collect { case Seq(_, thenExpr) => thenExpr }.toSeq
   val elseValue = if (branches.length % 2 == 0) None else Option(branches.last)
 
-  // both then and else val should be considered.
+  // both then and else expressions should be considered.
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
   def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (valueTypes.distinct.size > 1) {
-      TypeCheckResult.fail(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
-    } else {
+    if (valueTypesEqual) {
       checkTypesInternal()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "THEN and ELSE expressions should all be same type or coercible to a common type")
     }
   }
 
@@ -365,9 +366,12 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
 
   override protected def checkTypesInternal(): TypeCheckResult = {
     if (whenList.forall(_.dataType == BooleanType)) {
-      TypeCheckResult.success
+      TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.fail(s"WHEN expressions in CaseWhen should all be boolean type")
+      val index = whenList.indexWhere(_.dataType != BooleanType)
+      TypeCheckResult.TypeCheckFailure(
+        s"WHEN expressions in CaseWhen should all be boolean type, " +
+        s"but the ${index + 1}th when expression's type is ${whenList(index)}")
     }
   }
 
@@ -412,7 +416,14 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
 
   override def children: Seq[Expression] = key +: branches
 
-  override protected def checkTypesInternal(): TypeCheckResult = TypeCheckResult.success
+  override protected def checkTypesInternal(): TypeCheckResult = {
+    if ((key +: whenList).map(_.dataType).distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        "key and WHEN expressions should all be same type or coercible to a common type")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {

@@ -38,7 +38,7 @@ abstract class UnaryArithmetic extends UnaryExpression {
   }
 
   protected def evalInternal(evalE: Any): Any =
-    sys.error(s"UnaryArithmetics must either override eval or evalInternal")
+    sys.error(s"UnaryArithmetics must override either eval or evalInternal")
 }
 
 case class UnaryMinus(child: Expression) extends UnaryArithmetic {
@@ -90,7 +90,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
-      TypeCheckResult.fail(
+      TypeCheckResult.TypeCheckFailure(
         s"differing types in ${this.getClass.getSimpleName} " +
         s"(${left.dataType} and ${right.dataType}).")
     } else {
@@ -115,11 +115,14 @@ abstract class BinaryArithmetic extends BinaryExpression {
   }
 
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =
-    sys.error(s"BinaryArithmetics must either override eval or evalInternal")
+    sys.error(s"BinaryArithmetics must override either eval or evalInternal")
 }
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "+"
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
@@ -132,6 +135,9 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "-"
 
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
 
@@ -142,6 +148,9 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "*"
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
@@ -154,6 +163,9 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "/"
   override def nullable: Boolean = true
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
@@ -181,6 +193,9 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "%"
   override def nullable: Boolean = true
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   protected def checkTypesInternal(t: DataType) =
     TypeUtils.checkForNumericExpr(t, "operator " + symbol)
