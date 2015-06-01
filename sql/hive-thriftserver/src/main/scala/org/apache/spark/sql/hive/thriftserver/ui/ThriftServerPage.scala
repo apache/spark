@@ -143,7 +143,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(online: Boolean): Seq[Node] = {
     val numBatches = if(online) listener.onlineSessionNum 
-	    else (listener.sessionList.size - listener.onlineSessionNum)
+      else (listener.sessionList.size - listener.onlineSessionNum)
 
     val table = if (numBatches > 0) {
       val dataRowsTmp = listener.sessionList.values.toSeq
