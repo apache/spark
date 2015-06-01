@@ -101,6 +101,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
+          <!-- Disable all relocations defined in the parent pom. -->
           <relocations combine.self="override" />
         </configuration>
       </plugin>
