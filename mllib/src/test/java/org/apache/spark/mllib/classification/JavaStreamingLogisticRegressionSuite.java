@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.classification;
+package org.apache.spark.mllib.classification;
 
 import java.io.Serializable;
 import java.util.List;
@@ -28,7 +28,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.mllib.classification.StreamingLogisticRegressionWithSGD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;

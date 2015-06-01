@@ -22,6 +22,7 @@ import scala.collection.mutable.IndexedSeq
 import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
@@ -188,7 +189,10 @@ class GaussianMixture private (
     new GaussianMixtureModel(weights, gaussians)
   }
 
-  /** Average of dense breeze vectors */
+  /** Java-friendly version of [[run()]] */
+  def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
+
+    /** Average of dense breeze vectors */
   private def vectorMean(x: IndexedSeq[BV[Double]]): BDV[Double] = {
     val v = BDV.zeros[Double](x(0).length)
     x.foreach(xi => v += xi)
