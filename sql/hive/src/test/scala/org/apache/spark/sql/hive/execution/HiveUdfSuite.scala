@@ -94,18 +94,18 @@ class HiveUdfSuite extends QueryTest {
   }
 
   test("Max/Min on named_struct") {
-    assert(sql(
+    checkAnswer(sql(
       """
         |SELECT max(named_struct(
         |           "key", key,
         |           "value", value)).value FROM src 
-      """.stripMargin).head() === Row("val_498"))
-    assert(sql(
+      """.stripMargin), Seq(Row("val_498")))
+    checkAnswer(sql(
       """
         |SELECT min(named_struct(
         |           "key", key,
         |           "value", value)).value FROM src 
-      """.stripMargin).head() === Row("val_0"))
+      """.stripMargin), Seq(Row("val_0")))
   }
 
   test("SPARK-6409 UDAFAverage test") {
