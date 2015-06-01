@@ -18,45 +18,47 @@
 """
 Important classes of Spark SQL and DataFrames:
 
-    - L{SQLContext}
+    - :class:`pyspark.sql.SQLContext`
       Main entry point for :class:`DataFrame` and SQL functionality.
-    - L{DataFrame}
+    - :class:`pyspark.sql.DataFrame`
       A distributed collection of data grouped into named columns.
-    - L{Column}
+    - :class:`pyspark.sql.Column`
       A column expression in a :class:`DataFrame`.
-    - L{Row}
+    - :class:`pyspark.sql.Row`
       A row of data in a :class:`DataFrame`.
-    - L{HiveContext}
+    - :class:`pyspark.sql.HiveContext`
       Main entry point for accessing data stored in Apache Hive.
-    - L{GroupedData}
+    - :class:`pyspark.sql.GroupedData`
       Aggregation methods, returned by :func:`DataFrame.groupBy`.
-    - L{DataFrameNaFunctions}
+    - :class:`pyspark.sql.DataFrameNaFunctions`
       Methods for handling missing data (null values).
-    - L{functions}
+    - :class:`pyspark.sql.DataFrameStatFunctions`
+      Methods for statistics functionality.
+    - :class:`pyspark.sql.functions`
       List of built-in functions available for :class:`DataFrame`.
-    - L{types}
+    - :class:`pyspark.sql.types`
       List of data types available.
+    - :class:`pyspark.sql.Window`
+      For working with window functions.
 """
 from __future__ import absolute_import
 
-# fix the module name conflict for Python 3+
-import sys
-from . import _types as types
-modname = __name__ + '.types'
-types.__name__ = modname
-# update the __module__ for all objects, make them picklable
-for v in types.__dict__.values():
-    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
-        v.__module__ = modname
-sys.modules[modname] = types
-del modname, sys
+
+def since(version):
+    def deco(f):
+        f.__doc__ = f.__doc__.rstrip() + "\n\n.. versionadded:: %s" % version
+        return f
+    return deco
 
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD, DataFrameNaFunctions
-from pyspark.sql.dataframe import DataFrameStatFunctions
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.group import GroupedData
+from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
+from pyspark.sql.window import Window, WindowSpec
 
 __all__ = [
     'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
-    'DataFrameNaFunctions', 'DataFrameStatFunctions'
+    'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
 ]

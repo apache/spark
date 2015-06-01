@@ -17,11 +17,12 @@
 
 package org.apache.spark.deploy.worker
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.Command
 import org.apache.spark.util.Utils
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
-class CommandUtilsSuite extends FunSuite with Matchers {
+class CommandUtilsSuite extends SparkFunSuite with Matchers {
 
   test("set libraryPath correctly") {
     val appId = "12345-worker321-9876"

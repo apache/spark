@@ -20,12 +20,12 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.{GBTParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
@@ -36,17 +36,18 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
  */
-@AlphaComponent
-final class GBTClassifier
+@Experimental
+final class GBTClassifier(override val uid: String)
   extends Predictor[Vector, GBTClassifier, GBTClassificationModel]
   with GBTParams with TreeClassifierParams with Logging {
+
+  def this() = this(Identifiable.randomUID("gbtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -142,6 +143,7 @@ final class GBTClassifier
   }
 }
 
+@Experimental
 object GBTClassifier {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: logistic */
@@ -149,8 +151,7 @@ object GBTClassifier {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
@@ -158,9 +159,9 @@ object GBTClassifier {
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
-@AlphaComponent
+@Experimental
 final class GBTClassificationModel(
-    override val parent: GBTClassifier,
+    override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double])
   extends PredictionModel[Vector, GBTClassificationModel]
@@ -184,7 +185,7 @@ final class GBTClassificationModel(
   }
 
   override def copy(extra: ParamMap): GBTClassificationModel = {
-    copyValues(new GBTClassificationModel(parent, _trees, _treeWeights), extra)
+    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra)
   }
 
   override def toString: String = {
@@ -210,6 +211,7 @@ private[ml] object GBTClassificationModel {
       // parent, fittingParamMap for each tree is null since there are no good ways to set these.
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
-    new GBTClassificationModel(parent, newTrees, oldModel.treeWeights)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
+    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights)
   }
 }

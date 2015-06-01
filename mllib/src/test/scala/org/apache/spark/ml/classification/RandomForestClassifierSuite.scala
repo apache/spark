@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -32,7 +31,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[RandomForestClassifier]].
  */
-class RandomForestClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestClassifierSuite.compareAPIs
 
@@ -160,7 +159,9 @@ private object RandomForestClassifierSuite {
     val newModel = rf.fit(newData)
     // Use parent, fittingParamMap from newTree since these are not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(
-      oldModel, newModel.parent, categoricalFeatures)
+      oldModel, newModel.parent.asInstanceOf[RandomForestClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    assert(newModel.hasParent)
+    assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
   }
 }

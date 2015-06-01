@@ -19,11 +19,11 @@ package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
-import org.scalatest.FunSuite
+import com.google.common.io.ByteStreams
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class CompressionCodecSuite extends FunSuite {
+class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
 
   def testCodec(codec: CompressionCodec) {
@@ -62,6 +62,14 @@ class CompressionCodecSuite extends FunSuite {
     testCodec(codec)
   }
 
+  test("lz4 does not support concatenation of serialized streams") {
+    val codec = CompressionCodec.createCodec(conf, classOf[LZ4CompressionCodec].getName)
+    assert(codec.getClass === classOf[LZ4CompressionCodec])
+    intercept[Exception] {
+      testConcatenationOfSerializedStreams(codec)
+    }
+  }
+
   test("lzf compression codec") {
     val codec = CompressionCodec.createCodec(conf, classOf[LZFCompressionCodec].getName)
     assert(codec.getClass === classOf[LZFCompressionCodec])
@@ -72,6 +80,12 @@ class CompressionCodecSuite extends FunSuite {
     val codec = CompressionCodec.createCodec(conf, "lzf")
     assert(codec.getClass === classOf[LZFCompressionCodec])
     testCodec(codec)
+  }
+
+  test("lzf supports concatenation of serialized streams") {
+    val codec = CompressionCodec.createCodec(conf, classOf[LZFCompressionCodec].getName)
+    assert(codec.getClass === classOf[LZFCompressionCodec])
+    testConcatenationOfSerializedStreams(codec)
   }
 
   test("snappy compression codec") {
@@ -86,9 +100,38 @@ class CompressionCodecSuite extends FunSuite {
     testCodec(codec)
   }
 
+  test("snappy does not support concatenation of serialized streams") {
+    val codec = CompressionCodec.createCodec(conf, classOf[SnappyCompressionCodec].getName)
+    assert(codec.getClass === classOf[SnappyCompressionCodec])
+    intercept[Exception] {
+      testConcatenationOfSerializedStreams(codec)
+    }
+  }
+
   test("bad compression codec") {
     intercept[IllegalArgumentException] {
       CompressionCodec.createCodec(conf, "foobar")
     }
+  }
+
+  private def testConcatenationOfSerializedStreams(codec: CompressionCodec): Unit = {
+    val bytes1: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val out = codec.compressedOutputStream(baos)
+      (0 to 64).foreach(out.write)
+      out.close()
+      baos.toByteArray
+    }
+    val bytes2: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val out = codec.compressedOutputStream(baos)
+      (65 to 127).foreach(out.write)
+      out.close()
+      baos.toByteArray
+    }
+    val concatenatedBytes = codec.compressedInputStream(new ByteArrayInputStream(bytes1 ++ bytes2))
+    val decompressed: Array[Byte] = new Array[Byte](128)
+    ByteStreams.readFully(concatenatedBytes, decompressed)
+    assert(decompressed.toSeq === (0 to 127))
   }
 }

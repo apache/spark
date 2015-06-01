@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -28,7 +26,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def defaultParallelism(): Int = 1
 }
 
-class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with Logging {
 
   test("Scheduler does not always schedule tasks on the same workers") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")

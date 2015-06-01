@@ -248,7 +248,7 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("Constant folding test: Fold In(v, list) into true or false") {
     var originalQuery =
       testRelation

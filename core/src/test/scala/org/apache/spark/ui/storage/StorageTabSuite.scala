@@ -17,8 +17,8 @@
 
 package org.apache.spark.ui.storage
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.Success
+import org.scalatest.BeforeAndAfter
+import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -26,7 +26,7 @@ import org.apache.spark.storage._
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
-class StorageTabSuite extends FunSuite with BeforeAndAfter {
+class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _
@@ -169,7 +169,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   test("verify StorageTab contains all cached rdds") {
 
     val rddInfo0 = new RDDInfo(0, "rdd0", 1, memOnly, Seq(4))
-    val rddInfo1 = new RDDInfo(1, "rdd1", 1 ,memOnly, Seq(4))
+    val rddInfo1 = new RDDInfo(1, "rdd1", 1, memOnly, Seq(4))
     val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo0), Seq.empty, "details")
     val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfo1), Seq.empty, "details")
     val taskMetrics0 = new TaskMetrics

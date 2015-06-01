@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 object Literal {
@@ -77,14 +78,12 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
   override def toString: String = if (value != null) value.toString else "null"
 
-  type EvaluatedType = Any
   override def eval(input: Row): Any = value
 }
 
 // TODO: Specialize
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
-  type EvaluatedType = Any
 
   def update(expression: Expression, input: Row): Unit = {
     value = expression.eval(input)

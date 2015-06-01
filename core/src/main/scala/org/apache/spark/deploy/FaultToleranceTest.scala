@@ -65,7 +65,7 @@ private object FaultToleranceTest extends App with Logging {
   private val workers = ListBuffer[TestWorkerInfo]()
   private var sc: SparkContext = _
 
-  private val zk =  SparkCuratorUtil.newClient(conf)
+  private val zk = SparkCuratorUtil.newClient(conf)
 
   private var numPassed = 0
   private var numFailed = 0

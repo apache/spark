@@ -19,8 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types.DataType
 
@@ -39,7 +38,7 @@ object TestNullableColumnAccessor {
   }
 }
 
-class NullableColumnAccessorSuite extends FunSuite {
+class NullableColumnAccessorSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(

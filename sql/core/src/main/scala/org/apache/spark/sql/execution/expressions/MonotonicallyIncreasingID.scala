@@ -39,8 +39,6 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
    */
   @transient private[this] var count: Long = 0L
 
-  override type EvaluatedType = Long
-
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType

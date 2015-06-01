@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends PlanTest {
@@ -104,31 +105,16 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 
-  test("boolean casts") {
-    val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
-    def ruleTest(initial: Expression, transformed: Expression) {
-      val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      comparePlans(
-        booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)),
-        Project(Seq(Alias(transformed, "a")()), testRelation))
-    }
-    // Remove superflous boolean -> boolean casts.
-    ruleTest(Cast(Literal(true), BooleanType), Literal(true))
-    // Stringify boolean when casting to string.
-    ruleTest(
-      Cast(Literal(false), StringType),
-      If(Literal(false), Literal("true"), Literal("false")))
+  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    comparePlans(
+      rule(Project(Seq(Alias(initial, "a")()), testRelation)),
+      Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
   test("coalesce casts") {
     val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
-    def ruleTest(initial: Expression, transformed: Expression) {
-      val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      comparePlans(
-        fac(Project(Seq(Alias(initial, "a")()), testRelation)),
-        Project(Seq(Alias(transformed, "a")()), testRelation))
-    }
-    ruleTest(
+    ruleTest(fac,
       Coalesce(Literal(1.0)
         :: Literal(1)
         :: Literal.create(1.0, FloatType)
@@ -137,7 +123,7 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), DoubleType)
         :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
-    ruleTest(
+    ruleTest(fac,
       Coalesce(Literal(1L)
         :: Literal(1)
         :: Literal(new java.math.BigDecimal("1000000000000000000000"))
@@ -146,5 +132,40 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), DecimalType())
         :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType())
         :: Nil))
+  }
+
+  test("type coercion for CaseKeyWhen") {
+    val cwc = new HiveTypeCoercion {}.CaseWhenCoercion
+    ruleTest(cwc,
+      CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
+      CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
+    )
+    // Will remove exception expectation in PR#6405
+    intercept[RuntimeException] {
+      ruleTest(cwc,
+        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
+        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
+      )
+    }
+  }
+
+  test("type coercion simplification for equal to") {
+    val be = new HiveTypeCoercion {}.BooleanEqualization
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(1)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(0)),
+      Not(Literal(true))
+    )
+    ruleTest(be,
+      EqualNullSafe(Literal(true), Literal(1)),
+      And(IsNotNull(Literal(true)), Literal(true))
+    )
+    ruleTest(be,
+      EqualNullSafe(Literal(true), Literal(0)),
+      And(IsNotNull(Literal(true)), Not(Literal(true)))
+    )
   }
 }
