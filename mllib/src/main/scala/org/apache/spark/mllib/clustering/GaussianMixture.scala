@@ -192,7 +192,7 @@ class GaussianMixture private (
   /** Java-friendly version of [[run()]] */
   def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
 
-    /** Average of dense breeze vectors */
+  /** Average of dense breeze vectors */
   private def vectorMean(x: IndexedSeq[BV[Double]]): BDV[Double] = {
     val v = BDV.zeros[Double](x(0).length)
     x.foreach(xi => v += xi)
