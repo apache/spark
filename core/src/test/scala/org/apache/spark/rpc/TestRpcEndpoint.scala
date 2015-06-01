@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalactic.TripleEquals
 
-class TestRpcEndpoint extends RpcEndpoint with TripleEquals {
+class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
 
   override val rpcEnv: RpcEnv = null
 

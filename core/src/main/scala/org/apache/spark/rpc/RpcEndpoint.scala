@@ -39,7 +39,21 @@ private[spark] trait RpcEnvFactory {
  * However, there is no guarantee that the same thread will be executing the same
  * [[ThreadSafeRpcEndpoint]] for different messages.
  */
-private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
+private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint {
+  /**
+   * Invoked before [[RpcEndpoint]] starts to handle any message.
+   */
+  def onStart(): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
+   * Invoked when [[RpcEndpoint]] is stopping.
+   */
+  def onStop(): Unit = {
+    // By default, do nothing.
+  }
+}
 
 
 /**
@@ -98,20 +112,6 @@ private[spark] trait RpcEndpoint {
   def onError(cause: Throwable): Unit = {
     // By default, throw e and let RpcEnv handle it
     throw cause
-  }
-
-  /**
-   * Invoked before [[RpcEndpoint]] starts to handle any message.
-   */
-  def onStart(): Unit = {
-    // By default, do nothing.
-  }
-
-  /**
-   * Invoked when [[RpcEndpoint]] is stopping.
-   */
-  def onStop(): Unit = {
-    // By default, do nothing.
   }
 
   /**

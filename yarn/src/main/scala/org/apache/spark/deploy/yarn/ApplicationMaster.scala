@@ -535,10 +535,7 @@ private[spark] class ApplicationMaster(
       override val rpcEnv: RpcEnv, driver: RpcEndpointRef, isClusterMode: Boolean)
     extends RpcEndpoint with Logging {
 
-    override def onStart(): Unit = {
-      driver.send(RegisterClusterManager(self))
-
-    }
+    driver.send(RegisterClusterManager(self))
 
     override def receive: PartialFunction[Any, Unit] = {
       case x: AddWebUIFilter =>

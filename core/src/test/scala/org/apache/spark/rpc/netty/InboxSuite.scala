@@ -34,7 +34,7 @@ class InboxSuite extends SparkFunSuite {
 
     val dispatcher = mock(classOf[Dispatcher])
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint)
     val message = ContentMessage(null, "hi", false, null)
     inbox.post(message)
     assert(inbox.process(dispatcher) === false)
@@ -53,7 +53,7 @@ class InboxSuite extends SparkFunSuite {
     val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint)
     val message = ContentMessage(null, "hi", true, null)
     inbox.post(message)
     assert(inbox.process(dispatcher) === false)
@@ -69,7 +69,7 @@ class InboxSuite extends SparkFunSuite {
     val dispatcher = mock(classOf[Dispatcher])
 
     val numDroppedMessages = new AtomicInteger(0)
-    val inbox = new Inbox(endpointRef, endpoint) {
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint) {
       override def onDrop(message: Any): Unit = {
         numDroppedMessages.incrementAndGet()
       }
@@ -107,7 +107,7 @@ class InboxSuite extends SparkFunSuite {
 
     val remoteAddress = RpcAddress("localhost", 11111)
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint)
     inbox.post(Associated(remoteAddress))
     inbox.process(dispatcher)
 
@@ -121,7 +121,7 @@ class InboxSuite extends SparkFunSuite {
 
     val remoteAddress = RpcAddress("localhost", 11111)
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint)
     inbox.post(Disassociated(remoteAddress))
     inbox.process(dispatcher)
 
@@ -136,7 +136,7 @@ class InboxSuite extends SparkFunSuite {
     val remoteAddress = RpcAddress("localhost", 11111)
     val cause = new RuntimeException("Oops")
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new ThreadSafeInbox(endpointRef, endpoint)
     inbox.post(AssociationError(cause, remoteAddress))
     inbox.process(dispatcher)
 

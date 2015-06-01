@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpoint}
+import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcAddress, RpcEndpoint}
 
 private[netty] sealed trait InboxMessage
 
@@ -54,15 +54,53 @@ private[netty] case class Disassociated(remoteAddress: RpcAddress) extends Broad
 private[netty] case class AssociationError(cause: Throwable, remoteAddress: RpcAddress)
   extends BroadcastMessage
 
+private[netty] abstract class Inbox(
+    val endpointRef: NettyRpcEndpointRef, val endpoint: RpcEndpoint) extends Logging {
+
+  protected val messages = new ConcurrentLinkedQueue[InboxMessage]()
+
+  /**
+   * Process stored messages. Return `true` if the `Inbox` is already stopped, and the caller will
+   * release all resources used by the `Inbox`.
+   */
+  def process(dispatcher: Dispatcher): Boolean
+
+  def post(message: InboxMessage): Unit
+
+  protected def onDrop(message: Any): Unit = {
+    logWarning(s"Drop ${message} because $endpointRef is stopped")
+  }
+
+  def stop(): Unit
+
+  protected def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
+    try {
+      action
+    } catch {
+      case NonFatal(e) => {
+        try {
+          endpoint.onError(e)
+        } catch {
+          case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
+        }
+      }
+    }
+  }
+
+  def isEmpty: Boolean = messages.isEmpty
+
+}
+
 /**
  * A inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
  * @param endpointRef
  * @param endpoint
  */
-private[netty] class Inbox(
-    val endpointRef: NettyRpcEndpointRef, val endpoint: RpcEndpoint) extends Logging {
+private[netty] class ThreadSafeInbox(
+    endpointRef: NettyRpcEndpointRef,
+    override val endpoint: ThreadSafeRpcEndpoint) extends Inbox(endpointRef, endpoint) {
 
-  private val messages = new ConcurrentLinkedQueue[InboxMessage]()
+  private val _endpoint = endpoint.asInstanceOf[ThreadSafeRpcEndpoint]
 
   // protected by "this"
   private var stopped = false
@@ -70,11 +108,7 @@ private[netty] class Inbox(
   // OnStart should be the first message to process
   messages.add(OnStart)
 
-  /**
-   * Process stored messages. Return `true` if the `Inbox` is already stopped, and the caller will
-   * release all resources used by the `Inbox`.
-   */
-  def process(dispatcher: Dispatcher): Boolean = {
+  override def process(dispatcher: Dispatcher): Boolean = {
     var exit = false
     var message = messages.poll()
     while (message != null) {
@@ -105,10 +139,12 @@ private[netty] class Inbox(
                 }
             }
 
-          case OnStart => endpoint.onStart()
+          case OnStart => {
+            _endpoint.asInstanceOf[ThreadSafeRpcEndpoint].onStart()
+          }
           case OnStop =>
             dispatcher.unregisterRpcEndpoint(endpointRef.name)
-            endpoint.onStop()
+            _endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
             exit = true
           case Associated(remoteAddress) =>
@@ -124,7 +160,7 @@ private[netty] class Inbox(
     exit
   }
 
-  def post(message: InboxMessage): Unit = {
+  override def post(message: InboxMessage): Unit = {
     val dropped =
       synchronized {
         if (stopped) {
@@ -140,7 +176,7 @@ private[netty] class Inbox(
     }
   }
 
-  def stop(): Unit = synchronized {
+  override def stop(): Unit = synchronized {
     // The following codes should be in `synchronized` so that we can make sure "OnStop" is the last
     // message
     if (!stopped) {
@@ -148,24 +184,75 @@ private[netty] class Inbox(
       messages.add(OnStop)
     }
   }
+}
 
-  def isEmpty: Boolean = messages.isEmpty
+/**
+ * A inbox that stores messages for an [[RpcEndpoint]] and posts messages to it concurrently.
+ * @param endpointRef
+ * @param endpoint
+ */
+private[netty] class ConcurrentInbox(
+    endpointRef: NettyRpcEndpointRef,
+    endpoint: RpcEndpoint) extends Inbox(endpointRef, endpoint) {
 
-  protected def onDrop(message: Any): Unit = {
-    logWarning(s"Drop ${message} because $endpointRef is stopped")
-  }
+  @volatile private var stopped = false
 
-  private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
-    try {
-      action
-    } catch {
-      case NonFatal(e) => {
-        try {
-          endpoint.onError(e)
-        } catch {
-          case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
+  /**
+   * Process stored messages. Return `true` if the `Inbox` is already stopped, and the caller will
+   * release all resources used by the `Inbox`.
+   */
+  override def process(dispatcher: Dispatcher): Boolean = {
+    var message = messages.poll()
+    while (!stopped && message != null) {
+      safelyCall(endpoint) {
+        message match {
+          case ContentMessage(_sender, content, needReply, context) =>
+            val pf: PartialFunction[Any, Unit] =
+              if (needReply) {
+                endpoint.receiveAndReply(context)
+              } else {
+                endpoint.receive
+              }
+            try {
+              pf.applyOrElse[Any, Unit](content, { msg =>
+                throw new SparkException(s"Unmatched message $message from ${_sender}")
+              })
+              if (!needReply) {
+                context.finish()
+              }
+            } catch {
+              case NonFatal(e) =>
+                if (needReply) {
+                  // If the sender asks a reply, we should send the error back to the sender
+                  context.sendFailure(e)
+                } else {
+                  context.finish()
+                  throw e
+                }
+            }
+          case Associated(remoteAddress) =>
+            endpoint.onConnected(remoteAddress)
+          case Disassociated(remoteAddress) =>
+            endpoint.onDisconnected(remoteAddress)
+          case AssociationError(cause, remoteAddress) =>
+            endpoint.onNetworkError(cause, remoteAddress)
         }
       }
+      message = messages.poll()
+    }
+    stopped
+  }
+
+  override def post(message: InboxMessage): Unit = {
+    if (stopped) {
+      onDrop()
+    } else {
+      messages.add(message)
     }
   }
+
+  override def stop(): Unit = {
+    stopped = true
+  }
+
 }

@@ -25,7 +25,7 @@ import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.rpc.{RpcCallContext, RpcAddress, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
 private class RpcEndpointPair(val endpoint: RpcEndpoint, val endpointRef: NettyRpcEndpointRef)
@@ -52,7 +52,12 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
     nameToEndpoint.put(name, new RpcEndpointPair(endpoint, endpointRef))
     endpointToEndpointRef.put(endpoint, endpointRef)
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox =
+      if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
+        new ThreadSafeInbox(endpointRef, endpoint.asInstanceOf[ThreadSafeRpcEndpoint])
+      } else {
+        new ConcurrentInbox(endpointRef, endpoint)
+      }
     endpointToInbox.put(endpoint, inbox)
     idleInboxes.put(endpoint, inbox)
     afterUpdateInbox(inbox)
@@ -139,7 +144,12 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         while (!stopped) {
           try {
             val endpoint = receivers.take()
-            val inbox = idleInboxes.remove(endpoint)
+            val inbox =
+              if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
+                idleInboxes.remove(endpoint)
+              } else {
+                idleInboxes.get(endpoint)
+              }
             if (inbox != null) {
               val inboxStopped = inbox.process(Dispatcher.this)
               if (!inboxStopped) {
@@ -147,6 +157,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
                 if (!inbox.isEmpty) {
                   receivers.add(endpoint)
                 }
+              } else {
+                idleInboxes.remove(endpoint)
               }
             } else {
               // other thread is processing endpoint's Inbox

@@ -98,7 +98,9 @@ private[spark] class AkkaRpcEnv private[akka] (
         // Listen for remote client network events
         context.system.eventStream.subscribe(self, classOf[AssociationEvent])
         safelyCall(endpoint) {
-          endpoint.onStart()
+          if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
+            endpoint.asInstanceOf[ThreadSafeRpcEndpoint].onStart()
+          }
         }
       }
 
@@ -141,7 +143,9 @@ private[spark] class AkkaRpcEnv private[akka] (
       override def postStop(): Unit = {
         unregisterEndpoint(endpoint.self)
         safelyCall(endpoint) {
-          endpoint.onStop()
+          if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
+            endpoint.asInstanceOf[ThreadSafeRpcEndpoint].onStop()
+          }
         }
       }
 
