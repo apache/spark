@@ -846,7 +846,7 @@ private[spark] class Client(
    * of SPARK_STAGING directory.
    */
   private def cleanupStagingDir(appId: ApplicationId = null): Unit = {
-    val stagingDirPath =  if (appId != null) {
+    val stagingDirPath = if (appId != null) {
       new Path(getAppStagingDir(appId))
     } else {
       new Path(SPARK_STAGING)
