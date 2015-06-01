@@ -676,7 +676,7 @@ private[spark] class Client(
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
+        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(libraryPaths)))
       }
       if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
         logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
@@ -698,7 +698,7 @@ private[spark] class Client(
       }
 
       sparkConf.getOption("spark.yarn.am.extraLibraryPath").foreach { paths =>
-        prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(paths)))
+        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
       }
     }
 
@@ -1106,15 +1106,16 @@ object Client extends Logging {
       env: HashMap[String, String],
       isAM: Boolean,
       extraClassPath: Option[String] = None): Unit = {
-    extraClassPath.foreach(addClasspathEntry(_, env))
+    extraClassPath.foreach(addClasspathEntry(sparkConf, _, env))
     addClasspathEntry(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
+      sparkConf, YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
     )
 
     if (isAM) {
-      addClasspathEntry(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
-          LOCALIZED_CONF_DIR, env)
+      addClasspathEntry(sparkConf,
+        buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
+          LOCALIZED_CONF_DIR),
+        env)
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
@@ -1125,12 +1126,12 @@ object Client extends Logging {
           getUserClasspath(sparkConf)
         }
       userClassPath.foreach { x =>
-        addFileToClasspath(x, null, env)
+        addFileToClasspath(sparkConf, x, null, env)
       }
     }
-    addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
-    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
+    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(sparkConf, _, env))
   }
 
   /**
@@ -1159,18 +1160,20 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
+   * @parma conf      Spark configuration.
    * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
    */
   private def addFileToClasspath(
+      conf: SparkConf,
       uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
     if (uri != null && uri.getScheme == LOCAL_SCHEME) {
-      addClasspathEntry(uri.getPath, env)
+      addClasspathEntry(conf, uri.getPath, env)
     } else if (fileName != null) {
-      addClasspathEntry(buildPath(
+      addClasspathEntry(conf, buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
     }
   }
@@ -1179,8 +1182,35 @@ object Client extends Logging {
    * Add the given path to the classpath entry of the given environment map.
    * If the classpath is already set, this appends the new path to the existing classpath.
    */
-  private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
-    YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
+  private def addClasspathEntry(
+      conf: SparkConf,
+      path: String,
+      env: HashMap[String, String]): Unit =
+    YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name,
+      getClusterPath(conf, path))
+
+  /**
+   * Returns the path to be sent to the NM for a local path string.
+   *
+   * This method uses two configuration values:
+   *
+   * - spark.yarn.config.localPath: a string that identifies a portion of the input path that may only
+   *   be valid in the local process.
+   * - spark.yarn.config.clusterPath: a string with which to replace the local path. This may contain,
+   *   for example, env variable references, which will be expanded by the NMs when starting
+   *   containers.
+   *
+   * If either config is not available, the input path is returned.
+   */
+  def getClusterPath(conf: SparkConf, path: String): String = {
+    val localPath = conf.get("spark.yarn.config.localPath", null)
+    val clusterPath = conf.get("spark.yarn.config.clusterPath", null)
+    if (localPath != null && clusterPath != null) {
+      path.replace(localPath, clusterPath)
+    } else {
+      path
+    }
+  }
 
   /**
    * Obtains token for the Hive metastore and adds them to the credentials.
