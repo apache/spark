@@ -110,7 +110,7 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     Utils.deleteRecursively(tempDir)
   }
 
-  test("loadLibSVMFile throws SparkException when passing a zero-based vector") {
+  test("loadLibSVMFile throws IllegalArgumentException when indices is zero-based") {
     val lines =
       """
         |0
@@ -122,7 +122,24 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
-      val pointsWithoutNumFeatures = loadLibSVMFile(sc, path).collect()
+      loadLibSVMFile(sc, path).collect()
+    }
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws IllegalArgumentException when indices is not in ascending order") {
+    val lines =
+      """
+        |0
+        |0 3:4.0 2:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, Charsets.US_ASCII)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      loadLibSVMFile(sc, path).collect()
     }
     Utils.deleteRecursively(tempDir)
   }

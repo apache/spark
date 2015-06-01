@@ -82,8 +82,19 @@ object MLUtils {
           val value = indexAndValue(1).toDouble
           (index, value)
         }.unzip
-        require(indices.size == 0 || indices(0) >= 0,
-          "indices should be one-based in LIBSVM format")
+
+        // check if indices is one-based and in ascending order
+        var previous = -1
+        var i = 0
+        val indicesLength = indices.size
+        while (i < indicesLength) {
+          if (indices(i) <= previous) {
+            throw new IllegalArgumentException("indices should be one-based and in ascending order")
+          }
+          previous = indices(i)
+          i += 1
+        }
+
         (label, indices.toArray, values.toArray)
       }
 
