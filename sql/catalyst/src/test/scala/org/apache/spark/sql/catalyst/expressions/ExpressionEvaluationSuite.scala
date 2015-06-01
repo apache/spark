@@ -344,7 +344,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation("abdef" cast TimestampType, null)
     checkEvaluation("12.65" cast DecimalType.Unlimited, Decimal(12.65))
 
-    checkEvaluation(Literal(1) cast LongType, 1:Long)
+    checkEvaluation(Literal(1) cast LongType, 1.toLong)
     checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
     checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
@@ -363,13 +363,16 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5:Long)
+      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType),
+      5.toLong)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType), 0:Short)
+      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType),
+      0.toShort)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
       TimestampType, ByteType), DecimalType.Unlimited), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0:Short)
+      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType),
+      0.toShort)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Literal(true) cast StringType, "true")
@@ -509,9 +512,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
     val tss = new Timestamp(seconds)
-    checkEvaluation(Cast(ts, ShortType), 15: Short)
+    checkEvaluation(Cast(ts, ShortType), 15.toShort)
     checkEvaluation(Cast(ts, IntegerType), 15)
-    checkEvaluation(Cast(ts, LongType), 15: Long)
+    checkEvaluation(Cast(ts, LongType), 15.toLong)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
     checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)
