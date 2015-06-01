@@ -219,45 +219,6 @@ public class WrappedLargeByteBufferSuite {
     }
   }
 
-  @Test
-  public void constructWithBuffersWithNonZeroPosition() {
-    ByteBuffer[] bufs = testDataBuf().underlying;
-
-    bufs[0].position(50);
-    bufs[1].position(5);
-
-    WrappedLargeByteBuffer b1 = new WrappedLargeByteBuffer(bufs, 50);
-    assertEquals(55, b1.position());
-
-
-    bufs[1].position(50);
-    bufs[2].position(50);
-    bufs[3].position(35);
-    WrappedLargeByteBuffer b2 = new WrappedLargeByteBuffer(bufs, 50);
-    assertEquals(185, b2.position());
-
-
-    bufs[5].position(16);
-    try {
-      new WrappedLargeByteBuffer(bufs);
-      fail("expected exception");
-    } catch (IllegalArgumentException ex) {
-    }
-
-    bufs[5].position(0);
-    bufs[0].position(49);
-    try {
-      new WrappedLargeByteBuffer(bufs);
-      fail("expected exception");
-    } catch (IllegalArgumentException ex) {
-    }
-  }
-
-  @Test
-  public void positionsIndependentAfterConstructor() {
-    fail("TODO");
-  }
-
   @Test(expected=IllegalArgumentException.class)
   public void testRequireAtLeastOneBuffer() {
     new WrappedLargeByteBuffer( new ByteBuffer[0]);

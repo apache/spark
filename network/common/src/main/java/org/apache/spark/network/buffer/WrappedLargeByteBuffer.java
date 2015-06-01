@@ -57,10 +57,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
    * have size equal to {@link org.apache.spark.network.buffer.LargeByteBufferHelper#MAX_CHUNK_SIZE}
    * except for the final one.  The buffers are <code>duplicate</code>d, so the position of the
    * given buffers and the returned buffer will be independent, though the underlying data will be
-   * shared.
-   * <p/>
-   * The <code>position</code> of the returned buffer is determined by the position of the given
-   * buffers. TODO
+   * shared.  The constructed buffer will always have position == 0.
    */
   public WrappedLargeByteBuffer(ByteBuffer[] underlying) {
     this(underlying, LargeByteBufferHelper.MAX_CHUNK_SIZE);
@@ -79,37 +76,23 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     if (underlying.length == 0) {
       throw new IllegalArgumentException("must wrap at least one ByteBuffer");
     }
-    this.underlying = underlying;
+    this.underlying = new ByteBuffer[underlying.length];
     this.subBufferSize = subBufferSize;
     long sum = 0L;
-    boolean startFound = false;
-    long initialPosition = -1;
-
-    // figure out the position in this LargeByteBuffer, by looking at the positions of the each
-    // of the given ByteBuffers.  The ByteBuffers need to have positions that are consistent
-    // with each other.  Eg., say we have 5 ByteBuffers, and the position is somewhere in the
-    // middle of ByteBuffer 2.  Then ByteBuffers 0 & 1 must have position == capacity,
-    // and ByteBuffers 3 & 4 must have position == 0
 
     for (int i = 0; i < underlying.length; i++) {
-      ByteBuffer b = underlying[i];
+      ByteBuffer b = underlying[i].duplicate();
+      b.position(0);
+      this.underlying[i] = b;
       if (i != underlying.length -1 && b.capacity() != subBufferSize) {
         throw new IllegalArgumentException("All buffers, except for the final one, must have " +
           "size = " + subBufferSize);
       }
-      if (startFound) {
-        if (b.position() != 0) {
-          throw new IllegalArgumentException("ByteBuffers have inconsistent positions");
-        }
-      } else if (b.position() != b.capacity()) {
-        startFound = true;
-        initialPosition = sum + b.position();
-      }
       sum += b.capacity();
     }
-    _pos = initialPosition;
+    _pos = 0;
     currentBufferIdx = 0;
-    currentBuffer = underlying[0];
+    currentBuffer = this.underlying[0];
     size = sum;
   }
 
@@ -228,7 +211,9 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     for (int i = 0; i < underlying.length; i++) {
       duplicates[i] = underlying[i].duplicate();
     }
-    return new WrappedLargeByteBuffer(duplicates, subBufferSize);
+    WrappedLargeByteBuffer dup = new WrappedLargeByteBuffer(duplicates, subBufferSize);
+    dup.skip(position());
+    return dup;
   }
 
   @Override
