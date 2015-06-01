@@ -100,6 +100,15 @@ class DataTypeTests(unittest.TestCase):
         lt2 = pickle.loads(pickle.dumps(LongType()))
         self.assertEquals(lt, lt2)
 
+    # regression test for SPARK-7978
+    def test_decimal_type(self):
+        t1 = DecimalType()
+        t2 = DecimalType(10, 2)
+        self.assertTrue(t2 is not t1)
+        self.assertNotEqual(t1, t2)
+        t3 = DecimalType(8)
+        self.assertNotEqual(t2, t3)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
