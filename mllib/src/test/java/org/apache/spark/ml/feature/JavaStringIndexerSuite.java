@@ -52,7 +52,7 @@ public class JavaStringIndexerSuite {
 
   @Test
   public void testStringIndexer() {
-    StructType schema = createStructType(new StructField[]{
+    StructType schema = createStructType(new StructField[] {
       createStructField("id", IntegerType, false),
       createStructField("label", StringType, false)
     });
