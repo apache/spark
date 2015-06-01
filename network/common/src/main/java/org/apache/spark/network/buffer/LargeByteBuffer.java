@@ -118,7 +118,9 @@ public interface LargeByteBuffer {
    * Get the entire contents of this as one ByteBuffer, if possible.  The returned ByteBuffer
    * will always have the position set to 0, and the limit set to the end of the data.  Each
    * call will return a new ByteBuffer, but will not require copying the data (eg., it will
-   * use ByteBuffer#duplicate()).  The returned byte buffer will share data with this buffer.
+   * use ByteBuffer#duplicate()).  The returned byte buffer will share data with this buffer.  The
+   * returned buffers will never be larger than
+   * {@link org.apache.spark.network.buffer.LargeByteBufferHelper#MAX_CHUNK_SIZE}
    *
    * @throws BufferTooLargeException if this buffer is too large to fit in one {@link ByteBuffer}
    */

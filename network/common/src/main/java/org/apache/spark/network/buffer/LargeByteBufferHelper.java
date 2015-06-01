@@ -30,6 +30,12 @@ public class LargeByteBufferHelper {
 
   // netty can't quite send msgs that are a full 2GB -- they need to be slightly smaller
   // not sure what the exact limit is, but 200 seems OK.
+  /**
+   * The maximum size of any ByteBuffer.
+   * {@link org.apache.spark.network.buffer.LargeByteBuffer#asByteBuffer} will never return a
+   * ByteBuffer larger than this.  This is close to the max ByteBuffer size (2GB), minus a small
+   * amount for message overhead.
+   */
   public static final int MAX_CHUNK_SIZE = Integer.MAX_VALUE - 200;
 
   public static LargeByteBuffer asLargeByteBuffer(ByteBuffer buffer) {
