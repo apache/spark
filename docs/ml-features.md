@@ -1035,13 +1035,14 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
-StructType schema = new StructType(new StructField[] {
-  new StructField("id", IntegerType$.MODULE$, false, Metadata.empty()),
-  new StructField("hour", IntegerType$.MODULE$, false, Metadata.empty()),
-  new StructField("mobile", DoubleType$.MODULE$, false, Metadata.empty()),
-  new StructField("userFeatures", new VectorUDT(), false, Metadata.empty()),
-  new StructField("clicked", DoubleType$.MODULE$, false, Metadata.empty())
+StructType schema = createStructType(new StructField[] {
+  createStructField("id", IntegerType, false),
+  createStructField("hour", IntegerType, false),
+  createStructField("mobile", DoubleType, false),
+  createStructField("userFeatures", new VectorUDT(), false),
+  createStructField("clicked", DoubleType, false)
 });
 Row row = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
 JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));

@@ -34,6 +34,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaVectorAssemblerSuite {
   private transient JavaSparkContext jsc;
@@ -53,13 +54,13 @@ public class JavaVectorAssemblerSuite {
 
   @Test
   public void testVectorAssembler() {
-    StructType schema = new StructType(new StructField[] {
-      new StructField("id", IntegerType$.MODULE$, false, Metadata.empty()),
-      new StructField("x", DoubleType$.MODULE$, false, Metadata.empty()),
-      new StructField("y", new VectorUDT(), false, Metadata.empty()),
-      new StructField("name", StringType$.MODULE$, false, Metadata.empty()),
-      new StructField("z", new VectorUDT(), false, Metadata.empty()),
-      new StructField("n", LongType$.MODULE$, false, Metadata.empty())
+    StructType schema = createStructType(new StructField[] {
+      createStructField("id", IntegerType, false),
+      createStructField("x", DoubleType, false),
+      createStructField("y", new VectorUDT(), false),
+      createStructField("name", StringType, false),
+      createStructField("z", new VectorUDT(), false),
+      createStructField("n", LongType, false)
     });
     Row row = RowFactory.create(
       0, 0.0, Vectors.dense(1.0, 2.0), "a",
