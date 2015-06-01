@@ -106,7 +106,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       int toRead = Math.min(length - moved, currentBuffer.remaining());
       currentBuffer.get(dest, offset + moved, toRead);
       moved += toRead;
-      updateCurrentBuffer();
+      updateCurrentBufferIfNeeded();
     }
     _pos += moved;
   }
@@ -147,11 +147,15 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     }
     byte r = currentBuffer.get();
     _pos += 1;
-    updateCurrentBuffer();
+    updateCurrentBufferIfNeeded();
     return r;
   }
 
-  private void updateCurrentBuffer() {
+  /**
+   * If we've read to the end of the current buffer, move on to the next one.  Safe to call
+   * even if we haven't moved to the next buffer
+   */
+  private void updateCurrentBufferIfNeeded() {
     while (currentBuffer != null && !currentBuffer.hasRemaining()) {
       currentBufferIdx += 1;
       currentBuffer = currentBufferIdx < underlying.length ? underlying[currentBufferIdx] : null;
