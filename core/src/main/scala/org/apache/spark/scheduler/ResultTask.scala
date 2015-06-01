@@ -55,18 +55,7 @@ private[spark] class ResultTask[T, U](
   override def runTask(context: TaskContext): U = {
     // Deserialize the RDD and the func using the broadcast variables.
     val deserializeStartTime = System.currentTimeMillis()
-    val ser = SparkEnv.get.closureSerializer.newInstance()
-    // Kryo deserialization is not thread-safe w.r.t. underlying buffer
-    // create a copy of the buffer if Kryo is being used
-    val copy = if (SparkEnv.get.closureSerializer.isInstanceOf[KryoSerializer]) {
-        val arr = new Array[Byte](taskBinary.value.length)
-        System.arraycopy(taskBinary.value, 0, arr, 0, arr.length)
-        arr
-    } else {
-      taskBinary.value
-    }
-    val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
-      ByteBuffer.wrap(copy), Thread.currentThread.getContextClassLoader)
+    val (rdd, func) = deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](taskBinary)
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)

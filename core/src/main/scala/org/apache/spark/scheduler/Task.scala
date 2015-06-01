@@ -19,12 +19,15 @@ package org.apache.spark.scheduler
 
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.util.Arrays
 
 import scala.collection.mutable.HashMap
+import scala.reflect.ClassTag
 
-import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.serializer.{SerializerInstance, KryoSerializerInstance}
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
@@ -126,6 +129,21 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       taskThread.interrupt()
     }
   }
+
+  /**
+   * Deserializes the task from the broadcast variable.
+   * If Kryo serialization is being sed, a copy of the buffer is made because Kryo deserialization
+   * is not thread-safe w.r.t. the deserialization buffer (see SPARK-7708)
+   */
+  protected[this] def deserialize[T: ClassTag](taskBinary: Broadcast[Array[Byte]]): T = {
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    val taskBuffer = if (ser.isInstanceOf[KryoSerializerInstance]) {
+      Arrays.copyOf(taskBinary.value, taskBinary.value.length)
+    } else {
+      taskBinary.value
+    }
+    ser.deserialize[T](ByteBuffer.wrap(taskBuffer), Thread.currentThread.getContextClassLoader)
+  }  
 }
 
 /**

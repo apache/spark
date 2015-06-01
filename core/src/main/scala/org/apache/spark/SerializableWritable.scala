@@ -25,13 +25,9 @@ import org.apache.hadoop.io.Writable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
-import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
-import com.esotericsoftware.kryo.io.{Input, Output}
-import scala.reflect.ClassTag
 
 @DeveloperApi
-class SerializableWritable[T <: Writable](@transient var t: T)(implicit ct: ClassTag[T]) extends Serializable
-  with KryoSerializable {
+class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
 
   def value: T = t
 
@@ -48,14 +44,5 @@ class SerializableWritable[T <: Writable](@transient var t: T)(implicit ct: Clas
     ow.setConf(new Configuration())
     ow.readFields(in)
     t = ow.get().asInstanceOf[T]
-  }
-
-  override def write(kryo: Kryo, output: Output) {
-    kryo.writeObject(output, t)
-  }
-
-  override def read(kryo: Kryo, input: Input) {
-    val clazz = ct.runtimeClass.asInstanceOf[Class[T]]
-    t = kryo.readObject(input, clazz)
   }
 }

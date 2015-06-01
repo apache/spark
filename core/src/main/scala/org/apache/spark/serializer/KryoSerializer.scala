@@ -98,6 +98,8 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
+    kryo.register(classOf[Accumulator[_]], new KryoJavaSerializer())
+    kryo.register(classOf[Accumulable[_, _]], new KryoJavaSerializer())
 
     try {
       // Use the default classloader when calling the user registrator.

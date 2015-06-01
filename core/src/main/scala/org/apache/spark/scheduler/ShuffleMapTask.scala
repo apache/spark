@@ -58,19 +58,7 @@ private[spark] class ShuffleMapTask(
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val deserializeStartTime = System.currentTimeMillis()
-    val ser = SparkEnv.get.closureSerializer.newInstance()
-    // Kryo deserialization is not thread-safe w.r.t. underlying buffer
-    // create a copy of the buffer if Kryo is being used
-    val copy = if (SparkEnv.get.closureSerializer.isInstanceOf[KryoSerializer]) {
-        val arr = new Array[Byte](taskBinary.value.length)
-        System.arraycopy(taskBinary.value, 0, arr, 0, arr.length)
-        arr
-    } else {
-      taskBinary.value
-    }
-
-    val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-      ByteBuffer.wrap(copy), Thread.currentThread.getContextClassLoader)
+    val (rdd, dep) = deserialize[(RDD[_], ShuffleDependency[_, _, _])](taskBinary)
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)

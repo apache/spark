@@ -17,54 +17,36 @@
 
 package org.apache.spark.serializer
 
-import java.io.ByteArrayOutputStream
+import java.io.File
 
-import scala.collection.mutable
-import scala.reflect.ClassTag
+import com.google.common.base.Charsets._
+import com.google.common.io.Files
 
-import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SharedSparkContext, SparkConf, Partition, SerializableWritable}
-import org.apache.spark.scheduler.HighlyCompressedMapStatus
-import org.apache.spark.serializer.KryoTest._
-import org.apache.spark.storage.BlockManagerId
-import com.esotericsoftware.minlog.{Log => MinLog}
-import org.apache.hadoop.mapred.FileSplit
-import org.apache.hadoop.mapred.InputSplit
-import org.apache.hadoop.fs.Path
-import org.apache.spark.rdd.HadoopPartition
-import org.apache.spark.scheduler.ResultTask
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.util.Utils
 
-
-class TestPartition(@transient fs: FileSplit) extends Partition {
-
-  override def index = 42
-  val foobar = new SerializableWritable[InputSplit](fs)
-}
 
 class KryoClosureSerializerSuite extends FunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.closure.serializer", "org.apache.spark.serializer.KryoSerializer")
   
+  test("accumulator kryo serialization") {
+    val accum = sc.accumulator(0)
+    val rdd = sc.parallelize(0 until 3)
+    rdd.foreach(elem => accum += elem)
+    assert(accum.value == 3)
+  }
 
-  test("serialize various things using kryo closure serializer") {
-    val kryo = new KryoSerializer(conf).newInstance()
-    val fsplit = new FileSplit(new Path("/foo"), 0l, 100l, Array("host1"))
-    //val part = new HadoopPartition(1, 2, fsplit)
-    val part = new TestPartition(fsplit)
-        val bcast = sc.broadcast(new Array[Byte](4))
-
-    MinLog.set(MinLog.LEVEL_TRACE)
-    //val serialized = kryo.serialize(part)
-    //println(s"serialized.limit=${serialized.limit}")
-    //val des = kryo.deserialize[Partition](serialized).asInstanceOf[TestPartition]
-    //println(s"is=${des.foobar}")
-
-    val task = new ResultTask[Int, Int](1, bcast, part, null, 1)
-
-    val s = kryo.serialize(task)
-    println(s"limit=${s.limit}")
-    val d = kryo.deserialize[ResultTask[Int, Int]](s)
+  test("Hadoop RDD kryo serialization") {
+    // Regression test for Spark-7708. This test used to fail
+    // with StreamCorruptedException due to incorrect handling of
+    // JavaSerializable (FileSplit)
+    val dir = Utils.createTempDir()
+    val file = new File(dir, "textFile")
+    Files.write("Someline1 in file\nSomeline2 in file\nSomeline3 in file", file, UTF_8)
+    val rdd = sc.textFile(file.getAbsolutePath)
+    assert(rdd.count == 3)
   }
 }
