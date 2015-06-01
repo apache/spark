@@ -576,5 +576,16 @@ class DataFrameSuite extends QueryTest {
     val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
     assert(res9.count == 2)
     assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+
+    //only end provided as argument
+    val res10 = TestSQLContext.range(-10).select("id")
+    assert(res10.count == 0)
+
+    val res11 = TestSQLContext.range(10).select("id")
+    assert(res11.count == 10)
+    assert(res11.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
+
+    val res12 = TestSQLContext.range(0).select("id")
+    assert(res12.count == 0)
   }
 }
