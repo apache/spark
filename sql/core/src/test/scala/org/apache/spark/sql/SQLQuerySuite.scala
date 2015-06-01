@@ -123,7 +123,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
     // we except the id is materialized once
-    def id:() => String = () => { UUID.randomUUID().toString() }
+    def id: () => String = () => { UUID.randomUUID().toString() }
 
     val dfWithId = df.withColumn("id", callUDF(id, StringType))
     // Make a new DataFrame (actually the same reference to the old one)
