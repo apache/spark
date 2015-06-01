@@ -50,7 +50,7 @@ case class CreateTableAsSelect(
       import org.apache.hadoop.io.Text
       import org.apache.hadoop.mapred.TextInputFormat
 
-      var withSchema =
+      val withFormat =
         tableDesc.copy(
           inputFormat =
             tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
@@ -59,13 +59,14 @@ case class CreateTableAsSelect(
               .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
           serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
 
-      if (withSchema.schema.isEmpty) {
+      val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        withSchema =
-          tableDesc.copy(schema =
-          query.output.map(c =>
-            HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)))
+        tableDesc.copy(schema =
+        query.output.map(c =>
+          HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)))
+      } else {
+        withFormat
       }
 
       hiveContext.catalog.client.createTable(withSchema)
