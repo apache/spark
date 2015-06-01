@@ -366,7 +366,7 @@ trait CaseWhenLike extends Expression {
 
   // both then and else val should be considered.
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
-  def valueTypesEqual: Boolean = valueTypes.distinct.size <= 1
+  def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
 
   override def dataType: DataType = {
     if (!resolved) {
@@ -442,7 +442,8 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   override def children: Seq[Expression] = key +: branches
 
   override lazy val resolved: Boolean =
-    childrenResolved && valueTypesEqual
+    childrenResolved && valueTypesEqual &&
+    (key +: whenList).map(_.dataType).distinct.size == 1
 
   /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
