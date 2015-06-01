@@ -98,13 +98,13 @@ class HiveUdfSuite extends QueryTest {
       """
         |SELECT max(named_struct(
         |           "key", key,
-        |           "value", value)).value FROM src 
+        |           "value", value)).value FROM src
       """.stripMargin), Seq(Row("val_498")))
     checkAnswer(sql(
       """
         |SELECT min(named_struct(
         |           "key", key,
-        |           "value", value)).value FROM src 
+        |           "value", value)).value FROM src
       """.stripMargin), Seq(Row("val_0")))
   }
 
