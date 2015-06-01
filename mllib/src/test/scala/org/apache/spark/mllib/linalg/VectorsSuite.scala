@@ -96,7 +96,7 @@ class VectorsSuite extends FunSuite {
     assert(max2 === 2)
 
     // check for case that sparse vector is created with only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
-    val vec4 = Vectors.sparse(5,Array(0, 1, 2, 3),Array(0.0, 0.0, -1.0,-.7))
+    val vec4 = Vectors.sparse(5,Array(2, 3),Array(-1.0,-.7))
     val max3 = vec4.argmax
     assert(max3 === 0)
 
@@ -108,9 +108,7 @@ class VectorsSuite extends FunSuite {
     val max5 = vec6.argmax
     assert(max5 === 1)
 
-    // test that converting the sparse vector to another sparse vector then calling argmax still works right
-    var vec8 = Vectors.sparse(5,Array(0, 1),Array(0.0, -1.0))
-    vec8 = vec8.toSparse
+    var vec8 = Vectors.sparse(5,Array(1, 2),Array(0.0, -1.0))
     val max7 = vec8.argmax
     assert(max7 === 0)
   }
