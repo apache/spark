@@ -119,7 +119,7 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
     } {
       withClue(s"start = $start; end = $end") {
         try {
-          assert(o.slice(start,end).toSeq === ref.slice(start,end))
+          assert(o.slice(start, end).toSeq === ref.slice(start, end))
         } catch {
           case ex => fail(ex)
         }

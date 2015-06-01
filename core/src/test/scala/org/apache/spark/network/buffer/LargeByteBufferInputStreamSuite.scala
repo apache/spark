@@ -16,16 +16,18 @@
  */
 package org.apache.spark.network.buffer
 
-import java.io.{FileInputStream, FileOutputStream, OutputStream, File}
+import java.io.{File, FileInputStream, FileOutputStream, OutputStream}
 import java.nio.channels.FileChannel.MapMode
 
 import org.junit.Assert._
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
-class LargeByteBufferInputStreamSuite extends FunSuite with Matchers {
+import org.apache.spark.SparkFunSuite
+
+class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
 
   test("read from large mapped file") {
-    val testFile = File.createTempFile("large-buffer-input-stream-test",".bin")
+    val testFile = File.createTempFile("large-buffer-input-stream-test", ".bin")
 
     try {
       val out: OutputStream = new FileOutputStream(testFile)

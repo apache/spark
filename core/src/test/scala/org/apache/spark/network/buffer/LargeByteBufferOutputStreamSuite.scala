@@ -18,9 +18,11 @@ package org.apache.spark.network.buffer
 
 import scala.util.Random
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
-class LargeByteBufferOutputStreamSuite extends FunSuite with Matchers {
+import org.apache.spark.SparkFunSuite
+
+class LargeByteBufferOutputStreamSuite extends SparkFunSuite with Matchers {
 
   test("merged buffers for < 2GB") {
     val out = new LargeByteBufferOutputStream(10)
