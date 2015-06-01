@@ -48,4 +48,15 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
       assert(CatalystTypeConverters.createToScalaConverter(dataType)(null) === null)
     }
   }
+
+  test("option handling in convertToCatalyst") {
+    // convertToCatalyst doesn't handle unboxing from Options. This is inconsistent with
+    // createToCatalystConverter but it may not actually matter as this is only called internally
+    // in a handful of places where we don't expect to receive Options.
+    assert(CatalystTypeConverters.convertToCatalyst(Some(123)) === Some(123))
+  }
+
+  test("option handling in createToCatalystConverter") {
+    assert(CatalystTypeConverters.createToCatalystConverter(IntegerType)(Some(123)) === 123)
+  }
 }
