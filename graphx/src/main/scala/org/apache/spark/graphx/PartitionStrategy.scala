@@ -79,7 +79,7 @@ object PartitionStrategy {
       val cols = math.ceil(sqrtNumParts).toInt
       val lastColRows = numParts - rows * (cols - 1)
       val mixingPrime: VertexId = 1125899906842597L
-      val col = (math.abs(src * mixingPrime) % numParts % rows).toInt
+      val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
       val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
       col * rows + row
     }
