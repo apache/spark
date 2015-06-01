@@ -581,15 +581,15 @@ class FilterPushdownSuite extends PlanTest {
     // push down invalid
     val originalQuery1 = {
       x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('b)
     }
 
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     val correctAnswer1 =
       x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b).analyze
+       .sortBy(SortOrder('a, Ascending))
+       .select('b).analyze
 
     comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
   }
