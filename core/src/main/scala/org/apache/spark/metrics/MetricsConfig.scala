@@ -51,7 +51,12 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     loadPropertiesFromFile()
 
     // Also look for the properties in provided Spark configuration
-    conf.getMetricsConf map { case (key, value) => properties.setProperty(key, value) }
+    val prefix = "spark.metrics.conf."
+    conf.getAll.foreach {
+      case (k, v) if k.startsWith(prefix) =>
+        properties.setProperty(k.substring(prefix.length()), v)
+      case _ =>
+    }
 
     propertyCategories = subProperties(properties, INSTANCE_REGEX)
     if (propertyCategories.contains(DEFAULT_PREFIX)) {

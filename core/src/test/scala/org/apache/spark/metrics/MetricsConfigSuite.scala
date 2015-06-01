@@ -75,11 +75,11 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("MetricsConfig with properties set from a Spark configuration") {
     val sparkConf = new SparkConf(loadDefaults = false)
-    sparkConf.setMetricsProperty("*.sink.console.period", "10")
-    sparkConf.setMetricsProperty("*.sink.console.unit", "seconds")
-    sparkConf.setMetricsProperty("*.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
-    sparkConf.setMetricsProperty("master.sink.console.period", "20")
-    sparkConf.setMetricsProperty("master.sink.console.unit", "minutes")
+    setMetricsProperty(sparkConf, "*.sink.console.period", "10")
+    setMetricsProperty(sparkConf, "*.sink.console.unit", "seconds")
+    setMetricsProperty(sparkConf, "*.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
+    setMetricsProperty(sparkConf, "master.sink.console.period", "20")
+    setMetricsProperty(sparkConf, "master.sink.console.unit", "minutes")
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
@@ -102,11 +102,11 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("MetricsConfig with properties set from a file and a Spark configuration") {
     val sparkConf = new SparkConf(loadDefaults = false)
-    sparkConf.setMetricsProperty("*.sink.console.period", "10")
-    sparkConf.setMetricsProperty("*.sink.console.unit", "seconds")
-    sparkConf.setMetricsProperty("*.source.jvm.class", "org.apache.spark.SomeOtherSource")
-    sparkConf.setMetricsProperty("master.sink.console.period", "50")
-    sparkConf.setMetricsProperty("master.sink.console.unit", "seconds")
+    setMetricsProperty(sparkConf, "*.sink.console.period", "10")
+    setMetricsProperty(sparkConf, "*.sink.console.unit", "seconds")
+    setMetricsProperty(sparkConf, "*.source.jvm.class", "org.apache.spark.SomeOtherSource")
+    setMetricsProperty(sparkConf, "master.sink.console.period", "50")
+    setMetricsProperty(sparkConf, "master.sink.console.unit", "seconds")
     sparkConf.set("spark.metrics.conf", filePath)
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
@@ -153,4 +153,9 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     val servletProps = sinkProps("servlet")
     assert(servletProps.size() === 2)
   }
+
+  private def setMetricsProperty(conf: SparkConf, name: String, value: String): Unit = {
+    conf.set(s"spark.metrics.conf.$name", value)
+  }
+
 }
