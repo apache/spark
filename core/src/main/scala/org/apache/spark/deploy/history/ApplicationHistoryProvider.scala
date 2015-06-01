@@ -62,4 +62,6 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def getConfig(): Map[String, String] = Map()
 
+  def getAppStatus(appid: String): Boolean
+
 }

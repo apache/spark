@@ -31,6 +31,8 @@ import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{SignalLogger, Utils}
 
+import scala.collection.mutable
+
 /**
  * A web server that renders SparkUIs of completed applications.
  *
@@ -48,6 +50,8 @@ class HistoryServer(
     securityManager: SecurityManager,
     port: Int)
   extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+
+  private val loadedAppStatus = new mutable.HashMap[String, Boolean]()
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -182,7 +186,13 @@ class HistoryServer(
 
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      if (!loadedAppStatus.get(appId).isDefined) {
+        loadedAppStatus.put(appId, false)
+      }
+      if (!loadedAppStatus.get(appId).get) {
+        appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+        loadedAppStatus.update(appId, provider.getAppStatus(appId))
+      }
       true
     } catch {
       case e: Exception => e.getCause() match {
