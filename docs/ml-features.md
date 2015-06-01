@@ -563,7 +563,7 @@ column name and an output column name.
 from pyspark.ml.feature import StringIndexer
 
 df = sqlContext.createDataFrame(
-    [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")]
+    [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")],
     ["id", "category"])
 indexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
 indexed = indexer.fit(df).transform(df)
