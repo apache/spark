@@ -75,7 +75,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
-      val dataRows = listener.executionList.values
+      val dataRows = listener.executionList.values.toSeq.reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
@@ -142,13 +142,15 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(online: Boolean): Seq[Node] = {
-    val numBatches = if(online) listener.onlineSessionNum else (listener.sessionList.size-listener.onlineSessionNum)
+    val numBatches = if(online) listener.onlineSessionNum 
+	    else (listener.sessionList.size - listener.onlineSessionNum)
+
     val table = if (numBatches > 0) {
       val dataRowsTmp = listener.sessionList.values.toSeq
       val dataRows = if(online) {
-        dataRowsTmp.filter(_.finishTimestamp == 0).sortBy(_.startTimestamp).reverse
+        dataRowsTmp.filter(_.finishTimestamp == 0).reverse
       } else {
-        dataRowsTmp.filter(_.finishTimestamp != 0).sortBy(_.startTimestamp).reverse
+        dataRowsTmp.filter(_.finishTimestamp != 0).reverse
       }
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
