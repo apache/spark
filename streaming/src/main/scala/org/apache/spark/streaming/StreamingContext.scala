@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
@@ -576,18 +577,26 @@ class StreamingContext private[streaming] (
   def start(): Unit = synchronized {
     state match {
       case INITIALIZED =>
-        validate()
         startSite.set(DStream.getCreationSite())
         sparkContext.setCallSite(startSite.get)
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
-          scheduler.start()
-          uiTab.foreach(_.attach())
-          state = StreamingContextState.ACTIVE
+          try {
+            validate()
+            scheduler.start()
+            state = StreamingContextState.ACTIVE
+          } catch {
+            case NonFatal(e) =>
+              logError("Error starting the context, marking it as stopped", e)
+              scheduler.stop(false)
+              state = StreamingContextState.STOPPED
+              throw e
+          }
           StreamingContext.setActiveContext(this)
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+        uiTab.foreach(_.attach())
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
