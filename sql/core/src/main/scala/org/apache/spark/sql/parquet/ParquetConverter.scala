@@ -243,6 +243,8 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   /**
    * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
    * a long (i.e. precision <= 18)
+   * 
+   * Returned value is needed by CatalystConverter, which doesn't reuse the Decimal object.
    */
   protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Decimal = {
     val precision = ctype.precisionInfo.get.precision
