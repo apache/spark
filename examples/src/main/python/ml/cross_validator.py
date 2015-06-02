@@ -65,7 +65,7 @@ if __name__ == "__main__":
     crossval = CrossValidator(estimator=pipeline,
                               estimatorParamMaps=paramGrid,
                               evaluator=BinaryClassificationEvaluator(),
-                              numFolds=2) # use 3+ folds in practice
+                              numFolds=2)  # use 3+ folds in practice
 
     # Run cross-validation, and choose the best set of parameters.
     cvModel = crossval.fit(training)
