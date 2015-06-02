@@ -38,7 +38,7 @@ class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext 
     val dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
-    
+
     /**
      * Using the following R code to load the data, train the model and evaluate metrics.
      *

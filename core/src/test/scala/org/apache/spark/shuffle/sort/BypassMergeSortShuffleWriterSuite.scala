@@ -29,7 +29,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{TaskMetrics, ShuffleWriteMetrics}
@@ -37,7 +37,7 @@ import org.apache.spark.serializer.{SerializerInstance, Serializer, JavaSerializ
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-class BypassMergeSortShuffleWriterSuite extends FunSuite with BeforeAndAfterEach {
+class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _

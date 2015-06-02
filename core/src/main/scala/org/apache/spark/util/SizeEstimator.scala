@@ -236,7 +236,7 @@ object SizeEstimator extends Logging {
         val s1 = sampleArray(array, state, rand, drawn, length)
         val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
-        state.size += math.max(s1, s2) + 
+        state.size += math.max(s1, s2) +
           (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
       }
     }
@@ -244,7 +244,7 @@ object SizeEstimator extends Logging {
 
   private def sampleArray(
       array: AnyRef,
-      state: SearchState, 
+      state: SearchState,
       rand: Random,
       drawn: OpenHashSet[Int],
       length: Int): Long = {

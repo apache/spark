@@ -109,7 +109,7 @@ As an example, the following creates a `DataFrame` based on the content of a JSO
 val sc: SparkContext // An existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
-val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+val df = sqlContext.read.json("examples/src/main/resources/people.json")
 
 // Displays the content of the DataFrame to stdout
 df.show()
@@ -122,7 +122,7 @@ df.show()
 JavaSparkContext sc = ...; // An existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 
-DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
+DataFrame df = sqlContext.read().json("examples/src/main/resources/people.json");
 
 // Displays the content of the DataFrame to stdout
 df.show();
@@ -135,7 +135,7 @@ df.show();
 from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
 
-df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+df = sqlContext.read.json("examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame to stdout
 df.show()
@@ -171,7 +171,7 @@ val sc: SparkContext // An existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // Create the DataFrame
-val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+val df = sqlContext.read.json("examples/src/main/resources/people.json")
 
 // Show the content of the DataFrame
 df.show()
@@ -221,7 +221,7 @@ JavaSparkContext sc // An existing SparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // Create the DataFrame
-DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
+DataFrame df = sqlContext.read().json("examples/src/main/resources/people.json");
 
 // Show the content of the DataFrame
 df.show();
@@ -277,7 +277,7 @@ from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
 
 # Create the DataFrame
-df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+df = sqlContext.read.json("examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
 df.show()
@@ -777,8 +777,8 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("examples/src/main/resources/users.parquet")
-df.select("name", "favorite_color").save("namesAndFavColors.parquet")
+val df = sqlContext.read.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -787,8 +787,8 @@ df.select("name", "favorite_color").save("namesAndFavColors.parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("examples/src/main/resources/users.parquet");
-df.select("name", "favorite_color").save("namesAndFavColors.parquet");
+DataFrame df = sqlContext.read().load("examples/src/main/resources/users.parquet");
+df.select("name", "favorite_color").write().save("namesAndFavColors.parquet");
 
 {% endhighlight %}
 
@@ -798,8 +798,8 @@ df.select("name", "favorite_color").save("namesAndFavColors.parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("examples/src/main/resources/users.parquet")
-df.select("name", "favorite_color").save("namesAndFavColors.parquet")
+df = sqlContext.read.load("examples/src/main/resources/users.parquet")
+df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
 
 {% endhighlight %}
 
@@ -827,8 +827,8 @@ using this syntax.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val df = sqlContext.load("examples/src/main/resources/people.json", "json")
-df.select("name", "age").save("namesAndAges.parquet", "parquet")
+val df = sqlContext.read.format("json").load("examples/src/main/resources/people.json")
+df.select("name", "age").write.format("json").save("namesAndAges.parquet")
 {% endhighlight %}
 
 </div>
@@ -837,8 +837,8 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet")
 
 {% highlight java %}
 
-DataFrame df = sqlContext.load("examples/src/main/resources/people.json", "json");
-df.select("name", "age").save("namesAndAges.parquet", "parquet");
+DataFrame df = sqlContext.read().format("json").load("examples/src/main/resources/people.json");
+df.select("name", "age").write().format("parquet").save("namesAndAges.parquet");
 
 {% endhighlight %}
 
@@ -848,8 +848,8 @@ df.select("name", "age").save("namesAndAges.parquet", "parquet");
 
 {% highlight python %}
 
-df = sqlContext.load("examples/src/main/resources/people.json", "json")
-df.select("name", "age").save("namesAndAges.parquet", "parquet")
+df = sqlContext.read.load("examples/src/main/resources/people.json", format="json")
+df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
 
 {% endhighlight %}
 
@@ -947,11 +947,11 @@ import sqlContext.implicits._
 val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
 
 // The RDD is implicitly converted to a DataFrame by implicits, allowing it to be stored using Parquet.
-people.saveAsParquetFile("people.parquet")
+people.write.parquet("people.parquet")
 
 // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
 // The result of loading a Parquet file is also a DataFrame.
-val parquetFile = sqlContext.parquetFile("people.parquet")
+val parquetFile = sqlContext.read.parquet("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile")
@@ -969,11 +969,11 @@ teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 DataFrame schemaPeople = ... // The DataFrame from the previous example.
 
 // DataFrames can be saved as Parquet files, maintaining the schema information.
-schemaPeople.saveAsParquetFile("people.parquet");
+schemaPeople.write().parquet("people.parquet");
 
 // Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 // The result of loading a parquet file is also a DataFrame.
-DataFrame parquetFile = sqlContext.parquetFile("people.parquet");
+DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
@@ -995,11 +995,11 @@ List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>()
 schemaPeople # The DataFrame from the previous example.
 
 # DataFrames can be saved as Parquet files, maintaining the schema information.
-schemaPeople.saveAsParquetFile("people.parquet")
+schemaPeople.read.parquet("people.parquet")
 
 # Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a DataFrame.
-parquetFile = sqlContext.parquetFile("people.parquet")
+parquetFile = sqlContext.write.parquet("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
@@ -1087,9 +1087,9 @@ path
 
 {% endhighlight %}
 
-By passing `path/to/table` to either `SQLContext.parquetFile` or `SQLContext.load`, Spark SQL will
-automatically extract the partitioning information from the paths.  Now the schema of the returned
-DataFrame becomes:
+By passing `path/to/table` to either `SQLContext.read.parquet` or `SQLContext.read.load`, Spark SQL
+will automatically extract the partitioning information from the paths.
+Now the schema of the returned DataFrame becomes:
 
 {% highlight text %}
 
@@ -1122,15 +1122,15 @@ import sqlContext.implicits._
 
 // Create a simple DataFrame, stored into a partition directory
 val df1 = sparkContext.makeRDD(1 to 5).map(i => (i, i * 2)).toDF("single", "double")
-df1.saveAsParquetFile("data/test_table/key=1")
+df1.write.parquet("data/test_table/key=1")
 
 // Create another DataFrame in a new partition directory,
 // adding a new column and dropping an existing column
 val df2 = sparkContext.makeRDD(6 to 10).map(i => (i, i * 3)).toDF("single", "triple")
-df2.saveAsParquetFile("data/test_table/key=2")
+df2.write.parquet("data/test_table/key=2")
 
 // Read the partitioned table
-val df3 = sqlContext.parquetFile("data/test_table")
+val df3 = sqlContext.read.parquet("data/test_table")
 df3.printSchema()
 
 // The final schema consists of all 3 columns in the Parquet files together
@@ -1269,12 +1269,10 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
 
 <div data-lang="scala"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a `SQLContext`:
+This conversion can be done using `SQLContext.read.json()` on either an RDD of String,
+or a JSON file.
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
@@ -1285,8 +1283,7 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 // A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
 val path = "examples/src/main/resources/people.json"
-// Create a DataFrame from the file(s) pointed to by path
-val people = sqlContext.jsonFile(path)
+val people = sqlContext.read.json(path)
 
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
@@ -1304,19 +1301,17 @@ val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age 
 // an RDD[String] storing one JSON object per string.
 val anotherPeopleRDD = sc.parallelize(
   """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
-val anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
+val anotherPeople = sqlContext.read.json(anotherPeopleRDD)
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a `SQLContext` :
+This conversion can be done using `SQLContext.read().json()` on either an RDD of String,
+or a JSON file.
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
@@ -1326,9 +1321,7 @@ SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 
 // A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
-String path = "examples/src/main/resources/people.json";
-// Create a DataFrame from the file(s) pointed to by path
-DataFrame people = sqlContext.jsonFile(path);
+DataFrame people = sqlContext.read().json("examples/src/main/resources/people.json");
 
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
@@ -1347,18 +1340,15 @@ DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AN
 List<String> jsonData = Arrays.asList(
   "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
 JavaRDD<String> anotherPeopleRDD = sc.parallelize(jsonData);
-DataFrame anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD);
+DataFrame anotherPeople = sqlContext.read().json(anotherPeopleRDD);
 {% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a `SQLContext`:
+This conversion can be done using `SQLContext.read.json` on a JSON file.
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
@@ -1369,9 +1359,7 @@ sqlContext = SQLContext(sc)
 
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
-path = "examples/src/main/resources/people.json"
-# Create a DataFrame from the file(s) pointed to by path
-people = sqlContext.jsonFile(path)
+people = sqlContext.read.json("examples/src/main/resources/people.json")
 
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
@@ -1394,12 +1382,11 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 </div>
 
 <div data-lang="r"  markdown="1">
-Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a `SQLContext`:
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame. using
+the `jsonFile` function, which loads data from a directory of JSON files where each line of the
+files is a JSON object.
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
@@ -1882,6 +1869,25 @@ options.
 # Migration Guide
 
 ## Upgrading from Spark SQL 1.3 to 1.4
+
+#### DataFrame data reader/writer interface
+
+Based on user feedback, we created a new, more fluid API for reading data in (`SQLContext.read`)
+and writing data out (`DataFrame.write`), 
+and deprecated the old APIs (e.g. `SQLContext.parquetFile`, `SQLContext.jsonFile`).
+
+See the API docs for `SQLContext.read` (
+  <a href="api/scala/index.html#org.apache.spark.sql.SQLContext@read:DataFrameReader">Scala</a>,
+  <a href="api/java/org/apache/spark/sql/SQLContext.html#read()">Java</a>,
+  <a href="api/python/pyspark.sql.html#pyspark.sql.SQLContext.read">Python</a>
+) and `DataFrame.write` (
+  <a href="api/scala/index.html#org.apache.spark.sql.DataFrame@write:DataFrameWriter">Scala</a>,
+  <a href="api/java/org/apache/spark/sql/DataFrame.html#write()">Java</a>,
+  <a href="api/python/pyspark.sql.html#pyspark.sql.DataFrame.write">Python</a>
+) more information.
+
+
+#### DataFrame.groupBy retains grouping columns
 
 Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
 

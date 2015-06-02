@@ -214,13 +214,13 @@ class VectorsSuite extends SparkFunSuite {
 
       val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
 
-      // SparseVector vs. SparseVector 
-      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8) 
+      // SparseVector vs. SparseVector
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. SparseVector
       assert(Vectors.sqdist(denseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. DenseVector
       assert(Vectors.sqdist(denseVector1, denseVector2) ~== squaredDist relTol 1E-8)
-    }    
+    }
   }
 
   test("foreachActive") {
