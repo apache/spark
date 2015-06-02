@@ -30,9 +30,10 @@ import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
@@ -94,10 +95,19 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
       // We create a DataFrame by applying the schema of relation to the data to make sure.
       // We are writing data based on the expected schema,
-      val df = sqlContext.createDataFrame(
-        DataFrame(sqlContext, query).queryExecution.toRdd,
-        relation.schema,
-        needsConversion = false)
+      val df = {
+        // For partitioned relation r, r.schema's column ordering is different with the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column). We
+        // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
+        // safely apply the schema of r.schema to the data.
+        val project = Project(
+          relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
+
+        sqlContext.createDataFrame(
+          DataFrame(sqlContext, project).queryExecution.toRdd,
+          relation.schema,
+          needsConversion = false)
+      }
 
       val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
