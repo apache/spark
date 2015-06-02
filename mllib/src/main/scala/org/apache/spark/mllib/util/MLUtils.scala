@@ -83,14 +83,12 @@ object MLUtils {
           (index, value)
         }.unzip
 
-        // check if indices is one-based and in ascending order
+        // check if indices are one-based and in ascending order
         var previous = -1
         var i = 0
         val indicesLength = indices.size
         while (i < indicesLength) {
-          if (indices(i) <= previous) {
-            throw new IllegalArgumentException("indices should be one-based and in ascending order")
-          }
+          require(indices(i) > previous, "indices should be one-based and in ascending order" )
           previous = indices(i)
           i += 1
         }
