@@ -173,7 +173,7 @@ public class UnsafeShuffleWriterSuite {
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
-        partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
+        partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[3];
         return null;
       }
     }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), anyInt(), any(long[].class));
