@@ -87,7 +87,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def corr(col1: String, col2: String): Double = {
     corr(col1, col2, "pearson")
+// scalastyle:off
   }
+// scalastyle:on
 
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
