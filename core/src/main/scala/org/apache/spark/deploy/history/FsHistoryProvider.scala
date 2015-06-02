@@ -485,7 +485,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
        return false
      }
     else {
-      throw new Exception(s"no app with key $appid.")
+       val e = new NoSuchElementException(s"no app with key $appid.")
+       e.initCause(new NoSuchElementException)
+       throw e
     }
   }
 

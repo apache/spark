@@ -64,6 +64,12 @@ class HistoryServer(
         .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
         .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
       attachSparkUI(ui)
+      val newUrl = if(parts.length > 1) "/history/" + parts(0) + "/" + parts(1) else "/history/" + parts(0)
+      for(hanler <- getHandlers) {
+        if (hanler != null && hanler.getContextPath.equals(newUrl)) {
+          detachHandler(hanler)
+        }
+      }
       ui
     }
   }
@@ -106,7 +112,7 @@ class HistoryServer(
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI() + "/ui"))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -186,12 +192,14 @@ class HistoryServer(
 
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      if (!loadedAppStatus.get(appId).isDefined) {
-        loadedAppStatus.put(appId, false)
-      }
-      if (!loadedAppStatus.get(appId).get) {
+      val app_attemp_id = appId + attemptId.map { id => s"_$id" }.getOrElse("")
+      if (!loadedAppStatus.get(app_attemp_id).isDefined) {
+        loadedAppStatus.put(app_attemp_id, provider.getAppStatus(app_attemp_id))
         appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
-        loadedAppStatus.update(appId, provider.getAppStatus(appId))
+      }
+      if (!loadedAppStatus.get(app_attemp_id).get) {
+        loadedAppStatus.update(app_attemp_id, provider.getAppStatus(app_attemp_id))
+        appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
       }
       true
     } catch {
