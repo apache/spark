@@ -30,6 +30,7 @@ There are 3 main types of operators:
         Hive2SambaOperator,
         HiveOperator,
         HivePartitionSensor,
+        HiveToMySqlTransfer,
         MySqlOperator,
         MySqlToHiveTransfer,
         PostgresOperator,
@@ -37,6 +38,7 @@ There are 3 main types of operators:
         PrestoIntervalCheckOperator,
         PrestoValueCheckOperator,
         PythonOperator,
+        S3KeySensor,
         S3ToHiveTransfer,
         SqlSensor,
         SubDagOperator,
@@ -108,7 +110,7 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, S3Hook
+    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook, S3Hook, SqliteHook
 
 Executors
 ---------
