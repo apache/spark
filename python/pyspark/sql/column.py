@@ -333,7 +333,7 @@ class Column(object):
         if not isinstance(condition, Column):
             raise TypeError("condition should be a Column")
         v = value._jc if isinstance(value, Column) else value
-        jc = sc._jvm.functions.when(condition._jc, v)
+        jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
     @since(1.4)
