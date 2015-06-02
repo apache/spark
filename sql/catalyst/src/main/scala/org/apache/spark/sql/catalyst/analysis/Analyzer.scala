@@ -645,9 +645,14 @@ class Analyzer(
 
     /**
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
-     * other regular expressions that do not contain any window expression.
+     * other regular expressions that do not contain any window expression. For example, for
+     * `col1, Sum(col2 + col3) OVER (PARTITION BY col4 ORDER BY col5)`, we will extract
+     * `col1`, `col2 + col3`, `col4`, and `col5` out and replace them appearances in
+     * the window expression as attribute references. So, the first returned value will be
+     * `[Sum(_w0) OVER (PARTITION BY _w1 ORDER BY _w2)]` and the second returned value will be
+     * [col1, col2 + col3 as _w0, col4 as _w1, col5 as _w2].
      */
-    private def extractRegularExpressions(
+    private def extract(
         expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
       // First, we partition the input expressions to two part. For the first part,
       // every expression in it contain at least one WindowExpression.
@@ -662,8 +667,8 @@ class Analyzer(
       val extractedExprBuffer = new ArrayBuffer[NamedExpression]()
       def extractExpr(expr: Expression): Expression = expr match {
         case ne: NamedExpression =>
-          // If a named expression is not in regularExpressions, add extract it and replace it
-          // with an AttributeReference.
+          // If a named expression is not in regularExpressions, add it to
+          // extractedExprBuffer and replace it with an AttributeReference.
           val missingExpr =
             AttributeSet(Seq(expr)) -- (regularExpressions ++ extractedExprBuffer)
           if (missingExpr.nonEmpty) {
@@ -709,7 +714,7 @@ class Analyzer(
       }
 
       (newExpressionsWithWindowFunctions, regularExpressions ++ extractedExprBuffer)
-    } // end of extractRegularExpressions
+    } // end of extract
 
     /**
      * Adds operators for Window Expressions. Every Window operator handles a single Window Spec.
@@ -756,6 +761,8 @@ class Analyzer(
         if (distinctWindowSpec.length == 0 ) {
           failAnalysis(s"$expr does not have any WindowExpression.")
         } else if (distinctWindowSpec.length > 1) {
+          // newExpressionsWithWindowFunctions only have expressions with a single
+          // WindowExpression. If we reach here, we have a bug.
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
@@ -790,7 +797,7 @@ class Analyzer(
         if child.resolved &&
            hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
-        val (windowExpressions, aggregateExpressions) = extractRegularExpressions(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.
@@ -807,7 +814,7 @@ class Analyzer(
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
-        val (windowExpressions, aggregateExpressions) = extractRegularExpressions(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add Window operators.
@@ -821,7 +828,7 @@ class Analyzer(
       // have been resolved.
       case p @ Project(projectList, child)
         if hasWindowFunction(projectList) && !p.expressions.exists(!_.resolved) =>
-        val (windowExpressions, regularExpressions) = extractRegularExpressions(projectList)
+        val (windowExpressions, regularExpressions) = extract(projectList)
         // We add a project to get all needed expressions for window expressions from the child
         // of the original Project operator.
         val withProject = Project(regularExpressions, child)
