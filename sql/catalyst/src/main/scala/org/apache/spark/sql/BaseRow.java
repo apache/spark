@@ -41,8 +41,6 @@ public abstract class BaseRow implements Row {
         return true;
       }
     }
-    float a = 0;
-    byte b = 0;
     return false;
   }
 

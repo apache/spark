@@ -106,7 +106,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val result = create(in)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
-          logWarning(s"Code generated expression $in in $timeMs ms")
+          logInfo(s"Code generated expression $in in $timeMs ms")
           result
         }
       })
@@ -245,6 +245,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           float $primitiveTerm = ${value}f;
          """
 
+      case expressions.Literal(value, dt @ DecimalType()) =>
+        s"""
+          final boolean $nullTerm = false;
+          ${primitiveForType(dt)} $primitiveTerm = new ${primitiveForType(dt)}().set($value);
+         """
+
       case expressions.Literal(value, dataType) =>
         s"""
           final boolean $nullTerm = false;
@@ -262,32 +268,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
           StringType)
 
-      case Cast(child @ BooleanType(), dt: NumericType) =>
+      case Cast(child @ BooleanType(), dt: NumericType)  if !dt.isInstanceOf[DecimalType] =>
         child.castOrNull(c => s"(${primitiveForType(dt)})($c?1:0)", dt)
 
-      case Cast(child @ NumericType(), ByteType) =>
-        child.castOrNull(c => s"(byte)($c)", ByteType)
+      case Cast(child @ DecimalType(), IntegerType) =>
+        child.castOrNull(c => s"($c).toInt()", IntegerType)
 
-      case Cast(child @ NumericType(), ShortType) =>
-        child.castOrNull(c => s"(short)($c)", ShortType)
+      case Cast(child @ DecimalType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        child.castOrNull(c => s"($c).to${termForType(dt)}()", dt)
 
-      case Cast(child @ NumericType(), IntegerType) =>
-        child.castOrNull(c => s"(int)($c)", IntegerType)
-
-      case Cast(child @ NumericType(), LongType) =>
-        child.castOrNull(c => s"(long)($c)", LongType)
-
-      case Cast(child @ NumericType(), DoubleType) =>
-        child.castOrNull(c => s"(double)($c)", DoubleType)
-
-      case Cast(child @ NumericType(), FloatType) =>
-        child.castOrNull(c => s"(float)($c)", FloatType)
+      case Cast(child @ NumericType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        child.castOrNull(c => s"(${primitiveForType(dt)})($c)", dt)
 
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
       case Cast(e, StringType) if e.dataType != TimestampType =>
         e.castOrNull(c =>
-          s"new org.apache.spark.sql.types.UTF8String().set($c.toString())",
+          s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))",
           StringType)
 
       case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
@@ -381,37 +378,65 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         // Uh, bad function name...
         child.castOrNull(c => s"!$c", BooleanType)
 
-      case Add(e1, e2) if e1.dataType != DecimalType() =>
-        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 + $eval2" }
-      case Subtract(e1, e2) if e1.dataType != DecimalType() =>
-        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 - $eval2" }
-      case Multiply(e1, e2) if e1.dataType != DecimalType() =>
-        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 * $eval2" }
-      case Divide(e1, e2) if e1.dataType != DecimalType() =>
+      case Add(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$plus($eval2)" }
+      case Subtract(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$minus($eval2)" }
+      case Multiply(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$times($eval2)" }
+      case Divide(e1 @ DecimalType(), e2 @ DecimalType()) =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+          s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = null;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm}.isZero()) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm}.$$div${eval2.primitiveTerm});
+          }
+          """
+      case Remainder(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+          s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm}.isZero()) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm}.remainder(${eval2.primitiveTerm});
+          }
+         """
 
+      case Add(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 + $eval2" }
+      case Subtract(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 - $eval2" }
+      case Multiply(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 * $eval2" }
+      case Divide(e1, e2) =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
         eval1.code + eval2.code +
         s"""
           boolean $nullTerm = false;
           ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
-
           if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm} == 0) {
             $nullTerm = true;
           } else {
             $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm};
           }
         """
-
-      case Remainder(e1, e2) if e1.dataType != DecimalType() =>
+      case Remainder(e1, e2) =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
-
         eval1.code + eval2.code +
         s"""
           boolean $nullTerm = false;
           ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
-
           if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm} == 0) {
             $nullTerm = true;
           } else {
@@ -510,7 +535,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           $primitiveTerm.union((${htype})${rightEval.primitiveTerm});
         """
 
-      case MaxOf(e1, e2) if e1.dataType != DecimalType() =>
+      case MaxOf(e1, e2) if !e1.dataType.isInstanceOf[DecimalType] =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
 
@@ -534,7 +559,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           }
         """
 
-      case MinOf(e1, e2) if e1.dataType != DecimalType() =>
+      case MinOf(e1, e2) if !e1.dataType.isInstanceOf[DecimalType] =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
 
@@ -660,7 +685,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "double"
     case FloatType => "float"
     case BooleanType => "boolean"
-    case DecimalType() => "org.apache.spark.sql.types.Decimal"
+    case dt @ DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
     case DateType => "int"
@@ -677,7 +702,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"
-    case DecimalType() => "null"
+    case dt @ DecimalType() => "null"
     case StringType => "null"
     case _ => "null"
   }
@@ -690,7 +715,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "Double"
     case FloatType => "Float"
     case BooleanType => "Boolean"
-    case DecimalType() => "org.apache.spark.sql.types.Decimal"
+    case dt @ DecimalType() => "org.apache.spark.sql.types.Decimal"
     case BinaryType => "byte[]"
     case StringType => "org.apache.spark.sql.types.UTF8String"
     case DateType => "Integer"
