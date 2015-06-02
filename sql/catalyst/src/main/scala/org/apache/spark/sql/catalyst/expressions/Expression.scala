@@ -37,6 +37,13 @@ abstract class Expression extends TreeNode[Expression] {
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
+
+  /**
+   * Returns true when an expressions always return the same result for a specific set of
+   * input values.
+   */
+  // TODO: Need to well define what are explicit input values and implicit input values.
+  def deterministic: Boolean = true
   def nullable: Boolean
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
