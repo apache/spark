@@ -19,13 +19,14 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.util.Utils
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import org.scalatest.BeforeAndAfterAll
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -38,7 +39,7 @@ case class OrcParData(intField: Int, stringField: String)
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
-class OrcPartitionDiscoverySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
+class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
   val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultVal
 
   def withTempDir(f: File => Unit): Unit = {

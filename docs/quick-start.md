@@ -184,10 +184,10 @@ scala> linesWithSpark.cache()
 res7: spark.RDD[String] = spark.FilteredRDD@17e51082
 
 scala> linesWithSpark.count()
-res8: Long = 15
+res8: Long = 19
 
 scala> linesWithSpark.count()
-res9: Long = 15
+res9: Long = 19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -202,10 +202,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 >>> linesWithSpark.cache()
 
 >>> linesWithSpark.count()
-15
+19
 
 >>> linesWithSpark.count()
-15
+19
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -423,14 +423,14 @@ dependencies to `spark-submit` through its `--py-files` argument by packaging th
 
 We can run this application using the `bin/spark-submit` script:
 
-{% highlight python %}
+{% highlight bash %}
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
-{% endhighlight python %}
+{% endhighlight %}
 
 </div>
 </div>
@@ -444,7 +444,8 @@ Congratulations on running your first Spark application!
 * Finally, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run them as follows:
 
 {% highlight bash %}
@@ -453,4 +454,7 @@ You can run them as follows:
 
 # For Python examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/python/pi.py
+
+# For R examples, use spark-submit directly:
+./bin/spark-submit examples/src/main/r/dataframe.R
 {% endhighlight %}

@@ -148,6 +148,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   /** The underlying SparkContext */
   val sparkContext = new JavaSparkContext(ssc.sc)
 
+  /**
+   * @deprecated As of 0.9.0, replaced by `sparkContext`
+   */
   @deprecated("use sparkContext", "0.9.0")
   val sc: JavaSparkContext = sparkContext
 
@@ -218,7 +221,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param depth Searching depth of HDFS directory
    */
   def textFileStream(directory: String, depth: Int): JavaDStream[String] = {
-    ssc.textFileStream(directory,depth)
+    ssc.textFileStream(directory, depth)
   }
   /**
    * :: Experimental ::
@@ -724,6 +727,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
+   * @deprecated As of 1.3.0, replaced by `awaitTerminationOrTimeout(Long)`.
    */
   @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
   def awaitTermination(timeout: Long): Unit = {
@@ -782,6 +786,7 @@ object JavaStreamingContext {
    *
    * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactor", "1.4.0")
   def getOrCreate(
@@ -804,6 +809,7 @@ object JavaStreamingContext {
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
    * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
    *                       file system
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
@@ -829,6 +835,7 @@ object JavaStreamingContext {
    *                       file system
    * @param createOnError  Whether to create a new JavaStreamingContext if there is an
    *                       error in reading checkpoint data.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(

@@ -39,6 +39,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
+import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
@@ -100,6 +101,36 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         assert(output.size === expectedOutput.size)
         for (i <- 0 until output.size) {
           assert(output(i) === expectedOutput(i))
+        }
+      }
+    }
+  }
+
+  test("socket input stream - no block in a batch") {
+    withTestServer(new TestServer()) { testServer =>
+      testServer.start()
+
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        ssc.addStreamingListener(ssc.progressListener)
+
+        val batchCounter = new BatchCounter(ssc)
+        val networkStream = ssc.socketTextStream(
+          "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+        val outputStream = new TestOutputStream(networkStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
+
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        clock.advance(batchDuration.milliseconds)
+
+        // Make sure the first batch is finished
+        if (!batchCounter.waitUntilBatchesCompleted(1, 30000)) {
+          fail("Timeout: cannot finish all batches in 30 seconds")
+        }
+
+        networkStream.generatedRDDs.foreach { case (_, rdd) =>
+          assert(!rdd.isInstanceOf[WriteAheadLogBackedBlockRDD[_]])
         }
       }
     }
@@ -309,7 +340,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-
   test("test track the number of input stream") {
     val ssc = new StreamingContext(conf, batchDuration)
 
@@ -334,8 +364,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(receiverInputStreams.map(_.id) === Array(0, 1))
   }
 
-
-  def testFileStream(newFilesOnly: Boolean, depth :Int = 1) {
+  def testFileStream(newFilesOnly: Boolean, depth: Int = 1) {
     val testDir: File = null
     try {
       val batchDuration = Seconds(2)
@@ -409,7 +438,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
   val servingThread = new Thread() {
     override def run() {
       try {
-        while(true) {
+        while (true) {
           logInfo("Accepting connections on port " + port)
           val clientSocket = serverSocket.accept()
           if (startLatch.getCount == 1) {

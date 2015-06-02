@@ -44,6 +44,7 @@ from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.window import Window
 
 
 class ExamplePointUDT(UserDefinedType):
@@ -99,6 +100,15 @@ class DataTypeTests(unittest.TestCase):
         lt2 = pickle.loads(pickle.dumps(LongType()))
         self.assertEquals(lt, lt2)
 
+    # regression test for SPARK-7978
+    def test_decimal_type(self):
+        t1 = DecimalType()
+        t2 = DecimalType(10, 2)
+        self.assertTrue(t2 is not t1)
+        self.assertNotEqual(t1, t2)
+        t3 = DecimalType(8)
+        self.assertNotEqual(t2, t3)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
@@ -116,6 +126,11 @@ class SQLTests(ReusedPySparkTestCase):
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def test_range(self):
+        self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
+        self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sqlCtx.range(0, 1 << 40, 1 << 39).count(), 2)
 
     def test_explode(self):
         from pyspark.sql.functions import explode
@@ -480,29 +495,29 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        df.save(tmpPath, "org.apache.spark.sql.json", "error")
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json", schema)
-        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+        actual = self.sqlCtx.read.json(tmpPath, schema)
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
 
-        df.save(tmpPath, "org.apache.spark.sql.json", "overwrite")
-        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.json(tmpPath, "overwrite")
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        df.save(source="org.apache.spark.sql.json", mode="overwrite", path=tmpPath,
-                noUse="this options will not be used in save.")
-        actual = self.sqlCtx.load(source="org.apache.spark.sql.json", path=tmpPath,
-                                  noUse="this options will not be used in load.")
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.save(format="json", mode="overwrite", path=tmpPath,
+                      noUse="this options will not be used in save.")
+        actual = self.sqlCtx.read.load(format="json", path=tmpPath,
+                                       noUse="this options will not be used in load.")
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
                                                     "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         actual = self.sqlCtx.load(path=tmpPath)
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
@@ -738,11 +753,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
-            cls.sqlCtx = None
-            return
+            raise unittest.SkipTest("Hive is not available")
         except TypeError:
-            cls.sqlCtx = None
-            return
+            raise unittest.SkipTest("Hive is not available")
         os.unlink(cls.tempdir.name)
         _scala_HiveContext =\
             cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
@@ -756,57 +769,68 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def test_save_and_load_table(self):
-        if self.sqlCtx is None:
-            return  # no hive available, skipped
-
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "append", path=tmpPath)
-        actual = self.sqlCtx.createExternalTable("externalJsonTable", tmpPath,
-                                                 "org.apache.spark.sql.json")
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        df.write.saveAsTable("savedJsonTable", "json", "append", path=tmpPath)
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", tmpPath, "json")
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
 
-        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "overwrite", path=tmpPath)
+        df.write.saveAsTable("savedJsonTable", "json", "overwrite", path=tmpPath)
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.sqlCtx.createExternalTable("externalJsonTable",
-                                                 source="org.apache.spark.sql.json",
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", source="json",
                                                  schema=schema, path=tmpPath,
                                                  noUse="this options will not be used")
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.select("value").collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.select("value").collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE savedJsonTable")
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
 
         defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
                                                     "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
-        df.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
+        df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
         actual = self.sqlCtx.createExternalTable("externalJsonTable", path=tmpPath)
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertTrue(
-            sorted(df.collect()) ==
-            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
-        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()),
+                         sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("DROP TABLE savedJsonTable")
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
+
+    def test_window_functions(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        w = Window.partitionBy("value").orderBy("key")
+        from pyspark.sql import functions as F
+        sel = df.select(df.value, df.key,
+                        F.max("key").over(w.rowsBetween(0, 1)),
+                        F.min("key").over(w.rowsBetween(0, 1)),
+                        F.count("key").over(w.rowsBetween(float('-inf'), float('inf'))),
+                        F.rowNumber().over(w),
+                        F.rank().over(w),
+                        F.denseRank().over(w),
+                        F.ntile(2).over(w))
+        rs = sorted(sel.collect())
+        expected = [
+            ("1", 1, 1, 1, 1, 1, 1, 1, 1),
+            ("2", 1, 1, 1, 3, 1, 1, 1, 1),
+            ("2", 1, 2, 1, 3, 2, 1, 1, 1),
+            ("2", 2, 2, 2, 3, 3, 3, 2, 2)
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,7 +144,7 @@ private object IDF {
          * Since arrays are initialized to 0 by default,
          * we just omit changing those entries.
          */
-        if(df(j) >= minDocFreq) {
+        if (df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
         }
         j += 1

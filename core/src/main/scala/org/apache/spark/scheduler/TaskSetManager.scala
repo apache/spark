@@ -781,10 +781,10 @@ private[spark] class TaskSetManager(
     // that it's okay if we add a task to the same queue twice (if it had multiple preferred
     // locations), because dequeueTaskFromList will skip already-running tasks.
     for (index <- getPendingTasksForExecutor(execId)) {
-      addPendingTask(index, readding=true)
+      addPendingTask(index, readding = true)
     }
     for (index <- getPendingTasksForHost(host)) {
-      addPendingTask(index, readding=true)
+      addPendingTask(index, readding = true)
     }
 
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
@@ -861,9 +861,9 @@ private[spark] class TaskSetManager(
       case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
       case _ => null
     }
-    
+
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)  
+      conf.getTimeAsMs(localityWaitKey, defaultWait)
     } else {
       0L
     }

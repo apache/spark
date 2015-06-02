@@ -19,6 +19,9 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{FileNotFoundException, IOException, ObjectInputStream}
 
+import scala.collection.mutable
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
@@ -26,9 +29,6 @@ import org.apache.spark.SerializableWritable
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.util.{TimeStampedHashMap, Utils}
-
-import scala.collection.mutable
-import scala.reflect.ClassTag
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -69,7 +69,7 @@ import scala.reflect.ClassTag
  *   processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
+class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     @transient ssc_ : StreamingContext,
     directory: String,
     depth: Int = 1,
@@ -246,6 +246,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
         Array.empty
     }
   }
+
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
@@ -299,7 +300,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    val fileRDDs = files.map(file =>{
+    val fileRDDs = files.map { file =>
       val rdd = serializableConfOpt.map(_.value) match {
         case Some(config) => context.sparkContext.newAPIHadoopFile(
           file,
@@ -315,7 +316,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
           "Refer to the streaming programming guide for more details.")
       }
       rdd
-    })
+    }
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
@@ -342,7 +343,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new mutable.HashMap[Time, RDD[(K,V)]] ()
+    generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
     batchTimeToSelectedFiles =
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
@@ -390,7 +391,7 @@ private[streaming]
 object FileInputDStream {
 
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
-  
+
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
    * at least last minRememberDurationS duration can be remembered.

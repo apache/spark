@@ -119,7 +119,8 @@ object KinesisWordCountASL extends Logging {
     val batchInterval = Milliseconds(2000)
 
     // Kinesis checkpoint interval is the interval at which the DynamoDB is updated with information
-    //on sequence number of records that have been received. Same as batchInterval for this example.
+    // on sequence number of records that have been received. Same as batchInterval for this
+    // example.
     val kinesisCheckpointInterval = batchInterval
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
@@ -144,7 +145,7 @@ object KinesisWordCountASL extends Logging {
 
     // Map each word to a (word, 1) tuple so we can reduce by key to count the words
     val wordCounts = words.map(word => (word, 1)).reduceByKey(_ + _)
- 
+
     // Print the first 10 wordCounts
     wordCounts.print()
 
@@ -173,7 +174,8 @@ object KinesisWordProducerASL {
     if (args.length != 4) {
       System.err.println(
         """
-          |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec> <words-per-record>
+          |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
+                                         <words-per-record>
           |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
@@ -206,16 +208,16 @@ object KinesisWordProducerASL {
       recordsPerSecond: Int,
       wordsPerRecord: Int): Seq[(String, Int)] = {
 
-    val randomWords = List("spark","you","are","my","father")
+    val randomWords = List("spark", "you", "are", "my", "father")
     val totals = scala.collection.mutable.Map[String, Int]()
-  
+
     // Create the low-level Kinesis Client from the AWS Java SDK.
     val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
     kinesisClient.setEndpoint(endpoint)
 
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
         s" $recordsPerSecond records per second and $wordsPerRecord words per record")
-  
+
     // Iterate and put records onto the stream per the given recordPerSec and wordsPerRecord
     for (i <- 1 to 10) {
       // Generate recordsPerSec records to put onto the stream
@@ -253,8 +255,8 @@ object KinesisWordProducerASL {
   }
 }
 
-/** 
- *  Utility functions for Spark Streaming examples. 
+/**
+ *  Utility functions for Spark Streaming examples.
  *  This has been lifted from the examples/ project to remove the circular dependency.
  */
 private[streaming] object StreamingExamples extends Logging {

@@ -17,21 +17,16 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
-
-class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
+class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Double] = _
-  @transient var sqlContext: SQLContext = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext = new SQLContext(sc)
     data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4)
   }
 
@@ -52,7 +47,7 @@ class BinarizerSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Binarize continuous features with setter") {
     val threshold: Double = 0.2
-    val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0) 
+    val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0)
     val dataFrame: DataFrame = sqlContext.createDataFrame(
         data.zip(thresholdBinarized)).toDF("feature", "expected")
 
