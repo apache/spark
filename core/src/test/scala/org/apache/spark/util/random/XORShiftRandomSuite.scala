@@ -17,16 +17,16 @@
 
 package org.apache.spark.util.random
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils.times
 
 import scala.language.reflectiveCalls
 
-class XORShiftRandomSuite extends FunSuite with Matchers {
+class XORShiftRandomSuite extends SparkFunSuite with Matchers {
 
   private def fixture = new {
     val seed = 1L

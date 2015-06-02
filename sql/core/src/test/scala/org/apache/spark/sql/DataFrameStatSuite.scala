@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-class DataFrameStatSuite extends FunSuite  {
+class DataFrameStatSuite extends SparkFunSuite  {
 
   val sqlCtx = TestSQLContext
   def toLetter(i: Int): String = (i + 97).toChar.toString

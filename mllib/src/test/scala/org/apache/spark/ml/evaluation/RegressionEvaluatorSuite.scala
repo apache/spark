@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class RegressionEvaluatorSuite extends FunSuite with MLlibTestSparkContext {
+class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Regression Evaluator: default params") {
     /**

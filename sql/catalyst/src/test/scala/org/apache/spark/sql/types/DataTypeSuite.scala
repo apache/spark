@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class DataTypeSuite extends FunSuite {
+class DataTypeSuite extends SparkFunSuite {
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)

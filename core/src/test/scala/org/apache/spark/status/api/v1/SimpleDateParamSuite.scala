@@ -16,9 +16,11 @@
  */
 package org.apache.spark.status.api.v1
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 
-class SimpleDateParamSuite extends FunSuite with Matchers {
+import org.apache.spark.SparkFunSuite
+
+class SimpleDateParamSuite extends SparkFunSuite with Matchers {
 
   test("date parsing") {
     new SimpleDateParam("2015-02-20T23:21:17.190GMT").timestamp should be (1424474477190L)
