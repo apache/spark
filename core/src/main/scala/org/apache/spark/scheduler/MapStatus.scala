@@ -106,7 +106,7 @@ private[spark] class CompressedMapStatus(
 
   override def location: BlockManagerId = loc
 
-  override def stageAttemptId = _stageAttemptId
+  override def stageAttemptId: Int = _stageAttemptId
 
   override def getSizeForBlock(reduceId: Int): Long = {
     MapStatus.decompressSize(compressedSizes(reduceId))
