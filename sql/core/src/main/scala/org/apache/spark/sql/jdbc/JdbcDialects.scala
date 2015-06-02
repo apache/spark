@@ -87,7 +87,7 @@ abstract class JdbcDialect {
    * @return Enclosed column name
    */
   def columnEnclosing(colName: String): String = {
-    colName.split('.').map(c => s""""$c"""").mkString(".")
+    s""""$colName""""
   }
 }
 
@@ -219,6 +219,6 @@ case object MySQLDialect extends JdbcDialect {
   }
 
   override def columnEnclosing(colName: String): String = {
-    colName.split('.').map(c => s"`$c`").mkString(".")
+    s"`$colName`"
   }
 }

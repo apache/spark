@@ -415,11 +415,11 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
 
-    val columns = Seq("abc", "key", "key.table")
+    val columns = Seq("abc", "key")
     val MySQLColumns = columns.map(MySQL.columnEnclosing(_))
     val PostgresColumns = columns.map(Postgres.columnEnclosing(_))
-    assert(MySQLColumns === Seq("`abc`", "`key`", "`key`.`table`"))
-    assert(PostgresColumns === Seq(""""abc"""", """"key"""", """"key"."table""""))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
   }
 
   test("Dialect unregister") {
