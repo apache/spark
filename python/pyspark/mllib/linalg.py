@@ -25,13 +25,13 @@ SciPy is available in their environment.
 
 import sys
 import array
-from itertools import izip
 
 if sys.version >= '3':
     basestring = str
     xrange = range
     import copyreg as copy_reg
 else:
+    from itertools import izip as zip
     import copy_reg
 
 import numpy as np
@@ -1008,7 +1008,7 @@ class SparseMatrix(Matrix):
 
         cur_col = 0
         smlist = []
-        zipindval = izip(self.rowIndices, self.values)
+        zipindval = zip(self.rowIndices, self.values)
         for i, (rowInd, value) in enumerate(zipindval):
             if self.colPtrs[cur_col + 1] <= i:
                 cur_col += 1
