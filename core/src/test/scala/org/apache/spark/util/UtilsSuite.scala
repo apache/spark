@@ -547,7 +547,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     require(time < 500, "preparation time should not count")
   }
 
-  test("fetch hcfs dir") {
+  test("fetch hdfs dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "source-dir")
     val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
@@ -565,11 +565,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
     assert(!targetDir.isDirectory())
-    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+    Utils.fetchHdfsFile(path, targetDir, fs, new SparkConf(), conf, false)
     assert(targetDir.isDirectory())
 
     // Copy again to make sure it doesn't error if the dir already exists.
-    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+    Utils.fetchHdfsFile(path, targetDir, fs, new SparkConf(), conf, false)
 
     val destDir = new File(targetDir, sourceDir.getName())
     assert(destDir.isDirectory())
@@ -589,7 +589,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
-    Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
+    Utils.fetchHdfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
                         conf, false, Some(testFileName))
     val newFileName = new File(testFileDir, testFileName)
     assert(newFileName.isFile())

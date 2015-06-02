@@ -647,7 +647,7 @@ private[spark] object Utils extends Logging {
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
-        fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
+        fetchHdfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
                       filename = Some(filename))
     }
   }
@@ -657,7 +657,7 @@ private[spark] object Utils extends Logging {
    *
    * Visible for testing
    */
-  private[spark] def fetchHcfsFile(
+  private[spark] def fetchHdfsFile(
       path: Path,
       targetDir: File,
       fs: FileSystem,
@@ -678,7 +678,7 @@ private[spark] object Utils extends Logging {
       }
     } else {
       fs.listStatus(path).foreach { fileStatus =>
-        fetchHcfsFile(fileStatus.getPath(), dest, fs, conf, hadoopConf, fileOverwrite)
+        fetchHdfsFile(fileStatus.getPath(), dest, fs, conf, hadoopConf, fileOverwrite)
       }
     }
   }
