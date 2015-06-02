@@ -110,7 +110,7 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
   test("slice") {
     val ref = new Array[Byte](30)
     Random.nextBytes(ref)
-    val o = new ByteArrayChunkOutputStream(10)
+    val o = new ByteArrayChunkOutputStream(5)
     o.write(ref)
 
     for {

@@ -112,11 +112,11 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     var foundStart = false
     val result = new Array[Byte](length)
     while (!foundStart) {
-      val nextSize = chunkStart + chunks(chunkIdx).size
-      if (nextSize > start) {
+      val nextChunkStart = chunkStart + chunks(chunkIdx).size
+      if (nextChunkStart > start) {
         foundStart = true
       } else {
-        chunkStart = nextSize
+        chunkStart = nextChunkStart
         chunkIdx += 1
       }
     }
