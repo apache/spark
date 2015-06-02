@@ -344,7 +344,7 @@ private[spark] class Client(
       ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
       if (path != null && !path.isEmpty()) {
-        val (isLocal, localizedPath) = distribute(path, destName=Some(destName))
+        val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
         if (isLocal && confKey != null) {
           // If the resource is intended for local use only, handle this downstream
           // by setting the appropriate property
