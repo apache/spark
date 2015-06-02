@@ -1138,7 +1138,8 @@ class DAGScheduler(
         }
 
         if (disallowStageRetryForTest) {
-          abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+          abortStage(failedStage,
+            s"Fetch failure will not retry stage due to testing config. Failure = $failureMessage")
         } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled.
