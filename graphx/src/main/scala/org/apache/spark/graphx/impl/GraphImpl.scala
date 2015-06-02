@@ -101,8 +101,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
     val edTag = classTag[ED]
     val vdTag = classTag[VD]
+    val partitioner = partitionStrategy.getPartitionFunction(numPartitions)
     val newEdges = edges.withPartitionsRDD(edges.map { e =>
-      val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+      val part: PartitionID = partitioner(e.srcId, e.dstId)
       (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
