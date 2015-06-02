@@ -128,7 +128,7 @@ private[spark] class Client(
   }
 
   /**
-   * Cleanup  all subdirectory of SPARK_STAGING directory.
+   * Cleanup application staging directory.
    */
   private def cleanupStagingDir(appId: ApplicationId): Unit = {
     val appStagingDir = getAppStagingDir(appId)
