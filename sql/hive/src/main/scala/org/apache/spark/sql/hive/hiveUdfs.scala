@@ -78,6 +78,8 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
   type EvaluatedType = Any
   type UDFType = UDF
 
+  override def deterministic: Boolean = isUDFDeterministic
+
   override def nullable: Boolean = true
 
   @transient
@@ -140,6 +142,8 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
   type EvaluatedType = Any
+
+  override def deterministic: Boolean = isUDFDeterministic
 
   override def nullable: Boolean = true
 
