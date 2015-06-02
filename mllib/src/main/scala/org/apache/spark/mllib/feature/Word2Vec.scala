@@ -403,12 +403,7 @@ class Word2Vec extends Serializable with Logging {
     }
     newSentences.unpersist()
 
-    val wordArray = new Array[String](vocabSize)
-    var i = 0
-    while (i < vocabSize) {
-      wordArray(i) = bcVocab.value(i).word
-      i += 1
-    }
+    val wordArray = vocab.map(_.word)
     new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)
   }
 
@@ -434,16 +429,18 @@ class Word2Vec extends Serializable with Logging {
  */
 @Experimental
 class Word2VecModel private[mllib] (
-    wordIndex: Map[String, Int],
-    wordVectors: Array[Float]) extends Serializable with Saveable {
+    private val wordIndex: Map[String, Int],
+    private val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
   private val vectorSize = wordVectors.length / numWords
 
   // wordList: Ordered list of words obtained from wordIndex.
-  private val wordList: Array[String] = wordIndex.keys.toArray
-
+  private val wordList: Array[String] = {
+    val (wl, _) = wordIndex.toSeq.sortBy(_._2).unzip
+    wl.toArray
+  }
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
   private val wordVecNorms: Array[Double] = {
@@ -457,7 +454,7 @@ class Word2VecModel private[mllib] (
     wordVecNorms
   }
 
-  private[mllib] def this(model: Map[String, Array[Float]]) = {
+  def this(model: Map[String, Array[Float]]) = {
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
@@ -552,6 +549,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
   }
 
   private def buildWordVectors(model: Map[String, Array[Float]]) = {
+    require(!model.isEmpty, "Word2VecMap should be non-empty")
     val (vectorSize, numWords) = (model.head._2.size, model.size)
     val wordList = model.keys.toArray
     val wordVectors = new Array[Float](vectorSize * numWords)
