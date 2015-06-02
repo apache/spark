@@ -861,9 +861,9 @@ private[spark] class TaskSetManager(
       case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
       case _ => null
     }
-    
+
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)  
+      conf.getTimeAsMs(localityWaitKey, defaultWait)
     } else {
       0L
     }

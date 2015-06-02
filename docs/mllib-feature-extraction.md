@@ -188,7 +188,7 @@ Here we assume the extracted file is `text8` and in same directory as you run th
 import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.{Word2Vec, Word2VecModel}
 
 val input = sc.textFile("text8").map(line => line.split(" ").toSeq)
 
@@ -201,6 +201,10 @@ val synonyms = model.findSynonyms("china", 40)
 for((synonym, cosineSimilarity) <- synonyms) {
   println(s"$synonym $cosineSimilarity")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = Word2VecModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 <div data-lang="python">
@@ -410,6 +414,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.feature.ChiSqSelector
 
 // Load some data in libsvm format
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")

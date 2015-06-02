@@ -182,9 +182,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
-    case _ =>
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.foreach {
+      case (key, value) => setConf(key, value)
+    }
   }
 
   @transient
@@ -1021,21 +1040,33 @@ class SQLContext(@transient val sparkContext: SparkContext)
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
@@ -1046,6 +1077,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * [[DataFrame]] if no paths are passed in.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
    */
   @deprecated("Use read.parquet()", "1.4.0")
   @scala.annotation.varargs
@@ -1065,6 +1097,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String): DataFrame = {
@@ -1076,6 +1109,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String, schema: StructType): DataFrame = {
@@ -1084,6 +1118,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String, samplingRatio: Double): DataFrame = {
@@ -1096,6 +1131,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
@@ -1106,6 +1142,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
@@ -1115,6 +1152,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
@@ -1126,6 +1164,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
@@ -1137,6 +1176,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
@@ -1148,6 +1188,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
@@ -1159,6 +1200,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
    */
   @deprecated("Use read.load(path)", "1.4.0")
   def load(path: String): DataFrame = {
@@ -1169,6 +1211,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the dataset stored at path as a DataFrame, using the given data source.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
    */
   @deprecated("Use read.format(source).load(path)", "1.4.0")
   def load(path: String, source: String): DataFrame = {
@@ -1180,6 +1223,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
   @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
@@ -1191,6 +1235,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
   @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: Map[String, String]): DataFrame = {
@@ -1202,6 +1247,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
@@ -1214,6 +1261,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
@@ -1225,6 +1274,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * url named table.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String): DataFrame = {
@@ -1242,6 +1292,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(
@@ -1261,6 +1312,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * of the [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {

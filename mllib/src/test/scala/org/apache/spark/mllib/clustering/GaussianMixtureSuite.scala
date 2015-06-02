@@ -46,7 +46,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
   }
-  
+
   test("two clusters") {
     val data = sc.parallelize(GaussianTestData.data)
 
@@ -62,7 +62,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     val Ew = Array(1.0 / 3.0, 2.0 / 3.0)
     val Emu = Array(Vectors.dense(-4.3673), Vectors.dense(5.1604))
     val Esigma = Array(Matrices.dense(1, 1, Array(1.1098)), Matrices.dense(1, 1, Array(0.86644)))
-    
+
     val gmm = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)

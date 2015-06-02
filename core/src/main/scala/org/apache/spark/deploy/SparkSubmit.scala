@@ -869,7 +869,7 @@ private[spark] object SparkSubmitUtils {
       md.addDependency(dd)
     }
   }
-  
+
   /** Add exclusion rules for dependencies already included in the spark-assembly */
   def addExclusionRules(
       ivySettings: IvySettings,

@@ -18,11 +18,10 @@
 package org.apache.spark.shuffle.sort
 
 import org.mockito.Mockito._
-import org.scalatest.FunSuite
 
-import org.apache.spark.{Aggregator, SparkConf}
+import org.apache.spark.{Aggregator, SparkConf, SparkFunSuite}
 
-class SortShuffleWriterSuite extends FunSuite {
+class SortShuffleWriterSuite extends SparkFunSuite {
 
   import SortShuffleWriter._
 

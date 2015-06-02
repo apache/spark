@@ -117,7 +117,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val serInstance = ser.newInstance()
 
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
-  
+
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 

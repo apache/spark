@@ -37,11 +37,13 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait OneVsRestParams extends PredictorParams {
 
+  // scalastyle:off structural.type
   type ClassifierType = Classifier[F, E, M] forSome {
     type F
     type M <: ClassificationModel[F, M]
     type E <: Classifier[F, E, M]
   }
+  // scalastyle:on structural.type
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.

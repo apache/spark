@@ -36,7 +36,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
     val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
-    
+
     def newKryoInstance(
         conf: SparkConf,
         bufferSize: String = "64k",
@@ -46,7 +46,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       kryoConf.set(kryoBufferMaxProperty, maxBufferSize)
       new KryoSerializer(kryoConf).newInstance()
     }
-    
+
     // test default values
     newKryoInstance(conf, "64k", "64m")
     // 2048m = 2097152k
@@ -69,7 +69,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     // test configuration with mb is supported properly
     newKryoInstance(conf, "8m", "9m")
   }
-  
+
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {

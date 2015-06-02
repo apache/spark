@@ -117,7 +117,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       sc.parallelize(1 to 10, 2).map(x => a).count()
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("NotSerializableException") || 
+    assert(thrown.getMessage.contains("NotSerializableException") ||
       thrown.getCause.getClass === classOf[NotSerializableException])
 
     // Non-serializable closure in an earlier stage
@@ -125,7 +125,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
     }
     assert(thrown1.getClass === classOf[SparkException])
-    assert(thrown1.getMessage.contains("NotSerializableException") || 
+    assert(thrown1.getMessage.contains("NotSerializableException") ||
       thrown1.getCause.getClass === classOf[NotSerializableException])
 
     // Non-serializable closure in foreach function
@@ -133,7 +133,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       sc.parallelize(1 to 10, 2).foreach(x => println(a))
     }
     assert(thrown2.getClass === classOf[SparkException])
-    assert(thrown2.getMessage.contains("NotSerializableException") || 
+    assert(thrown2.getMessage.contains("NotSerializableException") ||
       thrown2.getCause.getClass === classOf[NotSerializableException])
 
     FailureSuiteState.clear()

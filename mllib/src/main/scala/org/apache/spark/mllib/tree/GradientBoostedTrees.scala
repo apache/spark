@@ -270,7 +270,7 @@ object GradientBoostedTrees extends Logging {
     logInfo(s"$timer")
 
     if (persistedInput) input.unpersist()
-    
+
     if (validate) {
       new GradientBoostedTreesModel(
         boostingStrategy.treeStrategy.algo,
