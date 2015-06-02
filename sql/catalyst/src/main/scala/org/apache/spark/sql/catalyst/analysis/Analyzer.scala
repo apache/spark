@@ -647,7 +647,7 @@ class Analyzer(
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
      * other regular expressions that do not contain any window expression. For example, for
      * `col1, Sum(col2 + col3) OVER (PARTITION BY col4 ORDER BY col5)`, we will extract
-     * `col1`, `col2 + col3`, `col4`, and `col5` out and replace them appearances in
+     * `col1`, `col2 + col3`, `col4`, and `col5` out and replace their appearances in
      * the window expression as attribute references. So, the first returned value will be
      * `[Sum(_w0) OVER (PARTITION BY _w1 ORDER BY _w2)]` and the second returned value will be
      * [col1, col2 + col3 as _w0, col4 as _w1, col5 as _w2].
