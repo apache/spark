@@ -1663,6 +1663,33 @@
               <compilerId>javac-with-errorprone</compilerId>
               <forceJavacCompilerUse>true</forceJavacCompilerUse>
               <showWarnings>true</showWarnings>
+
+              <!-- Change all the default on warning checks to error checks -->
+              <compilerArgs>
+                <arg>-Xep:ElementsCountedInLoop:ERROR</arg>
+                <arg>-Xep:Finally:ERROR</arg>
+                <arg>-Xep:IncompatibleModifiers:ERROR</arg>
+                <arg>-Xep:NonAtomicVolatileUpdate:ERROR</arg>
+                <arg>-Xep:ProtoFieldPreconditionsCheckNotNull:ERROR</arg>
+                <arg>-Xep:RequiredModifiers:ERROR</arg>
+                <arg>-Xep:StaticAccessedFromInstance:ERROR</arg>
+                <arg>-Xep:StringEquality:ERROR</arg>
+                <arg>-Xep:SynchronizeOnNonFinalField:ERROR</arg>
+                <arg>-Xep:TypeParameterUnusedInFormals:ERROR</arg>
+                <arg>-Xep:WaitNotInLoop:ERROR</arg>
+                <!--
+                These commented-out checkers doesn't exist or mature in error prone 2.0.1,
+                which is the underline version of plexus-compiler-javac-errorprone 2.5,
+                we should enable these checkers if possible when we update this dependency
+
+                <arg>-Xep:CannotMockFinalClass:ERROR</arg>
+                <arg>-Xep:EqualsHashCode:ERROR</arg>
+                <arg>-Xep:NonCanonicalStaticImport:ERROR</arg>
+                <arg>-Xep:NonOverridingEquals:ERROR</arg>
+                <arg>-Xep:PreconditionsInvalidPlaceholder:ERROR</arg>
+                <arg>-Xep:UnnecessaryStaticImport:ERROR</arg>
+                -->
+              </compilerArgs>
             </configuration>
             <dependencies>
               <dependency>
