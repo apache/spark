@@ -64,12 +64,6 @@ class HistoryServer(
         .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
         .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
       attachSparkUI(ui)
-      val newUrl = if(parts.length > 1) "/history/" + parts(0) + "/" + parts(1) else "/history/" + parts(0)
-      for(hanler <- getHandlers) {
-        if (hanler != null && hanler.getContextPath.equals(newUrl)) {
-          detachHandler(hanler)
-        }
-      }
       ui
     }
   }
