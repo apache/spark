@@ -259,12 +259,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   def refreshTable(tableName: String): Unit = {
     // TODO: Database support...
-    catalog.refreshTable("default", tableName)
+    val dbAndTableName = tableName.split("\\.")
+    catalog.refreshTable(dbAndTableName.lift(dbAndTableName.size -2)
+      .getOrElse("default"), dbAndTableName.last)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     // TODO: Database support...
-    catalog.invalidateTable("default", tableName)
+    val dbAndTableName = tableName.split("\\.")
+    catalog.invalidateTable(dbAndTableName.lift(dbAndTableName.size -2)
+      .getOrElse("default"), dbAndTableName.last)
   }
 
   /**

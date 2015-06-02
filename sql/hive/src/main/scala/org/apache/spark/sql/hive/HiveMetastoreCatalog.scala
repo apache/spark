@@ -204,9 +204,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
   def hiveDefaultTableFilePath(tableName: String): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
+    val dbAndTableName = tableName.split("\\.")
     new Path(
-      new Path(client.getDatabase(client.currentDatabase).location),
-      tableName.toLowerCase).toString
+      new Path(client.getDatabase(dbAndTableName.lift(dbAndTableName.size -2)
+        .getOrElse(client.currentDatabase)).location),
+      dbAndTableName.last.toLowerCase).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
