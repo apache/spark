@@ -49,7 +49,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           val metastoreVersion = get("spark.sql.hive.metastore.version")
           val metastoreJars = get("spark.sql.hive.metastore.jars")
 
-          val others = allSettings.filterNot{ case (key, _) =>
+          val others = allSettings.filterNot { case (key, _) =>
             key == "spark.sql.hive.metastore.version" || key == "spark.sql.hive.metastore.jars"
           }
 
@@ -63,7 +63,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         }
       }
     sparkConf
-      .set("spark.sql.hive.metastore.version","12")
+      .set("spark.sql.hive.metastore.version", "12")
       .set("spark.sql.hive.metastore.jars", "maven")
 
     val hiveContext = new HiveContext(
