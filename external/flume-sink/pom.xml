@@ -43,10 +43,15 @@
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-sdk</artifactId>
       <exclusions>
+        <!-- Guava is excluded to avoid its use in this module. -->
         <exclusion>
           <groupId>com.google.guava</groupId>
           <artifactId>guava</artifactId>
         </exclusion>
+        <!--
+          Exclude libthrift since the flume poms seem to confuse sbt, which fails to find the
+          dependency.
+        -->
         <exclusion>
           <groupId>org.apache.thrift</groupId>
           <artifactId>libthrift</artifactId>
@@ -71,18 +76,19 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
-    <!--
-      Dependencies explicitly added in test as they have been excluded from
-      Flume dependency (to avoid runtime problems when running with
-      Spark) but unit tests need it.
-    -->
     <dependency>
+      <!-- Add Guava in test scope since flume actually needs it. -->
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <!-- Version of Netty on which Flume 1.4.0 depends on is "3.4.0.Final" . -->
+      <!--
+        Netty explicitly added in test as it has been excluded from
+        Flume dependency (to avoid runtime problems when running with
+        Spark) but unit tests need it. Version of Netty on which
+        Flume 1.4.0 depends on is "3.4.0.Final" .
+      -->
       <groupId>io.netty</groupId>
       <artifactId>netty</artifactId>
       <version>3.4.0.Final</version>
