@@ -717,6 +717,18 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
   /**
+   * Gives the column an alias. Same as `as`.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".alias("colB"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.4.0
+   */
+  def alias(alias: String): Column = as(alias)
+
+  /**
    * Gives the column an alias.
    * {{{
    *   // Renames colA to colB in select output.

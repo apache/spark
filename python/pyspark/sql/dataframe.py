@@ -1170,6 +1170,9 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
+        This function is meant for exploratory data analysis, as we make no guarantee about the
+        backward compatibility of the schema of the resulting DataFrame.
+
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
         :param support: The frequency with which to consider an item 'frequent'. Default is 1%.

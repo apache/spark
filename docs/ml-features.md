@@ -456,6 +456,122 @@ for expanded in polyDF.select("polyFeatures").take(3):
 </div>
 </div>
 
+## StringIndexer
+
+`StringIndexer` encodes a string column of labels to a column of label indices.
+The indices are in `[0, numLabels)`, ordered by label frequencies.
+So the most frequent label gets index `0`.
+If the input column is numeric, we cast it to string and index the string values.
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id` and `category`:
+
+~~~~
+ id | category
+----|----------
+ 0  | a
+ 1  | b
+ 2  | c
+ 3  | a
+ 4  | a
+ 5  | c
+~~~~
+
+`category` is a string column with three labels: "a", "b", and "c".
+Applying `StringIndexer` with `category` as the input column and `categoryIndex` as the output
+column, we should get the following:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+ 3  | a        | 0.0
+ 4  | a        | 0.0
+ 5  | c        | 1.0
+~~~~
+
+"a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
+index `2`.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+[`StringIndexer`](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer) takes an input
+column name and an output column name.
+
+{% highlight scala %}
+import org.apache.spark.ml.feature.StringIndexer
+
+val df = sqlContext.createDataFrame(
+  Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
+).toDF("id", "category")
+val indexer = new StringIndexer()
+  .setInputCol("category")
+  .setOutputCol("categoryIndex")
+val indexed = indexer.fit(df).transform(df)
+indexed.show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`StringIndexer`](api/java/org/apache/spark/ml/feature/StringIndexer.html) takes an input column
+name and an output column name.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+import static org.apache.spark.sql.types.DataTypes.*;
+
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(0, "a"),
+  RowFactory.create(1, "b"),
+  RowFactory.create(2, "c"),
+  RowFactory.create(3, "a"),
+  RowFactory.create(4, "a"),
+  RowFactory.create(5, "c")
+));
+StructType schema = new StructType(new StructField[] {
+  createStructField("id", DoubleType, false),
+  createStructField("category", StringType, false)
+});
+DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+StringIndexer indexer = new StringIndexer()
+  .setInputCol("category")
+  .setOutputCol("categoryIndex");
+DataFrame indexed = indexer.fit(df).transform(df);
+indexed.show();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+[`StringIndexer`](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer) takes an input
+column name and an output column name.
+
+{% highlight python %}
+from pyspark.ml.feature import StringIndexer
+
+df = sqlContext.createDataFrame(
+    [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")],
+    ["id", "category"])
+indexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
+indexed = indexer.fit(df).transform(df)
+indexed.show()
+{% endhighlight %}
+</div>
+</div>
+
 ## OneHotEncoder
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features 

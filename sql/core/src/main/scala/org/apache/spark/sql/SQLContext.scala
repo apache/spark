@@ -182,9 +182,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
-    case _ =>
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.foreach {
+      case (key, value) => setConf(key, value)
+    }
   }
 
   @transient
