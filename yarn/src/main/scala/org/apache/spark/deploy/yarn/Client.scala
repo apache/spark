@@ -105,7 +105,7 @@ private[spark] class Client(
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
-      val appId = newAppResponse.getApplicationId()
+      appId = newAppResponse.getApplicationId()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
