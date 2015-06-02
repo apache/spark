@@ -189,7 +189,7 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
     // We only collapse these two Projects if the child Project's expressions are all
     // deterministic.
     case Project(projectList1, Project(projectList2, child))
-      if !hasNondeterministic(projectList2) =>
+         if !hasNondeterministic(projectList2) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
       val aliasMap = AttributeMap(projectList2.collect {

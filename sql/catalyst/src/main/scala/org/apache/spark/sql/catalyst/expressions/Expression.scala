@@ -39,12 +39,13 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when the current expression always return the same result for a specific set of
-   * input values.
+   * Returns true when the current expression always return the same result for fixed input values.
    */
-  // TODO: Need to well define what are explicit input values and implicit input values.
+  // TODO: Need to define explicit input values vs implicit input values.
   def deterministic: Boolean = true
+
   def nullable: Boolean
+
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
