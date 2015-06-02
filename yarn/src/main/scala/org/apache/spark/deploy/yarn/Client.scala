@@ -91,39 +91,54 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    var appId: ApplicationId = null
+    // Before we submit current application, we cleanup staging director as some old appStagingDir
+    // can not be deleted when those old jobs are failed or killed and so on, please see SPARK-7705
+    // and SPARK-7503 for details.
+    cleanupStagingDir()
+
+    // Setup the credentials before doing anything else, so we have don't have issues at any point.
+    setupCredentials()
+    yarnClient.init(yarnConf)
+    yarnClient.start()
+
+    logInfo("Requesting a new application from cluster with %d NodeManagers"
+      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+
+    // Get a new application from our RM
+    val newApp = yarnClient.createApplication()
+    val newAppResponse = newApp.getNewApplicationResponse()
+    val appId = newAppResponse.getApplicationId()
+
+    // Verify whether the cluster has enough resources for our AM
+    verifyClusterResources(newAppResponse)
+
+    // Set up the appropriate contexts to launch our AM
+    val containerContext = createContainerLaunchContext(newAppResponse)
+    val appContext = createApplicationSubmissionContext(newApp, containerContext)
+
+    // Finally, submit and monitor the application
+    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+    yarnClient.submitApplication(appContext)
+    appId
+  }
+
+  /**
+   * Cleanup  all subdirectory of SPARK_STAGING directory.
+   */
+  private def cleanupStagingDir(): Unit = {
+    val stagingDirPath = new Path(SPARK_STAGING)
     try {
-      // Setup the credentials before doing anything else,
-      // so we have don't have issues at any point.
-      setupCredentials()
-      yarnClient.init(yarnConf)
-      yarnClient.start()
-
-      logInfo("Requesting a new application from cluster with %d NodeManagers"
-        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
-
-      // Get a new application from our RM
-      val newApp = yarnClient.createApplication()
-      val newAppResponse = newApp.getNewApplicationResponse()
-      appId = newAppResponse.getApplicationId()
-
-      // Verify whether the cluster has enough resources for our AM
-      verifyClusterResources(newAppResponse)
-
-      // Set up the appropriate contexts to launch our AM
-      val containerContext = createContainerLaunchContext(newAppResponse)
-      val appContext = createApplicationSubmissionContext(newApp, containerContext)
-
-      // Finally, submit and monitor the application
-      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-      yarnClient.submitApplication(appContext)
-      appId
-    } catch {
-      case e: Throwable =>
-        if (appId != null) {
-          cleanupStagingDir(appId)
+      val fs = FileSystem.get(hadoopConf)
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      if (!preserveFiles && fs.exists(stagingDirPath)) {
+        fs.listStatus(stagingDirPath).foreach { fileStatus =>
+          logInfo(s"Deleting old application staging directory ${fileStatus.getPath}")
+          fs.delete(fileStatus.getPath, true)
         }
-        throw e
+      }
+    } catch {
+      case ioe: IOException =>
+        logWarning(s"Failed to cleanup staging dir $stagingDirPath", ioe)
     }
   }
 
@@ -813,9 +828,6 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    // Cleanup staging director as some appStagingDir can not be deleted when job is failed or
-    // killed, please see SPARK-7705 for details.
-    cleanupStagingDir()
     val appId = submitApplication()
     if (fireAndForget) {
       val report = getApplicationReport(appId)
@@ -838,36 +850,6 @@ private[spark] class Client(
       if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
         throw new SparkException(s"The final status of application $appId is undefined")
       }
-    }
-  }
-
-  /**
-   * Cleanup application staging directory if applicationId is given, or cleanup all subdirectory
-   * of SPARK_STAGING directory.
-   */
-  private def cleanupStagingDir(appId: ApplicationId = null): Unit = {
-    val stagingDirPath = if (appId != null) {
-      new Path(getAppStagingDir(appId))
-    } else {
-      new Path(SPARK_STAGING)
-    }
-    try {
-      val fs = FileSystem.get(hadoopConf)
-      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-      if (!preserveFiles && fs.exists(stagingDirPath)) {
-        if (appId != null) {
-          logInfo(s"Deleting application staging directory $stagingDirPath")
-          fs.delete(stagingDirPath, true)
-        } else {
-          fs.listStatus(stagingDirPath).foreach { fileStatus =>
-            logInfo(s"Deleting application staging directory ${fileStatus.getPath}")
-            fs.delete(fileStatus.getPath, true)
-          }
-        }
-      }
-    } catch {
-      case ioe: IOException =>
-        logWarning("Failed to cleanup staging dir.", ioe)
     }
   }
 }
