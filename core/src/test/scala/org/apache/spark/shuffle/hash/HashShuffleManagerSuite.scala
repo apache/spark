@@ -99,7 +99,7 @@ class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
     shuffle3.releaseWriters(success = true)
     checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
-    shuffleBlockResolver.removeShuffle((1,0))
+    shuffleBlockResolver.removeShuffle((1, 0))
   }
 
   def writeToFile(file: File, numBytes: Int) {

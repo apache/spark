@@ -160,7 +160,7 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
   override def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,
-      stageAttemptId:Int,
+      stageAttemptId: Int,
       context: TaskContext): ShuffleWriter[K, V] = {
     handle match {
       case unsafeShuffleHandle: UnsafeShuffleHandle[K, V] =>

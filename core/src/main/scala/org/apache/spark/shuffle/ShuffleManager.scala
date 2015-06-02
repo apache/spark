@@ -73,7 +73,7 @@ private[spark] trait ShuffleManager {
 
   private[this] val shuffleToAttempts = new ConcurrentHashMap[Int, ConcurrentHashMap[Int, Int]]()
   protected def addShuffleAttempt(shuffleId: Int, stageAttemptId: Int): Unit = {
-    shuffleToAttempts.putIfAbsent(shuffleId, new ConcurrentHashMap[Int,Int]())
+    shuffleToAttempts.putIfAbsent(shuffleId, new ConcurrentHashMap[Int, Int]())
     shuffleToAttempts.get(shuffleId).putIfAbsent(stageAttemptId, stageAttemptId)
   }
   protected def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
