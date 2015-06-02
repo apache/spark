@@ -480,13 +480,15 @@ trait HiveTypeCoercion {
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
   object BooleanEqualization extends Rule[LogicalPlan] {
-    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, new java.math.BigDecimal(1))
-    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, new java.math.BigDecimal(0))
+    private val trueValues =
+      Seq(1.toByte, 1.toShort, 1, 1L, new java.math.BigDecimal(1)).map(Literal(_))
+    private val falseValues =
+      Seq(0.toByte, 0.toShort, 0, 0L, new java.math.BigDecimal(0)).map(Literal(_))
 
     private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
       CaseKeyWhen(numericExpr, Seq(
-        Literal(trueValues.head), booleanExpr,
-        Literal(falseValues.head), Not(booleanExpr),
+        trueValues.head, booleanExpr,
+        falseValues.head, Not(booleanExpr),
         Literal(false)))
     }
 
