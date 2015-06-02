@@ -4,7 +4,7 @@ Concepts
 Operators
 '''''''''
 
-Operators allows to generate a certain type of task on the graph. There
+Operators allow for generating a certain type of task on the graph. There
 are 3 main type of operators:
 
 -  **Sensor:** Waits for events to happen, it could be a file appearing
@@ -58,11 +58,38 @@ arbitrary sets of tasks. The list of pools is managed in the UI
 (``Menu -> Admin -> Pools``) by giving the pools a name and assigning 
 it a number of worker slots. Tasks can then be associated with 
 one of the existing pools by using the ``pool`` parameter when 
-creating tasks (aka instantiating operators).
+creating tasks (instantiating operators). 
+
+The ``pool`` parameter can
+be used in conjunction with ``priority_weight`` to define priorities
+in the queue, and which tasks get executed first as slots open up in the
+pool. The default ``priority_weight`` is of ``1``, and can be bumped to any
+number. When sorting the queue to evaluate which task should be executed 
+next, we use the ``priority_weight``, summed up with of all 
+the tasks ``priority_weight`` downstream from this task. This way you can
+bumped a specific important task and the whole path to that task gets
+prioritized accordingly.
 
 Tasks will be scheduled as usual while the slots fill up. Once capacity is
 reached, runnable tasks get queued and there state will show as such in the
-UI. As slots free up, queued up tasks start running.
+UI. As slots free up, queued up tasks start running based on the 
+``priority_weight`` (of the task and its descendants).
 
 Note that by default tasks aren't assigned to any pool and their 
 execution parallelism is only limited to the executor's setting.
+
+Connections
+'''''''''''
+
+The connection information to external systems is stored in the Airflow
+metadata database and managed in the UI (``Menu -> Admin -> Connections``).
+A ``conn_id`` is defined there and hostname / login / password / schema 
+information attached to it. Then Airflow pipelines can simply refer
+to the centrally managed ``conn_id`` without having to hard code any
+of this information anywhere.
+
+Many connections with the same ``conn_id`` can be defined and when that 
+is the case, and when the **hooks** uses the ``get_connection`` method 
+from ``BaseHook``, Airflow will choose one connection randomly, allowing
+for some basic load balancing and some fault tolerance when used in
+conjunction with retries.

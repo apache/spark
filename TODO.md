@@ -1,7 +1,7 @@
 TODO
 -----
 #### UI
-* Run button / backfill wizard
+* Backfill form
 * Add templating to adhoc queries
 * Charts: better error handling
 
@@ -16,7 +16,6 @@ TODO
 #### Backend
 * Add a run_only_latest flag to BaseOperator, runs only most recent task instance where deps are met
 * Pickle all the THINGS!
-* Add priority_weight(Int) to BaseOperator, +@property subtree_priority
 * Distributed scheduler
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Raise errors when setting dependencies on task in foreign DAGs
