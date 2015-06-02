@@ -390,6 +390,9 @@ class LogisticRegressionWithLBFGS
         lr.setElasticNetParam(elasticNetParam)
         val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray:_*)
         lr.setInitialWeights(initialWeightsWithIntercept)
+        lr.setFitIntercept(addIntercept)
+        lr.setMaxIter(optimizer.getNumIterations())
+        lr.setTol(optimizer.getConvergenceTol())
         // Convert our input into a DataFrame
         val sqlContext = new SQLContext(input.context)
         import sqlContext.implicits._

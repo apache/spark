@@ -69,6 +69,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     this
   }
 
+  /*
+   * Get the convergence tolerance of iterations.
+   */
+  private[mllib] def getConvergenceTol(): Double = {
+    this.convergenceTol
+  }
+
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
    * @deprecated use [[LBFGS#setNumIterations]] instead
@@ -84,6 +91,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   def setNumIterations(iters: Int): this.type = {
     this.maxNumIterations = iters
     this
+  }
+
+  /**
+   * Get the maximum number of iterations for L-BFGS. Defaults to 100.
+   */
+  private[mllib] def getNumIterations(): Int = {
+    this.maxNumIterations
   }
 
   /**
