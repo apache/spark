@@ -36,7 +36,7 @@ class ParamsSuite extends SparkFunSuite {
 
     solver.setMaxIter(5)
     assert(solver.explainParam(maxIter) ===
-      "maxIter: max number of iterations (>= 0) (default: 10, current: 5)")
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 5)")
 
     assert(inputCol.toString === s"${uid}__inputCol")
 
@@ -120,7 +120,7 @@ class ParamsSuite extends SparkFunSuite {
     intercept[NoSuchElementException](solver.getInputCol)
 
     assert(solver.explainParam(maxIter) ===
-      "maxIter: max number of iterations (>= 0) (default: 10, current: 100)")
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 100)")
     assert(solver.explainParams() ===
       Seq(inputCol, maxIter).map(solver.explainParam).mkString("\n"))
 
