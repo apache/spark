@@ -259,6 +259,8 @@ class DataFrameWriter(object):
 
         :param cols: name of columns
         """
+        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
+            cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
         return self
 
