@@ -23,14 +23,9 @@ from __future__ import absolute_import
 # MLlib currently needs NumPy 1.4+, so complain if lower
 
 import numpy
-ver = numpy.version.version
 
-fd = ver.find('.')
-ver1 = int(ver[: fd])
-ver = ver[fd + 1:]
-ver2 = int(ver[: ver.find('.')])
-
-if ver1 < 1 or (ver1 == 1 and ver2 <= 4):
+ver = [int(x) for x in numpy.version.version.split(.)[:2]]
+if ver < [1, 4]:
     raise Exception("MLlib requires NumPy 1.4+")
 
 __all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
