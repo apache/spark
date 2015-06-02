@@ -1561,6 +1561,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
+  /* Case insensitive matches for Window Specification */
+  val PRECEDING = "(?i)preceding".r
+  val FOLLOWING = "(?i)following".r
+  val CURRENT = "(?i)current".r
   def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
@@ -1614,11 +1618,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         } else {
           val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
           def nodeToBoundary(node: Node): FrameBoundary = node match {
-            case Token("preceding", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedPreceding else ValuePreceding(count.toInt)
-            case Token("following", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedFollowing else ValueFollowing(count.toInt)
-            case Token("current", Nil) => CurrentRow
+            case Token(PRECEDING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedPreceding
+              } else {
+                ValuePreceding(count.toInt)
+              }
+            case Token(FOLLOWING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedFollowing
+              } else {
+                ValueFollowing(count.toInt)
+              }
+            case Token(CURRENT(), Nil) => CurrentRow
             case _ =>
               throw new NotImplementedError(
                 s"""No parse rules for the Window Frame Boundary based on Node ${node.getName}
