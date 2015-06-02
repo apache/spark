@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.client
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.util.Utils
 
@@ -35,6 +36,48 @@ class VersionsSuite extends SparkFunSuite with Logging {
     Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
       "hive.metastore.warehouse.dir" -> warehousePath.toString)
+  }
+
+  test("SPARK-8020: successfully create a HiveContext with metastore settings in Spark conf.") {
+    val sparkConf =
+      new SparkConf() {
+        // We are not really clone it. We need to keep the custom getAll.
+        override def clone: SparkConf = this
+
+        override def getAll: Array[(String, String)] = {
+          val allSettings = super.getAll
+          val metastoreVersion = get("spark.sql.hive.metastore.version")
+          val metastoreJars = get("spark.sql.hive.metastore.jars")
+
+          val others = allSettings.filterNot{ case (key, _) =>
+            key == "spark.sql.hive.metastore.version" || key == "spark.sql.hive.metastore.jars"
+          }
+
+          // Put metastore.version to the first one. It is needed to trigger the exception
+          // caused by SPARK-8020. Other problems triggered by SPARK-8020
+          // (e.g. using Hive 0.13.1's metastore client to connect to the a 0.12 metastore)
+          // are not easy to test.
+          Array(
+            ("spark.sql.hive.metastore.version" -> metastoreVersion),
+            ("spark.sql.hive.metastore.jars" -> metastoreJars)) ++ others
+        }
+      }
+    sparkConf
+      .set("spark.sql.hive.metastore.version","12")
+      .set("spark.sql.hive.metastore.jars", "maven")
+
+    val hiveContext = new HiveContext(
+      new SparkContext(
+        "local[2]",
+        "TestSQLContextInVersionsSuite",
+        sparkConf)) {
+
+      protected override def configure(): Map[String, String] = buildConf
+
+    }
+
+    // Make sure all metastore related lazy vals got created.
+    hiveContext.tables()
   }
 
   test("success sanity check") {
