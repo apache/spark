@@ -67,7 +67,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     // All blocks must have non-zero size
     (0 until NUM_BLOCKS).foreach { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      assert(statuses.forall(s => s._2 > 0))
+      assert(statuses.forall(s => s.size > 0))
     }
   }
 
@@ -106,7 +106,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      statuses.map(x => x._2)
+      statuses.map(x => x.size)
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
 
@@ -131,7 +131,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      statuses.map(x => x._2)
+      statuses.map(x => x.size)
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
 
