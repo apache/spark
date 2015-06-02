@@ -182,5 +182,9 @@ class HiveTypeCoercionSuite extends PlanTest {
       EqualTo(Literal(Decimal(1)), Literal(true)),
       Literal(true)
     )
+    ruleTest(be,
+      EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
+      Literal(true)
+    )
   }
 }
