@@ -70,7 +70,10 @@ public class JavaStreamingKMeansSuite implements Serializable {
       new Tuple2<Integer, Vector>(11, Vectors.dense(0.0)));
     JavaPairDStream<Integer, Vector> test = JavaPairDStream.fromJavaDStream(
       attachTestInputStream(ssc, Lists.newArrayList(testBatch, testBatch), 2));
-    StreamingKMeans skmeans = new StreamingKMeans();
+    StreamingKMeans skmeans = new StreamingKMeans()
+      .setK(1)
+      .setDecayFactor(1.0)
+      .setInitialCenters(new Vector[]{Vectors.dense(1.0)}, new double[]{0.0});
     skmeans.trainOn(training);
     JavaPairDStream<Integer, Integer> prediction = skmeans.predictOnValues(test);
     attachTestOutputStream(prediction.count());
