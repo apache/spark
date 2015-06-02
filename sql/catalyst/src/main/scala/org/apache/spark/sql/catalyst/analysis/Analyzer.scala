@@ -633,10 +633,10 @@ class Analyzer(
    *    it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
-    def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
+    private def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
       projectList.exists(hasWindowFunction)
 
-    def hasWindowFunction(expr: NamedExpression): Boolean = {
+    private def hasWindowFunction(expr: NamedExpression): Boolean = {
       expr.find {
         case window: WindowExpression => true
         case _ => false
@@ -647,7 +647,7 @@ class Analyzer(
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
      * other regular expressions that do not contain any window expression.
      */
-    def extractRegularExpressions(
+    private def extractRegularExpressions(
         expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
       // First, we partition the input expressions to two part. For the first part,
       // every expression in it contain at least one WindowExpression.
@@ -709,12 +709,12 @@ class Analyzer(
       }
 
       (newExpressionsWithWindowFunctions, regularExpressions ++ extractedExprBuffer)
-    }
+    } // end of extractRegularExpressions
 
     /**
      * Adds operators for Window Expressions. Every Window operator handles a single Window Spec.
      */
-    def addWindow(
+    private def addWindow(
         expressionsWithWindowFunctions: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
       // First, we need to extract all WindowExpressions from expressionsWithWindowFunctions
@@ -779,7 +779,7 @@ class Analyzer(
       // Finally, we create a Project to output currentChild's output
       // newExpressionsWithWindowFunctions.
       Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
-    }
+    } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
