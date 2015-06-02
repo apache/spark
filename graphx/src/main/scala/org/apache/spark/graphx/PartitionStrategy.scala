@@ -23,7 +23,8 @@ package org.apache.spark.graphx
  */
 trait PartitionStrategy extends Serializable {
   /** Returns the partition number for a given edge. */
-  def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID
+  def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = getPartitionFunction(numParts)(src,dst)
+  def getPartitionFunction(numParts: Int): (VertexId, VertexId) => PartitionID = getPartition(_, _, numParts)
 }
 
 /**
@@ -73,15 +74,26 @@ object PartitionStrategy {
    * is a perfect square the partitioning is unchanged.
    */
   case object EdgePartition2D extends PartitionStrategy {
-    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
-      val sqrtNumParts = math.sqrt(numParts)
-      val rows = math.round(sqrtNumParts).toInt
-      val cols = math.ceil(sqrtNumParts).toInt
-      val lastColRows = numParts - rows * (cols - 1)
+    override def getPartitionFunction(numParts: Int): (VertexId, VertexId) => PartitionID = {
+      val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
       val mixingPrime: VertexId = 1125899906842597L
-      val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
-      val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
-      col * rows + row
+      if (numParts == ceilSqrtNumParts * ceilSqrtNumParts) {
+        // Use old method for perfect squared to ensure we get same results
+        (src: VertexId, dst: VertexId) => {
+          val col: PartitionID = (math.abs(src * mixingPrime) % ceilSqrtNumParts).toInt
+          val row: PartitionID = (math.abs(dst * mixingPrime) % ceilSqrtNumParts).toInt
+          (col * ceilSqrtNumParts + row) % numParts
+        }
+      } else { // Otherwise use new method
+        (src: VertexId, dst: VertexId) => {
+          val cols = ceilSqrtNumParts
+          val rows = (numParts + cols - 1) / cols // == ceil(numParts.toDouble / cols)
+          val lastColRows = numParts - rows * (cols - 1) // = numParts % rows (mod rows)
+          val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
+          val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
+          col * rows + row
+        }
+      }
     }
   }
 
