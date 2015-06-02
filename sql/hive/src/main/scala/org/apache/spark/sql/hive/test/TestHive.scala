@@ -82,9 +82,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
+  private lazy val temporaryConfig = newTemporaryConfiguration()
+
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
@@ -187,7 +189,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }
   }
 
-  case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -251,8 +253,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
       runSqlHive(

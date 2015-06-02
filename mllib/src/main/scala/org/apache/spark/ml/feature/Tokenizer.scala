@@ -17,17 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
+ *
+ * @see [[RegexTokenizer]]
  */
-@AlphaComponent
+@Experimental
 class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
   def this() = this(Identifiable.randomUID("tok"))
@@ -44,13 +46,13 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
 }
 
 /**
- * :: AlphaComponent ::
- * A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default)
- * or using it to split the text (set matching to false). Optional parameters also allow filtering
- * tokens using a minimal length.
+ * :: Experimental ::
+ * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
+ * the text (default) or repeatedly matching the regex (if `gaps` is true).
+ * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
-@AlphaComponent
+@Experimental
 class RegexTokenizer(override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
@@ -71,8 +73,8 @@ class RegexTokenizer(override val uid: String)
   def getMinTokenLength: Int = $(minTokenLength)
 
   /**
-   * Indicates whether regex splits on gaps (true) or matching tokens (false).
-   * Default: false
+   * Indicates whether regex splits on gaps (true) or matches tokens (false).
+   * Default: true
    * @group param
    */
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
@@ -84,8 +86,8 @@ class RegexTokenizer(override val uid: String)
   def getGaps: Boolean = $(gaps)
 
   /**
-   * Regex pattern used by tokenizer.
-   * Default: `"\\p{L}+|[^\\p{L}\\s]+"`
+   * Regex pattern used to match delimiters if [[gaps]] is true or tokens if [[gaps]] is false.
+   * Default: `"\\s+"`
    * @group param
    */
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
@@ -96,7 +98,7 @@ class RegexTokenizer(override val uid: String)
   /** @group getParam */
   def getPattern: String = $(pattern)
 
-  setDefault(minTokenLength -> 1, gaps -> false, pattern -> "\\p{L}+|[^\\p{L}\\s]+")
+  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+")
 
   override protected def createTransformFunc: String => Seq[String] = { str =>
     val re = $(pattern).r

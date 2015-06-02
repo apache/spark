@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
@@ -33,6 +34,7 @@ import parquet.hadoop._
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.hadoop.util.ContextUtil
 
+import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD._
@@ -40,7 +42,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
-import org.apache.spark.{Partition => SparkPartition, SparkEnv, SerializableWritable, Logging, SparkException}
+import org.apache.spark.util.Utils
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -49,8 +51,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty))
-    new ParquetRelation2(paths, schema, partitionSpec, parameters)(sqlContext)
+    new ParquetRelation2(paths, schema, None, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -118,11 +119,27 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
 private[sql] class ParquetRelation2(
     override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
+    // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
+
+  private[sql] def this(
+      paths: Array[String],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      parameters: Map[String, String])(
+      sqlContext: SQLContext) = {
+    this(
+      paths,
+      maybeDataSchema,
+      maybePartitionSpec,
+      maybePartitionSpec.map(_.partitionColumns),
+      parameters)(sqlContext)
+  }
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
@@ -138,7 +155,7 @@ private[sql] class ParquetRelation2(
     meta
   }
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
@@ -161,7 +178,7 @@ private[sql] class ParquetRelation2(
         Boolean.box(shouldMergeSchemas),
         paths.toSet,
         maybeDataSchema,
-        maybePartitionSpec)
+        partitionColumns)
     } else {
       Objects.hashCode(
         Boolean.box(shouldMergeSchemas),
@@ -169,7 +186,7 @@ private[sql] class ParquetRelation2(
         dataSchema,
         schema,
         maybeDataSchema,
-        maybePartitionSpec)
+        partitionColumns)
     }
   }
 
@@ -184,9 +201,6 @@ private[sql] class ParquetRelation2(
   override val needConversion: Boolean = false
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
-
-  override def userDefinedPartitionColumns: Option[StructType] =
-    maybePartitionSpec.map(_.partitionColumns)
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
@@ -252,57 +266,65 @@ private[sql] class ParquetRelation2(
 
     val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
 
-    // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
-    // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects and
-    // footers.  Especially when a global arbitrative schema (either from metastore or data source
-    // DDL) is available.
-    new SqlNewHadoopRDD(
-      sc = sqlContext.sparkContext,
-      broadcastedConf = broadcastedConf,
-      initDriverSideJobFuncOpt = Some(setInputPaths),
-      initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
-      inputFormatClass = classOf[FilteringParquetRowInputFormat],
-      keyClass = classOf[Void],
-      valueClass = classOf[Row]) {
+    Utils.withDummyCallSite(sqlContext.sparkContext) {
+      // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
+      // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects
+      // and footers. Especially when a global arbitrative schema (either from metastore or data
+      // source DDL) is available.
+      new SqlNewHadoopRDD(
+        sc = sqlContext.sparkContext,
+        broadcastedConf = broadcastedConf,
+        initDriverSideJobFuncOpt = Some(setInputPaths),
+        initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
+        inputFormatClass = classOf[FilteringParquetRowInputFormat],
+        keyClass = classOf[Void],
+        valueClass = classOf[Row]) {
 
-      val cacheMetadata = useMetadataCache
+        val cacheMetadata = useMetadataCache
 
-      @transient val cachedStatuses = inputFiles.map { f =>
-        // In order to encode the authority of a Path containing special characters such as /,
-        // we need to use the string returned by the URI of the path to create a new Path.
-        val pathWithAuthority = new Path(f.getPath.toUri.toString)
+        @transient val cachedStatuses = inputFiles.map { f =>
+          // In order to encode the authority of a Path containing special characters such as '/'
+          // (which does happen in some S3N credentials), we need to use the string returned by the
+          // URI of the path to create a new Path.
+          val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
+          new FileStatus(
+            f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
+            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
+        }.toSeq
 
-        new FileStatus(
-          f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
-          f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithAuthority)
-      }.toSeq
+        @transient val cachedFooters = footers.map { f =>
+          // In order to encode the authority of a Path containing special characters such as /,
+          // we need to use the string returned by the URI of the path to create a new Path.
+          new Footer(escapePathUserInfo(f.getFile), f.getParquetMetadata)
+        }.toSeq
 
-      @transient val cachedFooters = footers.map { f =>
-        // In order to encode the authority of a Path containing special characters such as /,
-        // we need to use the string returned by the URI of the path to create a new Path.
-        new Footer(new Path(f.getFile.toUri.toString), f.getParquetMetadata)
-      }.toSeq
+        private def escapePathUserInfo(path: Path): Path = {
+          val uri = path.toUri
+          new Path(new URI(
+            uri.getScheme, uri.getRawUserInfo, uri.getHost, uri.getPort, uri.getPath,
+            uri.getQuery, uri.getFragment))
+        }
 
-      // Overridden so we can inject our own cached files statuses.
-      override def getPartitions: Array[SparkPartition] = {
-        val inputFormat = if (cacheMetadata) {
-          new FilteringParquetRowInputFormat {
-            override def listStatus(jobContext: JobContext): JList[FileStatus] = cachedStatuses
-
-            override def getFooters(jobContext: JobContext): JList[Footer] = cachedFooters
+        // Overridden so we can inject our own cached files statuses.
+        override def getPartitions: Array[SparkPartition] = {
+          val inputFormat = if (cacheMetadata) {
+            new FilteringParquetRowInputFormat {
+              override def listStatus(jobContext: JobContext): JList[FileStatus] = cachedStatuses
+              override def getFooters(jobContext: JobContext): JList[Footer] = cachedFooters
+            }
+          } else {
+            new FilteringParquetRowInputFormat
           }
-        } else {
-          new FilteringParquetRowInputFormat
-        }
 
-        val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
-        val rawSplits = inputFormat.getSplits(jobContext)
+          val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
+          val rawSplits = inputFormat.getSplits(jobContext)
 
-        Array.tabulate[SparkPartition](rawSplits.size) { i =>
-          new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+          Array.tabulate[SparkPartition](rawSplits.size) { i =>
+            new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+          }
         }
-      }
-    }.values
+      }.values
+    }
   }
 
   private class MetadataCache {
@@ -363,7 +385,7 @@ private[sql] class ParquetRelation2(
               .orElse(readSchema())
               .orElse(maybeMetastoreSchema)
               .getOrElse(sys.error("Failed to get the schema."))
-        
+
           // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
           // case insensitivity issue and possible schema mismatch (probably caused by schema
           // evolution).

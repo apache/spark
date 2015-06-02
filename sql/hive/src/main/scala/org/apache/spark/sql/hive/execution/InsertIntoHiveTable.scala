@@ -106,7 +106,7 @@ case class InsertIntoHiveTable(
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, table.schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 
@@ -194,10 +194,9 @@ case class InsertIntoHiveTable(
     if (partition.nonEmpty) {
 
       // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
-      table.hiveQlTable.getPartCols().foreach{
-        entry=>
-          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+      table.hiveQlTable.getPartCols().foreach { entry =>
+        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
 

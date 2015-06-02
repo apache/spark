@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types._
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
 
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = child.foldable
@@ -45,7 +44,6 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 }
 
 case class Sqrt(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = child.foldable
@@ -71,8 +69,6 @@ case class Sqrt(child: Expression) extends UnaryExpression {
 
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
-
-  type EvaluatedType = Any
 
   override lazy val resolved =
     left.resolved && right.resolved &&
@@ -101,7 +97,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
   }
 
-  def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any =
+  def evalInternal(evalE1: Any, evalE2: Any): Any =
     sys.error(s"BinaryExpressions must either override eval or evalInternal")
 }
 
@@ -184,7 +180,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
     case other => sys.error(s"Type $other does not support numeric operations")
   }
-  
+
   override def eval(input: Row): Any = {
     val evalE2 = right.eval(input)
     if (evalE2 == null || evalE2 == 0) {
@@ -244,7 +240,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     case other => sys.error(s"Unsupported bitwise & operation on $other")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = and(evalE1, evalE2)
+  override def evalInternal(evalE1: Any, evalE2: Any): Any = and(evalE1, evalE2)
 }
 
 /**
@@ -265,7 +261,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     case other => sys.error(s"Unsupported bitwise | operation on $other")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = or(evalE1, evalE2)
+  override def evalInternal(evalE1: Any, evalE2: Any): Any = or(evalE1, evalE2)
 }
 
 /**
@@ -286,14 +282,13 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     case other => sys.error(s"Unsupported bitwise ^ operation on $other")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = xor(evalE1, evalE2)
+  override def evalInternal(evalE1: Any, evalE2: Any): Any = xor(evalE1, evalE2)
 }
 
 /**
  * A function that calculates bitwise not(~) of a number.
  */
 case class BitwiseNot(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
 
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = child.foldable
@@ -323,7 +318,6 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
 }
 
 case class MaxOf(left: Expression, right: Expression) extends Expression {
-  type EvaluatedType = Any
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -368,7 +362,6 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 }
 
 case class MinOf(left: Expression, right: Expression) extends Expression {
-  type EvaluatedType = Any
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -416,7 +409,6 @@ case class MinOf(left: Expression, right: Expression) extends Expression {
  * A function that get the absolute value of the numeric value.
  */
 case class Abs(child: Expression) extends UnaryExpression  {
-  type EvaluatedType = Any
 
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = child.foldable

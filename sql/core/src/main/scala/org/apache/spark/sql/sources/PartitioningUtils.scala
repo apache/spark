@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -186,7 +187,7 @@ private[sql] object PartitioningUtils {
       Seq.empty
     } else {
       assert(distinctPartitionsColNames.size == 1, {
-        val list = distinctPartitionsColNames.mkString("\t", "\n", "")
+        val list = distinctPartitionsColNames.mkString("\t", "\n\t", "")
         s"Conflicting partition column names detected:\n$list"
       })
 
@@ -221,7 +222,7 @@ private[sql] object PartitioningUtils {
       // Then falls back to string
       .getOrElse {
         if (raw == defaultPartitionName) Literal.create(null, NullType)
-        else Literal.create(raw, StringType)
+        else Literal.create(unescapePathName(raw), StringType)
       }
   }
 
@@ -242,5 +243,78 @@ private[sql] object PartitioningUtils {
     literals.map { case l @ Literal(_, dataType) =>
       Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  val charToEscape = {
+    val bitSet = new java.util.BitSet(128)
+
+    /**
+     * ASCII 01-1F are HTTP control characters that need to be escaped.
+     * \u000A and \u000D are \n and \r, respectively.
+     */
+    val clist = Array(
+      '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009',
+      '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013',
+      '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C',
+      '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=', '?', '\\', '\u007F',
+      '{', '[', ']', '^')
+
+    clist.foreach(bitSet.set(_))
+
+    if (Shell.WINDOWS) {
+      Array(' ', '<', '>', '|').foreach(bitSet.set(_))
+    }
+
+    bitSet
+  }
+
+  def needsEscaping(c: Char): Boolean = {
+    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
+  }
+
+  def escapePathName(path: String): String = {
+    val builder = new StringBuilder()
+    path.foreach { c =>
+      if (needsEscaping(c)) {
+        builder.append('%')
+        builder.append(f"${c.asInstanceOf[Int]}%02x")
+      } else {
+        builder.append(c)
+      }
+    }
+
+    builder.toString()
+  }
+
+  def unescapePathName(path: String): String = {
+    val sb = new StringBuilder
+    var i = 0
+
+    while (i < path.length) {
+      val c = path.charAt(i)
+      if (c == '%' && i + 2 < path.length) {
+        val code: Int = try {
+          Integer.valueOf(path.substring(i + 1, i + 3), 16)
+        } catch { case e: Exception =>
+          -1: Integer
+        }
+        if (code >= 0) {
+          sb.append(code.asInstanceOf[Char])
+          i += 3
+        } else {
+          sb.append(c)
+          i += 1
+        }
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+
+    sb.toString()
   }
 }

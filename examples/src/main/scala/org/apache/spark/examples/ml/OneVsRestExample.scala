@@ -73,7 +73,7 @@ object OneVsRestExample {
         .action((x, c) => c.copy(fracTest = x))
       opt[String]("testInput")
         .text("input path to test dataset.  If given, option fracTest is ignored")
-        .action((x,c) => c.copy(testInput = Some(x)))
+        .action((x, c) => c.copy(testInput = Some(x)))
       opt[Int]("maxIter")
         .text(s"maximum number of iterations for Logistic Regression." +
           s" default: ${defaultParams.maxIter}")
@@ -88,10 +88,10 @@ object OneVsRestExample {
         .action((x, c) => c.copy(fitIntercept = x))
       opt[Double]("regParam")
         .text(s"the regularization parameter for Logistic Regression.")
-        .action((x,c) => c.copy(regParam = Some(x)))
+        .action((x, c) => c.copy(regParam = Some(x)))
       opt[Double]("elasticNetParam")
         .text(s"the ElasticNet mixing parameter for Logistic Regression.")
-        .action((x,c) => c.copy(elasticNetParam = Some(x)))
+        .action((x, c) => c.copy(elasticNetParam = Some(x)))
       checkConfig { params =>
         if (params.fracTest < 0 || params.fracTest >= 1) {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1).")

@@ -261,3 +261,7 @@ def _start_update_server():
     thread.daemon = True
     thread.start()
     return server
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

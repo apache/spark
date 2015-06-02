@@ -129,7 +129,7 @@ private[spark] abstract class Task[T](
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }  
+  }
 }
 
 /**

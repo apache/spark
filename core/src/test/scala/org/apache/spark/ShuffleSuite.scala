@@ -17,16 +17,16 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
 
-abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 
@@ -282,6 +282,39 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
   }
+
+  test("metrics for shuffle without aggregation") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val numRecords = 10000
+
+    val metrics = ShuffleSuite.runAndReturnMetrics(sc) {
+      sc.parallelize(1 to numRecords, 4)
+        .map(key => (key, 1))
+        .groupByKey()
+        .collect()
+    }
+
+    assert(metrics.recordsRead === numRecords)
+    assert(metrics.recordsWritten === numRecords)
+    assert(metrics.bytesWritten === metrics.byresRead)
+    assert(metrics.bytesWritten > 0)
+  }
+
+  test("metrics for shuffle with aggregation") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val numRecords = 10000
+
+    val metrics = ShuffleSuite.runAndReturnMetrics(sc) {
+      sc.parallelize(1 to numRecords, 4)
+        .flatMap(key => Array.fill(100)((key, 1)))
+        .countByKey()
+    }
+
+    assert(metrics.recordsRead === numRecords)
+    assert(metrics.recordsWritten === numRecords)
+    assert(metrics.bytesWritten === metrics.byresRead)
+    assert(metrics.bytesWritten > 0)
+  }
 }
 
 object ShuffleSuite {
@@ -294,5 +327,36 @@ object ShuffleSuite {
     override def compareTo(o: NonJavaSerializableClass): Int = {
       value - o.value
     }
+  }
+
+  case class AggregatedShuffleMetrics(
+    recordsWritten: Long,
+    recordsRead: Long,
+    bytesWritten: Long,
+    byresRead: Long)
+
+  def runAndReturnMetrics(sc: SparkContext)(job: => Unit): AggregatedShuffleMetrics = {
+    @volatile var recordsWritten: Long = 0
+    @volatile var recordsRead: Long = 0
+    @volatile var bytesWritten: Long = 0
+    @volatile var bytesRead: Long = 0
+    val listener = new SparkListener {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { m =>
+          recordsWritten += m.shuffleRecordsWritten
+          bytesWritten += m.shuffleBytesWritten
+        }
+        taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
+          recordsRead += m.recordsRead
+          bytesRead += m.totalBytesRead
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+
+    job
+
+    sc.listenerBus.waitUntilEmpty(500)
+    AggregatedShuffleMetrics(recordsWritten, recordsRead, bytesWritten, bytesRead)
   }
 }

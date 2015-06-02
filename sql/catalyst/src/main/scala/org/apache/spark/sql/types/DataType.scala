@@ -165,6 +165,9 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  /**
+   * @deprecated As of 1.2.0, replaced by `DataType.fromJson()`
+   */
   @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
@@ -271,7 +274,7 @@ object DataType {
 
     protected lazy val structField: Parser[StructField] =
       ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable  =>
+        case name ~ tpe ~ nullable =>
           StructField(name, tpe, nullable = nullable)
       }
 

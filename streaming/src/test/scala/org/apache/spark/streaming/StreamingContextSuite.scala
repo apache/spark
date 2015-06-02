@@ -25,16 +25,16 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter, FunSuite}
+import org.scalatest.{Assertions, BeforeAndAfter}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 
-class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
@@ -150,6 +150,22 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(ssc.getState() !== StreamingContextState.ACTIVE)
     assert(StreamingContext.getActive().isEmpty)
   }
+
+  test("start failure should stop internal components") {
+    ssc = new StreamingContext(conf, batchDuration)
+    val inputStream = addInputStream(ssc)
+    val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+      Some(values.sum + state.getOrElse(0))
+    }
+    inputStream.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
+    // Require that the start fails because checkpoint directory was not set
+    intercept[Exception] {
+      ssc.start()
+    }
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(ssc.scheduler.isStarted === false)
+  }
+
 
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
@@ -732,7 +748,9 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
-    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    while (!SlowTestReceiver.receivedAllRecords) {
+      Thread.sleep(100)
+    }
     // no clean to be done, the receiving thread should stop on it own
   }
 }

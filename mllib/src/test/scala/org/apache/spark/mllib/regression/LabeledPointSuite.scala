@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 
-class LabeledPointSuite extends FunSuite {
+class LabeledPointSuite extends SparkFunSuite {
 
   test("parse labeled points") {
     val points = Seq(

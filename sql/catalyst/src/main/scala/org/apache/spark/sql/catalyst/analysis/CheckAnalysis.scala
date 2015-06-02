@@ -71,6 +71,11 @@ trait CheckAnalysis {
               s"invalid expression ${b.prettyString} " +
               s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
+          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
+            failAnalysis(
+              s"Could not resolve window function '$name'. " +
+              "Note that, using window functions currently requires a HiveContext")
+
           case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
             // The window spec is not valid.
             val reason = windowSpec.validate.get

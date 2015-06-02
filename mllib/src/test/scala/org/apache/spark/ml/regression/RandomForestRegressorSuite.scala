@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[RandomForestRegressor]].
  */
-class RandomForestRegressorSuite extends FunSuite with MLlibTestSparkContext {
+class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestRegressorSuite.compareAPIs
 
@@ -98,7 +97,7 @@ class RandomForestRegressorSuite extends FunSuite with MLlibTestSparkContext {
   */
 }
 
-private object RandomForestRegressorSuite extends FunSuite {
+private object RandomForestRegressorSuite extends SparkFunSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.

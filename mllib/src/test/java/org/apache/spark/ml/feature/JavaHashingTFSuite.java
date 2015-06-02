@@ -63,17 +63,22 @@ public class JavaHashingTFSuite {
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
-    DataFrame sentenceDataFrame = jsql.createDataFrame(jrdd, schema);
 
-    Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
-    DataFrame wordsDataFrame = tokenizer.transform(sentenceDataFrame);
+    DataFrame sentenceData = jsql.createDataFrame(jrdd, schema);
+    Tokenizer tokenizer = new Tokenizer()
+      .setInputCol("sentence")
+      .setOutputCol("words");
+    DataFrame wordsData = tokenizer.transform(sentenceData);
     int numFeatures = 20;
     HashingTF hashingTF = new HashingTF()
       .setInputCol("words")
-      .setOutputCol("features")
+      .setOutputCol("rawFeatures")
       .setNumFeatures(numFeatures);
-    DataFrame featurized = hashingTF.transform(wordsDataFrame);
-    for (Row r : featurized.select("features", "words", "label").take(3)) {
+    DataFrame featurizedData = hashingTF.transform(wordsData);
+    IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
+    IDFModel idfModel = idf.fit(featurizedData);
+    DataFrame rescaledData = idfModel.transform(featurizedData);
+    for (Row r : rescaledData.select("features", "label").take(3)) {
       Vector features = r.getAs(0);
       Assert.assertEquals(features.size(), numFeatures);
     }

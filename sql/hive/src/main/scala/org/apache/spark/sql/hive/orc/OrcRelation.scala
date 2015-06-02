@@ -48,15 +48,14 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
-      schema: Option[StructType],
+      dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty[Partition]))
-    OrcRelation(paths, parameters, schema, partitionSpec)(sqlContext)
+    new OrcRelation(paths, dataSchema, None, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -136,22 +135,34 @@ private[orc] class OrcOutputWriter(
 }
 
 @DeveloperApi
-private[sql] case class OrcRelation(
+private[sql] class OrcRelation(
     override val paths: Array[String],
-    parameters: Map[String, String],
-    maybeSchema: Option[StructType] = None,
-    maybePartitionSpec: Option[PartitionSpec] = None)(
+    maybeDataSchema: Option[StructType],
+    maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
-  override val dataSchema: StructType = maybeSchema.getOrElse {
+  private[sql] def this(
+      paths: Array[String],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      parameters: Map[String, String])(
+      sqlContext: SQLContext) = {
+    this(
+      paths,
+      maybeDataSchema,
+      maybePartitionSpec,
+      maybePartitionSpec.map(_.partitionColumns),
+      parameters)(sqlContext)
+  }
+
+  override val dataSchema: StructType = maybeDataSchema.getOrElse {
     OrcFileOperator.readSchema(
       paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
   }
-
-  override def userDefinedPartitionColumns: Option[StructType] =
-    maybePartitionSpec.map(_.partitionColumns)
 
   override def needConversion: Boolean = false
 
@@ -169,7 +180,7 @@ private[sql] case class OrcRelation(
       paths.toSet,
       dataSchema,
       schema,
-      maybePartitionSpec)
+      partitionColumns)
   }
 
   override def buildScan(

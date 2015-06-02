@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -327,7 +327,7 @@ class SQLQuerySuite extends QueryTest {
       "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
       "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
       "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
+      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
     )
 
     if (HiveShim.version =="0.13.1") {
@@ -425,10 +425,10 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-4825 save join to table") {
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.insertInto("test1")
+    testData.write.mode(SaveMode.Append).insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.insertInto("test2")
-    testData.insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
+    testData.write.mode(SaveMode.Append).insertInto("test2")
     sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
@@ -780,6 +780,42 @@ class SQLQuerySuite extends QueryTest {
       ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
+  test("window function: multiple window expressions in a single expression") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.registerTempTable("nums")
+
+    val expected =
+      Row(1, 1, 1, 55, 1, 57) ::
+      Row(0, 2, 3, 55, 2, 60) ::
+      Row(1, 3, 6, 55, 4, 65) ::
+      Row(0, 4, 10, 55, 6, 71) ::
+      Row(1, 5, 15, 55, 9, 79) ::
+      Row(0, 6, 21, 55, 12, 88) ::
+      Row(1, 7, 28, 55, 16, 99) ::
+      Row(0, 8, 36, 55, 20, 111) ::
+      Row(1, 9, 45, 55, 25, 125) ::
+      Row(0, 10, 55, 55, 30, 140) :: Nil
+
+    val actual = sql(
+      """
+        |SELECT
+        |  y,
+        |  x,
+        |  sum(x) OVER w1 AS running_sum,
+        |  sum(x) OVER w2 AS total_sum,
+        |  sum(x) OVER w3 AS running_sum_per_y,
+        |  ((sum(x) OVER w1) + (sum(x) OVER w2) + (sum(x) OVER w3)) as combined2
+        |FROM nums
+        |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UnBOUNDED PRECEDiNG AND CuRRENT RoW),
+        |       w2 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOuNDED FoLLOWING),
+        |       w3 AS (PARTITION BY y ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+      """.stripMargin)
+
+    checkAnswer(actual, expected)
+
+    dropTempTable("nums")
+  }
+
   test("test case key when") {
     (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
     checkAnswer(
@@ -836,5 +872,38 @@ class SQLQuerySuite extends QueryTest {
         java.lang.Math.round(2.5).toString,
         java.lang.Math.exp(1.0).toString,
         java.lang.Math.floor(1.9).toString))
+  }
+
+  test("dynamic partition value test") {
+    try {
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      // date
+      sql("drop table if exists dynparttest1")
+      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+      sql(
+        """
+          |insert into table dynparttest1 partition(pdate)
+          | select count(*), cast('2015-05-21' as date) as pdate from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest1"),
+        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+
+      // decimal
+      sql("drop table if exists dynparttest2")
+      sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
+      sql(
+        """
+          |insert into table dynparttest2 partition(pdec)
+          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+        """.stripMargin)
+      checkAnswer(
+        sql("select * from dynparttest2"),
+        Seq(Row(500, new java.math.BigDecimal("100.1"))))
+    } finally {
+      sql("drop table if exists dynparttest1")
+      sql("drop table if exists dynparttest2")
+      sql("set hive.exec.dynamic.partition.mode=strict")
+    }
   }
 }

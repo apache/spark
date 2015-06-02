@@ -22,10 +22,10 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.ui.SparkUI
 
 /**
@@ -39,7 +39,7 @@ import org.apache.spark.ui.SparkUI
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
+class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
   with JsonTestUtils {
 
   private val logDir = new File("src/test/resources/spark-events")
@@ -82,7 +82,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "running app list json" -> "applications?status=running",
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
-    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",

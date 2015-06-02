@@ -22,13 +22,12 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.util.Utils
 
 
-class ReplSuite extends FunSuite {
+class ReplSuite extends SparkFunSuite {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"

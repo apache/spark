@@ -107,7 +107,8 @@ other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
-val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
+val lambda = 0.01
+val model = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
 {% endhighlight %}
 </div>
 

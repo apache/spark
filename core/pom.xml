@@ -338,6 +338,12 @@
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
       <artifactId>selenium-java</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>test</scope>
     </dependency>
     <!-- Added for selenium: -->
@@ -377,9 +383,15 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>net.razorvine</groupId>
+          <artifactId>serpent</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
@@ -464,6 +476,29 @@
             </executions>
             <configuration>
               <executable>..${path.separator}R${path.separator}install-dev${script.extension}</executable>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>sparkr-docs</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sparkr-pkg-docs</id>
+                <phase>compile</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <executable>..${path.separator}R${path.separator}create-docs${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -27,15 +28,21 @@ import org.apache.spark.sql.types._
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  test("alias") {
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
+    assert(df.select(df("a").as("b")).columns.head === "b")
+    assert(df.select(df("a").alias("b")).columns.head === "b")
+  }
+
   test("single explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
       df.select(explode('intList)),
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("explode and other columns") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select($"a", explode('intList)),
@@ -45,13 +52,13 @@ class ColumnExpressionSuite extends QueryTest {
 
     checkAnswer(
       df.select($"*", explode('intList)),
-      Row(1, Seq(1,2,3), 1) ::
-      Row(1, Seq(1,2,3), 2) ::
-      Row(1, Seq(1,2,3), 3) :: Nil)
+      Row(1, Seq(1, 2, 3), 1) ::
+      Row(1, Seq(1, 2, 3), 2) ::
+      Row(1, Seq(1, 2, 3), 3) :: Nil)
   }
 
   test("aliased explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select(explode('intList).as('int)).select('int),
@@ -79,7 +86,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("self join explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     val exploded = df.select(explode('intList).as('i))
 
     checkAnswer(
@@ -446,12 +453,50 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("rand") {
-    val randCol = testData.select('key, rand(5L).as("rand"))
+    val randCol = testData.select($"key", rand(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>
       assert(row.getDouble(1) <= 1.0)
       assert(row.getDouble(1) >= 0.0)
+    }
+
+    def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
+      val projects = df.queryExecution.executedPlan.collect {
+        case project: Project => project
+      }
+      assert(projects.size === expectedNumProjects)
+    }
+
+    // We first create a plan with two Projects.
+    // Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    //   Project [key, (Rand 5 + 1) AS rand]
+    //     LogicalRDD [key, value]
+    // Because Rand function is not deterministic, the column rand is not deterministic.
+    // So, in the optimizer, we will not collapse Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    // and Project [key, Rand 5 AS rand]. The final plan still has two Projects.
+    val dfWithTwoProjects =
+      testData
+        .select($"key", (rand(5L) + 1).as("rand"))
+        .select(($"rand" + 1).as("rand1"), ($"rand" - 1).as("rand2"))
+    checkNumProjects(dfWithTwoProjects, 2)
+
+    // Now, we add one more project rand1 - rand2 on top of the query plan.
+    // Since rand1 and rand2 are deterministic (they basically apply +/- to the generated
+    // rand value), we can collapse rand1 - rand2 to the Project generating rand1 and rand2.
+    // So, the plan will be optimized from ...
+    // Project [(rand1 - rand2) AS (rand1 - rand2)]
+    //   Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    //     Project [key, (Rand 5 + 1) AS rand]
+    //       LogicalRDD [key, value]
+    // to ...
+    // Project [((rand + 1 AS rand1) - (rand - 1 AS rand2)) AS (rand1 - rand2)]
+    //   Project [key, Rand 5 AS rand]
+    //     LogicalRDD [key, value]
+    val dfWithThreeProjects = dfWithTwoProjects.select($"rand1" - $"rand2")
+    checkNumProjects(dfWithThreeProjects, 2)
+    dfWithThreeProjects.collect().foreach { row =>
+      assert(row.getDouble(0) === 2.0 +- 0.0001)
     }
   }
 
