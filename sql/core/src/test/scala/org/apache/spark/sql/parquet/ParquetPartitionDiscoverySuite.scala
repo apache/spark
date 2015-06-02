@@ -18,10 +18,11 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 import java.math.BigInteger
-import java.sql.{Timestamp, Date}
+import java.sql.Timestamp
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -430,6 +431,22 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
       checkAnswer(read.load(dir.toString).select(fields: _*), row)
+    }
+  }
+
+  test("SPARK-8037: Ignores files whose name starts with dot") {
+    withTempPath { dir =>
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(dir.getCanonicalPath)
+
+      Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
+      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df)
     }
   }
 }
