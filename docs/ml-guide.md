@@ -178,18 +178,49 @@ There are now several algorithms in the Pipelines API which are not in the lower
 
 In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods section](mllib-linear-methods.html) for details. In `spark.ml`, we also include Pipelines API for [Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid of L1 and L2 regularization proposed in [this paper](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf). Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
 `\[
-\alpha \lambda_1\|\wv\|_1 + (1-\alpha) \frac{\lambda_2}{2}\|\wv\|_2, \alpha \in [0, 1].
+\alpha \|\wv\|_1 + (1-\alpha) \frac{1}{2}\|\wv\|_2^2, \alpha \in [0, 1].
 \]`
-By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. We implement Pipelines API for both linear regression and logistic regression with elastic net regularization.
+By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. For example, if a [linear regression](/api/scala/index.html#org.apache.spark.ml.regression.LinearRegression) model is trained with the elastic net parameter $\alpha$ set to $1$, it is equivalent to a [Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model. On the other hand, if $\alpha$ is set to $0$, the trained model reduces to a [ridge regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model. We implement Pipelines API for both linear regression and logistic regression with elastic net regularization.
 
 **Examples**
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-
+The following code illustrates how to load a sample dataset and use logistic regression with elastic net regularization to fit a model.
 
 {% highlight scala %}
+
+import scala.collection.mutable
+import scala.language.reflectiveCalls
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.{Pipeline, PipelineStage}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.DataFrame
+
+val regParam = 0.3
+val elasticNetParam = 0.8
+val tol = 1E-6
+val dataPath = "data/mllib/sample_libsvm_data.txt"
+
+println(s"LogisticRegressionExample with regParam $regParam and elasticNetParam $elasticNetParam")
+
+// Load training and test data and cache it.
+val training = MLUtils.loadLibSVMFile(sc, dataPath).toDF()
+
+val lor = new LogisticRegression()
+  .setRegParam(regParam)
+  .setElasticNetParam(elasticNetParam)
+  .setTol(tol)
+
+// Fit the model
+val lirModel = lor.fit(training)
+
+// Print the weights and intercept for logistic regression.
+println(s"Weights: ${lirModel.weights} Intercept: ${lirModel.intercept}")
 
 {% endhighlight %}
 

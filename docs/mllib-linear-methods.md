@@ -100,7 +100,7 @@ regularizers in MLlib:
       <td>L1</td><td>$\|\wv\|_1$</td><td>$\mathrm{sign}(\wv)$</td>
     </tr>
     <tr>
-      <td>elastic net</td><td>$\alpha \lambda_1\|\wv\|_1 + (1-\alpha)\frac{\lambda_2}{2}\|\wv\|_2$</td><td>$\alpha \lambda_1 \mathrm{sign}(\wv) + (1-\alpha)\lambda_2 \wv$</td>
+      <td>elastic net</td><td>$\alpha \|\wv\|_1 + (1-\alpha)\frac{1}{2}\|\wv\|_2^2$</td><td>$\alpha \mathrm{sign}(\wv) + (1-\alpha) \wv$</td>
     </tr>
   </tbody>
 </table>
