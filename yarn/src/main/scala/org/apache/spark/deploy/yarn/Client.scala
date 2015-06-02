@@ -91,54 +91,58 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    // Before we submit current application, we cleanup staging director as some old appStagingDir
-    // can not be deleted when those old jobs are failed or killed and so on, please see SPARK-7705
-    // and SPARK-7503 for details.
-    cleanupStagingDir()
+    var appId: ApplicationId = null
+    try {
+      // Setup the credentials before doing anything else,
+      // so we have don't have issues at any point.
+      setupCredentials()
+      yarnClient.init(yarnConf)
+      yarnClient.start()
 
-    // Setup the credentials before doing anything else, so we have don't have issues at any point.
-    setupCredentials()
-    yarnClient.init(yarnConf)
-    yarnClient.start()
+      logInfo("Requesting a new application from cluster with %d NodeManagers"
+        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
-    logInfo("Requesting a new application from cluster with %d NodeManagers"
-      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      // Get a new application from our RM
+      val newApp = yarnClient.createApplication()
+      val newAppResponse = newApp.getNewApplicationResponse()
+      val appId = newAppResponse.getApplicationId()
 
-    // Get a new application from our RM
-    val newApp = yarnClient.createApplication()
-    val newAppResponse = newApp.getNewApplicationResponse()
-    val appId = newAppResponse.getApplicationId()
+      // Verify whether the cluster has enough resources for our AM
+      verifyClusterResources(newAppResponse)
 
-    // Verify whether the cluster has enough resources for our AM
-    verifyClusterResources(newAppResponse)
+      // Set up the appropriate contexts to launch our AM
+      val containerContext = createContainerLaunchContext(newAppResponse)
+      val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
-    // Set up the appropriate contexts to launch our AM
-    val containerContext = createContainerLaunchContext(newAppResponse)
-    val appContext = createApplicationSubmissionContext(newApp, containerContext)
-
-    // Finally, submit and monitor the application
-    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-    yarnClient.submitApplication(appContext)
-    appId
+      // Finally, submit and monitor the application
+      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      yarnClient.submitApplication(appContext)
+      appId
+    } catch {
+      case e: Throwable =>
+        if (appId != null) {
+          cleanupStagingDir(appId)
+        }
+        throw e
+    }
   }
 
   /**
    * Cleanup  all subdirectory of SPARK_STAGING directory.
    */
-  private def cleanupStagingDir(): Unit = {
-    val stagingDirPath = new Path(SPARK_STAGING)
+  private def cleanupStagingDir(appId: ApplicationId): Unit = {
+    val appStagingDir = getAppStagingDir(appId)
     try {
-      val fs = FileSystem.get(hadoopConf)
       val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      val stagingDirPath = new Path(appStagingDir)
+      val fs = FileSystem.get(hadoopConf)
       if (!preserveFiles && fs.exists(stagingDirPath)) {
-        fs.listStatus(stagingDirPath).foreach { fileStatus =>
-          logInfo(s"Deleting old application staging directory ${fileStatus.getPath}")
-          fs.delete(fileStatus.getPath, true)
-        }
+        logInfo("Deleting staging directory " + stagingDirPath)
+        fs.delete(stagingDirPath, true)
       }
     } catch {
       case ioe: IOException =>
-        logWarning(s"Failed to cleanup staging dir $stagingDirPath", ioe)
+        logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
     }
   }
 
@@ -785,6 +789,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
+        cleanupStagingDir(appId)
         return (state, report.getFinalApplicationStatus)
       }
 
