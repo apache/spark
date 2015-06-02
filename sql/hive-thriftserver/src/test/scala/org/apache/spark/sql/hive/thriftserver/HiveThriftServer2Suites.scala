@@ -27,7 +27,7 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
@@ -448,7 +448,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
           |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
         """.stripMargin,
         new File(s"$tempLog4jConf/log4j.properties"),
-        Charsets.UTF_8)
+        UTF_8)
 
       tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
     }
