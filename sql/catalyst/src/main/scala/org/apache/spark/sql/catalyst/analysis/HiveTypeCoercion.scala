@@ -87,7 +87,7 @@ trait HiveTypeCoercion {
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
-    BooleanEqualization ::
+    BooleanEquality ::
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
@@ -479,7 +479,7 @@ trait HiveTypeCoercion {
   /**
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
-  object BooleanEqualization extends Rule[LogicalPlan] {
+  object BooleanEquality extends Rule[LogicalPlan] {
     private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1))
     private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal(0))
 
@@ -512,22 +512,22 @@ trait HiveTypeCoercion {
       // all other cases are considered as false.
 
       // We may simplify the expression if one side is literal numeric values
-      case EqualTo(b @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => b
-      case EqualTo(b @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => Not(b)
-      case EqualTo(Literal(value, _: NumericType), b @ BooleanType())
-        if trueValues.contains(value) => b
-      case EqualTo(Literal(value, _: NumericType), b @ BooleanType())
-        if falseValues.contains(value) => Not(b)
-      case EqualNullSafe(b @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => And(IsNotNull(b), b)
-      case EqualNullSafe(b @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => And(IsNotNull(b), Not(b))
-      case EqualNullSafe(Literal(value, _: NumericType), b @ BooleanType())
-        if trueValues.contains(value) => And(IsNotNull(b), b)
-      case EqualNullSafe(Literal(value, _: NumericType), b @ BooleanType())
-        if falseValues.contains(value) => And(IsNotNull(b), Not(b))
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => bool
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Not(bool)
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => bool
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => Not(bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
         transform(left , right)

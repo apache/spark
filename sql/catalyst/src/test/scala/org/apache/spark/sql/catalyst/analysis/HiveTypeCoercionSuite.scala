@@ -147,7 +147,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion simplification for equal to") {
-    val be = new HiveTypeCoercion {}.BooleanEqualization
+    val be = new HiveTypeCoercion {}.BooleanEquality
 
     ruleTest(be,
       EqualTo(Literal(true), Literal(1)),
