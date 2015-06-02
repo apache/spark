@@ -216,6 +216,13 @@ public class WrappedLargeByteBufferSuite {
       assertEquals(500 - initialPosition, dup.remaining());
       assertConsistent(buf);
       assertConsistent(dup);
+
+      // check positions of both buffers are independent
+      buf.skip(20);
+      assertEquals(initialPosition + 20, buf.position());
+      assertEquals(initialPosition, dup.position());
+      assertConsistent(buf);
+      assertConsistent(dup);
     }
   }
 
@@ -224,6 +231,19 @@ public class WrappedLargeByteBufferSuite {
     new WrappedLargeByteBuffer( new ByteBuffer[0]);
   }
 
+  @Test
+  public void positionIndependentOfInitialBuffers() {
+    ByteBuffer[] byteBufs = testDataBuf().underlying;
+    byteBufs[0].position(50);
+    for (int initialPosition: new int[]{0,20, 400}) {
+      WrappedLargeByteBuffer buf = new WrappedLargeByteBuffer(byteBufs, 50);
+      assertEquals(0L, buf.position());
+      assertEquals(50, byteBufs[0].position());
+      buf.skip(initialPosition);
+      assertEquals(initialPosition, buf.position());
+      assertEquals(50, byteBufs[0].position());
+    }
+  }
 
   private void assertConsistent(WrappedLargeByteBuffer buffer) {
     long pos = buffer.position();
@@ -245,7 +265,12 @@ public class WrappedLargeByteBufferSuite {
     }
   }
 
-  private void assertSubArrayEquals(byte[] exp, int expOffset, byte[] act, int actOffset, int length) {
+  private void assertSubArrayEquals(
+      byte[] exp,
+      int expOffset,
+      byte[] act,
+      int actOffset,
+      int length) {
     byte[] expCopy = new byte[length];
     byte[] actCopy = new byte[length];
     System.arraycopy(exp, expOffset, expCopy, 0, length);

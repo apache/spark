@@ -211,11 +211,8 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
   @Override
   public WrappedLargeByteBuffer duplicate() {
-    ByteBuffer[] duplicates = new ByteBuffer[underlying.length];
-    for (int i = 0; i < underlying.length; i++) {
-      duplicates[i] = underlying[i].duplicate();
-    }
-    WrappedLargeByteBuffer dup = new WrappedLargeByteBuffer(duplicates, subBufferSize);
+    // the constructor will duplicate the underlying buffers for us
+    WrappedLargeByteBuffer dup = new WrappedLargeByteBuffer(underlying, subBufferSize);
     dup.skip(position());
     return dup;
   }
