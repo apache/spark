@@ -215,6 +215,17 @@
       </snapshots>
     </repository>
     <repository>
+      <id>bintray</id>
+      <name>Bintray</name>
+      <url>https://dl.bintray.com/readytalk/maven</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
       <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
@@ -582,6 +593,11 @@
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>${derby.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.readytalk</groupId>
+        <artifactId>metrics3-statsd</artifactId>
+        <version>4.1.0</version>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>

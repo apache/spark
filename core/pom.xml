@@ -274,6 +274,10 @@
       <artifactId>jackson-module-scala_2.10</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.readytalk</groupId>
+      <artifactId>metrics3-statsd</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
       <scope>test</scope>

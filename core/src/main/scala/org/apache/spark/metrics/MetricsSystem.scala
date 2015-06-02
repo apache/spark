@@ -189,6 +189,7 @@ private[spark] class MetricsSystem private (
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {
+            logInfo(s"Registering sink $classPath")
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
