@@ -194,8 +194,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       // Nested directories to find new files.
       def dfs(status: FileStatus): List[FileStatus] = {
         val path = status.getPath
-        val depthFilter = depth + directoryDepth - path.depth()
         if (status.isDir) {
+          val depthFilter = depth + directoryDepth - path.depth()
           if (depthFilter - 1 >= 0) {
             if (lastFoundDirs.contains(path)) {
               if (status.getModificationTime > modTimeIgnoreThreshold) {
@@ -228,7 +228,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       }.flatMap(fs.listStatus(_)).toSeq
 
       val newFiles = path.flatMap(dfs(_)).map(_.getPath.toString).toArray
-      val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
+      val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {
@@ -267,11 +267,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    */
   private def isNewFile(path: Path, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
     val pathStr = path.toString
-    // Reject file if it start with _
-    if (path.getName().startsWith("_")) {
-      logDebug(s"startsWith: ${path.getName()}")
-      return false
-    }
     // Reject file if it does not satisfy filter
     if (!filter(path)) {
       logDebug(s"$pathStr rejected by filter")
