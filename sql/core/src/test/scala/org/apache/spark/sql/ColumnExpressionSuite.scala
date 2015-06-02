@@ -27,6 +27,12 @@ import org.apache.spark.sql.types._
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  test("alias") {
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
+    assert(df.select(df("a").as("b")).columns.head === "b")
+    assert(df.select(df("a").alias("b")).columns.head === "b")
+  }
+
   test("single explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
