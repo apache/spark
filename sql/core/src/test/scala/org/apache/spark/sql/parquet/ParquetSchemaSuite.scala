@@ -20,7 +20,7 @@ package org.apache.spark.sql.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import parquet.schema.MessageTypeParser
+import org.apache.parquet.schema.MessageTypeParser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ScalaReflection

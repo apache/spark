@@ -18,8 +18,8 @@
 package org.apache.spark.sql.parquet
 
 import org.scalatest.BeforeAndAfterAll
-import parquet.filter2.predicate.Operators._
-import parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.Operators._
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._

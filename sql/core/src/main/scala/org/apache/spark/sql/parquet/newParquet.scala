@@ -29,10 +29,10 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import parquet.filter2.predicate.FilterApi
-import parquet.hadoop._
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
