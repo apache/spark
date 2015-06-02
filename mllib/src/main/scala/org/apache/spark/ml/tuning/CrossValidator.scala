@@ -176,7 +176,10 @@ class CrossValidatorModel private[ml] (
   }
 
   override def copy(extra: ParamMap): CrossValidatorModel = {
-    val copied = new CrossValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[_]], avgMetrics.clone())
+    val copied = new CrossValidatorModel(
+      uid,
+      bestModel.copy(extra).asInstanceOf[Model[_]],
+      avgMetrics.clone())
     copyValues(copied, extra)
   }
 }
