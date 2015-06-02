@@ -219,6 +219,7 @@ class DataFrameWriter(object):
         self._sqlContext = df.sql_ctx
         self._jwrite = df._jdf.write()
 
+    @since(1.4)
     def mode(self, saveMode):
         """
         Specifies the behavior when data or table already exists. Options include:
