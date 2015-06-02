@@ -26,8 +26,8 @@ import com.google.common.annotations.VisibleForTesting;
  */
 public class LargeByteBufferInputStream extends InputStream {
 
-  LargeByteBuffer buffer;
-  final boolean dispose;
+  private LargeByteBuffer buffer;
+  private final boolean dispose;
 
   public LargeByteBufferInputStream(LargeByteBuffer buffer, boolean dispose) {
     this.buffer = buffer;

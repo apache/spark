@@ -20,15 +20,14 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.util.io.ByteArrayChunkOutputStream;
 
 public class LargeByteBufferOutputStream extends OutputStream {
 
-  private final int chunkSize;
-  final ByteArrayChunkOutputStream output;
+  private final ByteArrayChunkOutputStream output;
 
   public LargeByteBufferOutputStream(int chunkSize) {
-    this.chunkSize = chunkSize;
     output = new ByteArrayChunkOutputStream(chunkSize);
   }
 
@@ -44,10 +43,11 @@ public class LargeByteBufferOutputStream extends OutputStream {
     return largeBuffer(LargeByteBufferHelper.MAX_CHUNK_SIZE);
   }
 
-/**
- * exposed for testing.  You don't really ever want to call this method -- the returned
- * buffer will not implement {{asByteBuffer}} correctly.
- */
+  /**
+   * exposed for testing.  You don't really ever want to call this method -- the returned
+   * buffer will not implement {{asByteBuffer}} correctly.
+   */
+  @VisibleForTesting
   LargeByteBuffer largeBuffer(int maxChunk) {
     long totalSize = output.size();
     int chunksNeeded = (int) ((totalSize + maxChunk - 1) / maxChunk);
