@@ -129,6 +129,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   @transient private var lastNewFileFindingTime = 0L
 
   @transient private var path_ : Path = null
+  @transient private var directoryDepth_ : Int = -1
   @transient private var fs_ : FileSystem = null
 
   override def start() { }
@@ -186,48 +187,55 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
-      val filter = new PathFilter {
+      val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val directoryDepth = fs.getFileStatus(directoryPath).getPath.depth()
+      val rootDirectoryDepth = directoryDepth
 
-      // Nested directories to find new files.
-      def dfs(status: FileStatus): List[FileStatus] = {
+      // Search nested directories to find new files.
+      def searchFilesRecursively(status: FileStatus, files: mutable.ArrayBuffer[String]): Unit = {
         val path = status.getPath
         if (status.isDir) {
-          val depthFilter = depth + directoryDepth - path.depth()
-          if (depthFilter - 1 >= 0) {
+          // Note: A user may set depth = Int.MaxValue to search all nested directories.
+          if (depth > path.depth() - rootDirectoryDepth) {
             if (lastFoundDirs.contains(path)) {
               if (status.getModificationTime > modTimeIgnoreThreshold) {
-                fs.listStatus(path).toList.flatMap(dfs(_))
-              } else Nil
+                fs.listStatus(path).foreach(searchFilesRecursively(_, files))
+              }
             } else {
               lastFoundDirs += path
-              fs.listStatus(path).toList.flatMap(dfs(_))
+              fs.listStatus(path).foreach(searchFilesRecursively(_, files))
             }
-          } else Nil
+          }
         } else {
-          if (filter.accept(path)) status :: Nil else Nil
+          if (newFileFilter.accept(path)) {
+            files += path.toString
+          }
         }
       }
 
-      val path = if (lastFoundDirs.isEmpty) Seq(fs.getFileStatus(directoryPath))
-      else {
-        lastFoundDirs.filter { path =>
-          // If the mod time of directory is more than ignore time, no new files in this directory.
-          try {
-            val status = fs.getFileStatus(path)
-            status != null && status.getModificationTime > modTimeIgnoreThreshold
-          } catch {
-            // If the directory don't find, remove the directory from `lastFoundDirs`
-            case e: FileNotFoundException =>
-              lastFoundDirs.remove(path)
-              false
+      val validDirs: Iterable[Path] =
+        if (lastFoundDirs.isEmpty) {
+          Seq(directoryPath)
+        }
+        else {
+          lastFoundDirs.filter { path =>
+            // If the mod time of directory is more than ignore time, no new files in this directory
+            try {
+              val status = fs.getFileStatus(path)
+              status != null && status.getModificationTime > modTimeIgnoreThreshold
+            } catch {
+              // If the directory don't find, remove the directory from `lastFoundDirs`
+              case e: FileNotFoundException =>
+                lastFoundDirs.remove(path)
+                false
+            }
           }
         }
-      }.flatMap(fs.listStatus(_)).toSeq
 
-      val newFiles = path.flatMap(dfs(_)).map(_.getPath.toString).toArray
+      val newFiles = mutable.ArrayBuffer[String]()
+      validDirs.flatMap(fs.listStatus(_)). // Get sub dirs and files
+        foreach(searchFilesRecursively(_, newFiles))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -238,7 +246,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
             "files in the monitored directory."
         )
       }
-      newFiles
+      newFiles.toArray
     } catch {
       case e: Exception =>
         logWarning("Error finding new files", e)
@@ -321,17 +329,32 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   private def directoryPath: Path = {
-    if (path_ == null) path_ = new Path(directory)
+    if (fs_ == null) init()
     path_
   }
 
+  private def directoryDepth: Int = {
+    if (fs_ == null) init()
+    directoryDepth_
+  }
+
   private def fs: FileSystem = {
-    if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    if (fs_ == null) init()
     fs_
   }
 
-  private def reset()  {
+  private def init(): Unit = {
+    val originPath = new Path(directory)
+    fs_ = originPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    // Get the absolute path
+    path_ = fs_.getFileStatus(originPath).getPath
+    directoryDepth_ = path_.depth()
+  }
+
+  private def reset() {
     fs_ = null
+    path_ = null
+    directoryDepth_ = -1
   }
 
   @throws(classOf[IOException])
