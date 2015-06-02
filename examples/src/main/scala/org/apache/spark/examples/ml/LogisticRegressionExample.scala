@@ -30,7 +30,8 @@ import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.sql.DataFrame
 
 /**
- * An example runner for logistic regression with elastic-net (mixing L1/L2) regularization. Run with
+ * An example runner for logistic regression with elastic-net (mixing L1/L2) regularization.
+ * Run with
  * {{{
  * bin/run-example ml.LogisticRegressionExample [options]
  * }}}

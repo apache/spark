@@ -29,7 +29,8 @@ import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
 
 /**
- * An example runner for linear regression with elastic-net (mixing L1/L2) regularization. Run with
+ * An example runner for linear regression with elastic-net (mixing L1/L2) regularization.
+ * Run with
  * {{{
  * bin/run-example ml.LinearRegressionExample [options]
  * }}}
