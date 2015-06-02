@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
@@ -52,6 +53,9 @@ trait Saveable {
    */
   def save(sc: SparkContext, path: String): Unit
 
+  /** Java-friendly version of [[save()]]. */
+  def save(jsc: JavaSparkContext, path: String): Unit = save(jsc.sc, path)
+
   /** Current version of model save/load format. */
   protected def formatVersion: String
 
@@ -77,6 +81,8 @@ trait Loader[M <: Saveable] {
    */
   def load(sc: SparkContext, path: String): M
 
+  /** Java-friendly version of [[load()]]. */
+  def load(jsc: JavaSparkContext, path: String): M = load(jsc.sc, path)
 }
 
 /**
