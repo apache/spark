@@ -96,7 +96,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       // We create a DataFrame by applying the schema of relation to the data to make sure.
       // We are writing data based on the expected schema,
       val df = {
-        // For partitioned relation r, r.schema's column ordering is different with the column
+        // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column). We
         // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
         // safely apply the schema of r.schema to the data.
