@@ -135,7 +135,6 @@ object LogisticRegressionExample {
       .setElasticNetParam(params.elasticNetParam)
       .setMaxIter(params.maxIter)
       .setTol(params.tol)
-      .setMaxIter(params.maxIter)
 
     stages += lor
     val pipeline = new Pipeline().setStages(stages.toArray)
