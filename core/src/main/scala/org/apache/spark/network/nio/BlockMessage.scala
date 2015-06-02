@@ -110,7 +110,7 @@ private[nio] class BlockMessage() {
   def getType: Int = typ
   def getId: BlockId = id
   def getData: ByteBuffer = data
-  def getLevel: StorageLevel =  level
+  def getLevel: StorageLevel = level
 
   def toBufferMessage: BufferMessage = {
     val buffers = new ArrayBuffer[ByteBuffer]()
@@ -155,7 +155,7 @@ private[nio] class BlockMessage() {
 
   override def toString: String = {
     "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level +
-    ", data = " + (if (data != null) data.remaining.toString  else "null") + "]"
+    ", data = " + (if (data != null) data.remaining.toString else "null") + "]"
   }
 }
 

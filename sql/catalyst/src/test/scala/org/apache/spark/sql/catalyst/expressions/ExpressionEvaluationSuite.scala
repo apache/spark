@@ -22,17 +22,18 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.mathfuncs._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 
-class ExpressionEvaluationBaseSuite extends FunSuite {
+class ExpressionEvaluationBaseSuite extends SparkFunSuite {
 
   def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
     expression.eval(inputRow)
@@ -42,8 +43,8 @@ class ExpressionEvaluationBaseSuite extends FunSuite {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if(actual != expected) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+    if (actual != expected) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
@@ -125,37 +126,37 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   booleanLogicTest("AND", _ && _,
-    (true,  true,  true) ::
-    (true,  false, false) ::
-    (true,  null,  null) ::
-    (false, true,  false) ::
+    (true, true, true) ::
+    (true, false, false) ::
+    (true, null, null) ::
+    (false, true, false) ::
     (false, false, false) ::
-    (false, null,  false) ::
-    (null,  true,  null) ::
-    (null,  false, false) ::
-    (null,  null,  null) :: Nil)
+    (false, null, false) ::
+    (null, true, null) ::
+    (null, false, false) ::
+    (null, null, null) :: Nil)
 
   booleanLogicTest("OR", _ || _,
-    (true,  true,  true) ::
-    (true,  false, true) ::
-    (true,  null,  true) ::
-    (false, true,  true) ::
+    (true, true, true) ::
+    (true, false, true) ::
+    (true, null, true) ::
+    (false, true, true) ::
     (false, false, false) ::
-    (false, null,  null) ::
-    (null,  true,  true) ::
-    (null,  false, null) ::
-    (null,  null,  null) :: Nil)
+    (false, null, null) ::
+    (null, true, true) ::
+    (null, false, null) ::
+    (null, null, null) :: Nil)
 
   booleanLogicTest("=", _ === _,
-    (true,  true,  true) ::
-    (true,  false, false) ::
-    (true,  null,  null) ::
-    (false, true,  false) ::
+    (true, true, true) ::
+    (true, false, false) ::
+    (true, null, null) ::
+    (false, true, false) ::
     (false, false, true) ::
-    (false, null,  null) ::
-    (null,  true,  null) ::
-    (null,  false, null) ::
-    (null,  null,  null) :: Nil)
+    (false, null, null) ::
+    (null, true, null) ::
+    (null, false, null) ::
+    (null, null, null) :: Nil)
 
   def booleanLogicTest(
       name: String,
@@ -163,7 +164,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       truthTable: Seq[(Any, Any, Any)]) {
     test(s"3VL $name") {
       truthTable.foreach {
-        case (l,r,answer) =>
+        case (l, r, answer) =>
           val expr = op(Literal.create(l, BooleanType), Literal.create(r, BooleanType))
           checkEvaluation(expr, answer)
       }
@@ -371,6 +372,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
       DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
+    checkEvaluation(Literal(true) cast StringType, "true")
+    checkEvaluation(Literal(false) cast StringType, "false")
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
     checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
     checkEvaluation("23" cast DoubleType, 23d)
@@ -850,11 +853,37 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
   }
 
+  test("case key when") {
+    val row = create_row(null, 1, 2, "a", "b", "c")
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    val c6 = 'a.string.at(5)
+
+    val literalNull = Literal.create(null, IntegerType)
+    val literalInt = Literal(1)
+    val literalString = Literal("a")
+
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c1, Seq(c2, c4, literalNull, c5, c6)), "b", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(literalInt, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(c2, Seq(c1, c4, c5)), "b", row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(literalString, c2, c3)), 1, row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(c6, c3, c5, c2, Literal(3))), 3, row)
+
+    checkEvaluation(CaseKeyWhen(literalInt, Seq(c2, c4, c5)), "a", row)
+    checkEvaluation(CaseKeyWhen(literalString, Seq(c5, c2, c4, c3)), 2, row)
+    checkEvaluation(CaseKeyWhen(c6, Seq(c5, c2, c4, c3)), null, row)
+    checkEvaluation(CaseKeyWhen(literalNull, Seq(c2, c5, c1, c6)), "c", row)
+  }
+
   test("complex type") {
     val row = create_row(
       "^Ba*n",                                // 0
       null.asInstanceOf[UTF8String],          // 1
-      create_row("aa", "bb"),     // 2
+      create_row("aa", "bb"),                 // 2
       Map("aa"->"bb"),                        // 3
       Seq("aa", "bb")                         // 4
     )
@@ -865,52 +894,77 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal("aa")), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(GetMapValue(Literal.create(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, typeMap, true),
+      GetMapValue(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
+    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
       Literal.create(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal(1)), "bb", row)
-    checkEvaluation(GetItem(Literal.create(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(GetArrayItem(Literal.create(null, typeArray), Literal(1)), null, row)
     checkEvaluation(
-      GetItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, typeArray, true),
+      GetArrayItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
       Literal.create(null, IntegerType)), null, row)
 
-    def quickBuildGetField(expr: Expression, fieldName: String): StructGetField = {
+    def getStructField(expr: Expression, fieldName: String): ExtractValue = {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
-          StructGetField(expr, field, fields.indexOf(field))
+          GetStructField(expr, field, fields.indexOf(field))
       }
     }
 
-    def quickResolve(u: UnresolvedGetField): StructGetField = {
-      quickBuildGetField(u.child, u.fieldName)
+    def quickResolve(u: UnresolvedExtractValue): ExtractValue = {
+      ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(quickBuildGetField(Literal.create(null, typeS), "a"), null, row)
+    checkEvaluation(getStructField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
+    checkEvaluation(getStructField(Literal.create(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
+    assert(getStructField(BoundReference(2, typeS, nullable = true), "a").nullable === true)
+    assert(getStructField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable
       === false)
 
-    assert(quickBuildGetField(Literal.create(null, typeS), "a").nullable === true)
-    assert(quickBuildGetField(Literal.create(null, typeS_notNullable), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS), "a").nullable === true)
+    assert(getStructField(Literal.create(null, typeS_notNullable), "a").nullable === true)
 
-    checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
-    checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
+    checkEvaluation(quickResolve('c.map(typeMap).at(3).getItem("aa")), "bb", row)
+    checkEvaluation(quickResolve('c.array(typeArray.elementType).at(4).getItem(1)), "bb", row)
     checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
+  }
+
+  test("error message of ExtractValue") {
+    val structType = StructType(StructField("a", StringType, true) :: Nil)
+    val arrayStructType = ArrayType(structType)
+    val arrayType = ArrayType(StringType)
+    val otherType = StringType
+
+    def checkErrorMessage(
+        childDataType: DataType,
+        fieldDataType: DataType,
+        errorMesage: String): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        ExtractValue(
+          Literal.create(null, childDataType),
+          Literal.create(null, fieldDataType),
+          _ == _)
+      }
+      assert(e.getMessage().contains(errorMesage))
+    }
+
+    checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
+    checkErrorMessage(arrayStructType, BooleanType, "Field name should be String Literal")
+    checkErrorMessage(arrayType, StringType, "Array index should be integral type")
+    checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
 
   test("arithmetic") {
@@ -1155,7 +1209,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   /**
-   * Used for testing math functions for DataFrames. 
+   * Used for testing math functions for DataFrames.
    * @param c The DataFrame function
    * @param f The functions in scala.math
    * @param domain The set of values to run the function with
@@ -1163,7 +1217,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
    * @tparam T Generic type for primitives
    */
   def unaryMathFunctionEvaluation[@specialized(Int, Double, Float, Long) T](
-      c: Expression => Expression, 
+      c: Expression => Expression,
       f: T => T,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
       expectNull: Boolean = false): Unit = {
@@ -1217,11 +1271,11 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     unaryMathFunctionEvaluation(Tanh, math.tanh)
   }
 
-  test("toDeg") {
+  test("toDegrees") {
     unaryMathFunctionEvaluation(ToDegrees, math.toDegrees)
   }
 
-  test("toRad") {
+  test("toRadians") {
     unaryMathFunctionEvaluation(ToRadians, math.toRadians)
   }
 

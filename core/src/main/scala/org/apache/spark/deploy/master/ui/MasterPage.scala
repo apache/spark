@@ -35,10 +35,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 
-  override def renderJson(request: HttpServletRequest): JValue = {
+  def getMasterState: MasterStateResponse = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
-    JsonProtocol.writeMasterState(state)
+    Await.result(stateFuture, timeout)
+  }
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    JsonProtocol.writeMasterState(getMasterState)
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
@@ -68,11 +71,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
+    val state = getMasterState
 
     val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
+    val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
     val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
@@ -106,12 +109,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Workers:</strong> {state.workers.size}</li>
-              <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
-                {state.workers.map(_.coresUsed).sum} Used</li>
-              <li><strong>Memory:</strong>
-                {Utils.megabytesToString(state.workers.map(_.memory).sum)} Total,
-                {Utils.megabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
+              <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
+              <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
+                {aliveWorkers.map(_.coresUsed).sum} Used</li>
+              <li><strong>Memory in use:</strong>
+                {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
+                {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.size} Running,
                 {state.completedApps.size} Completed </li>

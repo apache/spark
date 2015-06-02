@@ -23,6 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -232,7 +233,7 @@ object CatalystTypeConverters {
     case other => other
   }
 
-  /** 
+  /**
    * Converts Catalyst types used internally in rows to standard Scala types
    * This method is slow, and for batch conversion you should be using converter
    * produced by createToScalaConverter.

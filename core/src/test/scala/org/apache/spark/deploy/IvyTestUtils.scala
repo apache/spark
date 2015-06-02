@@ -18,15 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.nio.file.{Files, Path}
 import java.util.jar.{JarEntry, JarOutputStream}
 
-import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
-
-import com.google.common.io.ByteStreams
+import com.google.common.io.{Files, ByteStreams}
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 
 private[deploy] object IvyTestUtils {
@@ -37,9 +35,9 @@ private[deploy] object IvyTestUtils {
    */
   private def pathFromCoordinate(
       artifact: MavenCoordinate,
-      prefix: Path,
+      prefix: File,
       ext: String,
-      useIvyLayout: Boolean): Path = {
+      useIvyLayout: Boolean): File = {
     val groupDirs = artifact.groupId.replace(".", File.separator)
     val artifactDirs = artifact.artifactId
     val artifactPath =
@@ -48,7 +46,7 @@ private[deploy] object IvyTestUtils {
       } else {
         Seq(groupDirs, artifactDirs, artifact.version, ext + "s").mkString(File.separator)
       }
-    new File(prefix.toFile, artifactPath).toPath
+    new File(prefix, artifactPath)
   }
 
   private def artifactName(artifact: MavenCoordinate, ext: String = ".jar"): String = {
@@ -164,18 +162,19 @@ private[deploy] object IvyTestUtils {
   private def createLocalRepository(
       artifact: MavenCoordinate,
       dependencies: Option[Seq[MavenCoordinate]] = None,
-      tempDir: Option[Path] = None,
+      tempDir: Option[File] = None,
       useIvyLayout: Boolean = false,
-      withPython: Boolean = false): Path = {
+      withPython: Boolean = false): File = {
     // Where the root of the repository exists, and what Ivy will search in
-    val tempPath = tempDir.getOrElse(Files.createTempDirectory(null))
+    val tempPath = tempDir.getOrElse(Files.createTempDir())
     // Create directory if it doesn't exist
-    Files.createDirectories(tempPath)
+    Files.createParentDirs(tempPath)
     // Where to create temporary class files and such
-    val root = Files.createTempDirectory(tempPath, null).toFile
+    val root = new File(tempPath, tempPath.hashCode().toString)
+    Files.createParentDirs(new File(root, "dummy"))
     try {
       val jarPath = pathFromCoordinate(artifact, tempPath, "jar", useIvyLayout)
-      Files.createDirectories(jarPath)
+      Files.createParentDirs(new File(jarPath, "dummy"))
       val className = "MyLib"
 
       val javaClass = createJavaClass(root, className, artifact.groupId)
@@ -188,11 +187,11 @@ private[deploy] object IvyTestUtils {
         } else {
           Seq(javaFile)
         }
-      val jarFile = packJar(jarPath.toFile, artifact, allFiles)
+      val jarFile = packJar(jarPath, artifact, allFiles)
       assert(jarFile.exists(), "Problem creating Jar file")
       val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
-      Files.createDirectories(pomPath)
-      val pomFile = createPom(pomPath.toFile, artifact, dependencies)
+      Files.createParentDirs(new File(pomPath, "dummy"))
+      val pomFile = createPom(pomPath, artifact, dependencies)
       assert(pomFile.exists(), "Problem creating Pom file")
     } finally {
       FileUtils.deleteDirectory(root)
@@ -212,9 +211,9 @@ private[deploy] object IvyTestUtils {
   private[deploy] def createLocalRepositoryForTests(
       artifact: MavenCoordinate,
       dependencies: Option[String],
-      rootDir: Option[Path],
+      rootDir: Option[File],
       useIvyLayout: Boolean = false,
-      withPython: Boolean = false): Path = {
+      withPython: Boolean = false): File = {
     val deps = dependencies.map(SparkSubmitUtils.extractMavenCoordinates)
     val mainRepo = createLocalRepository(artifact, deps, rootDir, useIvyLayout, withPython)
     deps.foreach { seq => seq.foreach { dep =>
@@ -236,26 +235,26 @@ private[deploy] object IvyTestUtils {
   private[deploy] def withRepository(
       artifact: MavenCoordinate,
       dependencies: Option[String],
-      rootDir: Option[Path],
+      rootDir: Option[File],
       useIvyLayout: Boolean = false,
       withPython: Boolean = false)(f: String => Unit): Unit = {
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
       withPython)
     try {
-      f(repo.toUri.toString)
+      f(repo.toURI.toString)
     } finally {
       // Clean up
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2")) {
-        FileUtils.deleteDirectory(new File(repo.toFile,
+        FileUtils.deleteDirectory(new File(repo,
           artifact.groupId.replace(".", File.separator) + File.separator + artifact.artifactId))
         dependencies.map(SparkSubmitUtils.extractMavenCoordinates).foreach { seq =>
           seq.foreach { dep =>
-            FileUtils.deleteDirectory(new File(repo.toFile,
+            FileUtils.deleteDirectory(new File(repo,
               dep.artifactId.replace(".", File.separator)))
           }
         }
       } else {
-        FileUtils.deleteDirectory(repo.toFile)
+        FileUtils.deleteDirectory(repo)
       }
     }
   }

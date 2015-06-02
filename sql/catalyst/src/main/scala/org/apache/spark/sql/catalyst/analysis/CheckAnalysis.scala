@@ -69,7 +69,17 @@ trait CheckAnalysis {
           case b: BinaryExpression if !b.resolved =>
             failAnalysis(
               s"invalid expression ${b.prettyString} " +
-                s"between ${b.left.simpleString} and ${b.right.simpleString}")
+              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
+
+          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
+            failAnalysis(
+              s"Could not resolve window function '$name'. " +
+              "Note that, using window functions currently requires a HiveContext")
+
+          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+            // The window spec is not valid.
+            val reason = windowSpec.validate.get
+            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
         }
 
         operator match {
@@ -81,12 +91,12 @@ trait CheckAnalysis {
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
-              case e: Attribute if !groupingExprs.contains(e) =>
+              case e: Attribute if groupingExprs.find(_ semanticEquals e).isEmpty =>
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() if you don't care which value you get.")
-              case e if groupingExprs.contains(e) => // OK
+              case e if groupingExprs.find(_ semanticEquals e).isDefined => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }

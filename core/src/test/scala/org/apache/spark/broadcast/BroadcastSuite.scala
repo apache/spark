@@ -17,11 +17,13 @@
 
 package org.apache.spark.broadcast
 
+import scala.concurrent.duration._
 import scala.util.Random
 
-import org.scalatest.{Assertions, FunSuite}
+import org.scalatest.Assertions
+import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkEnv}
+import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
@@ -43,7 +45,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-class BroadcastSuite extends FunSuite with LocalSparkContext {
+class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   private val httpConf = broadcastConf("HttpBroadcastFactory")
   private val torrentConf = broadcastConf("TorrentBroadcastFactory")
@@ -284,7 +286,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
     }
 
-    testUnpersistBroadcast(distributed, numSlaves,  torrentConf, afterCreation,
+    testUnpersistBroadcast(distributed, numSlaves, torrentConf, afterCreation,
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 
@@ -307,7 +309,17 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       removeFromDriver: Boolean) {
 
     sc = if (distributed) {
-      new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", broadcastConf)
+      val _sc =
+        new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", broadcastConf)
+      // Wait until all salves are up
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        _sc.jobProgressListener.synchronized {
+          val numBlockManagers = _sc.jobProgressListener.blockManagerIds.size
+          assert(numBlockManagers == numSlaves + 1,
+            s"Expect ${numSlaves + 1} block managers, but was ${numBlockManagers}")
+        }
+      }
+      _sc
     } else {
       new SparkContext("local", "test", broadcastConf)
     }

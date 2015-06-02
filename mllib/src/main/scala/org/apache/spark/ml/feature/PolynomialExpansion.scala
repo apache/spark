@@ -19,22 +19,26 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamValidators, IntParam, ParamMap}
+import org.apache.spark.ml.param.{IntParam, ParamValidators}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
  * which is available at [[http://en.wikipedia.org/wiki/Polynomial_expansion]], "In mathematics, an
  * expansion of a product of sums expresses it as a sum of products by using the fact that
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
- * `(x, y)`, if we want to expand it with degree 2, then we get `(x, y, x * x, x * y, y * y)`.
+ * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
  */
-@AlphaComponent
-class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
+@Experimental
+class PolynomialExpansion(override val uid: String)
+  extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
+
+  def this() = this(Identifiable.randomUID("poly"))
 
   /**
    * The polynomial degree to expand, which should be >= 1.  A value of 1 means no expansion.
@@ -47,14 +51,13 @@ class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExp
   setDefault(degree -> 2)
 
   /** @group getParam */
-  def getDegree: Int = getOrDefault(degree)
+  def getDegree: Int = $(degree)
 
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = { v =>
-    val d = paramMap(degree)
-    PolynomialExpansion.expand(v, d)
+  override protected def createTransformFunc: Vector => Vector = { v =>
+    PolynomialExpansion.expand(v, $(degree))
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
@@ -72,7 +75,7 @@ class PolynomialExpansion extends UnaryTransformer[Vector, Vector, PolynomialExp
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.
  */
-object PolynomialExpansion {
+private[feature] object PolynomialExpansion {
 
   private def choose(n: Int, k: Int): Int = {
     Range(n, n - k, -1).product / Range(k, 1, -1).product

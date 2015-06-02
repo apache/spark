@@ -161,7 +161,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    val hashValues = expressions.zipWithIndex.map { case (e,i) =>
+    val hashValues = expressions.zipWithIndex.map { case (e, i) =>
       val elementName = newTermName(s"c$i")
       val nonNull = e.dataType match {
         case BooleanType => q"if ($elementName) 0 else 1"

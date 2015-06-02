@@ -243,8 +243,10 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   /**
    * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
    * a long (i.e. precision <= 18)
+   *
+   * Returned value is needed by CatalystConverter, which doesn't reuse the Decimal object.
    */
-  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Unit = {
+  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Decimal = {
     val precision = ctype.precisionInfo.get.precision
     val scale = ctype.precisionInfo.get.scale
     val bytes = value.getBytes
@@ -480,7 +482,7 @@ private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverte
 
   override def hasDictionarySupport: Boolean = true
 
-  override def setDictionary(dictionary: Dictionary):Unit =
+  override def setDictionary(dictionary: Dictionary): Unit =
     dict = Array.tabulate(dictionary.getMaxId + 1) { dictionary.decodeToBinary(_).getBytes }
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
@@ -591,8 +593,8 @@ private[parquet] class CatalystArrayConverter(
       CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
       elementType,
       false),
-    fieldIndex=0,
-    parent=this)
+    fieldIndex = 0,
+    parent = this)
 
   override def getConverter(fieldIndex: Int): Converter = converter
 
@@ -601,7 +603,7 @@ private[parquet] class CatalystArrayConverter(
 
   override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
     // fieldIndex is ignored (assumed to be zero but not checked)
-    if(value == null) {
+    if (value == null) {
       throw new IllegalArgumentException("Null values inside Parquet arrays are not supported!")
     }
     buffer += value
@@ -654,8 +656,8 @@ private[parquet] class CatalystNativeArrayConverter(
       CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
       elementType,
       false),
-    fieldIndex=0,
-    parent=this)
+    fieldIndex = 0,
+    parent = this)
 
   override def getConverter(fieldIndex: Int): Converter = converter
 

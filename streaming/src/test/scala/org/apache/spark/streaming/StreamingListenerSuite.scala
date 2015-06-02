@@ -57,6 +57,11 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       info.totalDelay should be (None)
     })
 
+    batchInfosSubmitted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
+
     isInIncreasingOrder(batchInfosSubmitted.map(_.submissionTime)) should be (true)
 
     // SPARK-6766: processingStartTime of batch info should not be None when starting
@@ -69,6 +74,11 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       info.processingDelay should be (None)
       info.totalDelay should be (None)
     })
+
+    batchInfosStarted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
 
     isInIncreasingOrder(batchInfosStarted.map(_.submissionTime)) should be (true)
     isInIncreasingOrder(batchInfosStarted.map(_.processingStartTime.get)) should be (true)
@@ -85,6 +95,11 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       info.processingDelay.get should be >= 0L
       info.totalDelay.get should be >= 0L
     })
+
+    batchInfosCompleted.foreach { info =>
+      info.numRecords should be (1L)
+      info.streamIdToNumRecords should be (Map(0 -> 1L))
+    }
 
     isInIncreasingOrder(batchInfosCompleted.map(_.submissionTime)) should be (true)
     isInIncreasingOrder(batchInfosCompleted.map(_.processingStartTime.get)) should be (true)
@@ -118,8 +133,10 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
-    for(i <- 1 until seq.size) {
-      if (seq(i - 1) > seq(i)) return false
+    for (i <- 1 until seq.size) {
+      if (seq(i - 1) > seq(i)) {
+        return false
+      }
     }
     true
   }

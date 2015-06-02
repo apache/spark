@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{SQLConf, execution}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
@@ -31,7 +30,7 @@ import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
 
 
-class PlannerSuite extends FunSuite {
+class PlannerSuite extends SparkFunSuite {
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head

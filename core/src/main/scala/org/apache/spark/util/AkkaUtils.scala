@@ -63,7 +63,7 @@ private[spark] object AkkaUtils extends Logging {
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
 
-    val akkaThreads   = conf.getInt("spark.akka.threads", 4)
+    val akkaThreads = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
     val akkaTimeoutS = conf.getTimeAsSeconds("spark.akka.timeout",
       conf.get("spark.network.timeout", "120s"))
@@ -183,7 +183,9 @@ private[spark] object AkkaUtils extends Logging {
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      Thread.sleep(retryInterval)
+      if (attempts < maxAttempts) {
+        Thread.sleep(retryInterval)
+      }
     }
 
     throw new SparkException(
@@ -233,7 +235,7 @@ private[spark] object AkkaUtils extends Logging {
       protocol: String,
       systemName: String,
       host: String,
-      port: Any,
+      port: Int,
       actorName: String): String = {
     s"$protocol://$systemName@$host:$port/user/$actorName"
   }

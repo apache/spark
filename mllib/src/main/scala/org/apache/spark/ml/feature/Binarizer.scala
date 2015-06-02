@@ -17,22 +17,25 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Binarize a column of continuous features given a threshold.
  */
-@AlphaComponent
-final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
+@Experimental
+final class Binarizer(override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol {
+
+  def this() = this(Identifiable.randomUID("binarizer"))
 
   /**
    * Param for threshold used to binarize continuous features.
@@ -44,7 +47,7 @@ final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
 
   /** @group getParam */
-  def getThreshold: Double = getOrDefault(threshold)
+  def getThreshold: Double = $(threshold)
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
@@ -57,23 +60,21 @@ final class Binarizer extends Transformer with HasInputCol with HasOutputCol {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val td = map(threshold)
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    val td = $(threshold)
     val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val outputColName = map(outputCol)
+    val outputColName = $(outputCol)
     val metadata = BinaryAttribute.defaultAttr.withName(outputColName).toMetadata()
     dataset.select(col("*"),
-      binarizer(col(map(inputCol))).as(outputColName, metadata))
+      binarizer(col($(inputCol))).as(outputColName, metadata))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), DoubleType)
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
 
     val inputFields = schema.fields
-    val outputColName = map(outputCol)
+    val outputColName = $(outputCol)
 
     require(inputFields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")

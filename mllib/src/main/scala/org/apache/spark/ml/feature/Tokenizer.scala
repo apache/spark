@@ -17,19 +17,24 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
-import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
+import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
+ *
+ * @see [[RegexTokenizer]]
  */
-@AlphaComponent
-class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
+@Experimental
+class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
-  override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
+  def this() = this(Identifiable.randomUID("tok"))
+
+  override protected def createTransformFunc: String => Seq[String] = {
     _.toLowerCase.split("\\s")
   }
 
@@ -41,32 +46,35 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 }
 
 /**
- * :: AlphaComponent ::
- * A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default) 
- * or using it to split the text (set matching to false). Optional parameters also allow filtering
- * tokens using a minimal length.
+ * :: Experimental ::
+ * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
+ * the text (default) or repeatedly matching the regex (if `gaps` is true).
+ * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
-@AlphaComponent
-class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+@Experimental
+class RegexTokenizer(override val uid: String)
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+
+  def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
    * Minimum token length, >= 0.
    * Default: 1, to avoid returning empty strings
    * @group param
    */
-  val minTokenLength: IntParam = new IntParam(this, "minLength", "minimum token length (>= 0)",
+  val minTokenLength: IntParam = new IntParam(this, "minTokenLength", "minimum token length (>= 0)",
     ParamValidators.gtEq(0))
 
   /** @group setParam */
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
 
   /** @group getParam */
-  def getMinTokenLength: Int = getOrDefault(minTokenLength)
+  def getMinTokenLength: Int = $(minTokenLength)
 
   /**
-   * Indicates whether regex splits on gaps (true) or matching tokens (false).
-   * Default: false
+   * Indicates whether regex splits on gaps (true) or matches tokens (false).
+   * Default: true
    * @group param
    */
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
@@ -75,11 +83,11 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def setGaps(value: Boolean): this.type = set(gaps, value)
 
   /** @group getParam */
-  def getGaps: Boolean = getOrDefault(gaps)
+  def getGaps: Boolean = $(gaps)
 
   /**
-   * Regex pattern used by tokenizer.
-   * Default: `"\\p{L}+|[^\\p{L}\\s]+"`
+   * Regex pattern used to match delimiters if [[gaps]] is true or tokens if [[gaps]] is false.
+   * Default: `"\\s+"`
    * @group param
    */
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
@@ -88,14 +96,14 @@ class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenize
   def setPattern(value: String): this.type = set(pattern, value)
 
   /** @group getParam */
-  def getPattern: String = getOrDefault(pattern)
+  def getPattern: String = $(pattern)
 
-  setDefault(minTokenLength -> 1, gaps -> false, pattern -> "\\p{L}+|[^\\p{L}\\s]+")
+  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+")
 
-  override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { str =>
-    val re = paramMap(pattern).r
-    val tokens = if (paramMap(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
-    val minLength = paramMap(minTokenLength)
+  override protected def createTransformFunc: String => Seq[String] = { str =>
+    val re = $(pattern).r
+    val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
+    val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
   }
 

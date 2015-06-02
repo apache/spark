@@ -17,27 +17,28 @@
 
 package org.apache.spark.ml.param
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ParamsSuite extends FunSuite {
+class ParamsSuite extends SparkFunSuite {
 
   test("param") {
     val solver = new TestParams()
+    val uid = solver.uid
     import solver.{maxIter, inputCol}
 
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "max number of iterations (>= 0)")
-    assert(maxIter.parent.eq(solver))
-    assert(maxIter.toString === "maxIter: max number of iterations (>= 0) (default: 10)")
+    assert(maxIter.parent === uid)
+    assert(maxIter.toString === s"${uid}__maxIter")
     assert(!maxIter.isValid(-1))
     assert(maxIter.isValid(0))
     assert(maxIter.isValid(1))
 
     solver.setMaxIter(5)
-    assert(maxIter.toString ===
+    assert(solver.explainParam(maxIter) ===
       "maxIter: max number of iterations (>= 0) (default: 10, current: 5)")
 
-    assert(inputCol.toString === "inputCol: input column name (undefined)")
+    assert(inputCol.toString === s"${uid}__inputCol")
 
     intercept[IllegalArgumentException] {
       solver.setMaxIter(-1)
@@ -118,23 +119,28 @@ class ParamsSuite extends FunSuite {
     assert(!solver.isDefined(inputCol))
     intercept[NoSuchElementException](solver.getInputCol)
 
-    assert(solver.explainParams() === Seq(inputCol, maxIter).mkString("\n"))
+    assert(solver.explainParam(maxIter) ===
+      "maxIter: max number of iterations (>= 0) (default: 10, current: 100)")
+    assert(solver.explainParams() ===
+      Seq(inputCol, maxIter).map(solver.explainParam).mkString("\n"))
 
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))
+    assert(solver.hasParam("inputCol"))
+    assert(!solver.hasParam("abc"))
     intercept[NoSuchElementException] {
       solver.getParam("abc")
     }
 
     intercept[IllegalArgumentException] {
-      solver.validate()
+      solver.validateParams()
     }
-    solver.validate(ParamMap(inputCol -> "input"))
+    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validate()
+    solver.validateParams()
     intercept[IllegalArgumentException] {
       ParamMap(maxIter -> -10)
     }
@@ -144,6 +150,11 @@ class ParamsSuite extends FunSuite {
 
     solver.clearMaxIter()
     assert(!solver.isSet(maxIter))
+
+    val copied = solver.copy(ParamMap(solver.maxIter -> 50))
+    assert(copied.uid === solver.uid)
+    assert(copied.getInputCol === solver.getInputCol)
+    assert(copied.getMaxIter === 50)
   }
 
   test("ParamValidate") {
@@ -188,5 +199,25 @@ class ParamsSuite extends FunSuite {
 
     val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
+  }
+}
+
+object ParamsSuite extends SparkFunSuite {
+
+  /**
+   * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered
+   * by names; 3) param parent has the same UID as the object's UID; 4) param name is the same as
+   * the param method name.
+   */
+  def checkParams(obj: Params, expectedNumParams: Int): Unit = {
+    val params = obj.params
+    require(params.length === expectedNumParams,
+      s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
+    val paramNames = params.map(_.name)
+    require(paramNames === paramNames.sorted)
+    params.foreach { p =>
+      assert(p.parent === obj.uid)
+      assert(obj.getParam(p.name) === p)
+    }
   }
 }

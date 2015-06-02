@@ -25,12 +25,16 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class CliSuite extends FunSuite with BeforeAndAfter with Logging {
+/**
+ * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
+ * Hive metastore and warehouse.
+ */
+class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
 
@@ -58,13 +62,13 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-         |  --driver-class-path ${sys.props("java.class.path")}
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
     var next = 0
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
+    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
+    val queryStream = new ByteArrayInputStream(queries.map(_ + "\n").mkString.getBytes)
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
@@ -124,7 +128,7 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "Time taken: "
+        -> "OK"
     )
   }
 
@@ -149,6 +153,35 @@ class CliSuite extends FunSuite with BeforeAndAfter with Logging {
         -> "OK",
       ""
         -> "hive_test"
+    )
+  }
+
+  test("Commands using SerDe provided in --jars") {
+    val jarFile =
+      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+        .split("/")
+        .mkString(File.separator)
+
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
+    runCliWithin(1.minute, Seq("--jars", s"$jarFile"))(
+      """CREATE TABLE t1(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "OK",
+      "CREATE TABLE sourceTable (key INT, val STRING);"
+        -> "OK",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+        -> "OK",
+      "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
+        -> "Time taken:",
+      "SELECT count(key) FROM t1;"
+        -> "5",
+      "DROP TABLE t1;"
+        -> "OK",
+      "DROP TABLE sourceTable;"
+        -> "OK"
     )
   }
 }

@@ -45,7 +45,7 @@ private[streaming] case class BatchCleanupEvent(times: Seq[Time])
 private[streaming]
 case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
   def getBlocksOfStream(streamId: Int): Seq[ReceivedBlockInfo] = {
-    streamIdToAllocatedBlocks.get(streamId).getOrElse(Seq.empty)
+    streamIdToAllocatedBlocks.getOrElse(streamId, Seq.empty)
   }
 }
 
@@ -63,6 +63,7 @@ private[streaming] class ReceivedBlockTracker(
     hadoopConf: Configuration,
     streamIds: Seq[Int],
     clock: Clock,
+    recoverFromWriteAheadLog: Boolean,
     checkpointDirOption: Option[String])
   extends Logging {
 
@@ -75,7 +76,9 @@ private[streaming] class ReceivedBlockTracker(
   private var lastAllocatedBatchTime: Time = null
 
   // Recover block information from write ahead logs
-  recoverFromWriteAheadLogs()
+  if (recoverFromWriteAheadLog) {
+    recoverPastEvents()
+  }
 
   /** Add received block. This event will get written to the write ahead log (if enabled). */
   def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = synchronized {
@@ -150,7 +153,7 @@ private[streaming] class ReceivedBlockTracker(
    * returns only after the files are cleaned up.
    */
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
-    assert(cleanupThreshTime.milliseconds < clock.getTimeMillis())
+    require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
@@ -167,10 +170,11 @@ private[streaming] class ReceivedBlockTracker(
    * Recover all the tracker actions from the write ahead logs to recover the state (unallocated
    * and allocated block info) prior to failure.
    */
-  private def recoverFromWriteAheadLogs(): Unit = synchronized {
+  private def recoverPastEvents(): Unit = synchronized {
     // Insert the recovered block information
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
+      receivedBlockInfo.setBlockIdInvalid()
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
@@ -224,19 +228,9 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Optionally create the write ahead log manager only if the feature is enabled */
   private def createWriteAheadLog(): Option[WriteAheadLog] = {
-    if (WriteAheadLogUtils.enableReceiverLog(conf)) {
-      if (checkpointDirOption.isEmpty) {
-        throw new SparkException(
-          "Cannot enable receiver write-ahead log without checkpoint directory set. " +
-            "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
-            "See documentation for more details.")
-      }
+    checkpointDirOption.map { checkpointDir =>
       val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDirOption.get)
-
-      val log = WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
-      Some(log)
-    } else {
-      None
+      WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
     }
   }
 

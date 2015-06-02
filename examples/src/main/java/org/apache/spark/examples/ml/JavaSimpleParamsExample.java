@@ -71,7 +71,7 @@ public class JavaSimpleParamsExample {
     // we can view the parameters it used during fit().
     // This prints the parameter (name: value) pairs, where names are unique IDs for this
     // LogisticRegression instance.
-    System.out.println("Model 1 was fit using parameters: " + model1.fittingParamMap());
+    System.out.println("Model 1 was fit using parameters: " + model1.parent().extractParamMap());
 
     // We may alternatively specify parameters using a ParamMap.
     ParamMap paramMap = new ParamMap();
@@ -87,7 +87,7 @@ public class JavaSimpleParamsExample {
     // Now learn a new model using the paramMapCombined parameters.
     // paramMapCombined overrides all parameters set earlier via lr.set* methods.
     LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
-    System.out.println("Model 2 was fit using parameters: " + model2.fittingParamMap());
+    System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
     // Prepare test documents.
     List<LabeledPoint> localTest = Lists.newArrayList(
@@ -97,7 +97,7 @@ public class JavaSimpleParamsExample {
     DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform() method.
-    // LogisticRegression.transform will only use the 'features' column.
+    // LogisticRegressionModel.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     DataFrame results = model2.transform(test);

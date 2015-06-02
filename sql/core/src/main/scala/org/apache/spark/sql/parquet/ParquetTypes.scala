@@ -489,7 +489,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     val children =
       fs
         .globStatus(path)
-        .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+        .flatMap { status => if (status.isDir) fs.listStatus(status.getPath) else List(status) }
         .filterNot { status =>
           val name = status.getPath.getName
           (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE

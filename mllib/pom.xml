@@ -42,6 +42,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -141,16 +148,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <resources>
-      <resource>
-        <directory>../python</directory>
-        <includes>
-          <include>pyspark/mllib/*.py</include>
-          <include>pyspark/mllib/stat/*.py</include>
-          <include>pyspark/ml/*.py</include>
-          <include>pyspark/ml/param/*.py</include>
-        </includes>
-      </resource>
-    </resources>
   </build>
 </project>

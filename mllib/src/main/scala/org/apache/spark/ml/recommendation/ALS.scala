@@ -31,25 +31,51 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.netlib.util.intW
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
+ * Common params for ALS and ALSModel.
+ */
+private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
+  /**
+   * Param for the column name for user ids.
+   * Default: "user"
+   * @group param
+   */
+  val userCol = new Param[String](this, "userCol", "column name for user ids")
+
+  /** @group getParam */
+  def getUserCol: String = $(userCol)
+
+  /**
+   * Param for the column name for item ids.
+   * Default: "item"
+   * @group param
+   */
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
+
+  /** @group getParam */
+  def getItemCol: String = $(itemCol)
+}
+
+/**
  * Common params for ALS.
  */
-private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval {
+private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
+  with HasPredictionCol with HasCheckpointInterval with HasSeed {
 
   /**
    * Param for rank of the matrix factorization (>= 1).
@@ -59,7 +85,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidators.gtEq(1))
 
   /** @group getParam */
-  def getRank: Int = getOrDefault(rank)
+  def getRank: Int = $(rank)
 
   /**
    * Param for number of user blocks (>= 1).
@@ -70,7 +96,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
     ParamValidators.gtEq(1))
 
   /** @group getParam */
-  def getNumUserBlocks: Int = getOrDefault(numUserBlocks)
+  def getNumUserBlocks: Int = $(numUserBlocks)
 
   /**
    * Param for number of item blocks (>= 1).
@@ -81,7 +107,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
       ParamValidators.gtEq(1))
 
   /** @group getParam */
-  def getNumItemBlocks: Int = getOrDefault(numItemBlocks)
+  def getNumItemBlocks: Int = $(numItemBlocks)
 
   /**
    * Param to decide whether to use implicit preference.
@@ -91,7 +117,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
 
   /** @group getParam */
-  def getImplicitPrefs: Boolean = getOrDefault(implicitPrefs)
+  def getImplicitPrefs: Boolean = $(implicitPrefs)
 
   /**
    * Param for the alpha parameter in the implicit preference formulation (>= 0).
@@ -102,27 +128,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
     ParamValidators.gtEq(0))
 
   /** @group getParam */
-  def getAlpha: Double = getOrDefault(alpha)
-
-  /**
-   * Param for the column name for user ids.
-   * Default: "user"
-   * @group param
-   */
-  val userCol = new Param[String](this, "userCol", "column name for user ids")
-
-  /** @group getParam */
-  def getUserCol: String = getOrDefault(userCol)
-
-  /**
-   * Param for the column name for item ids.
-   * Default: "item"
-   * @group param
-   */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
-
-  /** @group getParam */
-  def getItemCol: String = getOrDefault(itemCol)
+  def getAlpha: Double = $(alpha)
 
   /**
    * Param for the column name for ratings.
@@ -132,7 +138,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
 
   /** @group getParam */
-  def getRatingCol: String = getOrDefault(ratingCol)
+  def getRatingCol: String = $(ratingCol)
 
   /**
    * Param for whether to apply nonnegativity constraints.
@@ -143,7 +149,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
     this, "nonnegative", "whether to use nonnegative constraint for least squares")
 
   /** @group getParam */
-  def getNonnegative: Boolean = getOrDefault(nonnegative)
+  def getNonnegative: Boolean = $(nonnegative)
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
@@ -152,65 +158,69 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   /**
    * Validates and transforms the input schema.
    * @param schema input schema
-   * @param paramMap extra params
    * @return output schema
    */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    assert(schema(map(userCol)).dataType == IntegerType)
-    assert(schema(map(itemCol)).dataType== IntegerType)
-    val ratingType = schema(map(ratingCol)).dataType
-    assert(ratingType == FloatType || ratingType == DoubleType)
-    val predictionColName = map(predictionCol)
-    assert(!schema.fieldNames.contains(predictionColName),
-      s"Prediction column $predictionColName already exists.")
-    val newFields = schema.fields :+ StructField(map(predictionCol), FloatType, nullable = false)
-    StructType(newFields)
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+    val ratingType = schema($(ratingCol)).dataType
+    require(ratingType == FloatType || ratingType == DoubleType)
+    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
 
 /**
+ * :: Experimental ::
  * Model fitted by ALS.
+ *
+ * @param rank rank of the matrix factorization model
+ * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
+ * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
  */
+@Experimental
 class ALSModel private[ml] (
-    override val parent: ALS,
-    override val fittingParamMap: ParamMap,
-    k: Int,
-    userFactors: RDD[(Int, Array[Float])],
-    itemFactors: RDD[(Int, Array[Float])])
-  extends Model[ALSModel] with ALSParams {
+    override val uid: String,
+    val rank: Int,
+    @transient val userFactors: DataFrame,
+    @transient val itemFactors: DataFrame)
+  extends Model[ALSModel] with ALSModelParams {
+
+  /** @group setParam */
+  def setUserCol(value: String): this.type = set(userCol, value)
+
+  /** @group setParam */
+  def setItemCol(value: String): this.type = set(itemCol, value)
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    import dataset.sqlContext.implicits._
-    val map = extractParamMap(paramMap)
-    val users = userFactors.toDF("id", "features")
-    val items = itemFactors.toDF("id", "features")
-
+  override def transform(dataset: DataFrame): DataFrame = {
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
     val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
       if (userFeatures != null && itemFeatures != null) {
-        blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
+        blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
         Float.NaN
       }
     }
     dataset
-      .join(users, dataset(map(userCol)) === users("id"), "left")
-      .join(items, dataset(map(itemCol)) === items("id"), "left")
-      .select(dataset("*"), predict(users("features"), items("features")).as(map(predictionCol)))
+      .join(userFactors, dataset($(userCol)) === userFactors("id"), "left")
+      .join(itemFactors, dataset($(itemCol)) === itemFactors("id"), "left")
+      .select(dataset("*"),
+        predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
 
 
 /**
+ * :: Experimental ::
  * Alternating Least Squares (ALS) matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -239,9 +249,12 @@ class ALSModel private[ml] (
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS extends Estimator[ALSModel] with ALSParams {
+@Experimental
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
+
+  def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
   def setRank(value: Int): this.type = set(rank, value)
@@ -282,6 +295,9 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   /** @group setParam */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
@@ -292,25 +308,27 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     this
   }
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
-    val map = extractParamMap(paramMap)
+  override def fit(dataset: DataFrame): ALSModel = {
+    import dataset.sqlContext.implicits._
     val ratings = dataset
-      .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
+      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType),
+        col($(ratingCol)).cast(FloatType))
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
-    val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
-      numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
-      maxIter = map(maxIter), regParam = map(regParam), implicitPrefs = map(implicitPrefs),
-      alpha = map(alpha), nonnegative = map(nonnegative),
-      checkpointInterval = map(checkpointInterval))
-    val model = new ALSModel(this, map, map(rank), userFactors, itemFactors)
-    Params.inheritValues(map, this, model)
-    model
+    val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
+      numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
+      maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
+      alpha = $(alpha), nonnegative = $(nonnegative),
+      checkpointInterval = $(checkpointInterval), seed = $(seed))
+    val userDF = userFactors.toDF("id", "features")
+    val itemDF = itemFactors.toDF("id", "features")
+    val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
+    copyValues(model)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
 }
 
@@ -325,7 +343,11 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 @DeveloperApi
 object ALS extends Logging {
 
-  /** Rating class for better code readability. */
+  /**
+   * :: DeveloperApi ::
+   * Rating class for better code readability.
+   */
+  @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   /** Trait for least squares solvers applied to the normal equation. */
@@ -486,8 +508,10 @@ object ALS extends Logging {
   }
 
   /**
+   * :: DeveloperApi ::
    * Implementation of the ALS algorithm.
    */
+  @DeveloperApi
   def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,

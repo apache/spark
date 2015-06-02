@@ -150,8 +150,13 @@ import org.apache.spark.util.Utils
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.
  *
- *  Connection encryption (SSL) configuration is organized hierarchically. The user can configure
- *  the default SSL settings which will be used for all the supported communication protocols unless
+ *  When authentication is being used, encryption can also be enabled by setting the option
+ *  spark.authenticate.enableSaslEncryption to true. This is only supported by communication
+ *  channels that use the network-common library, and can be used as an alternative to SSL in those
+ *  cases.
+ *
+ *  SSL can be used for encryption for certain communication channels. The user can configure the
+ *  default SSL settings which will be used for all the supported communication protocols unless
  *  they are overwritten by protocol specific settings. This way the user can easily provide the
  *  common settings for all the protocols without disabling the ability to configure each one
  *  individually.
@@ -411,6 +416,14 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * @return true if authentication is enabled, otherwise false
    */
   def isAuthenticationEnabled(): Boolean = authOn
+
+  /**
+   * Checks whether SASL encryption should be enabled.
+   * @return Whether to enable SASL encryption when connecting to services that support it.
+   */
+  def isSaslEncryptionEnabled(): Boolean = {
+    sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
+  }
 
   /**
    * Gets the user used for authenticating HTTP connections.

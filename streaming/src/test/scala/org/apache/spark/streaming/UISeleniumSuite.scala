@@ -28,14 +28,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 
-
-
-
 /**
  * Selenium tests for the Spark Web UI.
  */
 class UISeleniumSuite
-  extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 
@@ -94,19 +91,34 @@ class UISeleniumSuite
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         // check whether streaming page exists
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
-        val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
-        statisticText should contain("Network receivers:")
-        statisticText should contain("Batch interval:")
+        val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
+        h3Text should contain("Streaming Statistics")
 
+        // Check stat table
+        val statTableHeaders = findAll(cssSelector("#stat-table th")).map(_.text).toSeq
+        statTableHeaders.exists(
+          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")) should be
+          (true)
+        statTableHeaders should contain ("Histograms")
+
+        val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
+        statTableCells.exists(_.contains("Input Rate")) should be (true)
+        statTableCells.exists(_.contains("Scheduling Delay")) should be (true)
+        statTableCells.exists(_.contains("Processing Time")) should be (true)
+        statTableCells.exists(_.contains("Total Delay")) should be (true)
+
+        // Check batch tables
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
         h4Text.exists(_.matches("Active Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Status")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time", "Total Delay")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Total Delay (?)")
         }
 
         val batchLinks =
@@ -176,11 +188,9 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
-        val statisticText = findAll(cssSelector("li strong")).map(_.text).toSeq
-        statisticText should not contain ("Network receivers:")
-        statisticText should not contain ("Batch interval:")
+        val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
+        h3Text should not contain("Streaming Statistics")
       }
     }
   }
 }
-  
