@@ -21,7 +21,6 @@ import java.io.OutputStream
 
 import scala.collection.mutable.ArrayBuffer
 
-
 /**
  * An OutputStream that writes to fixed-size chunks of byte arrays.
  *
@@ -134,6 +133,5 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     }
     result
   }
-
 
 }

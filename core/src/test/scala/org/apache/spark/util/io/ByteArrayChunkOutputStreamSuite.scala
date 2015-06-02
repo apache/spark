@@ -21,7 +21,6 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
-
 class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
 
   test("empty output") {

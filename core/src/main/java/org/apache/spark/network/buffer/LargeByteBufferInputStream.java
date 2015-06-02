@@ -38,7 +38,6 @@ public class LargeByteBufferInputStream extends InputStream {
     this(buffer, false);
   }
 
-
   public int read() {
     if (buffer == null || buffer.remaining() == 0) {
       return -1;

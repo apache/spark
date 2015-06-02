@@ -88,8 +88,6 @@ class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
     (0 until 200).foreach{idx =>
       arr(idx) should be (idx.toByte)
     }
-
   }
-
 
 }

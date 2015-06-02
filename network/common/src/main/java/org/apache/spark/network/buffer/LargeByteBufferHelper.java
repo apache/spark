@@ -67,7 +67,6 @@ public class LargeByteBufferHelper {
     return new WrappedLargeByteBuffer(chunks, maxChunk);
   }
 
-
   public static LargeByteBuffer mapFile(
       FileChannel channel,
       FileChannel.MapMode mode,
@@ -85,6 +84,5 @@ public class LargeByteBufferHelper {
     }
     return new WrappedLargeByteBuffer(chunks);
   }
-
 
 }

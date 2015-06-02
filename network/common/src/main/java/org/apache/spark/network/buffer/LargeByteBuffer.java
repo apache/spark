@@ -91,7 +91,6 @@ public interface LargeByteBuffer {
    */
   public LargeByteBuffer duplicate();
 
-
   public long remaining();
 
   /**
