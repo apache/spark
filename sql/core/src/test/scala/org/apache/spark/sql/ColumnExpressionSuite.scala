@@ -447,7 +447,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("rand") {
-    val randCol = testData.select('key, rand(5L).as("rand"))
+    val randCol = testData.select($"key", rand(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>
@@ -464,15 +464,15 @@ class ColumnExpressionSuite extends QueryTest {
 
     // We first create a plan with two Projects.
     // Project [rand + 1 AS rand1, rand - 1 AS rand2]
-    //   Project [key, Rand 5 AS rand]
+    //   Project [key, (Rand 5 + 1) AS rand]
     //     LogicalRDD [key, value]
     // Because Rand function is not deterministic, the column rand is not deterministic.
     // So, in the optimizer, we will not collapse Project [rand + 1 AS rand1, rand - 1 AS rand2]
     // and Project [key, Rand 5 AS rand]. The final plan still has two Projects.
     val dfWithTwoProjects =
       testData
-        .select('key, rand(5L).as("rand"))
-        .select(('rand + 1).as("rand1"), ('rand - 1).as("rand2"))
+        .select($"key", (rand(5L) + 1).as("rand"))
+        .select(($"rand" + 1).as("rand1"), ($"rand" - 1).as("rand2"))
     checkNumProjects(dfWithTwoProjects, 2)
 
     // Now, we add one more project rand1 - rand2 on top of the query plan.
@@ -481,13 +481,13 @@ class ColumnExpressionSuite extends QueryTest {
     // So, the plan will be optimized from ...
     // Project [(rand1 - rand2) AS (rand1 - rand2)]
     //   Project [rand + 1 AS rand1, rand - 1 AS rand2]
-    //     Project [key, Rand 5 AS rand]
+    //     Project [key, (Rand 5 + 1) AS rand]
     //       LogicalRDD [key, value]
     // to ...
     // Project [((rand + 1 AS rand1) - (rand - 1 AS rand2)) AS (rand1 - rand2)]
     //   Project [key, Rand 5 AS rand]
     //     LogicalRDD [key, value]
-    val dfWithThreeProjects = dfWithTwoProjects.select('rand1 - 'rand2)
+    val dfWithThreeProjects = dfWithTwoProjects.select($"rand1" - $"rand2")
     checkNumProjects(dfWithThreeProjects, 2)
     dfWithThreeProjects.collect().foreach { row =>
       assert(row.getDouble(0) === 2.0 +- 0.0001)

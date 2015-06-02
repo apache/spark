@@ -39,7 +39,7 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
-   * Returns true when an expressions always return the same result for a specific set of
+   * Returns true when the current expression always return the same result for a specific set of
    * input values.
    */
   // TODO: Need to well define what are explicit input values and implicit input values.
