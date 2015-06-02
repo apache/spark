@@ -84,7 +84,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       ByteBuffer b = underlying[i].duplicate();
       b.position(0);
       this.underlying[i] = b;
-      if (i != underlying.length -1 && b.capacity() != subBufferSize) {
+      if (i != underlying.length - 1 && b.capacity() != subBufferSize) {
         throw new IllegalArgumentException("All buffers, except for the final one, must have " +
           "size = " + subBufferSize);
       }
