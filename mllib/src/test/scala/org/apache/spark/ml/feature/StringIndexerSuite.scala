@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
+class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("StringIndexer") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
