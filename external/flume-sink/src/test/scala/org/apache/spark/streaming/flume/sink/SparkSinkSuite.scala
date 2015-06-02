@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.flume.Context
@@ -185,9 +184,8 @@ class SparkSinkSuite extends FunSuite {
     count: Int): Seq[(NettyTransceiver, SparkFlumeProtocol.Callback)] = {
 
     (1 to count).map(_ => {
-      lazy val channelFactoryExecutor =
-        Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
-          setNameFormat("Flume Receiver Channel Thread - %d").build())
+      lazy val channelFactoryExecutor = Executors.newCachedThreadPool(
+        new SparkSinkThreadFactory("Flume Receiver Channel Thread - %d"))
       lazy val channelFactory =
         new NioClientSocketChannelFactory(channelFactoryExecutor, channelFactoryExecutor)
       val transceiver = new NettyTransceiver(address, channelFactory)
