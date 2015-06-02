@@ -101,6 +101,9 @@ class KMeansModel(Saveable, Loader):
         """Find the cluster to which x belongs in this model."""
         best = 0
         best_distance = float("inf")
+        if isinstance(x, RDD):
+            return x.map(self.predict)
+
         x = _convert_to_vector(x)
         for i in xrange(len(self.centers)):
             distance = x.squared_distance(self.centers[i])
@@ -270,12 +273,30 @@ class GaussianMixture(object):
 class StreamingKMeansModel(KMeansModel):
     """
     .. note:: Experimental
+    Clustering model which can perform an online update of the centroids.
+
+    The update formula is given by
+    c_t+1 = [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t]
+    n_t+1 = n_t * a + m_t
+
+    where
+    c_t: Centroid at the n_th iteration.
+    n_t: Number of weights at the n_th iteration.
+    x_t: Centroid of the new data closest to c_t
+    m_t: Number of weights of the new data closest to c_t
+    c_t+1: New centroid
+    n_t+1: New number of weights.
+    a: Decay Factor, which gives the forgetfulnes
+
+    Note that if a is set to 1, it is the weighted mean of the previous
+    and new data. If it set to zero, the old centroids are completely
+    forgotten.
 
     >>> initCenters, initWeights = [[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0]
     >>> stkm = StreamingKMeansModel(initCenters, initWeights)
     >>> data = sc.parallelize([[-0.1, -0.1], [0.1, 0.1],
     ...                        [0.9, 0.9], [1.1, 1.1]])
-    >>> stkm = stkm.update(data, 1.0, "batches")
+    >>> stkm = stkm.update(data, 1.0, u"batches")
     >>> stkm.centers
     array([[ 0.,  0.],
            [ 1.,  1.]])
@@ -287,7 +308,7 @@ class StreamingKMeansModel(KMeansModel):
     [3.0, 3.0]
     >>> decayFactor = 0.0
     >>> data = sc.parallelize([DenseVector([1.5, 1.5]), DenseVector([0.2, 0.2])])
-    >>> stkm = stkm.update(data, 0.0, "batches")
+    >>> stkm = stkm.update(data, 0.0, u"batches")
     >>> stkm.centers
     array([[ 0.2,  0.2],
            [ 1.5,  1.5]])
@@ -304,9 +325,22 @@ class StreamingKMeansModel(KMeansModel):
 
     @property
     def getClusterWeights(self):
+        """Convenience method to return the cluster weights."""
         return self._clusterWeights
 
     def update(self, data, decayFactor, timeUnit):
+        """Update the centroids, according to data
+
+        Parameters
+        ----------
+        data: Should be a RDD that represents the new data.
+
+        decayFactor: forgetfulness of the previous centroids.
+
+        timeUnit: Can be "batches" or "points"
+        If points, then the decay factor is raised to the power of
+        number of new points and if batches, it is used as it is.
+        """
         if not isinstance(data, RDD):
             raise TypeError("data should be of a RDD, got %s." % type(data))
         data = data.map(_convert_to_vector)
@@ -326,6 +360,21 @@ class StreamingKMeansModel(KMeansModel):
 class StreamingKMeans(object):
     """
     .. note:: Experimental
+
+    Provides methods to set k, decayFactor, timeUnit to train and
+    predict the incoming data
+
+    Parameters
+    ----------
+    k: int
+       Number of clusters
+
+    decayFactor: float
+        Forgetfulness of the previous centroid.
+
+    timeUnit: str, "batches" or "points"
+        If points, then the decayfactor is raised to the power of new
+        points.
     """
     def __init__(self, k=2, decayFactor=1.0, timeUnit="batches"):
         self._k = k
@@ -347,14 +396,20 @@ class StreamingKMeans(object):
                 "got type %d" % type(dstream))
 
     def setK(self, k):
+        """Set number of clusters."""
         self._k = k
         return self
 
     def setDecayFactor(self, decayFactor):
+        """Set decay factor."""
         self._decayFactor = decayFactor
         return self
 
     def setHalfLife(self, halfLife, timeUnit):
+        """
+        Set number of instances after which the centroids at
+        has 0.5 weightage
+        """
         self._timeUnit = timeUnit
         self._decayFactor = exp(log(0.5) / halfLife)
         return self
@@ -364,6 +419,10 @@ class StreamingKMeans(object):
         return self
 
     def setRandomCenters(self, dim, weight, seed):
+        """
+        Set the initial centres to be random samples from
+        a gaussian population with constant weights.
+        """
         rng = random.RandomState(seed)
         clusterCenters = rng.randn(self._k, dim)
         clusterWeights = tile(weight, self._k)
@@ -371,22 +430,29 @@ class StreamingKMeans(object):
         return self
 
     def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
         self._validate(dstream)
 
-        def update(_, rdd):
-            if rdd:
-                self.model = self.model.update(rdd, self._decayFactor, self._timeUnit)
+        def update(rdd):
+            self.model.update(rdd, self._decayFactor, self._timeUnit)
 
         dstream.foreachRDD(update)
-        return self
 
     def predictOn(self, dstream):
+        """
+        Make predictions on a dstream.
+        Returns a transformed dstream object
+        """
         self._validate(dstream)
-        dstream.map(self.model.predict)
+        return dstream.map(self.model.predict)
 
     def predictOnValues(self, dstream):
+        """
+        Make predictions on a keyed dstream.
+        Returns a transformed dstream object.
+        """
         self._validate(dstream)
-        dstream.mapValues(self.model.predict)
+        return dstream.mapValues(self.model.predict)
 
 
 def _test():

@@ -23,8 +23,9 @@ import os
 import sys
 import tempfile
 import array as pyarray
+from time import time, sleep
 
-from numpy import array, array_equal, zeros, inf
+from numpy import array, array_equal, zeros, inf, all
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -38,7 +39,7 @@ else:
 
 from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
-from pyspark.mllib.clustering import StreamingKMeans
+from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.regression import LabeledPoint
@@ -67,6 +68,15 @@ sc = SparkContext('local[4]', "MLlib tests")
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = sc
+
+
+class MLLibStreamingTestCase(unittest.TestCase):
+    def setUp(self):
+        self.sc = sc
+        self.ssc = StreamingContext(self.sc, 1.0)
+
+    def tearDown(self):
+        self.ssc.stop(False)
 
 
 def _squared_distance(a, b):
@@ -865,7 +875,7 @@ class ElementwiseProductTests(MLlibTestCase):
             eprod.transform(sparsevec), SparseVector(3, [0], [3]))
 
 
-class StreamingKMeansTest(MLlibTestCase):
+class StreamingKMeansTest(MLLibStreamingTestCase):
     def test_model_params(self):
         stkm = StreamingKMeans()
         stkm.setK(5).setDecayFactor(0.0)
@@ -877,30 +887,64 @@ class StreamingKMeansTest(MLlibTestCase):
         self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
 
         stkm.setInitialCenters([[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0])
-        self.assertEqual(stkm.model.centers, [[0.0, 0.0], [1.0, 1.0]])
-        self.assertEqual(stkm.model.getClusterWeights, [1.0, 1.0])
+        self.assertEquals(stkm.model.centers, [[0.0, 0.0], [1.0, 1.0]])
+        self.assertEquals(stkm.model.getClusterWeights, [1.0, 1.0])
 
-    def test_model(self):
+    def _ssc_wait(self, start_time, end_time, sleep_time):
+        while time() - start_time < end_time:
+            sleep(0.01)
+
+    def test_trainOn_model(self):
+        # Test the model on toy data.
         stkm = StreamingKMeans()
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
         weights = [1.0, 1.0, 1.0, 1.0]
         stkm.setInitialCenters(initCenters, weights)
 
+        # Create a toy dataset by setting a tiny offest for each point.
         offsets = [[0, 0.1], [0, -0.1], [0.1, 0], [-0.1, 0]]
         batches = []
-
         for offset in offsets:
             batches.append([[offset[0] + center[0], offset[1] + center[1]]
                             for center in initCenters])
 
         batches = [self.sc.parallelize(batch, 1) for batch in batches]
-        ssc = StreamingContext(self.sc, 2.0)
-        input_stream = ssc.queueStream(batches)
+        input_stream = self.ssc.queueStream(batches)
         stkm.trainOn(input_stream)
-        ssc.start()
+        t = time()
+        self.ssc.start()
+
+        # Give enough time to train the model.
+        self._ssc_wait(t, 6.0, 0.01)
         finalModel = stkm.model
-        self.assertEqual(finalModel.centers, initCenters)
-        # self.assertEqual(finalModel.getClusterWeights, [5.0, 5.0, 5.0, 5.0])
+        self.assertTrue(all(finalModel.centers == array(initCenters)))
+        self.assertEquals(finalModel.getClusterWeights, [5.0, 5.0, 5.0, 5.0])
+
+    def test_predictOn_model(self):
+        initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
+        weights = [1.0, 1.0, 1.0, 1.0]
+        model = StreamingKMeansModel(initCenters, weights)
+        stkm = StreamingKMeans()
+        stkm.model = model
+
+        predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
+        predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
+        predict_stream = self.ssc.queueStream(predict_data)
+        predict_val = stkm.predictOn(predict_stream)
+
+        result = []
+
+        def update(rdd):
+            if rdd:
+                rdd_collect = rdd.collect()
+                if rdd_collect:
+                    result.append(rdd_collect)
+
+        predict_val.foreachRDD(update)
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 6.0, 0.01)
+        self.assertEquals(result, [[0], [1], [2], [3]])
 
 
 if __name__ == "__main__":
