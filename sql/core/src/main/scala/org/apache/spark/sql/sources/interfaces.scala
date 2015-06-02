@@ -500,7 +500,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionSpec.partitionColumns.filterNot { column =>
+    StructType(dataSchema ++ partitionColumns.filterNot { column =>
       dataSchemaColumnNames.contains(column.name.toLowerCase)
     })
   }
