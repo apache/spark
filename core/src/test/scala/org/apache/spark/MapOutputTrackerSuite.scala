@@ -56,8 +56,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000), 0,
         Array(10000L, 1000L)))
     val statuses = tracker.getServerStatuses(10, 0)
-    assert(statuses.toSeq === Seq((BlockManagerId("a", "hostA", 1000), size1000),
-                                  (BlockManagerId("b", "hostB", 1000), size10000)))
+    assert(statuses.toSeq === Seq(
+      MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000),
+      MapServerAttemptSize(BlockManagerId("b", "hostB", 1000), 0, size10000)))
     tracker.stop()
     rpcEnv.shutdown()
   }
@@ -134,7 +135,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+      Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     masterTracker.incrementEpoch()
