@@ -398,6 +398,9 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     runGC()
     postGCTester.assertCleanup()
 
+    // TODO I'm not convinced this is actually testing shuffle cleanup completely -- add more
+    // tests (for hash, shuffle, and unsafe) before we commit this
+
     // Make sure the broadcasted task closure no longer exists after GC.
     val taskClosureBroadcastId = broadcastIds.max + 1
     assert(sc.env.blockManager.master.getMatchingBlockIds({

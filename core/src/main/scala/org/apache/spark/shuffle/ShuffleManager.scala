@@ -78,6 +78,10 @@ private[spark] trait ShuffleManager {
   }
   protected def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
     val attempts = shuffleToAttempts.get(shuffleId)
-    attempts.values.asScala
+    if (attempts == null) {
+      Iterable[Int]()
+    } else {
+      attempts.values().asScala
+    }
   }
 }
