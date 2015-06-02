@@ -348,8 +348,7 @@ class DistributedLDAModel private (
 
   /** Java-friendly version of [[topicDistributions]] */
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
-    new JavaPairRDD[java.lang.Long, Vector](
-      topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+    JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
   }
 
   // TODO:

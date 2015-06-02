@@ -44,7 +44,7 @@ public class JavaStatisticsSuite implements Serializable {
   }
 
   @Test
-  public void runStatisticsUsingStaticMethods() {
+  public void testCorr() {
     JavaRDD<Double> x = sc.parallelize(Lists.newArrayList(1.0, 2.0, 3.0, 4.0));
     JavaRDD<Double> y = sc.parallelize(Lists.newArrayList(1.1, 2.2, 3.1, 4.3));
 

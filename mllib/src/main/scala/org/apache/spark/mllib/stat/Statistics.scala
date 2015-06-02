@@ -101,6 +101,7 @@ object Statistics {
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
+  /** Java-friendly version of [[corr()]] */
   def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double], method: String): Double =
     corr(x.rdd.asInstanceOf[RDD[Double]], y.rdd.asInstanceOf[RDD[Double]], method)
 
