@@ -44,13 +44,11 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel
+    val fileOutPutStream = new FileOutputStream(file)
     Utils.tryWithSafeFinally {
-      while (bytes.remaining > 0) {
-        channel.write(bytes)
-      }
+      fileOutPutStream.write(bytes.array(), 0, bytes.limit())
     } {
-      channel.close()
+      fileOutPutStream.close()
     }
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
@@ -107,25 +105,23 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   }
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
-    val channel = new RandomAccessFile(file, "r").getChannel
+    val inputFile = new RandomAccessFile(file, "r")
+
     Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map
       if (length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(length.toInt)
-        channel.position(offset)
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
-            throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
-          }
-        }
+        inputFile.seek(offset)
+        val byteArr = new Array[Byte](length.toInt)
+        inputFile.read(byteArr)
+        val buf = ByteBuffer.wrap(byteArr)
         buf.flip()
         Some(buf)
       } else {
+        val channel = inputFile.getChannel
         Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
     } {
-      channel.close()
+      inputFile.close()
     }
   }
 
