@@ -68,7 +68,7 @@ object LinearRegressionExample {
         s"L1 and L2, default: ${defaultParams.elasticNetParam}")
         .action((x, c) => c.copy(elasticNetParam = x))
       opt[Int]("maxIter")
-        .text(s"maximal number of iterations, default: ${defaultParams.maxIter}")
+        .text(s"maximum number of iterations, default: ${defaultParams.maxIter}")
         .action((x, c) => c.copy(maxIter = x))
       opt[Double]("tol")
         .text(s"the convergence tolerance of iterations, Smaller value will lead " +
@@ -115,9 +115,6 @@ object LinearRegressionExample {
     val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
       params.dataFormat, params.testInput, "regression", params.fracTest)
 
-    // Set up Pipeline
-    val stages = new mutable.ArrayBuffer[PipelineStage]()
-
     val lir = new LinearRegression()
       .setFeaturesCol("features")
       .setLabelCol("label")
@@ -126,23 +123,19 @@ object LinearRegressionExample {
       .setMaxIter(params.maxIter)
       .setTol(params.tol)
 
-    stages += lir
-    val pipeline = new Pipeline().setStages(stages.toArray)
-
-    // Fit the Pipeline
+    // Train the model
     val startTime = System.nanoTime()
-    val pipelineModel = pipeline.fit(training)
+    val lirModel = lir.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    val lirModel = pipelineModel.stages.last.asInstanceOf[LinearRegressionModel]
     // Print the weights and intercept for linear regression.
     println(s"Weights: ${lirModel.weights} Intercept: ${lirModel.intercept}")
 
     println("Training data results:")
-    DecisionTreeExample.evaluateRegressionModel(pipelineModel, training, "label")
+    DecisionTreeExample.evaluateRegressionModel(lirModel, training, "label")
     println("Test data results:")
-    DecisionTreeExample.evaluateRegressionModel(pipelineModel, test, "label")
+    DecisionTreeExample.evaluateRegressionModel(lirModel, test, "label")
 
     sc.stop()
   }
