@@ -150,7 +150,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       closeAndWriteOutput();
       success = true;
     } finally {
-      if (!success) {
+      if (!success && sorter != null) {
         sorter.cleanupAfterError();
       }
     }
