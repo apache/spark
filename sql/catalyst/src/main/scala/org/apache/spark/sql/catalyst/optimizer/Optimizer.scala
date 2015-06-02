@@ -186,7 +186,8 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // We only collapse these two
+    // We only collapse these two Projects if the child Project's expressions are all
+    // deterministic.
     case Project(projectList1, Project(projectList2, child))
       if !hasNondeterministic(projectList2) =>
       // Create a map of Aliases to their values from the child projection.
