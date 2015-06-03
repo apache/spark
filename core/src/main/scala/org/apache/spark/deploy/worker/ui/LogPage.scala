@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.worker.ui
 
+import java.io.File
+import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -133,6 +135,13 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
 
     if (!supportedLogTypes.contains(logType)) {
       return ("Error: Log type must be one of " + supportedLogTypes.mkString(", "), 0, 0, 0)
+    }
+
+    // Verify that the normalized path of the log directory is in the working directory
+    val normalizedUri = new URI(logDirectory).normalize()
+    val normalizedLogDir = new File(normalizedUri.getPath)
+    if (!Utils.isInDirectory(workDir, normalizedLogDir)) {
+      return ("Error: invalid log directory " + logDirectory, 0, 0, 0)
     }
 
     try {

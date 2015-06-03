@@ -2011,6 +2011,22 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
+  /**
+   * Return whether the specified file is a parent directory of the child file.
+   */
+  def isInDirectory(parent: File, child: File): Boolean = {
+    if (child == null || parent == null) {
+      return false
+    }
+    if (!child.exists() || !parent.exists() || !parent.isDirectory()) {
+      return false
+    }
+    if (parent.equals(child)) {
+      return true
+    }
+    isInDirectory(parent, child.getParentFile)
+  }
+
 }
 
 /**
