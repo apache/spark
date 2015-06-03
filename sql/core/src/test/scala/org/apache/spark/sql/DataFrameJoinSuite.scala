@@ -67,7 +67,8 @@ class DataFrameJoinSuite extends QueryTest {
 
     checkAnswer(
       df1.join(df2, Seq($"df1.key" === $"df2.key", $"df1.value" === $"df2.value"), "inner"),
-      sql("SELECT a.key, a.value, b.key, b.value FROM testData a JOIN testData b ON a.key = b.key AND a.value = b.value").collect().toSeq)
+      sql("SELECT a.key, a.value, b.key, b.value FROM testData a JOIN testData b " +
+        "ON a.key = b.key AND a.value = b.value").collect().toSeq)
   }
 
   test("join - using aliases after self join") {
