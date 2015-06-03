@@ -650,7 +650,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
     checkAnswer(
       sqlContext.sql("show TABLES in default"),
-      Seq(Row("ttt2", false),Row("ttt3", false), Row("ttt4", false)))
+      Seq(Row("ttt2", false), Row("ttt3", false), Row("ttt4", false)))
 
     sqlContext.sql("""drop table if exists ttt2 """)
     sqlContext.sql("""drop table if exists ttt3 """)
