@@ -18,66 +18,31 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
-import java.util.concurrent.Executors
-import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, UUID}
+import java.util.{Map => JMap, UUID}
 
-import org.apache.commons.logging.Log
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hive.service.cli._
+import org.apache.hive.service.cli.operation.ExecuteStatementOperation
+import org.apache.hive.service.cli.session.HiveSession
+
+import org.apache.spark.Logging
+import org.apache.spark.sql.execution.SetCommand
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.ExecuteStatementOperation
-import org.apache.hive.service.cli.session.{SessionManager, HiveSession}
-
-import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
-import org.apache.spark.sql.execution.SetCommand
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.types._
-
-/**
- * A compatibility layer for interacting with Hive version 0.13.1.
- */
-private[thriftserver] object HiveThriftServerShim {
-  val version = "0.13.1"
-
-  def setServerUserName(
-      sparkServiceUGI: UserGroupInformation,
-      sparkCliService:SparkSQLCLIService) = {
-    setSuperField(sparkCliService, "serviceUGI", sparkServiceUGI)
-  }
-}
-
-private[hive] class SparkSQLDriver(val _context: HiveContext = SparkSQLEnv.hiveContext)
-  extends AbstractSparkSQLDriver(_context) {
-  override def getResults(res: JList[_]): Boolean = {
-    if (hiveResponse == null) {
-      false
-    } else {
-      res.asInstanceOf[JArrayList[String]].addAll(hiveResponse)
-      hiveResponse = null
-      true
-    }
-  }
-}
 
 private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
     statement: String,
     confOverlay: JMap[String, String],
-    runInBackground: Boolean = true)(
-    hiveContext: HiveContext,
-    sessionToActivePool: SMap[SessionHandle, String])
+    runInBackground: Boolean = true)
+    (hiveContext: HiveContext, sessionToActivePool: SMap[SessionHandle, String])
   // NOTE: `runInBackground` is set to `false` intentionally to disable asynchronous execution
-  extends ExecuteStatementOperation(parentSession, statement, confOverlay, false) with Logging {
+  extends ExecuteStatementOperation(parentSession, statement, confOverlay, false)
+  with Logging {
 
   private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
@@ -88,7 +53,7 @@ private[hive] class SparkExecuteStatementOperation(
     logDebug("CLOSING")
   }
 
-  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any],  ordinal: Int) {
+  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
     dataTypes(ordinal) match {
       case StringType =>
         to += from.getString(ordinal)
@@ -207,50 +172,5 @@ private[hive] class SparkExecuteStatementOperation(
     }
     setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)
-  }
-}
-
-private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
-  extends SessionManager
-  with ReflectedCompositeService {
-
-  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
-
-  override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
-
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
-    setSuperField(this, "operationManager", sparkSqlOperationManager)
-    addService(sparkSqlOperationManager)
-
-    initCompositeService(hiveConf)
-  }
-
-  override def openSession(
-      protocol: TProtocolVersion,
-      username: String,
-      passwd: String,
-      sessionConf: java.util.Map[String, String],
-      withImpersonation: Boolean,
-      delegationToken: String): SessionHandle = {
-    hiveContext.openSession()
-    val sessionHandle = super.openSession(
-      protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
-    val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    sessionHandle
-  }
-
-  override def closeSession(sessionHandle: SessionHandle) {
-    HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
-    super.closeSession(sessionHandle)
-    sparkSqlOperationManager.sessionToActivePool -= sessionHandle
-
-    hiveContext.detachSession()
   }
 }
