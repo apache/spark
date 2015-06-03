@@ -255,12 +255,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // If this is a legacy directory, then add the directory to the zipStream and add
             // each file to that directory.
             if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
-              val files = fs.listFiles(logPath, false)
+              val files = fs.listStatus(logPath)
               zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
               zipStream.closeEntry()
-              while (files.hasNext) {
-                val file = files.next().getPath
-                zipFileToStream(file, attempt.logPath + Path.SEPARATOR + file.getName, zipStream)
+              files.foreach { file =>
+                val path = file.getPath
+                zipFileToStream(path, attempt.logPath + Path.SEPARATOR + path.getName, zipStream)
               }
             } else {
               zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
