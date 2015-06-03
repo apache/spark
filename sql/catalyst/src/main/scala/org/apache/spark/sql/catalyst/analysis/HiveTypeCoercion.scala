@@ -41,7 +41,7 @@ object HiveTypeCoercion {
    * with primitive types, because in that case the precision and scale of the result depends on
    * the operation. Those rules are implemented in [[HiveTypeCoercion.DecimalPrecision]].
    */
-  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
+  val findTightestCommonTypeOfTwo: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
@@ -56,6 +56,17 @@ object HiveTypeCoercion {
     case (_: DecimalType, DecimalType.Unlimited) => Some(DecimalType.Unlimited)
 
     case _ => None
+  }
+
+  /**
+   * Find the tightest common type of a set of types by continuously applying
+   * `findTightestCommonTypeOfTwo` on these types.
+   */
+  private def findTightestCommonType(types: Seq[DataType]) = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case None => None
+      case Some(d) => findTightestCommonTypeOfTwo(d, c)
+    })
   }
 }
 
@@ -180,7 +191,7 @@ trait HiveTypeCoercion {
 
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            findTightestCommonType(l.dataType, r.dataType).map { widestType =>
+            findTightestCommonTypeOfTwo(l.dataType, r.dataType).map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
               val newRight =
@@ -217,7 +228,7 @@ trait HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         case b: BinaryExpression if b.left.dataType != b.right.dataType =>
-          findTightestCommonType(b.left.dataType, b.right.dataType).map { widestType =>
+          findTightestCommonTypeOfTwo(b.left.dataType, b.right.dataType).map { widestType =>
             val newLeft =
               if (b.left.dataType == widestType) b.left else Cast(b.left, widestType)
             val newRight =
@@ -441,21 +452,18 @@ trait HiveTypeCoercion {
             DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           )
 
-        case LessThan(e1 @ DecimalType.Expression(p1, s1),
-                      e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-                             e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
-                         e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-        case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-                                e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+        // When we compare 2 decimal types with different precisions, cast them to the smallest
+        // common precision.
+        case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
+                                  e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          val resultType = DecimalType(max(p1, p2), max(s1, s2))
+          b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
+        case b @ BinaryComparison(e1 @ DecimalType.Fixed(_, _), e2)
+          if e2.dataType == DecimalType.Unlimited =>
+          b.makeCopy(Array(Cast(e1, DecimalType.Unlimited), e2))
+        case b @ BinaryComparison(e1, e2 @ DecimalType.Fixed(_, _))
+          if e1.dataType == DecimalType.Unlimited =>
+          b.makeCopy(Array(e1, Cast(e2, DecimalType.Unlimited)))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
@@ -570,7 +578,7 @@ trait HiveTypeCoercion {
 
       case a @ CreateArray(children) if !a.resolved =>
         val commonType = a.childTypes.reduce(
-          (a, b) => findTightestCommonType(a, b).getOrElse(StringType))
+          (a, b) => findTightestCommonTypeOfTwo(a, b).getOrElse(StringType))
         CreateArray(
           children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
 
@@ -599,14 +607,9 @@ trait HiveTypeCoercion {
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
       case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
-        val dt: Option[DataType] = Some(NullType)
         val types = es.map(_.dataType)
-        val rt = types.foldLeft(dt)((r, c) => r match {
-          case None => None
-          case Some(d) => findTightestCommonType(d, c)
-        })
-        rt match {
-          case Some(finaldt) => Coalesce(es.map(Cast(_, finaldt)))
+        findTightestCommonType(types) match {
+          case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None =>
             sys.error(s"Could not determine return type of Coalesce for ${types.mkString(",")}")
         }
@@ -619,17 +622,13 @@ trait HiveTypeCoercion {
    */
   object Division extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
+      // Skip nodes who has not been resolved yet,
+      // as this is an extra rule which should be applied at last.
+      case e if !e.resolved => e
 
       // Decimal and Double remain the same
-      case d: Divide if d.resolved && d.dataType == DoubleType => d
-      case d: Divide if d.resolved && d.dataType.isInstanceOf[DecimalType] => d
-
-      case Divide(l, r) if l.dataType.isInstanceOf[DecimalType] =>
-        Divide(l, Cast(r, DecimalType.Unlimited))
-      case Divide(l, r) if r.dataType.isInstanceOf[DecimalType] =>
-        Divide(Cast(l, DecimalType.Unlimited), r)
+      case d: Divide if d.dataType == DoubleType => d
+      case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
 
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }
@@ -642,42 +641,33 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case cw: CaseWhenLike if cw.childrenResolved && !cw.valueTypesEqual =>
-        logDebug(s"Input values for null casting ${cw.valueTypes.mkString(",")}")
-        val commonType = cw.valueTypes.reduce { (v1, v2) =>
-          findTightestCommonType(v1, v2).getOrElse(sys.error(
-            s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
-        }
-        val transformedBranches = cw.branches.sliding(2, 2).map {
-          case Seq(when, value) if value.dataType != commonType =>
-            Seq(when, Cast(value, commonType))
-          case Seq(elseVal) if elseVal.dataType != commonType =>
-            Seq(Cast(elseVal, commonType))
-          case s => s
-        }.reduce(_ ++ _)
-        cw match {
-          case _: CaseWhen =>
-            CaseWhen(transformedBranches)
-          case CaseKeyWhen(key, _) =>
-            CaseKeyWhen(key, transformedBranches)
-        }
+      case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
+        logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
+        val maybeCommonType = findTightestCommonType(c.valueTypes)
+        maybeCommonType.map { commonType =>
+          val castedBranches = c.branches.grouped(2).map {
+            case Seq(when, value) if value.dataType != commonType =>
+              Seq(when, Cast(value, commonType))
+            case Seq(elseVal) if elseVal.dataType != commonType =>
+              Seq(Cast(elseVal, commonType))
+            case other => other
+          }.reduce(_ ++ _)
+          c match {
+            case _: CaseWhen => CaseWhen(castedBranches)
+            case CaseKeyWhen(key, _) => CaseKeyWhen(key, castedBranches)
+          }
+        }.getOrElse(c)
 
-      case ckw: CaseKeyWhen if ckw.childrenResolved && !ckw.resolved =>
-        val commonType = (ckw.key +: ckw.whenList).map(_.dataType).reduce { (v1, v2) =>
-          findTightestCommonType(v1, v2).getOrElse(sys.error(
-            s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
-        }
-        val transformedBranches = ckw.branches.sliding(2, 2).map {
-          case Seq(when, then) if when.dataType != commonType =>
-            Seq(Cast(when, commonType), then)
-          case s => s
-        }.reduce(_ ++ _)
-        val transformedKey = if (ckw.key.dataType != commonType) {
-          Cast(ckw.key, commonType)
-        } else {
-          ckw.key
-        }
-        CaseKeyWhen(transformedKey, transformedBranches)
+      case c: CaseKeyWhen if c.childrenResolved && !c.resolved =>
+        val maybeCommonType = findTightestCommonType((c.key +: c.whenList).map(_.dataType))
+        maybeCommonType.map { commonType =>
+          val castedBranches = c.branches.grouped(2).map {
+            case Seq(when, then) if when.dataType != commonType =>
+              Seq(Cast(when, commonType), then)
+            case other => other
+          }.reduce(_ ++ _)
+          CaseKeyWhen(Cast(c.key, commonType), castedBranches)
+        }.getOrElse(c)
     }
   }
 

@@ -720,6 +720,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from 0 to `end`(exclusive) with step value 1.
+   *
+   * @since 1.4.0
+   * @group dataframe
+   */
+  @Experimental
+  def range(end: Long): DataFrame = range(0, end)
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end`(exclusive) with an step value, with partition number
    * specified.
    *

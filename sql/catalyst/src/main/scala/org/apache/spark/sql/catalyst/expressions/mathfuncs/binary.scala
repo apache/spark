@@ -29,16 +29,9 @@ import org.apache.spark.sql.types._
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
 
-  override def symbol: String = null
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def nullable: Boolean = left.nullable || right.nullable
   override def toString: String = s"$name($left, $right)"
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-      left.dataType == right.dataType &&
-      !DecimalType.isFixed(left.dataType)
 
   override def dataType: DataType = DoubleType
 
@@ -58,9 +51,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 }
 
-case class Atan2(
-    left: Expression,
-    right: Expression) extends BinaryMathExpression(math.atan2, "ATAN2") {
+case class Atan2(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.atan2, "ATAN2") {
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -80,8 +72,7 @@ case class Atan2(
   }
 }
 
-case class Hypot(
-    left: Expression,
-    right: Expression) extends BinaryMathExpression(math.hypot, "HYPOT")
+case class Hypot(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.hypot, "HYPOT")
 
 case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")
