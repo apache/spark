@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{NotSerializableException, ObjectOutput, ObjectStreamClass, ObjectStreamField}
+import java.io._
 import java.lang.reflect.{Field, Method}
 import java.security.AccessController
 
@@ -145,17 +145,25 @@ private[spark] object SerializationDebugger extends Logging {
       // An object contains multiple slots in serialization.
       // Get the slots and visit fields in all of them.
       val (finalObj, desc) = findObjectAndDescriptor(o)
+
+      if (!finalObj.eq(o)) {
+        return visit(finalObj, s"writeReplace data (class: ${finalObj.getClass.getName})" :: stack)
+      }
+
       val slotDescs = desc.getSlotDescs
       var i = 0
       while (i < slotDescs.length) {
         val slotDesc = slotDescs(i)
         if (slotDesc.hasWriteObjectMethod) {
-          // TODO: Handle classes that specify writeObject method.
+          val childStack = visitSerializableWithWriteObjectMethod(finalObj, slotDesc, stack)
+          if (childStack.nonEmpty) {
+            return childStack
+          }
         } else {
           val fields: Array[ObjectStreamField] = slotDesc.getFields
           val objFieldValues: Array[Object] = new Array[Object](slotDesc.getNumObjFields)
           val numPrims = fields.length - objFieldValues.length
-          desc.getObjFieldValues(finalObj, objFieldValues)
+          slotDesc.getObjFieldValues(finalObj, objFieldValues)
 
           var j = 0
           while (j < objFieldValues.length) {
@@ -169,9 +177,36 @@ private[spark] object SerializationDebugger extends Logging {
             }
             j += 1
           }
-
         }
         i += 1
+      }
+      return List.empty
+    }
+
+    private def visitSerializableWithWriteObjectMethod(
+        o: Object, slotDesc: ObjectStreamClass, stack: List[String]): List[String] = {
+      println(">>> processing serializable with writeObject" + o)
+      val innerObjectsCatcher = new ListObjectOutputStream
+      var notSerializableFound = false
+      try {
+        innerObjectsCatcher.writeObject(o)
+      } catch {
+        case io: IOException =>
+          notSerializableFound = true
+      }
+      if (notSerializableFound) {
+        val innerObjects = innerObjectsCatcher.outputArray
+        var k = 0
+        while (k < innerObjects.length) {
+          val elem = s"writeObject data (class: ${slotDesc.getName})"
+          val childStack = visit(innerObjects(k), elem :: stack)
+          if (childStack.nonEmpty) {
+            return childStack
+          }
+          k += 1
+        }
+      } else {
+        visited ++= innerObjectsCatcher.outputArray
       }
       return List.empty
     }
@@ -218,6 +253,27 @@ private[spark] object SerializationDebugger extends Logging {
     override def writeChar(i: Int): Unit = {}
     override def writeLong(l: Long): Unit = {}
     override def writeByte(i: Int): Unit = {}
+  }
+
+  /** An output stream that emulates /dev/null */
+  private class NullOutputStream extends OutputStream {
+    override def write(b: Int) { }
+  }
+
+  /**
+   * A dummy [[ObjectOutputStream]] that saves the list of objects written to it and returns
+   * them through `outputArray`.
+   */
+  private class ListObjectOutputStream extends ObjectOutputStream(new NullOutputStream) {
+    private val output = new mutable.ArrayBuffer[Any]
+    this.enableReplaceObject(true)
+
+    def outputArray: Array[Any] = output.toArray
+
+    override def replaceObject(obj: Object): Object = {
+      output += obj
+      obj
+    }
   }
 
   /** An implicit class that allows us to call private methods of ObjectStreamClass. */
