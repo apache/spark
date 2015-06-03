@@ -49,7 +49,7 @@ object MimaExcludes {
               "org.apache.spark.util.collection.PairIterator"),
             // false positive, this is a @Private class
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter")
+              "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.this")
           )
         case v if v.startsWith("1.4") =>
           Seq(
