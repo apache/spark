@@ -16,9 +16,6 @@ class PostgresOperator(BaseOperator):
         a '.sql' extensions.
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'PostgresOperator'
-    }
     template_fields = ('sql',)
     template_ext = ('.sql',)
     ui_color = '#ededed'

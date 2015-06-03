@@ -66,10 +66,6 @@ class SqlSensor(BaseSensorOperator):
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'SqlSensor'
-    }
-
     @apply_defaults
     def __init__(self, conn_id, sql, *args, **kwargs):
 
@@ -111,9 +107,6 @@ class ExternalTaskSensor(BaseSensorOperator):
     :type external_task_id: string
     """
     template_fields = ('execution_date',)
-    __mapper_args__ = {
-        'polymorphic_identity': 'ExternalTaskSensor'
-    }
 
     @apply_defaults
     def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
@@ -155,9 +148,6 @@ class HivePartitionSensor(BaseSensorOperator):
     :type partition: string
     """
     template_fields = ('table', 'partition',)
-    __mapper_args__ = {
-        'polymorphic_identity': 'HivePartitionSensor'
-    }
 
     @apply_defaults
     def __init__(
@@ -193,9 +183,6 @@ class HdfsSensor(BaseSensorOperator):
     Waits for a file or folder to land in HDFS
     """
     template_fields = ('filepath',)
-    __mapper_args__ = {
-        'polymorphic_identity': 'HdfsSensor'
-    }
 
     @apply_defaults
     def __init__(
@@ -235,9 +222,6 @@ class S3KeySensor(BaseSensorOperator):
     :type wildcard_match: bool
     """
     template_fields = ('bucket_key', 'bucket_name')
-    __mapper_args__ = {
-        'polymorphic_identity': 'S3KeySensor'
-    }
 
     @apply_defaults
     def __init__(
@@ -300,9 +284,6 @@ class S3PrefixSensor(BaseSensorOperator):
     :type bucket_name: str
     """
     template_fields = ('bucket_key', 'bucket_name')
-    __mapper_args__ = {
-        'polymorphic_identity': 'S3PrefixSensor'
-    }
 
     @apply_defaults
     def __init__(
@@ -342,9 +323,6 @@ class TimeSensor(BaseSensorOperator):
     :type target_time: datetime.time
     """
     template_fields = tuple()
-    __mapper_args__ = {
-        'polymorphic_identity': 'TimeSensor'
-    }
 
     @apply_defaults
     def __init__(self, target_time, *args, **kwargs):

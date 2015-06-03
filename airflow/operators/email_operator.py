@@ -20,10 +20,6 @@ class EmailOperator(BaseOperator):
     template_ext = ('.html',)
     ui_color = '#e6faf9'
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'EmailOperator'
-    }
-
     @apply_defaults
     def __init__(
             self,

@@ -894,7 +894,7 @@ class Log(Base):
         self.owner = task_instance.task.owner
 
 
-class BaseOperator(Base):
+class BaseOperator(object):
     """
     Abstract base class for all operators. Since operators create objects that
     become node in the dag, BaseOperator contains many recursive methods for
@@ -968,21 +968,6 @@ class BaseOperator(Base):
     # Defines the color in the UI
     ui_color = '#fff'
     ui_fgcolor = '#000'
-
-    __tablename__ = "task"
-
-    dag_id = Column(String(ID_LEN), primary_key=True)
-    task_id = Column(String(ID_LEN), primary_key=True)
-    owner = Column(String(500))
-    task_type = Column(String(20))
-    start_date = Column(DateTime())
-    end_date = Column(DateTime())
-    depends_on_past = Column(Integer())
-
-    __mapper_args__ = {
-        'polymorphic_on': task_type,
-        'polymorphic_identity': 'BaseOperator'
-    }
 
     @apply_defaults
     def __init__(
@@ -1241,7 +1226,11 @@ class BaseOperator(Base):
             return self.downstream_list
 
     def __repr__(self):
-        return "<Task({self.task_type}): {self.task_id}>".format(self=self)
+        return "<Task({self.__class__.__name__}): {self.task_id}>".format(self=self)
+
+    @property
+    def task_type(self):
+        return self.__class__.__name__
 
     def append_only_new(self, l, item):
         if any([item is t for t in l]):

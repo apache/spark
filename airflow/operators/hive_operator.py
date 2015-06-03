@@ -22,9 +22,6 @@ class HiveOperator(BaseOperator):
     :type script_begin_tag: str
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'HiveOperator'
-    }
     template_fields = ('hql', 'schema')
     template_ext = ('.hql', '.sql',)
     ui_color = '#f0e4ec'

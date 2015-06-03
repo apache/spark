@@ -15,9 +15,6 @@ class PrestoCheckOperator(BaseOperator):
     :type presto_conn_id: string
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'PrestoCheckOperator'
-    }
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
     ui_color = '#fff7e6'

@@ -1,7 +1,6 @@
 import logging
 from tempfile import NamedTemporaryFile
 import subprocess
-import os
 
 from airflow.hooks import S3Hook
 from airflow.models import BaseOperator
@@ -9,14 +8,14 @@ from airflow.utils import apply_defaults
 
 class S3FileTransformOperator(BaseOperator):
     """
-    Copies data from a source S3 location to a temporary location on the 
-    local filesystem. Runs a transformation on this file as specified by 
+    Copies data from a source S3 location to a temporary location on the
+    local filesystem. Runs a transformation on this file as specified by
     the transformation script and uploads the output to a destination S3 location.
 
-    The locations of the source and the destination files in the local filesystem 
+    The locations of the source and the destination files in the local filesystem
     is provided as an first and second arguments to the transformation script.
-    The transformation script is expected to read the data from source , transform it 
-    and write the output to the local destination file. The operator then takes over 
+    The transformation script is expected to read the data from source , transform it
+    and write the output to the local destination file. The operator then takes over
     control and uploads the local destination file to S3.
 
     :param source_s3_key: The key to be retrieved from S3
@@ -33,12 +32,9 @@ class S3FileTransformOperator(BaseOperator):
     :type transform_script: str
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'S3FileTransformOperator'
-    }
     template_fields = ('source_s3_key', 'dest_s3_key')
     template_ext = ()
-    ui_color = '#f9c915'    
+    ui_color = '#f9c915'
 
     @apply_defaults
     def __init__(
@@ -81,8 +77,8 @@ class S3FileTransformOperator(BaseOperator):
             logging.info("Uploading transformed file to S3")
             f_dest.flush()
             self.dest_s3.load_file(
-                filename=f_dest.name, 
-                key=self.dest_s3_key, 
+                filename=f_dest.name,
+                key=self.dest_s3_key,
                 replace=self.replace
             )
             logging.info("Upload successful")
