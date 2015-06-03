@@ -26,6 +26,8 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
@@ -286,6 +288,24 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
     }
 
+    val driverClassPath = {
+      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // overrides all other potential log4j configurations contained in other dependency jar files.
+      val tempLog4jConf = Utils.createTempDir().getCanonicalPath
+
+      Files.write(
+        """log4j.rootCategory=INFO, console
+        |log4j.appender.console=org.apache.log4j.ConsoleAppender
+        |log4j.appender.console.target=System.err
+        |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+        |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+      """.stripMargin,
+      new File(s"$tempLog4jConf/log4j.properties"),
+      UTF_8)
+
+      tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
+    }
+
     s"""$startScript
        |  --master local
        |  --hiveconf hive.root.logger=INFO,console
@@ -295,6 +315,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf $portConf=$port
        |  --driver-class-path ${sys.props("java.class.path")}
+       |  --driver-class-path $driverClassPath
+       |  --driver-java-options -Dlog4j.debug
        |  --conf spark.ui.enabled=false
      """.stripMargin.split("\\s+").toSeq
   }
