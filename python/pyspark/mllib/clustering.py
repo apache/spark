@@ -25,8 +25,8 @@ from math import exp, log
 
 from numpy import array, random, tile
 
-from pyspark import RDD
 from pyspark import SparkContext
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
@@ -328,6 +328,7 @@ class StreamingKMeansModel(KMeansModel):
         """Convenience method to return the cluster weights."""
         return self._clusterWeights
 
+    @ignore_unicode_prefix
     def update(self, data, decayFactor, timeUnit):
         """Update the centroids, according to data
 
