@@ -264,17 +264,14 @@ class DataFrameWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
-
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
-        :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
         :param options: all other string options
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -326,16 +323,13 @@ class DataFrameWriter(object):
     def json(self, path, mode="error"):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
-
         :param path: the path in any Hadoop supported file system
-        :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -345,16 +339,13 @@ class DataFrameWriter(object):
     def parquet(self, path, mode="error"):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
-
         :param path: the path in any Hadoop supported file system
-        :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -364,21 +355,17 @@ class DataFrameWriter(object):
     def jdbc(self, url, table, mode="error", properties={}):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
-        In the case the table already exists in the external database,
-        behavior of this function depends on the save mode, specified by the `mode`
-        function (default to throwing an exception). There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
-
-        .. warning:: Don't create too many partitions in parallel on a large cluster;
+        .. note:: Don't create too many partitions in parallel on a large cluster;\
         otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: Name of the table in the external database.
-        :param mode: one of ``append``, ``overwrite``, ``error``, ``ignore`` (default: ``error``)
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
         :param properties: JDBC database connection arguments, a list of
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.

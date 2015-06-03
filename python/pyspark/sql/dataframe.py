@@ -44,7 +44,7 @@ class DataFrame(object):
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
     and can be created using various functions in :class:`SQLContext`::
 
-        people = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -56,8 +56,8 @@ class DataFrame(object):
     A more concrete example::
 
         # To create DataFrame using SQLContext
-        people = sqlContext.parquetFile("...")
-        department = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
+        department = sqlContext.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -120,21 +120,13 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
     def saveAsParquetFile(self, path):
         """Saves the contents as a Parquet file, preserving the schema.
 
-        Files that are written out using this method can be read back in as
-        a :class:`DataFrame` using :func:`SQLContext.parquetFile`.
-
-        >>> import tempfile, shutil
-        >>> parquetFile = tempfile.mkdtemp()
-        >>> shutil.rmtree(parquetFile)
-        >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlContext.parquetFile(parquetFile)
-        >>> sorted(df2.collect()) == sorted(df.collect())
-        True
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.parquet` instead.
         """
+        warnings.warn(
+            "saveAsParquetFile is deprecated. Use write.parquet() instead.", DeprecationWarning)
         self._jdf.saveAsParquetFile(path)
 
     @since(1.3)
@@ -151,69 +143,48 @@ class DataFrame(object):
         """
         self._jdf.registerTempTable(name)
 
-    @since(1.3)
     def registerAsTable(self, name):
-        """DEPRECATED: use :func:`registerTempTable` instead"""
+        """
+        .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.
+        """
         warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
         self.registerTempTable(name)
 
-    @since(1.3)
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this :class:`DataFrame` into the specified table.
 
-        Optionally overwriting any existing data.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.insertInto` instead.
         """
+        warnings.warn(
+            "insertInto is deprecated. Use write.insertInto() instead.", DeprecationWarning)
         self.write.insertInto(tableName, overwrite)
 
-    @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of this :class:`DataFrame` to a data source as a table.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the saveAsTable operation when
-        table already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.saveAsTable` instead.
         """
+        warnings.warn(
+            "insertInto is deprecated. Use write.saveAsTable() instead.", DeprecationWarning)
         self.write.saveAsTable(tableName, source, mode, **options)
 
     @since(1.3)
     def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.save` instead.
         """
+        warnings.warn(
+            "insertInto is deprecated. Use write.save() instead.", DeprecationWarning)
         return self.write.save(path, source, mode, **options)
 
     @property
     @since(1.4)
     def write(self):
         """
-        Interface for saving the content of the :class:`DataFrame` out
-        into external storage.
+        Interface for saving the content of the :class:`DataFrame` out into external storage.
 
-        :return :class:`DataFrameWriter`
-
-        .. note:: Experimental
-
-        >>> df.write
-        <pyspark.sql.readwriter.DataFrameWriter object at ...>
+        :return: :class:`DataFrameWriter`
         """
         return DataFrameWriter(self)
 
