@@ -101,8 +101,14 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     size = sum;
   }
 
+
   @Override
-  public void get(byte[] dest, int offset, int length) {
+  public WrappedLargeByteBuffer get(byte[] dest) {
+    return get(dest, 0, dest.length);
+  }
+
+  @Override
+  public WrappedLargeByteBuffer get(byte[] dest, int offset, int length) {
     if (length > remaining()) {
       throw new BufferUnderflowException();
     }
@@ -114,6 +120,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       updateCurrentBufferIfNeeded();
     }
     _pos += moved;
+    return this;
   }
 
   @Override

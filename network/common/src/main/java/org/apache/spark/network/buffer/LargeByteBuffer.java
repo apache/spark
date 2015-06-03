@@ -47,15 +47,28 @@ import java.nio.channels.WritableByteChannel;
 public interface LargeByteBuffer {
   public byte get();
 
+
+  /**
+   * Bulk copy data from this buffer into the given array.  First checks there is sufficient
+   * data in this buffer; if not, throws a {@link java.nio.BufferUnderflowException}.  Behaves
+   * in the exact same way as <code>get(dst, 0, dst.length)</code>
+   *
+   * @param dst the destination array
+   * @return this buffer
+   */
+  public LargeByteBuffer get(byte[] dst);
+
   /**
    * Bulk copy data from this buffer into the given array.  First checks there is sufficient
    * data in this buffer; if not, throws a {@link java.nio.BufferUnderflowException}.
    *
-   * @param dst
-   * @param offset
-   * @param length
+   * @param dst the destination array
+   * @param offset the offset within the destination array to write to
+   * @param length how many bytes to write
+   * @return this buffer
    */
-  public void get(byte[] dst, int offset, int length);
+  public LargeByteBuffer get(byte[] dst, int offset, int length);
+
 
   public LargeByteBuffer rewind();
 

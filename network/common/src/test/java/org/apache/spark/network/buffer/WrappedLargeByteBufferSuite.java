@@ -138,6 +138,16 @@ public class WrappedLargeByteBufferSuite {
       assertConsistent(b);
       b.skip(position);
       assertConsistent(b);
+
+      int copy2Length = Math.min(20, 500 - position);
+      byte[] copy2 = new byte[copy2Length];
+      b.rewind();
+      b.skip(position);
+      b.get(copy2);
+      assertSubArrayEquals(data, position, copy2, 0, copy2Length);
+
+      b.rewind();
+      b.skip(position);
     }
   }
 
@@ -146,10 +156,18 @@ public class WrappedLargeByteBufferSuite {
     WrappedLargeByteBuffer b = testDataBuf();
     byte[] into = new byte[500];
     for (int[] offsetAndLength: new int[][]{{0, 200}, {10,10}, {300, 20}, {30, 100}}) {
+      int offset = offsetAndLength[0];
+      int length = offsetAndLength[1];
       b.rewind();
-      b.get(into, offsetAndLength[0], offsetAndLength[1]);
+      b.get(into, offset, length);
       assertConsistent(b);
-      assertSubArrayEquals(data, 0, into, offsetAndLength[0], offsetAndLength[1]);
+      assertSubArrayEquals(data, 0, into, offset, length);
+
+      byte[] into2 = new byte[length];
+      b.rewind();
+      b.get(into2);
+      assertConsistent(b);
+      assertSubArrayEquals(data, 0, into2, 0, length);
     }
 
     try {
@@ -159,6 +177,15 @@ public class WrappedLargeByteBufferSuite {
       fail("expected exception");
     } catch (BufferUnderflowException bue) {
     }
+
+    try {
+      b.rewind();
+      b.skip(1);
+      b.get(into);
+      fail("expected exception");
+    } catch (BufferUnderflowException bue) {
+    }
+
     b.rewind();
     b.skip(495);
     assertEquals(data[495], b.get());
