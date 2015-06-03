@@ -83,14 +83,14 @@ private[client] sealed abstract class Shim {
       listBucketingEnabled: Boolean): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
-    val method = findMethod(klass, name, args:_*)
+    val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
       s"Method $name of class $klass is not static.")
     method
   }
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
-    klass.getMethod(name, args:_*)
+    klass.getMethod(name, args: _*)
   }
 
 }
@@ -109,12 +109,12 @@ private[client] class Shim_v0_12 extends Shim {
   private lazy val getDriverResultsMethod = findMethod(classOf[Driver], "getResults",
     classOf[JArrayList[String]])
   private lazy val loadPartitionMethod = findMethod(classOf[Hive], "loadPartition", classOf[Path],
-    classOf[String], classOf[JMap[String,String]], JBoolean.TYPE, JBoolean.TYPE,
+    classOf[String], classOf[JMap[String, String]], JBoolean.TYPE, JBoolean.TYPE,
     JBoolean.TYPE, JBoolean.TYPE)
   private lazy val loadTableMethod = findMethod(classOf[Hive], "loadTable", classOf[Path],
     classOf[String], JBoolean.TYPE, JBoolean.TYPE)
   private lazy val loadDynamicPartitionsMethod = findMethod(classOf[Hive], "loadDynamicPartitions",
-    classOf[Path], classOf[String], classOf[JMap[String,String]], JBoolean.TYPE,
+    classOf[Path], classOf[String], classOf[JMap[String, String]], JBoolean.TYPE,
     JInteger.TYPE, JBoolean.TYPE, JBoolean.TYPE)
 
   override def setCurrentSessionState(state: SessionState): Unit = startMethod.invoke(null, state)
@@ -215,12 +215,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 private[client] class Shim_v0_14 extends Shim_v0_13 {
 
   private lazy val loadPartitionMethod = findMethod(classOf[Hive], "loadPartition", classOf[Path],
-    classOf[String], classOf[JMap[String,String]], JBoolean.TYPE, JBoolean.TYPE,
+    classOf[String], classOf[JMap[String, String]], JBoolean.TYPE, JBoolean.TYPE,
     JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
   private lazy val loadTableMethod = findMethod(classOf[Hive], "loadTable", classOf[Path],
     classOf[String], JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
   private lazy val loadDynamicPartitionsMethod = findMethod(classOf[Hive], "loadDynamicPartitions",
-    classOf[Path], classOf[String], classOf[JMap[String,String]], JBoolean.TYPE, JInteger.TYPE,
+    classOf[Path], classOf[String], classOf[JMap[String, String]], JBoolean.TYPE, JInteger.TYPE,
     JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
 
   override def loadPartition(
