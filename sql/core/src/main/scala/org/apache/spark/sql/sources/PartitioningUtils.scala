@@ -189,8 +189,13 @@ private[sql] object PartitioningUtils {
       Seq.empty
     } else {
       assert(distinctPartitionsColNames.size == 1, {
-        val list = distinctPartitionsColNames.mkString("\t", "\n\t", "")
-        s"Conflicting partition column names detected:\n$list"
+        val list = distinctPartitionsColNames.map(_.mkString(", ")).zipWithIndex.map {
+          case (names, index) =>
+            s"\tPartition column name list #$index: $names"
+        }
+
+        s"Conflicting partition column names detected:\n${list.mkString("\n")}\n" +
+          "For partitioned table directories, data files should only live in leaf directories."
       })
 
       // Resolves possible type conflicts for each column
