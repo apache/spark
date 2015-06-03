@@ -107,7 +107,7 @@ private[parquet] class CatalystSchemaConverter(
       val precision = field.getDecimalMetadata.getPrecision
       val scale = field.getDecimalMetadata.getScale
 
-      require(
+      CatalystSchemaConverter.analysisRequire(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
         s"Invalid decimal precision: $typeName cannot store $precision digits (max $maxPrecision)")
 
@@ -141,7 +141,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case INT96 =>
-        require(
+        CatalystSchemaConverter.analysisRequire(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
             s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP} to true.")
@@ -181,10 +181,12 @@ private[parquet] class CatalystSchemaConverter(
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case LIST =>
-        require(field.getFieldCount == 1, s"Invalid list type $field")
+        CatalystSchemaConverter.analysisRequire(
+          field.getFieldCount == 1, s"Invalid list type $field")
 
         val repeatedType = field.getType(0)
-        require(repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
+        CatalystSchemaConverter.analysisRequire(
+          repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
         if (isElementType(repeatedType, field.getName)) {
           ArrayType(convertField(repeatedType), containsNull = true)
@@ -199,19 +201,20 @@ private[parquet] class CatalystSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
       case MAP | MAP_KEY_VALUE =>
-        require(
+        CatalystSchemaConverter.analysisRequire(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type $field")
 
         val keyValueType = field.getType(0).asGroupType()
-        require(
+        CatalystSchemaConverter.analysisRequire(
           keyValueType.isRepetition(REPEATED) &&
             keyValueType.getOriginalType != MAP_KEY_VALUE &&
             keyValueType.getFieldCount == 2,
           s"Invalid map type $field")
 
         val keyType = keyValueType.getType(0)
-        require(keyType.isPrimitive, s"Map key type must be some primitive type.")
+        CatalystSchemaConverter.analysisRequire(
+          keyType.isPrimitive, s"Map key type must be some primitive type.")
 
         val valueType = keyValueType.getType(1)
         val valueOptional = valueType.isRepetition(OPTIONAL)
@@ -422,10 +425,16 @@ private[parquet] class CatalystSchemaConverter(
 private[parquet] object CatalystSchemaConverter {
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
-    require(
+    analysisRequire(
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
        """.stripMargin.split("\n").mkString(" "))
+  }
+
+  def analysisRequire(f: => Boolean, message: String): Unit = {
+    if (!f) {
+      throw new AnalysisException(message)
+    }
   }
 }
