@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -50,6 +51,51 @@ abstract class Expression extends TreeNode[Expression] {
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: Row = null): Any
+
+  /**
+   * Returns an [[EvaluatedExpression]], which contains Java source code that
+   * can be used to generate the result of evaluating the expression on an input row.
+   * @param ctx a [[CodeGenContext]]
+   */
+  def gen(ctx: CodeGenContext): EvaluatedExpression = {
+    val nullTerm = ctx.freshName("nullTerm")
+    val primitiveTerm = ctx.freshName("primitiveTerm")
+    val objectTerm = ctx.freshName("objectTerm")
+    val ve = EvaluatedExpression("", nullTerm, primitiveTerm, objectTerm)
+    ve.code = genSource(ctx, ve)
+
+    // Only inject debugging code if debugging is turned on.
+    //    val debugCode =
+    //      if (debugLogging) {
+    //        val localLogger = log
+    //        val localLoggerTree = reify { localLogger }
+    //        s"""
+    //          $localLoggerTree.debug(
+    //            ${this.toString} + ": " + (if (${ev.nullTerm}) "null" else ${ev.primitiveTerm}.toString))
+    //        """
+    //      } else {
+    //        ""
+    //      }
+
+    ve
+  }
+
+  /**
+   * Returns Java source code for this expression
+   */
+  def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val e = this.asInstanceOf[Expression]
+    ctx.references += e
+    s"""
+          /* expression: ${this} */
+          Object ${ev.objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
+          boolean ${ev.nullTerm} = ${ev.objectTerm} == null;
+          ${ctx.primitiveForType(e.dataType)} ${ev.primitiveTerm} =
+            ${ctx.defaultPrimitive(e.dataType)};
+          if (!${ev.nullTerm}) ${ev.primitiveTerm} =
+            (${ctx.termForType(e.dataType)})${ev.objectTerm};
+    """
+  }
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -116,6 +162,41 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def nullable: Boolean = left.nullable || right.nullable
 
   override def toString: String = s"($left $symbol $right)"
+
+
+  /**
+   * Short hand for generating binary evaluation code, which depends on two sub-evaluations of
+   * the same type.  If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f a function from two primitive term names to a tree that evaluates them.
+   */
+  def evaluate(ctx: CodeGenContext,
+               ev: EvaluatedExpression,
+               f: (String, String) => String): String =
+    evaluateAs(left.dataType)(ctx, ev, f)
+
+  def evaluateAs(resultType: DataType)(ctx: CodeGenContext,
+                                       ev: EvaluatedExpression,
+                                       f: (String, String) => String): String = {
+    // TODO: Right now some timestamp tests fail if we enforce this...
+    if (left.dataType != right.dataType) {
+      // log.warn(s"${left.dataType} != ${right.dataType}")
+    }
+
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val resultCode = f(eval1.primitiveTerm, eval2.primitiveTerm)
+
+    eval1.code + eval2.code +
+      s"""
+          boolean ${ev.nullTerm} = ${eval1.nullTerm} || ${eval2.nullTerm};
+          ${ctx.primitiveForType(resultType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(resultType)};
+          if(!${ev.nullTerm}) {
+            ${ev.primitiveTerm} = (${ctx.primitiveForType(resultType)})($resultCode);
+          }
+        """
+  }
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
@@ -124,6 +205,19 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+  def castOrNull(ctx: CodeGenContext,
+                 ev: EvaluatedExpression,
+                 f: String => String, dataType: DataType): String = {
+    val eval = child.gen(ctx)
+    eval.code +
+      s"""
+          boolean ${ev.nullTerm} = ${eval.nullTerm};
+          ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
+          if (!${ev.nullTerm}) {
+            ${ev.primitiveTerm} = ${f(eval.primitiveTerm)};
+          }
+        """
+  }
 }
 
 // TODO Semantically we probably not need GroupExpression

@@ -52,8 +52,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
     val ctx = newCodeGenContext()
 
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
-      val evalA = expressionEvaluator(order.child, ctx)
-      val evalB = expressionEvaluator(order.child, ctx)
+      val evalA = order.child.gen(ctx)
+      val evalB = order.child.gen(ctx)
       val asc = order.direction == Ascending
       val compare = order.child.dataType match {
         case BinaryType =>

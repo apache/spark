@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -60,6 +61,14 @@ case class NewSet(elementType: DataType) extends LeafExpression {
     new OpenHashSet[Any]()
   }
 
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    s"""
+      boolean ${ev.nullTerm} = false;
+      ${ctx.hashSetForType(elementType)} ${ev.primitiveTerm} =
+        new ${ctx.hashSetForType(elementType)}();
+    """
+  }
+
   override def toString: String = s"new Set($dataType)"
 }
 
@@ -89,6 +98,23 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     } else {
       setEval
     }
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val itemEval = item.gen(ctx)
+    val setEval = set.gen(ctx)
+
+    val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    val htype = ctx.hashSetForType(elementType)
+
+    itemEval.code + setEval.code +
+    s"""
+       if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
+         (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
+       }
+       boolean ${ev.nullTerm} = false;
+       ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
+     """
   }
 
   override def toString: String = s"$set += $item"
@@ -123,6 +149,22 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
     } else {
       null
     }
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val leftEval = left.gen(ctx)
+    val rightEval = right.gen(ctx)
+
+    val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    val htype = ctx.hashSetForType(elementType)
+
+    leftEval.code + rightEval.code +
+    s"""
+      boolean ${ev.nullTerm} = false;
+      ${htype} ${ev.primitiveTerm} =
+        (${htype})${leftEval.primitiveTerm};
+      ${ev.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
+    """
   }
 }
 

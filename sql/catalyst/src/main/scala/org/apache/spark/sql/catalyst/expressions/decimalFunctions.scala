@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
 import org.apache.spark.sql.types._
 
 /** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
@@ -35,6 +36,14 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
       childResult.asInstanceOf[Decimal].toUnscaledLong
     }
   }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val eval = child.gen(ctx)
+    eval.code +s"""
+      boolean ${ev.nullTerm} = ${eval.nullTerm};
+      long ${ev.primitiveTerm} = ${ev.nullTerm} ? -1 : ${eval.primitiveTerm}.toUnscaledLong();
+     """
+  }
 }
 
 /** Create a Decimal from an unscaled Long value */
@@ -52,5 +61,21 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
     } else {
       new Decimal().setOrNull(childResult.asInstanceOf[Long], precision, scale)
     }
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.nullTerm} = ${eval.nullTerm};
+      org.apache.spark.sql.types.Decimal ${ev.primitiveTerm} =
+       ${ctx.defaultPrimitive(DecimalType())};
+
+      if (!${ev.nullTerm}) {
+       ${ev.primitiveTerm} = new org.apache.spark.sql.types.Decimal();
+       ${ev.primitiveTerm} =
+         ${ev.primitiveTerm}.setOrNull(${eval.primitiveTerm}, $precision, $scale);
+       ${ev.nullTerm} = ${ev.primitiveTerm} == null;
+      }
+      """
   }
 }

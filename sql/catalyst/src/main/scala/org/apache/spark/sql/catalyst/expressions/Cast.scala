@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
@@ -432,6 +433,42 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   override def eval(input: Row): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = this match {
+
+    case Cast(child @ BinaryType(), StringType) =>
+      castOrNull (ctx, ev, c =>
+        s"new org.apache.spark.sql.types.UTF8String().set($c)",
+        StringType)
+
+    case Cast(child @ DateType(), StringType) =>
+      castOrNull(ctx, ev, c =>
+        s"""new org.apache.spark.sql.types.UTF8String().set(
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
+        StringType)
+
+    case Cast(child @ BooleanType(), dt: NumericType)  if !dt.isInstanceOf[DecimalType] =>
+      castOrNull(ctx, ev, c => s"(${ctx.primitiveForType(dt)})($c?1:0)", dt)
+
+    case Cast(child @ DecimalType(), IntegerType) =>
+      castOrNull(ctx, ev, c => s"($c).toInt()", IntegerType)
+
+    case Cast(child @ DecimalType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+      castOrNull(ctx, ev, c => s"($c).to${ctx.termForType(dt)}()", dt)
+
+    case Cast(child @ NumericType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+      castOrNull(ctx, ev, c => s"(${ctx.primitiveForType(dt)})($c)", dt)
+
+    // Special handling required for timestamps in hive test cases since the toString function
+    // does not match the expected output.
+    case Cast(e, StringType) if e.dataType != TimestampType =>
+      castOrNull(ctx, ev, c =>
+        s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))",
+        StringType)
+
+    case other =>
+      super.genSource(ctx, ev)
   }
 }
 

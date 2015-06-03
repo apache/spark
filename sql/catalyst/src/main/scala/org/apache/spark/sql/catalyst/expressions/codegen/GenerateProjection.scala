@@ -45,12 +45,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val ctx = newCodeGenContext()
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
-        s"private ${primitiveForType(e.dataType)} c$i = ${defaultPrimitive(e.dataType)};\n"
+        s"private ${ctx.primitiveForType(e.dataType)} c$i = ${ctx.defaultPrimitive(e.dataType)};\n"
     }.mkString("\n      ")
 
     val initColumns = expressions.zipWithIndex.map {
       case (e, i) =>
-        val eval = expressionEvaluator(e, ctx)
+        val eval = e.gen(ctx)
         s"""
         {
           // column$i
@@ -68,10 +68,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n        ")
 
     val updateCases = expressions.zipWithIndex.map { case (e, i) =>
-      s"case $i: { c$i = (${termForType(e.dataType)})value; return;}"
+      s"case $i: { c$i = (${ctx.termForType(e.dataType)})value; return;}"
     }.mkString("\n        ")
 
-    val specificAccessorFunctions = nativeTypes.map { dataType =>
+    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
       val cases = expressions.zipWithIndex.map {
         case (e, i) if e.dataType == dataType =>
           s"case $i: return c$i;"
@@ -80,21 +80,21 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public ${primitiveForType(dataType)} ${accessorForType(dataType)}(int i) {
+      public ${ctx.primitiveForType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
         if (isNullAt(i)) {
-          return ${defaultPrimitive(dataType)};
+          return ${ctx.defaultPrimitive(dataType)};
         }
         switch (i) {
         $cases
         }
-        return ${defaultPrimitive(dataType)};
+        return ${ctx.defaultPrimitive(dataType)};
       }"""
       } else {
         ""
       }
     }.mkString("\n")
 
-    val specificMutatorFunctions = nativeTypes.map { dataType =>
+    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
       val cases = expressions.zipWithIndex.map {
         case (e, i) if e.dataType == dataType =>
           s"case $i: { c$i = value; return; }"
@@ -103,7 +103,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public void ${mutatorForType(dataType)}(int i, ${primitiveForType(dataType)} value) {
+      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.primitiveForType(dataType)} value) {
         nullBits[i] = false;
         switch (i) {
         $cases

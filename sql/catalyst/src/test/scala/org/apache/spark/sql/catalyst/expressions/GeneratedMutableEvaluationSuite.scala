@@ -29,7 +29,7 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
     val ctx = GenerateProjection.newCodeGenContext()
-    lazy val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
+    lazy val evaluated = expression.gen(ctx)
 
     val plan = try {
       GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)

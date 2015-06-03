@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types._
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -82,6 +83,11 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
       case b: Boolean => !b
     }
   }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    // Uh, bad function name...
+    castOrNull(ctx, ev, c => s"!($c)", BooleanType)
+  }
 }
 
 /**
@@ -141,6 +147,26 @@ case class And(left: Expression, right: Expression)
       }
     }
   }
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    s"""
+      ${eval1.code}
+      boolean ${ev.nullTerm} = false;
+      boolean ${ev.primitiveTerm}  = false;
+
+      if (!${eval1.nullTerm} && !${eval1.primitiveTerm}) {
+      } else {
+        ${eval2.code}
+        if (!${eval2.nullTerm} && !${eval2.primitiveTerm}) {
+        } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
+          ${ev.primitiveTerm} = true;
+        } else {
+          ${ev.nullTerm} = true;
+        }
+      }
+     """
+  }
 }
 
 case class Or(left: Expression, right: Expression)
@@ -167,10 +193,44 @@ case class Or(left: Expression, right: Expression)
       }
     }
   }
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    s"""
+      ${eval1.code}
+      boolean ${ev.nullTerm} = false;
+      boolean ${ev.primitiveTerm} = false;
+
+      if (!${eval1.nullTerm} && ${eval1.primitiveTerm}) {
+        ${ev.primitiveTerm} = true;
+      } else {
+        ${eval2.code}
+        if (!${eval2.nullTerm} && ${eval2.primitiveTerm}) {
+          ${ev.primitiveTerm} = true;
+        } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
+          ${ev.primitiveTerm} = false;
+        } else {
+          ${ev.nullTerm} = true;
+        }
+      }
+     """
+  }
 }
 
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    left.dataType match {
+      case dt: NumericType => evaluateAs(BooleanType) (ctx, ev, {
+        (eval1, eval2) => s"$eval1 $symbol $eval2"
+      })
+      case dt: TimestampType =>
+        super.genSource(ctx, ev)
+      case other => evaluateAs(BooleanType) (ctx, ev, {
+        (eval1, eval2) => s"$eval1.compare($eval2) $symbol 0"
+      })
+    }
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
@@ -216,6 +276,17 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression) = {
+    left.dataType match {
+      case BinaryType() =>
+        evaluateAs (BooleanType) (ctx, ev, {
+          case (eval1, eval2) =>
+            s"java.util.Arrays.equals((byte[])$eval1, (byte[])$eval2)"
+        })
+      case other =>
+        evaluateAs (BooleanType) (ctx, ev, { case (eval1, eval2) => s"$eval1 == $eval2" })
+    }
+  }
 }
 
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
@@ -235,6 +306,22 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else {
       l == r
     }
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val cmpCode = if (left.dataType.isInstanceOf[BinaryType]) {
+      s"java.util.Arrays.equals((byte[])${eval1.primitiveTerm}, (byte[])${eval2.primitiveTerm})"
+    } else {
+      s"${eval1.primitiveTerm} == ${eval2.primitiveTerm}"
+    }
+    eval1.code + eval2.code +
+      s"""
+        final boolean ${ev.nullTerm} = false;
+        final boolean ${ev.primitiveTerm} = (${eval1.nullTerm} && ${eval2.nullTerm}) ||
+           (!${eval1.nullTerm} && $cmpCode);
+      """
   }
 }
 
@@ -308,6 +395,26 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     } else {
       falseValue.eval(input)
     }
+  }
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val condEval = predicate.gen(ctx)
+    val trueEval = trueValue.gen(ctx)
+    val falseEval = falseValue.gen(ctx)
+
+    s"""
+      boolean ${ev.nullTerm} = false;
+      ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
+      ${condEval.code}
+      if(!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
+        ${trueEval.code}
+        ${ev.nullTerm} = ${trueEval.nullTerm};
+        ${ev.primitiveTerm} = ${trueEval.primitiveTerm};
+      } else {
+        ${falseEval.code}
+        ${ev.nullTerm} = ${falseEval.nullTerm};
+        ${ev.primitiveTerm} = ${falseEval.primitiveTerm};
+      }
+    """
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"

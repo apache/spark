@@ -33,7 +33,7 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
     } catch {
       case e: Throwable =>
         val ctx = GenerateProjection.newCodeGenContext()
-        val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
+        val evaluated = expression.gen(ctx)
         fail(
           s"""
             |Code generation of $expression failed:
