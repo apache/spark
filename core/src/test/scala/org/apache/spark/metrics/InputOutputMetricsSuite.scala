@@ -108,7 +108,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Shou
     }
   }
 
-  test("exceptions while getting IO thread statistics should not fail tasks / jobs (SPARK-8062)") {
+  test("getFileSystemThreadStatistics should guard against null schemes (SPARK-8062)") {
     val tempDir = Utils.createTempDir()
     val outPath = new File(tempDir, "outfile")
 

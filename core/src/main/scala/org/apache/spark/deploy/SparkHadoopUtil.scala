@@ -179,7 +179,7 @@ class SparkHadoopUtil extends Logging {
       Seq.empty
     } else {
       FileSystem.getAllStatistics
-        .filter { stats => stats.getScheme.equals(scheme) }
+        .filter { stats => scheme.equals(stats.getScheme()) }
         .map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
     }
   }
