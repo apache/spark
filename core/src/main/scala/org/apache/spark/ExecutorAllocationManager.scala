@@ -158,9 +158,8 @@ private[spark] class ExecutorAllocationManager(
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
-  private lazy val sparkEnv = SparkEnv.get
+  private val sparkEnv = SparkEnv.get
 
-  private val executorEndpoints = new mutable.HashMap[String, RpcEndpointRef]()
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -399,17 +398,7 @@ private[spark] class ExecutorAllocationManager(
       // however, we are no longer at the lower bound, and so we must mark executor X
       // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
       executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
-      val hostAndPort =
-        sparkEnv.blockManager.master.getRpcHostPortForExecutor(executorId)
-      hostAndPort match {
-        case Some((host, port)) =>
-          executorEndpoints(executorId) =
-            sparkEnv.rpcEnv.setupEndpointRef(
-              SparkEnv.executorActorSystemName,
-              RpcAddress(host, port),
-              ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
-        case None =>
-      }
+
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
     } else {
       logWarning(s"Duplicate executor $executorId has registered")
@@ -467,11 +456,7 @@ private[spark] class ExecutorAllocationManager(
     if (executorIds.contains(executorId)) {
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
 
-        val hasCachedBlocks =
-          executorsWithCachedBlocks.contains(executorId) ||
-            executorEndpoints.get(executorId).exists(_.askWithRetry[Boolean](HasCachedBlocks))
-
-        if (hasCachedBlocks) executorsWithCachedBlocks += executorId
+        val hasCachedBlocks = sparkEnv.blockManager.master.
 
         val now = clock.getTimeMillis()
         val timeout = {

@@ -48,6 +48,8 @@ class BlockManagerMasterEndpoint(
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
 
+  private val cachedBlocksByExecutor = new mutable.HashMap[String, mutable.Set[BlockId]]
+  
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 

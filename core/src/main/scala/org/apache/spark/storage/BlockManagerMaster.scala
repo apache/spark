@@ -202,6 +202,14 @@ class BlockManagerMaster(
     Await.result(future, timeout)
   }
 
+  /**
+   * Find out if the executor has cached blocks. This method checks only if the executor holds
+   * cached blocks, which are not broadcast blocks.
+   */
+  def hasCachedBlocks(executorId: String): Boolean = {
+    driverEndpoint.askWithRetry[Boolean](hasCachedBlocks(executorId))
+  }
+
   /** Stop the driver endpoint, called only on the Spark driver node */
   def stop() {
     if (driverEndpoint != null && isDriver) {
