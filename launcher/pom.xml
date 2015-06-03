@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-launcher_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Launcher Project</name>
+  <name>Spark Project Launcher</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>launcher</sbt.project.name>
