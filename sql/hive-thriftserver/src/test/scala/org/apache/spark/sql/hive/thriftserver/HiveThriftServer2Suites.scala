@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.URL
-import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
 import java.sql.{Date, DriverManager, Statement}
 
 import scala.collection.mutable.ArrayBuffer
@@ -29,6 +27,8 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
@@ -441,13 +441,14 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        Paths.get(s"$tempLog4jConf/log4j.properties"),
         """log4j.rootCategory=INFO, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
           |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-        """.stripMargin.getBytes(StandardCharsets.UTF_8))
+        """.stripMargin,
+        new File(s"$tempLog4jConf/log4j.properties"),
+        UTF_8)
 
       tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
     }
