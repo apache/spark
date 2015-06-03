@@ -92,6 +92,7 @@ private[hive] class ClientWrapper(
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
     case hive.v13 => new Shim_v0_13()
+    case hive.v14 => new Shim_v0_14()
   }
 
   val state = {
@@ -341,8 +342,8 @@ private[hive] class ClientWrapper(
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit = withHiveState {
-
-    client.loadPartition(
+    shim.loadPartition(
+      client,
       new Path(loadPath), // TODO: Use URI
       tableName,
       partSpec,
@@ -357,7 +358,8 @@ private[hive] class ClientWrapper(
       tableName: String,
       replace: Boolean,
       holdDDLTime: Boolean): Unit = withHiveState {
-    client.loadTable(
+    shim.loadTable(
+      client,
       new Path(loadPath),
       tableName,
       replace,
@@ -372,7 +374,8 @@ private[hive] class ClientWrapper(
       numDP: Int,
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = withHiveState {
-    client.loadDynamicPartitions(
+    shim.loadDynamicPartitions(
+      client,
       new Path(loadPath),
       tableName,
       partSpec,

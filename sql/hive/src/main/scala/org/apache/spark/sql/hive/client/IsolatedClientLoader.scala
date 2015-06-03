@@ -50,15 +50,15 @@ private[hive] object IsolatedClientLoader {
   def hiveVersion(version: String): HiveVersion = version match {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
+    case "14" | "0.14" | "0.14.0" => hive.v14
   }
 
   private def downloadVersion(version: HiveVersion): Seq[URL] = {
-    val hiveArtifacts =
-      (Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde") ++
-        (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
-        .map(a => s"org.apache.hive:$a:${version.fullVersion}") :+
-        "com.google.guava:guava:14.0.1" :+
-        "org.apache.hadoop:hadoop-client:2.4.0"
+    val hiveArtifacts = version.extraDeps ++
+      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
+        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
+      Seq("com.google.guava:guava:14.0.1",
+        "org.apache.hadoop:hadoop-client:2.4.0")
 
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
