@@ -271,6 +271,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /**
+     * Get the list of executors excluding driver
+     */
+    private def getExecutors(ssc: StreamingContext): List[String] = {
+      val executors = ssc.sparkContext.getExecutorMemoryStatus.map(_._1.split(":")(0)).toList
+      val driver = ssc.sparkContext.getConf.get("spark.driver.host")
+      executors.diff(List(driver))
+    }
+
+    /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
@@ -280,18 +289,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         rcvr.setReceiverId(nis.id)
         rcvr
       })
-
-      // Right now, we only honor preferences if all receivers have them
-      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
-
-      // Create the parallel collection of receivers to distributed them on the worker nodes
-      val tempRDD =
-        if (hasLocationPreferences) {
-          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
-          ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        } else {
-          ssc.sc.makeRDD(receivers, receivers.size)
-        }
 
       val checkpointDirOption = Option(ssc.checkpointDir)
       val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
@@ -308,11 +305,36 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         supervisor.start()
         supervisor.awaitTermination()
       }
+
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
       if (!ssc.sparkContext.isLocal) {
         ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
       }
+
+      // Right now, we only honor preferences if all receivers have them
+      var hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
+
+      // If no location preferences are specified, set preferredLocation for each receiver
+      // so as to distribute them evenly over executors in a round-robin fashion
+      if (!hasLocationPreferences && !ssc.sparkContext.isLocal) {
+        val executors = getExecutors(ssc)
+        if (!executors.isEmpty) {
+          var i = 0;
+          for (i <- 0 to (receivers.length - 1)) {
+            receivers(i).preferredLocation = Some(executors(i % executors.length))
+          }
+          hasLocationPreferences = true; 
+        }
+      }
+
+      val tempRDD =
+        if (hasLocationPreferences) {
+          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
+          ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
+        } else {
+          ssc.sc.makeRDD(receivers, receivers.size)
+        }      
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")

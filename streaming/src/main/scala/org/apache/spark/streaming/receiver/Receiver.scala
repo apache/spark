@@ -107,8 +107,8 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    */
   def onStop()
 
-  /** Override this to specify a preferred location (hostname). */
-  def preferredLocation : Option[String] = None
+  /** Specify a preferred location (hostname) */
+  var preferredLocation = None: Option[String]
 
   /**
    * Store a single item of received data to Spark's memory.
