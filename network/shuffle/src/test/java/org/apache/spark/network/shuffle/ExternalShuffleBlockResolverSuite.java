@@ -47,9 +47,9 @@ public class ExternalShuffleBlockResolverSuite {
 
     dataContext.create();
     // Write some sort and hash data.
-    dataContext.insertSortShuffleData(0, 0,
+    dataContext.insertSortShuffleData(0, 0, 0,
       new byte[][] { sortBlock0.getBytes(), sortBlock1.getBytes() } );
-    dataContext.insertHashShuffleData(1, 0,
+    dataContext.insertHashShuffleData(1, 0, 0,
       new byte[][] { hashBlock0.getBytes(), hashBlock1.getBytes() } );
   }
 
@@ -63,7 +63,7 @@ public class ExternalShuffleBlockResolverSuite {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf);
     // Unregistered executor
     try {
-      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0_0");
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
@@ -72,7 +72,7 @@ public class ExternalShuffleBlockResolverSuite {
     // Invalid shuffle manager
     resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
     try {
-      resolver.getBlockData("app0", "exec2", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec2", "shuffle_1_1_0_0");
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
       // pass
@@ -82,11 +82,20 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
     try {
-      resolver.getBlockData("app0", "exec3", "shuffle_1_1_0");
+      resolver.getBlockData("app0", "exec3", "shuffle_1_1_0_0");
       fail("Should have failed");
     } catch (Exception e) {
       // pass
     }
+
+    // no stageAttemptId
+    try {
+      resolver.getBlockData("app0", "exec1", "shuffle_1_1_0");
+      fail("Should have failed");
+    } catch (RuntimeException e) {
+      assertTrue("Bad error message: " + e, e.getMessage().contains("Unexpected block id format"));
+    }
+
   }
 
   @Test
@@ -96,16 +105,18 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
     InputStream block0Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_0_0").createInputStream();
     String block0 = CharStreams.toString(new InputStreamReader(block0Stream));
     block0Stream.close();
     assertEquals(sortBlock0, block0);
 
     InputStream block1Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_0_0_1_0").createInputStream();
     String block1 = CharStreams.toString(new InputStreamReader(block1Stream));
     block1Stream.close();
     assertEquals(sortBlock1, block1);
+
+    // TODO test reading from a different stage attempt
   }
 
   @Test
@@ -115,13 +126,13 @@ public class ExternalShuffleBlockResolverSuite {
       dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 
     InputStream block0Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_1_0_0").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_1_0_0_0").createInputStream();
     String block0 = CharStreams.toString(new InputStreamReader(block0Stream));
     block0Stream.close();
     assertEquals(hashBlock0, block0);
 
     InputStream block1Stream =
-      resolver.getBlockData("app0", "exec0", "shuffle_1_0_1").createInputStream();
+      resolver.getBlockData("app0", "exec0", "shuffle_1_0_1_0").createInputStream();
     String block1 = CharStreams.toString(new InputStreamReader(block1Stream));
     block1Stream.close();
     assertEquals(hashBlock1, block1);

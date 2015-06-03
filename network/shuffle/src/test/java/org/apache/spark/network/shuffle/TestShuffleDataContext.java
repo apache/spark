@@ -57,8 +57,9 @@ public class TestShuffleDataContext {
   }
 
   /** Creates reducer blocks in a sort-based data format within our local dirs. */
-  public void insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
-    String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
+  public void insertSortShuffleData(int shuffleId, int mapId, int stageAttemptId,
+      byte[][] blocks) throws IOException {
+    String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0_" + stageAttemptId;
 
     OutputStream dataStream = new FileOutputStream(
       ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
@@ -78,9 +79,10 @@ public class TestShuffleDataContext {
   }
 
   /** Creates reducer blocks in a hash-based data format within our local dirs. */
-  public void insertHashShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
+  public void insertHashShuffleData(int shuffleId, int mapId, int stageAttemptId,
+      byte[][] blocks) throws IOException {
     for (int i = 0; i < blocks.length; i ++) {
-      String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i;
+      String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i + "_" + stageAttemptId;
       Files.write(blocks[i],
         ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId));
     }
