@@ -190,6 +190,6 @@ class PipelineModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PipelineModel = {
-    new PipelineModel(uid, stages)
+    new PipelineModel(uid, stages.map(_.copy(extra)))
   }
 }
