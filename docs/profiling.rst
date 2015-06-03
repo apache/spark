@@ -1,7 +1,7 @@
 Data Profiling
 ==============
 
-Part of being a productive data ninja is about having the right weapons to
+Part of being a productive with data is about having the right weapons to
 profile the data you are working with. Airflow provides a simple query 
 interface to write sql and get results quickly, and a charting application 
 letting you visualize data.
@@ -24,7 +24,7 @@ You can even use the same templating and macros availlable when writting
 airflow pipelines, parameterizing your queries and modifying parameters 
 direclty in the URL.
 
-These charts ain't Tableau, but they're easy to create, modify and share.
+These charts are basic, but they're easy to create, modify and share.
 
 Chart Screenshot
 ................

@@ -30,20 +30,53 @@ defaults = {
 
 DEFAULT_CONFIG = """\
 [core]
+# The home folder for airflow, default is ~/airflow
 airflow_home = {AIRFLOW_HOME}
+
+# The folder where you airflow pipelines live, most likely a
+# subfolder in a code repository
 dags_folder = {AIRFLOW_HOME}/dags
+
+# The folder where airflow should store its log files
 base_log_folder = {AIRFLOW_HOME}/logs
+
+# The executor class that airflow should use. Choices include
+# SequentialExecutor, LocalExecutor, CeleryExecutor
 executor = SequentialExecutor
+
+# The SqlAlchemy connection string to the metadata database.
+# SqlAlchemy supports many different database engine, more information
+# their website
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
+
+# The amount of parallelism as a setting to the executor. This defines
+# the max number of task instances that should run simultaneously
+# on this airflow installation
 parallelism = 32
+
+# Whether to load the examples that ship with Airflow. It's good to
+# get started, but you probably want to set this to False in a production
+# environment
 load_examples = True
 
+
 [webserver]
+# The base url of your website as airflow cannot guess what domain or
+# cname you are using. This is use in autamated emails that
+# airflow sends to point links to the right web server
 base_url = http://localhost:8080
+
+# The ip specified when starting the web server
 web_server_host = 0.0.0.0
+
+# The port on which to run the web server
 web_server_port = 8080
 
+
 [smtp]
+# If you want airflow to send emails on retries, failure, and you want to
+# the airflow.utils.send_email function, you have to configure an smtp
+# server here
 smtp_host = localhost
 smtp_user = airflow
 smtp_port = 25
@@ -51,17 +84,50 @@ smtp_password = airflow
 smtp_mail_from = airflow@airflow.com
 
 [celery]
+# This section only applies if you are using the CeleryExecutor in
+# [core] section above
+
+# The app name that will be used by celery
 celery_app_name = airflow.executors.celery_executor
+
+# The concurrency that will be used when starting workers with the
+# "airflow worker" command. This defines the number of task instances that
+# a worker will take, so size up your workers based on the resources on
+# your worker box and the nature of your tasks
 celeryd_concurrency = 16
+
+# When you start an airflow worker, airflow starts a tiny web server
+# subprocess to serve the workers local log files to the airflow main
+# web server, who then builds pages and sends them to users. This defines
+# the port on which the logs are served. It needs to be unused, and open
+# visible from the main web server to connect into the workers.
 worker_log_server_port = 8793
+
+# The Celery broker URL. Celery supports RabbitMQ, Redis and experimentaly
+# a sqlalchemy database. Refer to the Celery documentation for more
+# information.
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
+
+# Another key Celery setting
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
+
+# Celery Flower is a sweet UI for Celery. Airflow has a shortcut to start
+# it `airflow flower`. This defines the port that Celery Flower runs on
 flower_port = 8383
+
+# Default queue that tasks get assigned to and that worker listen on.
 default_queue = default
 
 [scheduler]
+# Task instances listen for external kill signal (when you clear tasks
+# from the CLI or the UI), this defines the frequency at which they should
+# listen (in seconds).
 job_heartbeat_sec = 5
-scheduler_heartbeat_sec = 60
+
+# The scheduler constantly tries to trigger new tasks (look at the
+# scheduler section in the docs for more information). This defines
+# how often the scheduler should run (in seconds).
+scheduler_heartbeat_sec = 5
 """
 
 TEST_CONFIG = """\
