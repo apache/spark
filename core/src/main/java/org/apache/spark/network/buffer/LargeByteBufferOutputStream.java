@@ -23,10 +23,22 @@ import java.nio.ByteBuffer;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.util.io.ByteArrayChunkOutputStream;
 
+/**
+ * An OutputStream that will write all data to memory.  It supports writing over 2GB
+ * and the resulting data can be retrieved as a
+ * {@link org.apache.spark.network.buffer.LargeByteBuffer}
+ */
 public class LargeByteBufferOutputStream extends OutputStream {
 
   private final ByteArrayChunkOutputStream output;
 
+  /**
+   * Create a new LargeByteBufferOutputStream which writes to byte arrays of the given size.  Note
+   * that <code>chunkSize</code> has <b>no effect</b> on the LargeByteBuffer returned by
+   * {@link #largeBuffer()}.
+   *
+   * @param chunkSize size of the byte arrays used by this output stream, in bytes
+   */
   public LargeByteBufferOutputStream(int chunkSize) {
     output = new ByteArrayChunkOutputStream(chunkSize);
   }
@@ -39,6 +51,13 @@ public class LargeByteBufferOutputStream extends OutputStream {
     output.write(bytes, off, len);
   }
 
+  /**
+   * Get all of the data written to the stream so far as a LargeByteBuffer.  This method can be
+   * called multiple times, and each returned buffer will be completely independent (the data
+   * is copied for each returned buffer).  It does not close the stream.
+   *
+   * @return the data written to the stream as a LargeByteBuffer
+   */
   public LargeByteBuffer largeBuffer() {
     return largeBuffer(LargeByteBufferHelper.MAX_CHUNK_SIZE);
   }
