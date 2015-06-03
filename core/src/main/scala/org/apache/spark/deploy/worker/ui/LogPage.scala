@@ -29,6 +29,7 @@ import org.apache.spark.util.logging.RollingFileAppender
 private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
   private val workDir = parent.workDir
+  private val supportedLogTypes = Set("stderr", "stdout")
 
   def renderLog(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
@@ -129,6 +130,11 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       offsetOption: Option[Long],
       byteLength: Int
     ): (String, Long, Long, Long) = {
+
+    if (!supportedLogTypes.contains(logType)) {
+      return ("Error: Log type must be one of " + supportedLogTypes.mkString(", "), 0, 0, 0)
+    }
+
     try {
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")

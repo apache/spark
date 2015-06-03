@@ -91,20 +91,19 @@ class CrossValidator(Estimator):
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.mllib.linalg import Vectors
     >>> dataset = sqlContext.createDataFrame(
-    ...     [(Vectors.dense([0.0, 1.0]), 0.0),
-    ...      (Vectors.dense([1.0, 2.0]), 1.0),
-    ...      (Vectors.dense([0.55, 3.0]), 0.0),
-    ...      (Vectors.dense([0.45, 4.0]), 1.0),
-    ...      (Vectors.dense([0.51, 5.0]), 1.0)] * 10,
+    ...     [(Vectors.dense([0.0]), 0.0),
+    ...      (Vectors.dense([0.4]), 1.0),
+    ...      (Vectors.dense([0.5]), 0.0),
+    ...      (Vectors.dense([0.6]), 1.0),
+    ...      (Vectors.dense([1.0]), 1.0)] * 10,
     ...     ["features", "label"])
     >>> lr = LogisticRegression()
-    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1, 5]).build()
+    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
-    >>> # SPARK-7432: The following test is flaky.
-    >>> # cvModel = cv.fit(dataset)
-    >>> # expected = lr.fit(dataset, {lr.maxIter: 5}).transform(dataset)
-    >>> # cvModel.transform(dataset).collect() == expected.collect()
+    >>> cvModel = cv.fit(dataset)
+    >>> evaluator.evaluate(cvModel.transform(dataset))
+    0.8333...
     """
 
     # a placeholder to make it appear in the generated doc

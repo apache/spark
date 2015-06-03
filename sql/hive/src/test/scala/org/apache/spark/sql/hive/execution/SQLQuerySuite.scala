@@ -780,6 +780,42 @@ class SQLQuerySuite extends QueryTest {
       ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
+  test("window function: multiple window expressions in a single expression") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.registerTempTable("nums")
+
+    val expected =
+      Row(1, 1, 1, 55, 1, 57) ::
+      Row(0, 2, 3, 55, 2, 60) ::
+      Row(1, 3, 6, 55, 4, 65) ::
+      Row(0, 4, 10, 55, 6, 71) ::
+      Row(1, 5, 15, 55, 9, 79) ::
+      Row(0, 6, 21, 55, 12, 88) ::
+      Row(1, 7, 28, 55, 16, 99) ::
+      Row(0, 8, 36, 55, 20, 111) ::
+      Row(1, 9, 45, 55, 25, 125) ::
+      Row(0, 10, 55, 55, 30, 140) :: Nil
+
+    val actual = sql(
+      """
+        |SELECT
+        |  y,
+        |  x,
+        |  sum(x) OVER w1 AS running_sum,
+        |  sum(x) OVER w2 AS total_sum,
+        |  sum(x) OVER w3 AS running_sum_per_y,
+        |  ((sum(x) OVER w1) + (sum(x) OVER w2) + (sum(x) OVER w3)) as combined2
+        |FROM nums
+        |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UnBOUNDED PRECEDiNG AND CuRRENT RoW),
+        |       w2 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOuNDED FoLLOWING),
+        |       w3 AS (PARTITION BY y ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+      """.stripMargin)
+
+    checkAnswer(actual, expected)
+
+    dropTempTable("nums")
+  }
+
   test("test case key when") {
     (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
     checkAnswer(
