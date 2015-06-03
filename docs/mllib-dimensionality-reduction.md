@@ -225,3 +225,27 @@ provided in the [Self-Contained Applications](quick-start.html#self-contained-ap
 section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
+
+## Random Projection (RP)
+[Random Projection](http://en.wikipedia.org/wiki/Random_projection) reduces the dimension of a
+matrix while ensuring that ["<i>the distance between any pair of points is approximately preserved</i>"](http://statweb.stanford.edu/~markad/publications/hdwb-nips-2007.pdf)
+while make usage of the [Johnson-Lindenstrauss Lemma](http://en.wikipedia.org/wiki/Johnson%E2%80%93Lindenstrauss_lemma).
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+The following code demonstrates how to compute principal components on a `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Matrix
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+java
+</div>
+
+</div>

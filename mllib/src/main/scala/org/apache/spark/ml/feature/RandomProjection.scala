@@ -18,7 +18,9 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.{ParamPair, Params, ParamMap, Param}
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.mllib.feature
 import org.apache.spark.ml.{Estimator, Model}
@@ -35,18 +37,30 @@ import org.apache.spark.sql.functions._
  * Keeps parameter for the Random Projection
  */
 @Experimental
-trait RPParams  extends Params {
-  var intrinsicDimension: Param[Double] = new Param(this, "dimension", "dimension to project into")
-  var inputColumn: Param[String] = new Param(this, "inputColumn", "name of input column")
-  var outputColumn: Param[String] = new Param(this, "outputColumn", "name of output column")
-  def setInputColumn(value: String): RPParams = set(ParamPair(inputColumn, value))
-  def setOutputColumn(value: String): RPParams = set(ParamPair(outputColumn, value))
-  def setIntrinsicDimension(value: Double): RPParams = set(ParamPair(intrinsicDimension, value))
-  def validateParams(map: ParamMap): Unit = {
-    require(map.contains(intrinsicDimension), "please specify the intrinsic dimension")
-    require(map.contains(inputColumn), "please specify input column")
-    require(map.contains(outputColumn), "please specify output column")
+trait RPParams  extends Params with HasInputCol with HasOutputCol{
+  var intrinsicDimensionParam: DoubleParam = new DoubleParam(this, 
+                                                            "intrinsicDimension", 
+                                                            "dimension to project into")
+
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  def setIntrinsicDimension(value: Double): RPParams = {
+    set(ParamPair(intrinsicDimensionParam, value))
   }
+
+  def validateParams(map: ParamMap): Unit = {
+    getInputCol
+    require(map.contains(intrinsicDimensionParam), "please specify the intrinsic dimension")
+    require(map.contains(inputCol), "please specify input column")
+    require(map.contains(outputCol), "please specify output column")
+  }
+
+  /** @group getParam */
+  def getIntrinsicDimension: Double = $(intrinsicDimensionParam)
 
   /**
    *
@@ -56,8 +70,8 @@ trait RPParams  extends Params {
    */
   def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = extractParamMap(paramMap)
-    val inputfeature = schema(map(inputColumn)).dataType
-    val outputFields = schema.fields :+ StructField(map(outputColumn), inputfeature, false)
+    val inputfeature = schema(map(inputCol)).dataType
+    val outputFields = schema.fields :+ StructField(map(outputCol), inputfeature, false)
     StructType(outputFields)
   }
 }
@@ -68,13 +82,14 @@ trait RPParams  extends Params {
  * The model that actually performs the reduction
  */
 @Experimental
-class RPModel(override val parent: Estimator[RPModel],
+class RPModel(override val uid: String,
+              val parentModel: Estimator[RPModel],
               val fittingParamMap: ParamMap,
               randomProjectionMatrix: Matrix,
               rp: feature.RandomProjection,
               origDimension: Int) extends Model[RPModel] with RPParams {
 
-
+  parent = parentModel
 
   /**
    * prepare schema for the new DataFrame
@@ -93,10 +108,10 @@ class RPModel(override val parent: Estimator[RPModel],
   override def transform(dataSet: DataFrame): DataFrame = {
     val map = extractParamMap()
     validateParams(map)
-    dataSet.withColumn(map(outputColumn),
+    dataSet.withColumn(map(outputCol),
       callUDF((row: Any) => applyRP(row),
-        dataSet.schema(map(inputColumn)).dataType,
-        dataSet(map(inputColumn))))
+        dataSet.schema(map(inputCol)).dataType,
+        dataSet(map(inputCol))))
   }
 
 
@@ -117,14 +132,13 @@ class RPModel(override val parent: Estimator[RPModel],
    */
   def createMatrix(dataset: DataFrame, paramMap: ParamMap): RowMatrix = {
     val map = extractParamMap(paramMap) ++ fittingParamMap
-    val mat: RowMatrix = new RowMatrix(dataset.select(map(inputColumn)).map {
+    val mat: RowMatrix = new RowMatrix(dataset.select(map(inputCol)).map {
       case (row: Vector) => row
       case (row: GenericRow) => row.getAs[Vector](0)
     })
     mat
   }
 
-  override val uid: String = _
 }
 
 /**
@@ -133,7 +147,10 @@ class RPModel(override val parent: Estimator[RPModel],
  * Estimates the model based on input-data
  */
 @Experimental
-class RandomProjection extends Estimator[RPModel] with RPParams {
+class RandomProjection(override val uid: String)
+  extends Estimator[RPModel] with RPParams {
+
+  def this() = this(Identifiable.randomUID("random_projection"))
 
   /**
    * fit model to data
@@ -144,18 +161,18 @@ class RandomProjection extends Estimator[RPModel] with RPParams {
     val map = extractParamMap()
     validateParams(map)
 
-    val inputColumnValue = map(inputColumn)
+    val inputColumnValue = map(inputCol)
     require(dataset.schema.fieldNames.contains(inputColumnValue),
             s"input column '${inputColumnValue}' does not exist")
 
-    val dimension = map(intrinsicDimension)
+    val dimension = getIntrinsicDimension
     val origDimension = getOriginalDimension(dataset, map)
     val rp = new feature.RandomProjection(dimension.toInt)
     val matrix = rp.computeRPMatrix(dataset.sqlContext.sparkContext, origDimension)
-    val model = new RPModel(this, map, matrix.toLocalMatrix(), rp, origDimension)
-    model.setInputColumn(map(inputColumn))
-    model.setOutputColumn(map(outputColumn))
-    model.setIntrinsicDimension(map(intrinsicDimension))
+    val model = new RPModel(uid, this, map, matrix.toLocalMatrix(), rp, origDimension)
+    model.setInputCol(map(inputCol))
+    model.setOutputCol(map(outputCol))
+    model.setIntrinsicDimension(dimension)
     model
   }
 
@@ -166,7 +183,7 @@ class RandomProjection extends Estimator[RPModel] with RPParams {
    * @return
    */
   def getOriginalDimension(dataSet: DataFrame, params: ParamMap = extractParamMap()): Int = {
-    val col = params(inputColumn)
+    val col = params(inputCol)
     dataSet.select(col).first() match {
       case (row: Vector) => row.length
       case (row: GenericRow) => row.getAs[Vector](0).size
@@ -181,6 +198,4 @@ class RandomProjection extends Estimator[RPModel] with RPParams {
   def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, extractParamMap)
   }
-
-  override val uid: String = _
 }
