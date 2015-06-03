@@ -24,13 +24,13 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import akka.actor.Address
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.deploy._
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class MasterSuite extends FunSuite with Matchers {
+class MasterSuite extends SparkFunSuite with Matchers {
 
   test("toAkkaUrl") {
     val conf = new SparkConf(loadDefaults = false)

@@ -21,14 +21,13 @@ import scala.concurrent.Await
 
 import akka.actor._
 import akka.testkit.TestActorRef
-import org.scalatest.FunSuite
 
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
 
-class MapOutputTrackerSuite extends FunSuite {
+class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
   test("master start and stop") {

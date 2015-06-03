@@ -28,7 +28,7 @@ import akka.actor.{ActorSystem, Props}
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
@@ -43,7 +43,11 @@ import org.apache.spark.util.{AkkaUtils, ManualClock}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
-class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockHandlerSuite
+  extends SparkFunSuite
+  with BeforeAndAfter
+  with Matchers
+  with Logging {
 
   val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
   val hadoopConf = new Configuration()

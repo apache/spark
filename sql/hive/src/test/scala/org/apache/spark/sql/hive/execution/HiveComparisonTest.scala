@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -40,7 +40,7 @@ import org.apache.spark.sql.hive.test.TestHive
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test

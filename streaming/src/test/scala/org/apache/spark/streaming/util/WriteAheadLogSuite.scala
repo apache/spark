@@ -26,11 +26,12 @@ import scala.language.{implicitConversions, postfixOps}
 import WriteAheadLogSuite._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.{ManualClock, Utils}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
-class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
+class WriteAheadLogSuite extends SparkFunSuite with BeforeAndAfter {
 
   val hadoopConf = new Configuration()
   var tempDir: File = null

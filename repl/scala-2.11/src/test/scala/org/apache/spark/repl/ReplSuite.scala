@@ -26,14 +26,13 @@ import scala.concurrent.duration._
 import scala.tools.nsc.interpreter.SparkILoop
 
 import com.google.common.io.Files
-import org.scalatest.FunSuite
 import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 
 
-class ReplSuite extends FunSuite {
+class ReplSuite extends SparkFunSuite {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"

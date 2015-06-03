@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
-class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
+class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _

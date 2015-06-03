@@ -19,9 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
-import org.scalatest.FunSuite
-
-class SecurityManagerSuite extends FunSuite {
+class SecurityManagerSuite extends SparkFunSuite {
 
   test("set security with conf") {
     val conf = new SparkConf

@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.param
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ParamsSuite extends FunSuite {
+class ParamsSuite extends SparkFunSuite {
 
   val solver = new TestParams()
   import solver.{inputCol, maxIter}

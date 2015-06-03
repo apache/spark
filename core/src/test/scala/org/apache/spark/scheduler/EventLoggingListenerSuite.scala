@@ -25,8 +25,9 @@ import scala.io.Source
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
@@ -39,7 +40,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Logging {
+class EventLoggingListenerSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   import EventLoggingListenerSuite._
 
   private val fileSystem = Utils.getHadoopFileSystem("/",

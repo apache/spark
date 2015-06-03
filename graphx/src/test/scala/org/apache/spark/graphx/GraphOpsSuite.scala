@@ -17,13 +17,12 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.rdd._
-import org.scalatest.FunSuite
 
-class GraphOpsSuite extends FunSuite with LocalSparkContext {
+class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("joinVertices") {
     withSpark { sc =>

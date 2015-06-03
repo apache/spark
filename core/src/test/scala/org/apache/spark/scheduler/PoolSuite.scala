@@ -19,15 +19,13 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Tests that pools and the associated scheduling algorithms for FIFO and fair scheduling work
  * correctly.
  */
-class PoolSuite extends FunSuite with LocalSparkContext {
+class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {

@@ -27,14 +27,13 @@ import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.scalatest.FunSuite
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class UtilsSuite extends FunSuite with ResetSystemProperties {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")

@@ -19,9 +19,7 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -74,7 +72,7 @@ object NaiveBayesSuite {
     theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)))
 }
 
-class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
+class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOfPredictions = predictions.zip(input).count {
@@ -153,7 +151,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
+class NaiveBayesClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 10

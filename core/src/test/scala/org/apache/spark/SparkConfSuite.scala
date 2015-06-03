@@ -21,12 +21,11 @@ import java.util.concurrent.{TimeUnit, Executors}
 
 import scala.util.{Try, Random}
 
-import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.ResetSystemProperties
 import com.esotericsoftware.kryo.Kryo
 
-class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("loading from system properties") {
     System.setProperty("spark.test.testProperty", "2")
     val conf = new SparkConf()

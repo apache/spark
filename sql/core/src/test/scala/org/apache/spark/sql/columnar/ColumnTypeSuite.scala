@@ -20,15 +20,13 @@ package org.apache.spark.sql.columnar
 import java.nio.ByteBuffer
 import java.sql.Timestamp
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
 
-class ColumnTypeSuite extends FunSuite with Logging {
+class ColumnTypeSuite extends SparkFunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {

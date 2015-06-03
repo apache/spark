@@ -17,9 +17,9 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class EdgeSuite extends FunSuite {
+class EdgeSuite extends SparkFunSuite {
   test ("compare") {
     // decending order
     val testEdges: Array[Edge[Int]] = Array(

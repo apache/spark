@@ -23,13 +23,13 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.{when}
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ui.SparkUI
 
-class HistoryServerSuite extends FunSuite with Matchers with MockitoSugar {
+class HistoryServerSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
   test("generate history page with relative links") {
     val historyServer = mock[HistoryServer]

@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vectors, Matrices}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
+class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(6.0, 9.0),

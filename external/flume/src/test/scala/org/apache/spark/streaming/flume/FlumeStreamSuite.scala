@@ -35,15 +35,15 @@ import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestOutputStream}
 import org.apache.spark.util.Utils
 
-class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
+class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
   val conf = new SparkConf().setMaster("local[4]").setAppName("FlumeStreamSuite")
 
   var ssc: StreamingContext = null

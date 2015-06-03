@@ -16,13 +16,12 @@
  */
 package org.apache.spark.storage
 
-import org.scalatest.FunSuite
 import java.io.File
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class BlockObjectWriterSuite extends FunSuite {
+class BlockObjectWriterSuite extends SparkFunSuite {
   test("verify write metrics") {
     val file = new File("somefile")
     file.deleteOnExit()

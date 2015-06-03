@@ -26,12 +26,12 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
-class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty)(

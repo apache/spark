@@ -19,13 +19,12 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext {
+class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 

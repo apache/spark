@@ -37,7 +37,7 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
+import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
@@ -47,7 +47,7 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
 
 
-class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
+class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
 
   private val conf = new SparkConf(false)

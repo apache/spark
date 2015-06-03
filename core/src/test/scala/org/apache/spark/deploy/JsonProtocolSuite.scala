@@ -23,14 +23,13 @@ import java.util.Date
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s._
 import org.json4s.jackson.JsonMethods
-import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class JsonProtocolSuite extends FunSuite {
+class JsonProtocolSuite extends SparkFunSuite {
 
   test("writeApplicationInfo") {
     val output = JsonProtocol.writeApplicationInfo(createAppInfo())

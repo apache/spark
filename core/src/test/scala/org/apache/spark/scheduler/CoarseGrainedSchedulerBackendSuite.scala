@@ -17,12 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils}
 
-import org.scalatest.FunSuite
-
-class CoarseGrainedSchedulerBackendSuite extends FunSuite with LocalSparkContext {
+class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
 
   test("serialized task larger than akka frame size") {
     val conf = new SparkConf

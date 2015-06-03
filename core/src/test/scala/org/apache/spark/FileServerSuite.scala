@@ -25,13 +25,12 @@ import javax.net.ssl.SSLHandshakeException
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.RandomUtils
-import org.scalatest.FunSuite
 
 import org.apache.spark.util.Utils
 
 import SSLSampleConfigs._
 
-class FileServerSuite extends FunSuite with LocalSparkContext {
+class FileServerSuite extends SparkFunSuite with LocalSparkContext {
 
   @transient var tmpDir: File = _
   @transient var tmpFile: File = _

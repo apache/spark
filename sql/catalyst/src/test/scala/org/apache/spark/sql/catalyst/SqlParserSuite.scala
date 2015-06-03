@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.Command
-import org.scalatest.FunSuite
 
 private[sql] case class TestCommand(cmd: String) extends Command
 
@@ -45,7 +45,7 @@ private[sql] class CaseInsensitiveTestParser extends AbstractSparkSQLParser {
     }
 }
 
-class SqlParserSuite extends FunSuite {
+class SqlParserSuite extends SparkFunSuite {
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser

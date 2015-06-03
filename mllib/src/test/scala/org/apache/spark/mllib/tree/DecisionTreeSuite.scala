@@ -20,8 +20,7 @@ package org.apache.spark.mllib.tree
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
 
 
-class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Binary classification with continuous features: split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -884,7 +883,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object DecisionTreeSuite extends FunSuite {
+object DecisionTreeSuite extends SparkFunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
