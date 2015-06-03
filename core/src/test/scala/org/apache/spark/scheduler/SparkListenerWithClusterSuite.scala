@@ -46,7 +46,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
     rdd2.setName("Target RDD")
     rdd2.count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(listener.addedExecutorInfo.size == 2)
     assert(listener.addedExecutorInfo("0").totalCores == 1)
     assert(listener.addedExecutorInfo("1").totalCores == 1)
