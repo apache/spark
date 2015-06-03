@@ -191,36 +191,22 @@ The following code illustrates how to load a sample dataset and use logistic reg
 
 {% highlight scala %}
 
-import scala.collection.mutable
-import scala.language.reflectiveCalls
-
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.{Pipeline, PipelineStage}
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.DataFrame
-
-val regParam = 0.3
-val elasticNetParam = 0.8
-val tol = 1E-6
-val dataPath = "data/mllib/sample_libsvm_data.txt"
-
-println(s"LogisticRegressionExample with regParam $regParam and elasticNetParam $elasticNetParam")
 
 // Load training and test data and cache it.
-val training = MLUtils.loadLibSVMFile(sc, dataPath).toDF()
+val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 
 val lor = new LogisticRegression()
-  .setRegParam(regParam)
-  .setElasticNetParam(elasticNetParam)
-  .setTol(tol)
+  .setRegParam(0.3)
+  .setElasticNetParam(0.8)
+  .setTol(1e-6)
 
 // Fit the model
-val lirModel = lor.fit(training)
+val lorModel = lor.fit(training)
 
 // Print the weights and intercept for logistic regression.
-println(s"Weights: ${lirModel.weights} Intercept: ${lirModel.intercept}")
+println(s"Weights: ${lorModel.weights} Intercept: ${lorModel.intercept}")
 
 {% endhighlight %}
 
