@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -80,6 +81,10 @@ object Statistics {
    */
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
+  /** Java-friendly version of [[corr()]] */
+  def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double]): Double =
+    corr(x.rdd.asInstanceOf[RDD[Double]], y.rdd.asInstanceOf[RDD[Double]])
+
   /**
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
@@ -95,6 +100,10 @@ object Statistics {
    *         specified method.
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
+
+  /** Java-friendly version of [[corr()]] */
+  def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double], method: String): Double =
+    corr(x.rdd.asInstanceOf[RDD[Double]], y.rdd.asInstanceOf[RDD[Double]], method)
 
   /**
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the
