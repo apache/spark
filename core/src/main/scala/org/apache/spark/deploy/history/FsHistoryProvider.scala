@@ -17,16 +17,18 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
 
+import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
@@ -59,7 +61,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
-  private val fs = Utils.getHadoopFileSystem(logDir, SparkHadoopUtil.get.newConfiguration(conf))
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -218,6 +221,58 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
   }
+
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      zipStream: ZipOutputStream): Unit = {
+
+    /**
+     * This method compresses the files passed in, and writes the compressed data out into the
+     * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
+     * the name of the file being compressed.
+     */
+    def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
+      val fs = FileSystem.get(hadoopConf)
+      val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
+      try {
+        outputStream.putNextEntry(new ZipEntry(entryName))
+        ByteStreams.copy(inputStream, outputStream)
+        outputStream.closeEntry()
+      } finally {
+        inputStream.close()
+      }
+    }
+
+    applications.get(appId) match {
+      case Some(appInfo) =>
+        try {
+          // If no attempt is specified, or there is no attemptId for attempts, return all attempts
+          appInfo.attempts.filter { attempt =>
+            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
+          }.foreach { attempt =>
+            val logPath = new Path(logDir, attempt.logPath)
+            // If this is a legacy directory, then add the directory to the zipStream and add
+            // each file to that directory.
+            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
+              val files = fs.listFiles(logPath, false)
+              zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
+              zipStream.closeEntry()
+              while (files.hasNext) {
+                val file = files.next().getPath
+                zipFileToStream(file, attempt.logPath + Path.SEPARATOR + file.getName, zipStream)
+              }
+            } else {
+              zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
+            }
+          }
+        } finally {
+          zipStream.close()
+        }
+      case None => throw new SparkException(s"Logs for $appId not found.")
+    }
+  }
+
 
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
