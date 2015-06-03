@@ -395,22 +395,35 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def join(right: DataFrame, usingColumn: String): DataFrame = {
+    join(right, Seq(usingColumn))
+  }
+
+  def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
-    // Project only one of the join column.
-    val joinedCol = joined.right.resolve(usingColumn)
+    // Project only one of the join columns.
+    val joinedCols = usingColumns.map(col => joined.right.resolve(col))
+    val condition = usingColumns.map { col =>
+      catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col))
+    }.foldLeft[Option[catalyst.expressions.BinaryExpression]](None) { (opt, eqTo) =>
+      opt match {
+        case Some(cond) =>
+          Some(catalyst.expressions.And(cond, eqTo))
+        case None =>
+          Some(eqTo)
+      }
+    }
+
     Project(
-      joined.output.filterNot(_ == joinedCol),
+      joined.output.filterNot(joinedCols.contains(_)),
       Join(
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(catalyst.expressions.EqualTo(
-          joined.left.resolve(usingColumn),
-          joined.right.resolve(usingColumn))))
+        condition)
     )
   }
 
@@ -425,7 +438,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
+  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, Seq(joinExprs), "inner")
 
   /**
    * Join with another [[DataFrame]], using the given join expression. The following performs
@@ -448,6 +461,10 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
+    join(right, Seq(joinExprs), joinType)
+  }
+
+  def join(right: DataFrame, joinExprs: Seq[Column], joinType: String): DataFrame = {
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -458,7 +475,17 @@ class DataFrame private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+    val condition = joinExprs
+      .foldLeft[Option[catalyst.expressions.Expression]](None) { (opt, condNext) =>
+        opt match {
+          case Some(cond) =>
+            Some(catalyst.expressions.And(cond, condNext.expr))
+          case None =>
+            Some(condNext.expr)
+        }
+      }
+
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), condition)
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.

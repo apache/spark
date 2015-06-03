@@ -34,6 +34,15 @@ class DataFrameJoinSuite extends QueryTest {
       Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
   }
 
+  test("join - join using multiple columns") {
+    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Seq("int", "int2")),
+      Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
   test("join - join using self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
 
@@ -50,6 +59,15 @@ class DataFrameJoinSuite extends QueryTest {
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
       sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
+  }
+
+  test("join - self join multiple columns") {
+    val df1 = testData.as('df1)
+    val df2 = testData.as('df2)
+
+    checkAnswer(
+      df1.join(df2, Seq($"df1.key" === $"df2.key", $"df1.value" === $"df2.value"), "inner"),
+      sql("SELECT a.key, a.value, b.key, b.value FROM testData a JOIN testData b ON a.key = b.key AND a.value = b.value").collect().toSeq)
   }
 
   test("join - using aliases after self join") {
