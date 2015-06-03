@@ -24,3 +24,18 @@
         {% endfor %}
     {% endif %}
 {% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script>
+      // We blur task_ids in demo mode
+    $( document ).ready(function() {
+      if ("{{ demo_mode }}" == "True") {
+          $("pre span.s").css({
+              'text-shadow': '0px 0px 10px red',
+              'color': 'transparent',
+          });
+      }
+    });
+    </script>
+{% endblock %}

@@ -19,6 +19,7 @@
 
 {% block tail %}
     {{ super() }}
+    <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
     <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
     <script src="{{ url_for('static', filename='highcharts-more.js') }}">
     </script>
@@ -26,6 +27,7 @@
       filename='vendor/bootstrap-daterangepicker/daterangepicker.js') }}"></script>
     <script src="{{ admin_static.url(filename='admin/js/form-1.0.0.js') }}"></script>
     <script>
+    $( document ).ready(function() {
       execution_date = '{{ execution_date }}';
       hc = {{ hc|safe }};
       hc.plotOptions.series.point = {
@@ -47,7 +49,18 @@
             Highcharts.dateFormat('%H:%M:%S', new Date(duration));
         }
       }
-      $('#container').highcharts(hc);
+      $("#container").highcharts(hc);
+
+      // We blur task_ids in demo mode
+      if ("{{ demo_mode }}" == "True") {
+          d3.select("svg")
+            .append("filter")
+            .attr("id", "blur-effect-1")
+            .append("feGaussianBlur")
+            .attr("stdDeviation", 3);
+          d3.selectAll("g.highcharts-xaxis-labels text").style("filter", "url(#blur-effect-1)");
+      }
+    });
     </script>
 
 {% endblock %}

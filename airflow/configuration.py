@@ -14,6 +14,7 @@ defaults = {
         'web_server_host': '0.0.0.0',
         'web_server_port': '8080',
         'authenticate': False,
+        'demo_mode': False,
     },
     'scheduler': {
         'statsd_on': False,

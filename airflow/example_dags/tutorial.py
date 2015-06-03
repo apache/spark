@@ -4,12 +4,15 @@ http://airflow.readthedocs.org/en/latest/tutorial.html
 """
 from airflow import DAG
 from airflow.operators import BashOperator
-from datetime import datetime
+from datetime import datetime, timedelta
+
+seven_days_ago = datetime.combine(datetime.today() - timedelta(7),
+                                  datetime.min.time())
 
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2015, 1, 1),
+    'start_date': seven_days_ago,
     'email': ['airflow@airflow.com'],
     'email_on_failure': False,
     'email_on_retry': False,

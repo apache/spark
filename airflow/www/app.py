@@ -621,7 +621,8 @@ class Airflow(BaseView):
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(linenos=True))
         return self.render(
-            'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/dag_code.html', html_code=html_code, dag=dag, title=title,
+            demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
     @expose('/circles')
     @login_required
@@ -948,7 +949,7 @@ class Airflow(BaseView):
     @wwwutils.gzipped
     def tree(self):
         dag_id = request.args.get('dag_id')
-        blur = request.args.get('blur') == 'true'
+        blur = conf.getboolean('webserver', 'demo_mode')
         dag = dagbag.get_dag(dag_id)
         root = request.args.get('root')
         if root:
@@ -1044,7 +1045,7 @@ class Airflow(BaseView):
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        blur = request.args.get('blur') == 'true'
+        blur = conf.getboolean('webserver', 'demo_mode')
         arrange = request.args.get('arrange', "LR")
         dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
@@ -1152,6 +1153,7 @@ class Airflow(BaseView):
             data=all_data,
             chart_options={'yAxis': {'title': {'text': 'hours'}}},
             height="700px",
+            demo_mode=conf.getboolean('webserver', 'demo_mode'),
         )
 
     @expose('/landing_times')
@@ -1186,6 +1188,7 @@ class Airflow(BaseView):
             data=all_data,
             height="700px",
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
+            demo_mode=conf.getboolean('webserver', 'demo_mode'),
         )
 
     @expose('/refresh')
@@ -1214,6 +1217,7 @@ class Airflow(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         dag = dagbag.get_dag(dag_id)
+        demo_mode = conf.getboolean('webserver', 'demo_mode')
 
         dttm = request.args.get('execution_date')
         if dttm:
@@ -1275,6 +1279,7 @@ class Airflow(BaseView):
             form=form,
             hc=json.dumps(hc, indent=4),
             height=height,
+            demo_mode=demo_mode,
         )
 
     @expose('/variables/<form>', methods=["GET", "POST"])
