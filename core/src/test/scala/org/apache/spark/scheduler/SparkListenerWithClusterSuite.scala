@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.scalatest.{FunSuite, BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 /**
