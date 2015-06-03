@@ -43,7 +43,7 @@ class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext {
     // Trigger a job so that executors get added
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.addedExecutorInfos.values.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
       // Browse to each URL to check that it's valid
@@ -73,7 +73,7 @@ class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext {
     // Trigger a job so that executors get added
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
     assert(listeners.size === 1)
     val listener = listeners(0)
