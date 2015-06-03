@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
@@ -127,8 +127,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val needsConversion = relation.needConversion
     val dataSchema = relation.dataSchema
 
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
       df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
       writerContainer.commitJob()
       relation.refresh()
@@ -139,9 +140,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
-
       try {
+        writerContainer.executorSideSetup(taskContext)
         if (needsConversion) {
           val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
           while (iterator.hasNext) {
@@ -191,8 +191,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val (partitionOutput, dataOutput) = output.partition(a => partitionColumns.contains(a.name))
     val codegenEnabled = df.sqlContext.conf.codegenEnabled
 
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
       df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
       writerContainer.commitJob()
       relation.refresh()
@@ -203,32 +204,38 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
+      try {
+        writerContainer.executorSideSetup(taskContext)
 
-      val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
-      val dataProj = newProjection(codegenEnabled, dataOutput, output)
+        val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
+        val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-      if (needsConversion) {
-        val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = partitionProj(row)
-          val dataPart = dataProj(row)
-          val convertedDataPart = converter(dataPart).asInstanceOf[Row]
-          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+        if (needsConversion) {
+          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            val partitionPart = partitionProj(row)
+            val dataPart = dataProj(row)
+            val convertedDataPart = converter(dataPart).asInstanceOf[Row]
+            writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+          }
+        } else {
+          val partitionSchema = StructType.fromAttributes(partitionOutput)
+          val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
+            val dataPart = dataProj(row)
+            writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+          }
         }
-      } else {
-        val partitionSchema = StructType.fromAttributes(partitionOutput)
-        val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
-          val dataPart = dataProj(row)
-          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
-        }
+
+        writerContainer.commitTask()
+      } catch { case cause: Throwable =>
+        logError("Aborting task.", cause)
+        writerContainer.abortTask()
+        throw new SparkException("Task failed while writing rows.", cause)
       }
-
-      writerContainer.commitTask()
     }
   }
 
@@ -283,7 +290,12 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
+
+    // This preparation must happen before initializing output format and output committer, since
+    // their initialization involves the job configuration, which can be potentially decorated in
+    // `relation.prepareJobForWrite`.
     outputWriterFactory = relation.prepareJobForWrite(job)
+
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -359,7 +371,9 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortTask(): Unit = {
-    outputCommitter.abortTask(taskAttemptContext)
+    if (outputCommitter != null) {
+      outputCommitter.abortTask(taskAttemptContext)
+    }
     logError(s"Task attempt $taskAttemptId aborted.")
   }
 
@@ -369,7 +383,9 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortJob(): Unit = {
-    outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    if (outputCommitter != null) {
+      outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    }
     logError(s"Job $jobId aborted.")
   }
 }
@@ -390,6 +406,7 @@ private[sql] class DefaultWriterContainer(
 
   override def commitTask(): Unit = {
     try {
+      assert(writer != null, "OutputWriter instance should have been initialized")
       writer.close()
       super.commitTask()
     } catch {
@@ -401,7 +418,9 @@ private[sql] class DefaultWriterContainer(
 
   override def abortTask(): Unit = {
     try {
-      writer.close()
+      if (writer != null) {
+        writer.close()
+      }
     } finally {
       super.abortTask()
     }
@@ -445,6 +464,7 @@ private[sql] class DynamicPartitionWriterContainer(
   override def commitTask(): Unit = {
     try {
       outputWriters.values.foreach(_.close())
+      outputWriters.clear()
       super.commitTask()
     } catch { case cause: Throwable =>
       super.abortTask()
@@ -455,6 +475,7 @@ private[sql] class DynamicPartitionWriterContainer(
   override def abortTask(): Unit = {
     try {
       outputWriters.values.foreach(_.close())
+      outputWriters.clear()
     } finally {
       super.abortTask()
     }
