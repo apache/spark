@@ -133,7 +133,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   test("Single command with -e") {
-    runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
   }
 
   test("Single command with --database") {
