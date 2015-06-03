@@ -46,7 +46,10 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.partitioner"),
             // Mima false positive (was a private[spark] class)
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.util.collection.PairIterator")
+              "org.apache.spark.util.collection.PairIterator"),
+            // false positive, this is a @Private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter")
           )
         case v if v.startsWith("1.4") =>
           Seq(
