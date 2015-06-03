@@ -127,6 +127,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val needsConversion = relation.needConversion
     val dataSchema = relation.dataSchema
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
     writerContainer.driverSideSetup()
 
     try {
@@ -140,8 +142,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
+      // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
+
         if (needsConversion) {
           val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
           while (iterator.hasNext) {
@@ -154,6 +158,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             writerContainer.outputWriterForRow(row).write(row)
           }
         }
+
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
         logError("Aborting task.", cause)
@@ -191,6 +196,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val (partitionOutput, dataOutput) = output.partition(a => partitionColumns.contains(a.name))
     val codegenEnabled = df.sqlContext.conf.codegenEnabled
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
     writerContainer.driverSideSetup()
 
     try {
@@ -204,6 +211,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
+      // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
 
