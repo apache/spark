@@ -324,7 +324,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           for (i <- 0 to (receivers.length - 1)) {
             receivers(i).preferredLocation = Some(executors(i % executors.length))
           }
-          hasLocationPreferences = true; 
+          hasLocationPreferences = true
         }
       }
 
