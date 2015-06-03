@@ -97,7 +97,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   /**
    * Get a copy of the data between the two endpoints, start <= idx < until.  Always returns
-   * an array of size (until - start).  Throws an IllegalArgumentException if
+   * an array of size (until - start).  Throws an IllegalArgumentException unless
    * 0 <= start <= until <= size
    */
   def slice(start: Long, until: Long): Array[Byte] = {
