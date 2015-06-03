@@ -23,7 +23,9 @@ from __future__ import absolute_import
 # MLlib currently needs NumPy 1.4+, so complain if lower
 
 import numpy
-if numpy.version.version < '1.4':
+
+ver = [int(x) for x in numpy.version.version.split('.')[:2]]
+if ver < [1, 4]:
     raise Exception("MLlib requires NumPy 1.4+")
 
 __all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
