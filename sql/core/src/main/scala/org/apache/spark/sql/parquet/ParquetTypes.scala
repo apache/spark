@@ -19,7 +19,7 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -33,12 +33,11 @@ import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeNa
 import parquet.schema.Type.Repetition
 import parquet.schema.{ConversionPatterns, DecimalMetadata, GroupType => ParquetGroupType, MessageType, OriginalType => ParquetOriginalType, PrimitiveType => ParquetPrimitiveType, Type => ParquetType, Types => ParquetTypes}
 
+import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SparkException}
 
-// Implicits
-import scala.collection.JavaConversions._
 
 /** A class representing Parquet info fields we care about, for passing back to Parquet */
 private[parquet] case class ParquetTypeInfo(
@@ -73,13 +72,12 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.INT96 if int96AsTimestamp => TimestampType
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
-        sys.error("Potential loss of precision: cannot convert INT96")
+        throw new AnalysisException("Potential loss of precision: cannot convert INT96")
       case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
         if (originalType == ParquetOriginalType.DECIMAL && decimalInfo.getPrecision <= 18) =>
           // TODO: for now, our reader only supports decimals that fit in a Long
           DecimalType(decimalInfo.getPrecision, decimalInfo.getScale)
-      case _ => sys.error(
-        s"Unsupported parquet datatype $parquetType")
+      case _ => throw new AnalysisException(s"Unsupported parquet datatype $parquetType")
     }
   }
 
@@ -371,7 +369,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             parquetKeyType,
             parquetValueType)
         }
-        case _ => sys.error(s"Unsupported datatype $ctype")
+        case _ => throw new AnalysisException(s"Unsupported datatype $ctype")
       }
     }
   }
@@ -403,7 +401,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
   def convertFromString(string: String): Seq[Attribute] = {
     Try(DataType.fromJson(string)).getOrElse(DataType.fromCaseClassString(string)) match {
       case s: StructType => s.toAttributes
-      case other => sys.error(s"Can convert $string to row")
+      case other => throw new AnalysisException(s"Can convert $string to row")
     }
   }
 
@@ -411,8 +409,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     // ,;{}()\n\t= and space character are special characters in Parquet schema
     schema.map(_.name).foreach { name =>
       if (name.matches(".*[ ,;{}()\n\t=].*")) {
-        sys.error(
-          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\n\t=".
+        throw new AnalysisException(
+          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
              |Please use alias to rename it.
            """.stripMargin.split("\n").mkString(" "))
       }
