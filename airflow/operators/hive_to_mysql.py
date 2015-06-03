@@ -18,7 +18,7 @@ class HiveToMySqlTransfer(BaseOperator):
     :type mysql_table: str
     :param mysql_conn_id: source mysql connection
     :type mysql_conn_id: str
-    :param hive_conn_id: desctination hive connection
+    :param hive_conn_id: destination hive connection
     :type hive_conn_id: str
     :param mysql_preoperator: sql statement to run against mysql prior to
         import, typically use to truncate of delete in place of the data
