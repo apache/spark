@@ -17,12 +17,10 @@
 
 package org.apache.spark.util
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkFunSuite}
 
-class ClosureCleanerSuite extends FunSuite {
+class ClosureCleanerSuite extends SparkFunSuite {
   test("closures inside an object") {
     assert(TestObject.run() === 30) // 6 + 7 + 8 + 9
   }

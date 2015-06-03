@@ -17,17 +17,15 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.FunSuite
-
 import com.google.common.io.Files
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 
-class GraphSuite extends FunSuite with LocalSparkContext {
+class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   def starGraph(sc: SparkContext, n: Int): Graph[String, Int] = {
     Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexId, x: VertexId)), 3), "v")

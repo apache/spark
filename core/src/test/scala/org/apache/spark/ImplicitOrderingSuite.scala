@@ -17,11 +17,9 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.rdd.RDD
 
-class ImplicitOrderingSuite extends FunSuite with LocalSparkContext {
+class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
   // Tests that PairRDDFunctions grabs an implicit Ordering in various cases where it should.
   test("basic inference of Orderings"){
     sc = new SparkContext("local", "test")
@@ -50,30 +48,30 @@ private object ImplicitOrderingSuite {
   class OrderedClass extends Ordered[OrderedClass] {
     override def compare(o: OrderedClass): Int = ???
   }
-  
+
   def basicMapExpectations(rdd: RDD[Int]) = {
-    List((rdd.map(x => (x, x)).keyOrdering.isDefined, 
+    List((rdd.map(x => (x, x)).keyOrdering.isDefined,
             "rdd.map(x => (x, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (1, x)).keyOrdering.isDefined, 
+          (rdd.map(x => (1, x)).keyOrdering.isDefined,
             "rdd.map(x => (1, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (x.toString, x)).keyOrdering.isDefined, 
+          (rdd.map(x => (x.toString, x)).keyOrdering.isDefined,
             "rdd.map(x => (x.toString, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (null, x)).keyOrdering.isDefined, 
+          (rdd.map(x => (null, x)).keyOrdering.isDefined,
             "rdd.map(x => (null, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty, 
+          (rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty,
             "rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty"),
-          (rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined, 
+          (rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined,
             "rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined, 
+          (rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined,
             "rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined"))
   }
-  
+
   def otherRDDMethodExpectations(rdd: RDD[Int]) = {
-    List((rdd.groupBy(x => x).keyOrdering.isDefined, 
+    List((rdd.groupBy(x => x).keyOrdering.isDefined,
            "rdd.groupBy(x => x).keyOrdering.isDefined"),
-         (rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty, 
+         (rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty,
            "rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty"),
-         (rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined, 
+         (rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined,
            "rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined"),
          (rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined,
            "rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined"),

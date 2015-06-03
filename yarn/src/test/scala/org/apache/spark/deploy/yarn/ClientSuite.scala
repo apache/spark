@@ -28,17 +28,17 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
 import scala.reflect.ClassTag
 import scala.util.Try
 
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")

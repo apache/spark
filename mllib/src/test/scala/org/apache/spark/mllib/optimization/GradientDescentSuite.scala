@@ -20,8 +20,9 @@ package org.apache.spark.mllib.optimization
 import scala.collection.JavaConversions._
 import scala.util.Random
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -61,7 +62,7 @@ object GradientDescentSuite {
   }
 }
 
-class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matchers {
+class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers {
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
@@ -140,7 +141,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
   }
 }
 
-class GradientDescentClusterSuite extends FunSuite with LocalClusterSparkContext {
+class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small") {
     val m = 4

@@ -21,12 +21,10 @@ import java.io.File
 
 import scala.collection.JavaConversions._
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class ExecutorRunnerTest extends FunSuite {
+class ExecutorRunnerTest extends SparkFunSuite {
   test("command includes appId") {
     val appId = "12345-worker321-9876"
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))

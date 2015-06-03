@@ -23,14 +23,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
 import org.apache.spark._
-import org.scalatest.FunSuite
 
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
 
-class PipedRDDSuite extends FunSuite with SharedSparkContext {
+class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("basic pipe") {
     if (testCommandAvailable("cat")) {

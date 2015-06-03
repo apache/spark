@@ -24,7 +24,7 @@ import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
 
@@ -64,7 +64,7 @@ import scala.language.postfixOps
  * increments would be captured even though the commit in both tasks was executed
  * erroneously.
  */
-class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
+class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   var outputCommitCoordinator: OutputCommitCoordinator = null
   var tempDir: File = null

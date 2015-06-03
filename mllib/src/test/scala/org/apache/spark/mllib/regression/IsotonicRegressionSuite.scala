@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
+class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers {
 
   private def round(d: Double) = {
     Math.round(d * 100).toDouble / 100

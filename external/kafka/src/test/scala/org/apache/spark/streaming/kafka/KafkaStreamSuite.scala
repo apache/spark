@@ -34,10 +34,10 @@ import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient.ZkClient
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  * This is an abstract base class for Kafka testsuites. This has the functionality to set up
  * and tear down local Kafka servers, and to push data using Kafka producers.
  */
-abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Logging {
+abstract class KafkaStreamSuiteBase extends SparkFunSuite with Eventually with Logging {
 
   private val zkHost = "localhost"
   private var zkPort: Int = 0

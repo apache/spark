@@ -19,8 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -74,7 +73,7 @@ case class ComplexReflectData(
     mapFieldContainsNull: Map[Int, Option[Long]],
     dataField: Data)
 
-class ScalaReflectionRelationSuite extends FunSuite {
+class ScalaReflectionRelationSuite extends SparkFunSuite {
 
   import org.apache.spark.sql.test.TestSQLContext.implicits._
 

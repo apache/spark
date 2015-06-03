@@ -20,9 +20,10 @@ package org.apache.spark.deploy.worker
 import akka.actor.{ActorSystem, AddressFromURIString, Props}
 import akka.testkit.TestActorRef
 import akka.remote.DisassociatedEvent
-import org.scalatest.FunSuite
 
-class WorkerWatcherSuite extends FunSuite {
+import org.apache.spark.SparkFunSuite
+
+class WorkerWatcherSuite extends SparkFunSuite {
   test("WorkerWatcher shuts down on valid disassociation") {
     val actorSystem = ActorSystem("test")
     val targetWorkerUrl = "akka://1.2.3.4/user/Worker"

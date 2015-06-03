@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // TODO: add more tests
 

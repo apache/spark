@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
-class RowSuite extends FunSuite {
+class RowSuite extends SparkFunSuite {
 
   test("create row") {
     val expected = new GenericMutableRow(4)

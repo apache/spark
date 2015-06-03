@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.scalatest.FunSuite
 
 /**
  * *** DUPLICATED FROM sql/catalyst/plans. ***
@@ -28,7 +28,7 @@ import org.scalatest.FunSuite
  * It is hard to have maven allow one subproject depend on another subprojects test code.
  * So, we duplicate this code here.
  */
-class PlanTest extends FunSuite {
+class PlanTest extends SparkFunSuite {
 
   /**
    * Since attribute references are given globally unique ids during analysis,

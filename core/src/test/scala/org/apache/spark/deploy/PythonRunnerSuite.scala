@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class PythonRunnerSuite extends FunSuite {
+class PythonRunnerSuite extends SparkFunSuite {
 
   // Test formatting a single path to be added to the PYTHONPATH
   test("format path") {

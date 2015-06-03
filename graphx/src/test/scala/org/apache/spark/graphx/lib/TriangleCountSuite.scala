@@ -17,13 +17,12 @@
 
 package org.apache.spark.graphx.lib
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy.RandomVertexCut
 
 
-class TriangleCountSuite extends FunSuite with LocalSparkContext {
+class TriangleCountSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Count a single triangle") {
     withSpark { sc =>

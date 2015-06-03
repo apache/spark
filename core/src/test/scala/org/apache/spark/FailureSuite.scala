@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.util.NonSerializable
 
 import java.io.NotSerializableException
@@ -38,7 +36,7 @@ object FailureSuiteState {
   }
 }
 
-class FailureSuite extends FunSuite with LocalSparkContext {
+class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.

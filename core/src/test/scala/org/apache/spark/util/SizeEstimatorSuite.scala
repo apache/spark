@@ -17,7 +17,9 @@
 
 package org.apache.spark.util
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, PrivateMethodTester}
+
+import org.apache.spark.SparkFunSuite
 
 class DummyClass1 {}
 
@@ -44,7 +46,10 @@ class DummyString(val arr: Array[Char]) {
 }
 
 class SizeEstimatorSuite
-  extends FunSuite with BeforeAndAfterEach with PrivateMethodTester with ResetSystemProperties {
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with PrivateMethodTester
+  with ResetSystemProperties {
 
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case

@@ -19,13 +19,13 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{PrivateMethodTester, FunSuite}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark._
 
 import scala.util.Random
 
-class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
+class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext with PrivateMethodTester {
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test

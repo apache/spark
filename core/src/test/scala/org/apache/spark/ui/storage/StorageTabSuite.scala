@@ -17,8 +17,8 @@
 
 package org.apache.spark.ui.storage
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.Success
+import org.scalatest.BeforeAndAfter
+import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -26,7 +26,7 @@ import org.apache.spark.storage._
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
-class StorageTabSuite extends FunSuite with BeforeAndAfter {
+class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _

@@ -22,15 +22,15 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
 
-class ExpressionEvaluationSuite extends FunSuite {
+class ExpressionEvaluationSuite extends SparkFunSuite {
 
   test("literals") {
     checkEvaluation(Literal(1), 1)
