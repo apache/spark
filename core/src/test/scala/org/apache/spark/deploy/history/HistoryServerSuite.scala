@@ -18,8 +18,11 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
+import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import com.google.common.base.Charsets
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
@@ -27,7 +30,6 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -169,18 +171,6 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   // Test that the files are downloaded correctly, and validate them.
   def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
 
-    def validateFile(expStream: FileInputStream, actualStream: FileInputStream): Unit = {
-      try {
-        val expected = IOUtils.toString(expStream)
-        val actual = IOUtils.toString(actualStream)
-        actual should be(expected)
-      } finally {
-        Seq(expStream, actualStream).foreach { s =>
-          Utils.tryWithSafeFinally(s.close())()
-        }
-      }
-    }
-
     val url = attemptId match {
       case Some(id) =>
         new URL(s"${generateURL(s"applications/$appId")}/$id/logs")
@@ -193,39 +183,35 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     inputStream should not be None
     error should be (None)
 
-    val dir = Utils.createTempDir()
-    try {
-      Utils.chmod700(dir)
-      HistoryTestUtils.unzipToDir(inputStream.get, dir)
-      val unzippedContent = dir.listFiles()
-      attemptId match {
-        case Some(_) => unzippedContent.length should be (1)
-        case None => unzippedContent.length should be (2)
-      }
-
-      // If these are legacy files, then each of the unzipped contents is actually a legacy log dir.
+    val zipStream = new ZipInputStream(inputStream.get)
+    var entry = zipStream.getNextEntry
+    entry should not be null
+    val totalFiles = {
       if (legacy) {
-        unzippedContent.foreach { legacyDir =>
-          assert(legacyDir.isDirectory)
-          val logFiles = legacyDir.listFiles()
-          logFiles.length should be (3)
-          logFiles.foreach { f =>
-            val actualStream = new FileInputStream(f)
-            val expectedStream =
-              new FileInputStream(new File(new File(logDir, legacyDir.getName), f.getName))
-            validateFile(expectedStream, actualStream)
+        attemptId.map { x => 3 }.getOrElse(6)
+      } else {
+        attemptId.map { x => 1 }.getOrElse(2)
+      }
+    }
+    var filesCompared = 0
+    while(entry != null) {
+      if (!entry.isDirectory) {
+        val expectedFile = {
+          if (legacy) {
+            val splits = entry.getName.split("/")
+            new File(new File(logDir, splits(0)), splits(1))
+          } else {
+            new File(logDir, entry.getName)
           }
         }
-      } else {
-        unzippedContent.foreach { f =>
-          val actualStream = new FileInputStream(f)
-          val expectedStream = new FileInputStream(new File(logDir, f.getName))
-          validateFile(expectedStream, actualStream)
-        }
+        val expected = Files.toString(expectedFile, Charsets.UTF_8)
+        val actual  = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
+        actual should be (expected)
+        filesCompared += 1
       }
-    } finally {
-      Utils.deleteRecursively(dir)
+      entry = zipStream.getNextEntry
     }
+    filesCompared should be (totalFiles)
   }
 
   test("response codes on bad paths") {

@@ -17,14 +17,16 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedOutputStream, FileInputStream, File, FileOutputStream, OutputStreamWriter}
+import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStream, File,
+  FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
-import java.util.zip.ZipOutputStream
+import java.util.zip.{ZipInputStream,  ZipOutputStream}
 
 import scala.io.Source
 
-import org.apache.commons.io.IOUtils
+import com.google.common.base.Charsets
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -351,36 +353,23 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     provider.checkForLogs()
 
     (1 to 2).foreach { i =>
-      val outDir = Utils.createTempDir()
-      val unzipDir = Utils.createTempDir()
-      try {
-        Utils.chmod700(outDir)
-        Utils.chmod700(unzipDir)
-        val outFile = new File(outDir, s"file$i.zip")
-        val outputStream = new ZipOutputStream(new FileOutputStream(outFile))
-        provider.writeEventLogs("downloadApp1", Some(s"attempt$i"), outputStream)
-        HistoryTestUtils.unzipToDir(new FileInputStream(outFile), unzipDir)
-        val actualFiles = unzipDir.listFiles()
-        assert(actualFiles.length == 1)
-        actualFiles.foreach { actualFile =>
-          val expFile = logs.find(_.getName == actualFile.getName).get
-          val expStream = new FileInputStream(expFile)
-          val resultStream = new FileInputStream(actualFile)
-          try {
-            val input = IOUtils.toString(expStream)
-            val out = IOUtils.toString(resultStream)
-            out should be(input)
-          } finally {
-            Seq(expStream, resultStream).foreach { s =>
-              Utils.tryWithSafeFinally(s.close())()
-            }
-          }
-        }
-      } finally {
-        Seq(outDir, unzipDir).foreach { f =>
-          Utils.tryWithSafeFinally(Utils.deleteRecursively(f))()
-        }
+      val underlyingStream = new ByteArrayOutputStream()
+      val outputStream = new ZipOutputStream(underlyingStream)
+      provider.writeEventLogs("downloadApp1", Some(s"attempt$i"), outputStream)
+      outputStream.close()
+      val inputStream = new ZipInputStream(new ByteArrayInputStream(underlyingStream.toByteArray))
+      var totalEntries = 0
+      var entry = inputStream.getNextEntry
+      entry should not be null
+      while (entry != null) {
+        val actual = new String(ByteStreams.toByteArray(inputStream), Charsets.UTF_8)
+        val expected = Files.toString(logs.find(_.getName == entry.getName).get, Charsets.UTF_8)
+        actual should be (expected)
+        totalEntries += 1
+        entry = inputStream.getNextEntry
       }
+      totalEntries should be (1)
+      inputStream.close()
     }
   }
 

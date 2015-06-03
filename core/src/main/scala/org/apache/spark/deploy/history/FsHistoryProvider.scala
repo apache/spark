@@ -23,6 +23,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
 
+import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
@@ -233,19 +234,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      */
     def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
       val fs = FileSystem.get(hadoopConf)
-      val buffer = new Array[Byte](64 * 1024)
       val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
       try {
         outputStream.putNextEntry(new ZipEntry(entryName))
-        var dataRemaining = true
-        while (dataRemaining) {
-          val length = inputStream.read(buffer)
-          if (length != -1) {
-            outputStream.write(buffer, 0, length)
-          } else {
-            dataRemaining = false
-          }
-        }
+        ByteStreams.copy(inputStream, outputStream)
         outputStream.closeEntry()
       } finally {
         inputStream.close()
