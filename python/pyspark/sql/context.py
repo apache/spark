@@ -131,7 +131,7 @@ class SQLContext(object):
         return UDFRegistration(self)
 
     @since(1.4)
-    def range(self, start, end, step=1, numPartitions=None):
+    def range(self, start, end=None, step=1, numPartitions=None):
         """
         Create a :class:`DataFrame` with single LongType column named `id`,
         containing elements in a range from `start` to `end` (exclusive) with
@@ -145,10 +145,18 @@ class SQLContext(object):
 
         >>> sqlContext.range(1, 7, 2).collect()
         [Row(id=1), Row(id=3), Row(id=5)]
+
+        >>> sqlContext.range(3).collect()
+        [Row(id=0), Row(id=1), Row(id=2)]
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
-        jdf = self._ssql_ctx.range(int(start), int(end), int(step), int(numPartitions))
+
+        if end is None:
+            jdf = self._ssql_ctx.range(0, int(start), int(step), int(numPartitions))
+        else:
+            jdf = self._ssql_ctx.range(int(start), int(end), int(step), int(numPartitions))
+
         return DataFrame(jdf, self)
 
     @ignore_unicode_prefix
