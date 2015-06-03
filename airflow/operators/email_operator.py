@@ -4,6 +4,17 @@ from airflow.utils import apply_defaults
 
 
 class EmailOperator(BaseOperator):
+    """
+    Sends an email.
+
+    :param to: list of emails to send the email to
+    :type to: list or string (comma or semicolon delimited)
+    :param subject: subject line for the email (templated)
+    :type subject: string
+    :param html_content: content of the email (templated), html markup
+        is allowed
+    :type html_content: string
+    """
 
     template_fields = ('subject', 'html_content')
     template_ext = ('.html',)
@@ -20,17 +31,6 @@ class EmailOperator(BaseOperator):
             subject,
             html_content,
             *args, **kwargs):
-        """
-        Sends an email.
-
-        :param to: list of emails to send the email to
-        :type to: list or string (comma or semicolon delimited)
-        :param subject: subject line for the email (templated)
-        :type subject: string
-        :param html_content: content of the email (templated), html markup
-            is allowed
-        :type html_content: string
-        """
         super(EmailOperator, self).__init__(*args, **kwargs)
         self.to = to
         self.subject = subject
