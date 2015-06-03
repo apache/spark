@@ -372,6 +372,7 @@ class LogisticRegressionWithLBFGS
     }
   }
 
+
   /**
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
@@ -379,8 +380,27 @@ class LogisticRegressionWithLBFGS
    * applying a regularization penalty to the intercept, otherwise
    * defaults to the mllib implementation. If more than two classes
    * or feature scaling is disabled, always uses mllib implementation.
+   * If using ml implementation, uses ml code to generate initial weights.
+   */
+  override def run(input: RDD[LabeledPoint]): LogisticRegressionModel = {
+    run(input, generateInitialWeights(), false)
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input RDD
+   * of LabeledPoint entries starting from the initial weights provided.
+   * If a known updater is used calls the ml implementation, to avoid
+   * applying a regularization penalty to the intercept, otherwise
+   * defaults to the mllib implementation. If more than two classes
+   * or feature scaling is disabled, always uses mllib implementation.
+   * Uses user provided weights.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
+    run(input, initialWeights, true)
+  }
+
+  private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSupplied: Boolean):
+      LogisticRegressionModel = {
     // ml's Logisitic regression only supports binary classifcation currently.
     if (numOfLinearPredictor == 1 && useFeatureScaling) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
@@ -389,7 +409,9 @@ class LogisticRegressionWithLBFGS
         lr.setRegParam(optimizer.getRegParam())
         lr.setElasticNetParam(elasticNetParam)
         val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray: _*)
-        lr.setInitialWeights(initialWeightsWithIntercept)
+        if (userSuppliedWeights) {
+          lr.setInitialWeights(initialWeightsWithIntercept)
+        }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())

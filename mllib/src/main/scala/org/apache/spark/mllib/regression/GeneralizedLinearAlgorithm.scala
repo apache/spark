@@ -174,10 +174,9 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * Run the algorithm with the configured parameters on an input
-   * RDD of LabeledPoint entries.
+   * Generate the initial weights when the user does not supply them
    */
-  def run(input: RDD[LabeledPoint]): M = {
+  private def generateInitialWeights(): Vector = {
     if (numFeatures < 0) {
       numFeatures = input.map(_.features.size).first()
     }
@@ -193,16 +192,21 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
      * have the intercept as part of weights to have consistent design.
      */
-    val initialWeights = {
-      if (numOfLinearPredictor == 1) {
-        Vectors.dense(new Array[Double](numFeatures))
-      } else if (addIntercept) {
-        Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
-      } else {
-        Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
-      }
+    if (numOfLinearPredictor == 1) {
+      Vectors.dense(new Array[Double](numFeatures))
+    } else if (addIntercept) {
+      Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+    } else {
+      Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
     }
-    run(input, initialWeights)
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input
+   * RDD of LabeledPoint entries.
+   */
+  def run(input: RDD[LabeledPoint]): M = {
+    run(input, generateInitialWeights())
   }
 
   /**
