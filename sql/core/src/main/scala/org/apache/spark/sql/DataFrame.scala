@@ -1091,9 +1091,10 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(col: Column): DataFrame = {
-    val colsAfterDrop = schema.filter { field =>
-      !this.col(field.name).expr.semanticEquals(col.expr)
-    }.map(field => Column(field.name))
+    val attrs = this.logicalPlan.output
+    val colsAfterDrop = attrs.filter { attr =>
+      attr != col.expr
+    }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
 

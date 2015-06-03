@@ -352,6 +352,32 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
+  test("drop unknown column with same name (no-op) with column reference") {
+    val col = Column("key")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("drop column after join with duplicate columns using column reference") {
+    val newSalary = salary.withColumnRenamed("personId", "id")
+    val col = newSalary("id")
+    // this join will result in duplicate "id" columns
+    val joinedDf = person.join(newSalary,
+      person("id") === newSalary("id"), "inner")
+    // remove only the "id" column that was associated with newSalary
+    val df = joinedDf.drop(col)
+    checkAnswer(
+      df,
+      joinedDf.collect().map { case Row(id: Int, name: String, age: Int,
+                                        idToDrop: Int, salary: Double) =>
+        Row(id, name, age, salary)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
