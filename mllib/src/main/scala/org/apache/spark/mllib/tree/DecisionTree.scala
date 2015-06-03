@@ -737,7 +737,12 @@ object DecisionTree extends Serializable with Logging {
     val leftWeight = leftCount / totalCount.toDouble
     val rightWeight = rightCount / totalCount.toDouble
 
-    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+    val gainRatio = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+  //calculate splitInfo
+  val splitInfo= -(scala.math.log(leftCount/totalCount.toDouble)    
+    +scala.math.log(rightCount/totalCount.toDouble))/scala.math.log(2)
+   //C4.5 algorithm instead of ID3 algorithm
+   val gain=gainRatio/splitInfo
 
     // if information gain doesn't satisfy minimum information gain,
     // then this split is invalid, return invalid information gain stats.
