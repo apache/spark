@@ -636,6 +636,9 @@ class DataFrame(object):
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical columns.
 
+        .. note:: This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
         >>> df.describe().show()
         +-------+---+
         |summary|age|
@@ -653,9 +656,11 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def head(self, n=None):
-        """
-        Returns the first ``n`` rows as a list of :class:`Row`,
-        or the first :class:`Row` if ``n`` is ``None.``
+        """Returns the first ``n`` rows.
+
+        If n is greater than 1, return a list of :class:`Row`. If n is 1, return a single Row.
+
+        :param n: int, default 1.
 
         >>> df.head()
         Row(age=2, name=u'Alice')
@@ -1170,8 +1175,8 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        This function is meant for exploratory data analysis, as we make no guarantee about the
-        backward compatibility of the schema of the resulting DataFrame.
+        .. note::  This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.

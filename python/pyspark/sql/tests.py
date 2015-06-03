@@ -753,8 +753,10 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
+            cls.tearDownClass()
             raise unittest.SkipTest("Hive is not available")
         except TypeError:
+            cls.tearDownClass()
             raise unittest.SkipTest("Hive is not available")
         os.unlink(cls.tempdir.name)
         _scala_HiveContext =\
