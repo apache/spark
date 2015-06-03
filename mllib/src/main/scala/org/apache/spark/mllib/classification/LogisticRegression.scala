@@ -26,6 +26,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
+import org.apache.spark.mllib.util.MLUtils.appendBias
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
@@ -383,7 +384,7 @@ class LogisticRegressionWithLBFGS
    * If using ml implementation, uses ml code to generate initial weights.
    */
   override def run(input: RDD[LabeledPoint]): LogisticRegressionModel = {
-    run(input, generateInitialWeights(), false)
+    run(input, generateInitialWeights(input), false)
   }
 
   /**
@@ -399,7 +400,7 @@ class LogisticRegressionWithLBFGS
     run(input, initialWeights, true)
   }
 
-  private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSupplied: Boolean):
+  private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
     // ml's Logisitic regression only supports binary classifcation currently.
     if (numOfLinearPredictor == 1 && useFeatureScaling) {
@@ -408,8 +409,12 @@ class LogisticRegressionWithLBFGS
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
         lr.setElasticNetParam(elasticNetParam)
-        val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray: _*)
         if (userSuppliedWeights) {
+          val initialWeightsWithIntercept = if (addIntercept) {
+            appendBias(initialWeights)
+          } else {
+            initialWeights
+          }
           lr.setInitialWeights(initialWeightsWithIntercept)
         }
         lr.setFitIntercept(addIntercept)

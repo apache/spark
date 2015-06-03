@@ -176,7 +176,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Generate the initial weights when the user does not supply them
    */
-  private def generateInitialWeights(): Vector = {
+  protected def generateInitialWeights(input: RDD[LabeledPoint]): Vector = {
     if (numFeatures < 0) {
       numFeatures = input.map(_.features.size).first()
     }
@@ -206,7 +206,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[LabeledPoint]): M = {
-    run(input, generateInitialWeights())
+    run(input, generateInitialWeights(input))
   }
 
   /**
