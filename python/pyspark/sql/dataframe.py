@@ -62,6 +62,8 @@ class DataFrame(object):
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
+    .. note:: Experimental
+
     .. versionadded:: 1.3
     """
 
@@ -161,7 +163,7 @@ class DataFrame(object):
 
         Optionally overwriting any existing data.
         """
-        self._jdf.insertInto(tableName, overwrite)
+        self.write.insertInto(tableName, overwrite)
 
     @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):
@@ -801,9 +803,53 @@ class DataFrame(object):
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jdf = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jdf, self.sql_ctx)
+        return GroupedData(jgd, self.sql_ctx)
+
+    @since(1.4)
+    def rollup(self, *cols):
+        """
+        Create a multi-dimensional rollup for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.rollup('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+        """
+        jgd = self._jdf.rollup(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
+
+    @since(1.4)
+    def cube(self, *cols):
+        """
+        Create a multi-dimensional cube for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.cube('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | null|   2|    1|
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|   5|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+        """
+        jgd = self._jdf.cube(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
 
     @since(1.3)
     def agg(self, *exprs):
@@ -1123,6 +1169,9 @@ class DataFrame(object):
         frequent element count algorithm described in
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        This function is meant for exploratory data analysis, as we make no guarantee about the
+        backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.

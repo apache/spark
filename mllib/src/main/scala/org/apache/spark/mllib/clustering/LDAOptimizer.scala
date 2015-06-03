@@ -273,7 +273,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Default: 1024, following the original Online LDA paper.
    */
   def setTau0(tau0: Double): this.type = {
-    require(tau0 > 0,  s"LDA tau0 must be positive, but was set to $tau0")
+    require(tau0 > 0, s"LDA tau0 must be positive, but was set to $tau0")
     this.tau0 = tau0
     this
   }
@@ -339,7 +339,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def initialize(
       docs: RDD[(Long, Vector)],
-      lda: LDA):  OnlineLDAOptimizer = {
+      lda: LDA): OnlineLDAOptimizer = {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
@@ -458,7 +458,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * uses digamma which is accurate but expensive.
    */
   private def dirichletExpectation(alpha: BDM[Double]): BDM[Double] = {
-    val rowSum =  sum(alpha(breeze.linalg.*, ::))
+    val rowSum = sum(alpha(breeze.linalg.*, ::))
     val digAlpha = digamma(alpha)
     val digRowSum = digamma(rowSum)
     val result = digAlpha(::, breeze.linalg.*) - digRowSum

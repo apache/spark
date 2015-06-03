@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Row, SQLContext}
 
-class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Word2Vec") {
     val sqlContext = new SQLContext(sc)
@@ -35,9 +34,9 @@ class Word2VecSuite extends FunSuite with MLlibTestSparkContext {
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(
-      "a" -> Array(-0.2811822295188904,-0.6356269121170044,-0.3020961284637451),
-      "b" -> Array(1.0309048891067505,-1.29472815990448,0.22276712954044342),
-      "c" -> Array(-0.08456747233867645,0.5137411952018738,0.11731560528278351)
+      "a" -> Array(-0.2811822295188904, -0.6356269121170044, -0.3020961284637451),
+      "b" -> Array(1.0309048891067505, -1.29472815990448, 0.22276712954044342),
+      "c" -> Array(-0.08456747233867645, 0.5137411952018738, 0.11731560528278351)
     )
 
     val expected = doc.map { sentence =>

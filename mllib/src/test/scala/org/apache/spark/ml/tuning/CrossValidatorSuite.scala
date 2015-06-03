@@ -17,15 +17,19 @@
 
 package org.apache.spark.ml.tuning
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{SQLContext, DataFrame}
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.types.StructType
 
-class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
+class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
 
@@ -52,5 +56,55 @@ class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
+  }
+
+  test("validateParams should check estimatorParamMaps") {
+    import CrossValidatorSuite._
+
+    val est = new MyEstimator("est")
+    val eval = new MyEvaluator
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(est.inputCol, Array("input1", "input2"))
+      .build()
+
+    val cv = new CrossValidator()
+      .setEstimator(est)
+      .setEstimatorParamMaps(paramMaps)
+      .setEvaluator(eval)
+
+    cv.validateParams() // This should pass.
+
+    val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
+    cv.setEstimatorParamMaps(invalidParamMaps)
+    intercept[IllegalArgumentException] {
+      cv.validateParams()
+    }
+  }
+}
+
+object CrossValidatorSuite {
+
+  abstract class MyModel extends Model[MyModel]
+
+  class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {
+
+    override def validateParams(): Unit = require($(inputCol).nonEmpty)
+
+    override def fit(dataset: DataFrame): MyModel = {
+      throw new UnsupportedOperationException
+    }
+
+    override def transformSchema(schema: StructType): StructType = {
+      throw new UnsupportedOperationException
+    }
+  }
+
+  class MyEvaluator extends Evaluator {
+
+    override def evaluate(dataset: DataFrame): Double = {
+      throw new UnsupportedOperationException
+    }
+
+    override val uid: String = "eval"
   }
 }

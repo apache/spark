@@ -21,14 +21,13 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream}
 
 import com.google.common.io.ByteStreams
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.{FileSegment, BlockObjectWriter}
 
-class PartitionedSerializedPairBufferSuite extends FunSuite {
+class PartitionedSerializedPairBufferSuite extends SparkFunSuite {
   test("OrderedInputStream single record") {
     val serializerInstance = new KryoSerializer(new SparkConf()).newInstance
 

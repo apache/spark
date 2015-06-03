@@ -24,18 +24,19 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-import org.apache.hadoop.util.Shell
 import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.{SQLConf, DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -61,7 +62,6 @@ private[sql] case class InsertIntoDataSource(
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
-    partitionColumns: Array[String],
     mode: SaveMode)
   extends RunnableCommand {
 
@@ -93,11 +93,23 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[Row])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
-      val df = sqlContext.createDataFrame(
-        DataFrame(sqlContext, query).queryExecution.toRdd,
-        relation.schema,
-        needsConversion = false)
+      // We create a DataFrame by applying the schema of relation to the data to make sure.
+      // We are writing data based on the expected schema,
+      val df = {
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column). We
+        // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
+        // safely apply the schema of r.schema to the data.
+        val project = Project(
+          relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
 
+        sqlContext.createDataFrame(
+          DataFrame(sqlContext, project).queryExecution.toRdd,
+          relation.schema,
+          needsConversion = false)
+      }
+
+      val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
         insert(new DefaultWriterContainer(relation, job), df)
       } else {
@@ -206,9 +218,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
           writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
         }
       } else {
+        val partitionSchema = StructType.fromAttributes(partitionOutput)
+        val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
         while (iterator.hasNext) {
           val row = iterator.next()
-          val partitionPart = partitionProj(row)
+          val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
           val dataPart = dataProj(row)
           writerContainer.outputWriterForRow(partitionPart).write(dataPart)
         }
@@ -375,13 +389,22 @@ private[sql] class DefaultWriterContainer(
   override def outputWriterForRow(row: Row): OutputWriter = writer
 
   override def commitTask(): Unit = {
-    writer.close()
-    super.commitTask()
+    try {
+      writer.close()
+      super.commitTask()
+    } catch {
+      case cause: Throwable =>
+        super.abortTask()
+        throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    writer.close()
-    super.abortTask()
+    try {
+      writer.close()
+    } finally {
+      super.abortTask()
+    }
   }
 }
 
@@ -405,7 +428,7 @@ private[sql] class DynamicPartitionWriterContainer(
       val valueString = if (string == null || string.isEmpty) {
         defaultPartitionName
       } else {
-        DynamicPartitionWriterContainer.escapePathName(string)
+        PartitioningUtils.escapePathName(string)
       }
       s"/$col=$valueString"
     }.mkString.stripPrefix(Path.SEPARATOR)
@@ -420,59 +443,20 @@ private[sql] class DynamicPartitionWriterContainer(
   }
 
   override def commitTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.commitTask()
+    try {
+      outputWriters.values.foreach(_.close())
+      super.commitTask()
+    } catch { case cause: Throwable =>
+      super.abortTask()
+      throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.abortTask()
-  }
-}
-
-private[sql] object DynamicPartitionWriterContainer {
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  val charToEscape = {
-    val bitSet = new java.util.BitSet(128)
-
-    /**
-     * ASCII 01-1F are HTTP control characters that need to be escaped.
-     * \u000A and \u000D are \n and \r, respectively.
-     */
-    val clist = Array(
-      '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009',
-      '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013',
-      '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C',
-      '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=', '?', '\\', '\u007F',
-      '{', '[', ']', '^')
-
-    clist.foreach(bitSet.set(_))
-
-    if (Shell.WINDOWS) {
-      Array(' ', '<', '>', '|').foreach(bitSet.set(_))
+    try {
+      outputWriters.values.foreach(_.close())
+    } finally {
+      super.abortTask()
     }
-
-    bitSet
-  }
-
-  def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
-  }
-
-  def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (DynamicPartitionWriterContainer.needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
-      } else {
-        builder.append(c)
-      }
-    }
-
-    builder.toString()
   }
 }

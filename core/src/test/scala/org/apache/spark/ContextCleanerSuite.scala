@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -44,7 +44,7 @@ import org.apache.spark.storage.ShuffleIndexBlockId
  * config options, in particular, a different shuffle manager class
  */
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[HashShuffleManager])
-  extends FunSuite with BeforeAndAfter with LocalSparkContext
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
   implicit val defaultTimeout = timeout(10000 millis)
   val conf = new SparkConf()
@@ -158,7 +158,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd.count()
 
     // Test that GC does not cause RDD cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, rddIds = Seq(rdd.id))
+    val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -195,7 +195,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     var broadcast = newBroadcast()
 
     // Test that GC does not cause broadcast cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
+    val preGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -267,7 +267,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
 
-    val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))

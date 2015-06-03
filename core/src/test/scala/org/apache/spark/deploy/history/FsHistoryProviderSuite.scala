@@ -29,15 +29,15 @@ import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
 
-class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
+class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
   private var testDir: File = null
 

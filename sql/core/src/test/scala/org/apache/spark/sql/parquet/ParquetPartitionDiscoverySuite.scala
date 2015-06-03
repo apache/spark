@@ -16,8 +16,13 @@
  */
 package org.apache.spark.sql.parquet
 
+import java.io.File
+import java.math.BigInteger
+import java.sql.Timestamp
+
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -25,7 +30,7 @@ import org.apache.spark.sql.sources.PartitioningUtils._
 import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, SQLContext}
+import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext}
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -175,11 +180,17 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
+        val dir = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          dir)
+        // Introduce _temporary dir to test the robustness of the schema discovery process.
+        new File(dir.toString, "_temporary").mkdir()
       }
+      // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
+      new File(base.getCanonicalPath, "_temporary").mkdir()
 
+      println("load the partitioned table")
       read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
@@ -367,6 +378,75 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
       }
+    }
+  }
+
+  test("SPARK-7847: Dynamic partition directory path escaping and unescaping") {
+    withTempPath { dir =>
+      val df = Seq("/", "[]", "?").zipWithIndex.map(_.swap).toDF("i", "s")
+      df.write.format("parquet").partitionBy("s").save(dir.getCanonicalPath)
+      checkAnswer(read.parquet(dir.getCanonicalPath), df.collect())
+    }
+  }
+
+  test("Various partition value types") {
+    val row =
+      Row(
+        100.toByte,
+        40000.toShort,
+        Int.MaxValue,
+        Long.MaxValue,
+        1.5.toFloat,
+        4.5,
+        new java.math.BigDecimal(new BigInteger("212500"), 5),
+        new java.math.BigDecimal(2.125),
+        java.sql.Date.valueOf("2015-05-23"),
+        new Timestamp(0),
+        "This is a string, /[]?=:",
+        "This is not a partition column")
+
+    // BooleanType is not supported yet
+    val partitionColumnTypes =
+      Seq(
+        ByteType,
+        ShortType,
+        IntegerType,
+        LongType,
+        FloatType,
+        DoubleType,
+        DecimalType(10, 5),
+        DecimalType.Unlimited,
+        DateType,
+        TimestampType,
+        StringType)
+
+    val partitionColumns = partitionColumnTypes.zipWithIndex.map {
+      case (t, index) => StructField(s"p_$index", t)
+    }
+
+    val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
+    val df = createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    withTempPath { dir =>
+      df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
+      val fields = schema.map(f => Column(f.name).cast(f.dataType))
+      checkAnswer(read.load(dir.toString).select(fields: _*), row)
+    }
+  }
+
+  test("SPARK-8037: Ignores files whose name starts with dot") {
+    withTempPath { dir =>
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(dir.getCanonicalPath)
+
+      Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
+      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df)
     }
   }
 }

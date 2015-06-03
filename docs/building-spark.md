@@ -80,6 +80,7 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
+    <tr><td>2.6.x and later 2.x</td><td>hadoop-2.6</td></tr>
   </tbody>
 </table>
 
@@ -118,14 +119,10 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings. You can also build for
-Hive 0.12.0 using the `-Phive-0.12.0` profile.
+By default Spark will build with Hive 0.13.1 bindings.
 {% highlight bash %}
 # Apache Hadoop 2.4.X with Hive 13 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
-
-# Apache Hadoop 2.4.X with Hive 12 support
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-0.12.0 -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
 # Building for Scala 2.11
@@ -134,9 +131,7 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
     dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
-Scala 2.11 support in Spark does not support a few features due to dependencies
-which are themselves not Scala 2.11 ready. Specifically, Spark's external 
-Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
+Spark does not yet support its JDBC component for Scala 2.11.
 
 # Spark Tests in Maven
 
@@ -180,7 +175,7 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 # Building Spark with IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IDESetup).
 
 # Running Java 8 Test Suites
 

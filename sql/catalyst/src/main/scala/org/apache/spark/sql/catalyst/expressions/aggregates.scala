@@ -37,7 +37,7 @@ abstract class AggregateExpression extends Expression {
    * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
    * replaced with a physical aggregate operator at runtime.
    */
-  override def eval(input: Row = null): EvaluatedType =
+  override def eval(input: Row = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
@@ -73,8 +73,6 @@ abstract class PartialAggregate extends AggregateExpression {
 abstract class AggregateFunction
   extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
   self: Product =>
-
-  override type EvaluatedType = Any
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression
@@ -113,7 +111,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
   override def update(input: Row): Unit = {
     if (currentMin.value == null) {
       currentMin.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMin.value = expr.eval(input)
     }
   }
@@ -144,7 +142,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
   override def update(input: Row): Unit = {
     if (currentMax.value == null) {
       currentMax.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMax.value = expr.eval(input)
     }
   }
@@ -396,13 +394,13 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
  * Combining    PartitionLevel   InputData
  *                           <-- null
  * Zero     <-- Zero         <-- null
- *                              
+ *
  *          <-- null         <-- no data
- * null     <-- null         <-- no data 
+ * null     <-- null         <-- no data
  */
 case class CombineSum(child: Expression) extends AggregateExpression {
   def this() = this(null)
-  
+
   override def children: Seq[Expression] = child :: Nil
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
@@ -618,7 +616,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val addFunction = 
+  private val addFunction =
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
 
   override def update(input: Row): Unit = {
@@ -636,7 +634,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
 case class CombineSumFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
-  
+
   def this() = this(null, null) // Required for serialization.
 
   private val calcType =
@@ -651,12 +649,12 @@ case class CombineSumFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val addFunction = 
+  private val addFunction =
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
-  
+
   override def update(input: Row): Unit = {
     val result = expr.eval(input)
-    // partial sum result can be null only when no input rows present 
+    // partial sum result can be null only when no input rows present
     if(result != null) {
       sum.update(addFunction, input)
     }
