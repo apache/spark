@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
@@ -101,6 +102,26 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+  }
+
+  test("OneVsRest.copy and OneVsRestMode.copy") {
+    val lr = new LogisticRegression()
+      .setMaxIter(1)
+
+    val ovr = new OneVsRest()
+    withClue("copy with classifier unset should work") {
+      ovr.copy(ParamMap(lr.maxIter -> 10))
+    }
+    ovr.setClassifier(lr)
+    val ovr1 = ovr.copy(ParamMap(lr.maxIter -> 10))
+    require(ovr.getClassifier.getOrDefault(lr.maxIter) === 1, "copy should have no side-effects")
+    require(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
+      "copy should handle extra classifier params")
+
+    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.threshold -> 0.1))
+    ovrModel.models.foreach { case m: LogisticRegressionModel =>
+      require(m.getThreshold === 0.1, "copy should handle extra model params")
+    }
   }
 }
 
