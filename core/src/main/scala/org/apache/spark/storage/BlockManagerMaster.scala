@@ -17,13 +17,14 @@
 
 package org.apache.spark.storage
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.Iterable
+import scala.collection.generic.CanBuildFrom
+import scala.concurrent.{Await, Future}
 
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 private[spark]
 class BlockManagerMaster(
@@ -102,8 +103,8 @@ class BlockManagerMaster(
     val future = driverEndpoint.askWithRetry[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
       case e: Exception =>
-        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
-    }
+        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}", e)
+    }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
@@ -114,8 +115,8 @@ class BlockManagerMaster(
     val future = driverEndpoint.askWithRetry[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
       case e: Exception =>
-        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
-    }
+        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}", e)
+    }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
@@ -128,8 +129,8 @@ class BlockManagerMaster(
     future.onFailure {
       case e: Exception =>
         logWarning(s"Failed to remove broadcast $broadcastId" +
-          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
-    }
+          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}", e)
+    }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
@@ -169,11 +170,17 @@ class BlockManagerMaster(
     val response = driverEndpoint.
       askWithRetry[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
-    val result = timeout.awaitResult(Future.sequence(futures))
-    if (result == null) {
+    implicit val sameThread = ThreadUtils.sameThread
+    val cbf =
+      implicitly[
+        CanBuildFrom[Iterable[Future[Option[BlockStatus]]],
+        Option[BlockStatus],
+        Iterable[Option[BlockStatus]]]]
+    val blockStatus = timeout.awaitResult(
+      Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
+    if (blockStatus == null) {
       throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
     }
-    val blockStatus = result.asInstanceOf[Iterable[Option[BlockStatus]]]
     blockManagerIds.zip(blockStatus).flatMap { case (blockManagerId, status) =>
       status.map { s => (blockManagerId, s) }
     }.toMap
