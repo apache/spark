@@ -139,6 +139,7 @@ private[streaming] class ReceiverSupervisorImpl(
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val numRecords = receivedBlock match {
       case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
+      case IteratorBlock(iterator) =>  iterator.length
       case _ => -1
     }
 
