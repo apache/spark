@@ -38,6 +38,7 @@ public class LargeByteBufferInputStream extends InputStream {
     this(buffer, false);
   }
 
+  @Override
   public int read() {
     if (buffer == null || buffer.remaining() == 0) {
       return -1;
@@ -46,10 +47,12 @@ public class LargeByteBufferInputStream extends InputStream {
     }
   }
 
+  @Override
   public int read(byte[] dest) {
     return read(dest, 0, dest.length);
   }
 
+  @Override
   public int read(byte[] dest, int offset, int length) {
     if (buffer == null || buffer.remaining() == 0) {
       return -1;
@@ -60,6 +63,7 @@ public class LargeByteBufferInputStream extends InputStream {
     }
   }
 
+  @Override
   public long skip(long toSkip) {
     if (buffer != null) {
       return buffer.skip(toSkip);
@@ -75,6 +79,7 @@ public class LargeByteBufferInputStream extends InputStream {
   /**
    * Clean up the buffer, and potentially dispose of it
    */
+  @Override
   public void close() {
     if (buffer != null) {
       if (dispose) {

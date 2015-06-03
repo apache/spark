@@ -43,10 +43,12 @@ public class LargeByteBufferOutputStream extends OutputStream {
     output = new ByteArrayChunkOutputStream(chunkSize);
   }
 
+  @Override
   public void write(int b) {
     output.write(b);
   }
 
+  @Override
   public void write(byte[] bytes, int off, int len) {
     output.write(bytes, off, len);
   }
@@ -82,6 +84,7 @@ public class LargeByteBufferOutputStream extends OutputStream {
     return new WrappedLargeByteBuffer(chunks, maxChunk);
   }
 
+  @Override
   public void close() throws IOException {
     output.close();
   }
