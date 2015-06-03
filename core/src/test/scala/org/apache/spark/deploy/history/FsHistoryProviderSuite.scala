@@ -21,7 +21,7 @@ import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStrea
   FileOutputStream, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.TimeUnit
-import java.util.zip.{ZipInputStream,  ZipOutputStream}
+import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.io.Source
 

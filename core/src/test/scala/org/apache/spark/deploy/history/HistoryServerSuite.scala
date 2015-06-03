@@ -194,7 +194,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
     var filesCompared = 0
-    while(entry != null) {
+    while (entry != null) {
       if (!entry.isDirectory) {
         val expectedFile = {
           if (legacy) {
@@ -205,7 +205,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
           }
         }
         val expected = Files.toString(expectedFile, Charsets.UTF_8)
-        val actual  = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
         actual should be (expected)
         filesCompared += 1
       }
