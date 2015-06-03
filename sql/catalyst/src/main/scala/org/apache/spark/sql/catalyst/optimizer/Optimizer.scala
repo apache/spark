@@ -156,6 +156,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
+    // push down project if possible when the child is sort
+    case p @ Project(projectList, s @ Sort(_, _, grandChild))
+      if s.references.subsetOf(p.outputSet) =>
+      s.copy(child = Project(projectList, grandChild))
+
     // Eliminate no-op Projects
     case Project(projectList, child) if child.output == projectList => child
   }
@@ -174,8 +179,17 @@ object ColumnPruning extends Rule[LogicalPlan] {
  * expressions into one single expression.
  */
 object ProjectCollapsing extends Rule[LogicalPlan] {
+
+  /** Returns true if any expression in projectList is non-deterministic. */
+  private def hasNondeterministic(projectList: Seq[NamedExpression]): Boolean = {
+    projectList.exists(expr => expr.find(!_.deterministic).isDefined)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Project(projectList1, Project(projectList2, child)) =>
+    // We only collapse these two Projects if the child Project's expressions are all
+    // deterministic.
+    case Project(projectList1, Project(projectList2, child))
+         if !hasNondeterministic(projectList2) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
       val aliasMap = AttributeMap(projectList2.collect {
@@ -258,6 +272,10 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
+
+      // MaxOf and MinOf can't do null propagation
+      case e: MaxOf => e
+      case e: MinOf => e
 
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {

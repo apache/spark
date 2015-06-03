@@ -52,9 +52,12 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[ui] class RDDOperationCluster(val id: String, val name: String) {
+private[ui] class RDDOperationCluster(val id: String, private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
+
+  def name: String = _name
+  def setName(n: String): Unit = { _name = n }
 
   def childNodes: Seq[RDDOperationNode] = _childNodes.iterator.toSeq
   def childClusters: Seq[RDDOperationCluster] = _childClusters.iterator.toSeq
@@ -70,6 +73,8 @@ private[ui] class RDDOperationCluster(val id: String, val name: String) {
 }
 
 private[ui] object RDDOperationGraph extends Logging {
+
+  val STAGE_CLUSTER_PREFIX = "stage_"
 
   /**
    * Construct a RDDOperationGraph for a given stage.
@@ -88,7 +93,8 @@ private[ui] object RDDOperationGraph extends Logging {
     val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
-    val stageClusterId = s"stage_${stage.stageId}"
+    // Use a special prefix here to differentiate this cluster from other operation clusters
+    val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
@@ -110,8 +116,8 @@ private[ui] object RDDOperationGraph extends Logging {
         // which may be nested inside of other clusters
         val rddScopes = rdd.scope.map { scope => scope.getAllScopes }.getOrElse(Seq.empty)
         val rddClusters = rddScopes.map { scope =>
-          val clusterId = scope.name + "_" + scope.id
-          val clusterName = scope.name
+          val clusterId = scope.id
+          val clusterName = scope.name.replaceAll("\\n", "\\\\n")
           clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
         }
         // Build the cluster hierarchy for this RDD
@@ -171,7 +177,7 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} (${node.id})"]"""
+    s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */

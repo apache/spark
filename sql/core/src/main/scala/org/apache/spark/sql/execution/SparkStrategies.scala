@@ -243,8 +243,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 case (predicate, None) => predicate
                 // Filter needs to be applied above when it contains partitioning
                 // columns
-                case (predicate, _) if(!predicate.references.map(_.name).toSet
-                  .intersect (partitionColNames).isEmpty) => predicate
+                case (predicate, _)
+                  if !predicate.references.map(_.name).toSet.intersect(partitionColNames).isEmpty =>
+                  predicate
               }
             }
           } else {
@@ -270,7 +271,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
+          InMemoryColumnarTableScan(_, filters, mem)) :: Nil
       case _ => Nil
     }
   }
@@ -354,10 +355,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
-      case LogicalDescribeCommand(table, isExtended) =>
+      case describe @ LogicalDescribeCommand(table, isExtended) =>
         val resultPlan = self.sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+          RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
 
       case _ => Nil
     }

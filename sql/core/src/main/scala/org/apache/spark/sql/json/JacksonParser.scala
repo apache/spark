@@ -26,6 +26,7 @@ import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 
@@ -149,10 +150,10 @@ private[sql] object JacksonParser {
   private def convertMap(
       factory: JsonFactory,
       parser: JsonParser,
-      valueType: DataType): Map[String, Any] = {
-    val builder = Map.newBuilder[String, Any]
+      valueType: DataType): Map[UTF8String, Any] = {
+    val builder = Map.newBuilder[UTF8String, Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      builder += parser.getCurrentName -> convertField(factory, parser, valueType)
+      builder += UTF8String(parser.getCurrentName) -> convertField(factory, parser, valueType)
     }
 
     builder.result()
@@ -180,7 +181,7 @@ private[sql] object JacksonParser {
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
         require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, record)
+        row.update(corruptIndex, UTF8String(record))
       }
 
       Seq(row)

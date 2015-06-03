@@ -17,19 +17,22 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Normalize a vector to have unit norm using the given p-norm.
  */
-@AlphaComponent
-class Normalizer extends UnaryTransformer[Vector, Vector, Normalizer] {
+@Experimental
+class Normalizer(override val uid: String) extends UnaryTransformer[Vector, Vector, Normalizer] {
+
+  def this() = this(Identifiable.randomUID("normalizer"))
 
   /**
    * Normalization in L^p^ space.  Must be >= 1.

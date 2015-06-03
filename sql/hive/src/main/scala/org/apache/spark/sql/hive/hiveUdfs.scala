@@ -75,8 +75,10 @@ private[hive] abstract class HiveFunctionRegistry
 
 private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
-  type EvaluatedType = Any
+
   type UDFType = UDF
+
+  override def deterministic: Boolean = isUDFDeterministic
 
   override def nullable: Boolean = true
 
@@ -139,7 +141,8 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
 private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
-  type EvaluatedType = Any
+
+  override def deterministic: Boolean = isUDFDeterministic
 
   override def nullable: Boolean = true
 
@@ -316,7 +319,7 @@ private[hive] case class HiveWindowFunction(
 
   // The object inspector of values returned from the Hive window function.
   @transient
-  protected lazy val returnInspector  = {
+  protected lazy val returnInspector = {
     evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inputInspectors)
   }
 
@@ -335,8 +338,6 @@ private[hive] case class HiveWindowFunction(
     }
 
   def nullable: Boolean = true
-
-  override type EvaluatedType = Any
 
   override def eval(input: Row): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
@@ -413,7 +414,7 @@ private[hive] case class HiveGenericUdaf(
   protected lazy val resolver: AbstractGenericUDAFResolver = funcWrapper.createFunction()
 
   @transient
-  protected lazy val objectInspector  = {
+  protected lazy val objectInspector = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
     resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
@@ -446,7 +447,7 @@ private[hive] case class HiveUdaf(
     new GenericUDAFBridge(funcWrapper.createFunction())
 
   @transient
-  protected lazy val objectInspector  = {
+  protected lazy val objectInspector = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
     resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
@@ -483,7 +484,11 @@ private[hive] case class HiveGenericUdtf(
   extends Generator with HiveInspectors {
 
   @transient
-  protected lazy val function: GenericUDTF = funcWrapper.createFunction()
+  protected lazy val function: GenericUDTF = {
+    val fun: GenericUDTF = funcWrapper.createFunction()
+    fun.setCollector(collector)
+    fun
+  }
 
   @transient
   protected lazy val inputInspectors = children.map(toInspector)
@@ -494,6 +499,9 @@ private[hive] case class HiveGenericUdtf(
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
 
+  @transient
+  protected lazy val collector = new UDTFCollector
+
   lazy val elementTypes = outputInspector.getAllStructFieldRefs.map {
     field => (inspectorToDataType(field.getFieldObjectInspector), true)
   }
@@ -502,8 +510,7 @@ private[hive] case class HiveGenericUdtf(
     outputInspector // Make sure initialized.
 
     val inputProjection = new InterpretedProjection(children)
-    val collector = new UDTFCollector
-    function.setCollector(collector)
+
     function.process(wrap(inputProjection(input), inputInspectors, udtInput))
     collector.collectRows()
   }
@@ -523,6 +530,12 @@ private[hive] case class HiveGenericUdtf(
       collected = new ArrayBuffer[Row]
       toCollect
     }
+  }
+
+  override def terminate(): TraversableOnce[Row] = {
+    outputInspector // Make sure initialized.
+    function.close()
+    collector.collectRows()
   }
 
   override def toString: String = {
@@ -546,12 +559,12 @@ private[hive] case class HiveUdafFunction(
     } else {
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
-  
+
   private val inspectors = exprs.map(toInspector).toArray
-    
-  private val function = { 
+
+  private val function = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
-    resolver.getEvaluator(parameterInfo) 
+    resolver.getEvaluator(parameterInfo)
   }
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
@@ -566,7 +579,7 @@ private[hive] case class HiveUdafFunction(
 
   @transient
   protected lazy val cached = new Array[AnyRef](exprs.length)
-  
+
   def update(input: Row): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))

@@ -541,7 +541,7 @@ private[parquet] class FilteringParquetRowInputFormat
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val filter: Filter = ParquetInputFormat.getFilter(configuration)
     var rowGroupsDropped: Long = 0
-    var totalRowGroups: Long  = 0
+    var totalRowGroups: Long = 0
 
     // Ugly hack, stuck with it until PR:
     // https://github.com/apache/incubator-parquet-mr/pull/17
@@ -664,7 +664,7 @@ private[parquet] object FileSystemHelper {
         s"ParquetTableOperations: path $path does not exist or is not a directory")
     }
     fs.globStatus(path)
-      .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+      .flatMap { status => if (status.isDir) fs.listStatus(status.getPath) else List(status) }
       .map(_.getPath)
   }
 
@@ -674,7 +674,7 @@ private[parquet] object FileSystemHelper {
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
+    val nameP = new scala.util.matching.Regex("""part-.-(\d{1,}).*""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt

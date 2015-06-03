@@ -157,9 +157,11 @@ private[spark] object SerDe {
       val keysLen = readInt(in)
       val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
 
-      val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until valuesLen).map(_ => readTypedObject(in, valuesType))
+      val values = (0 until valuesLen).map(_ => {
+        val valueType = readObjectType(in)
+        readTypedObject(in, valueType)
+      })
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()

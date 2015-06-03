@@ -396,6 +396,20 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
+#' @rdname nafunctions
+#' @export
+setGeneric("dropna",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
+             standardGeneric("dropna") 
+           })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("na.omit",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
+             standardGeneric("na.omit") 
+           })
+
 #' @rdname schema
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
@@ -407,6 +421,10 @@ setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 #' @rdname except
 #' @export
 setGeneric("except", function(x, y) { standardGeneric("except") })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna") })
 
 #' @rdname filter
 #' @export
@@ -456,19 +474,19 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
-#' @rdname sampleDF
+#' @rdname sample
+#' @export
+setGeneric("sample",
+           function(x, withReplacement, fraction, seed) {
+             standardGeneric("sample")
+           })
+
+#' @rdname sample
 #' @export
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample_frac")
-          })
-
-#' @rdname sampleDF
-#' @export
-setGeneric("sampleDF",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sampleDF")
-          })
+           })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -480,9 +498,13 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname saveAsTable
+#' @rdname write.df
 #' @export
-setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
+setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
+
+#' @rdname write.df
+#' @export
+setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
 
 #' @rdname schema
 #' @export
@@ -550,6 +572,10 @@ setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname column
 #' @export
+setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
+
+#' @rdname column
+#' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 #' @rdname column
 #' @export
@@ -570,6 +596,10 @@ setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 #' @rdname column
 #' @export
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
+
+#' @rdname column
+#' @export
+setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 
 #' @rdname column
 #' @export
@@ -601,6 +631,10 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
 #' @rdname column
 #' @export
+setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname column
+#' @export
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
@@ -610,6 +644,14 @@ setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 #' @rdname column
 #' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column
+#' @export
+setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+
+#' @rdname column
+#' @export
+setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname column
 #' @export

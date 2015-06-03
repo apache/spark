@@ -231,7 +231,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </td>
         <td>
           <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
-          <a href={detailUrl}>{lastStageName}</a>
+          <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
           {formattedSubmissionTime}

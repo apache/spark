@@ -20,14 +20,14 @@ package org.apache.spark.ml.regression
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS,
-  OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -44,8 +44,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Linear regression.
  *
  * The learning objective is to minimize the squared error, with regularization.
@@ -58,9 +57,12 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *  - L1 (Lasso)
  *  - L2 + L1 (elastic net)
  */
-@AlphaComponent
-class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
+@Experimental
+class LinearRegression(override val uid: String)
+  extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("linReg"))
 
   /**
    * Set the regularization parameter.
@@ -81,7 +83,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */
@@ -128,7 +130,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
-      return new LinearRegressionModel(this, Vectors.sparse(numFeatures, Seq()), yMean)
+      return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -167,7 +169,8 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     val weights = {
       val rawWeights = state.x.toArray.clone()
       var i = 0
-      while (i < rawWeights.length) {
+      val len = rawWeights.length
+      while (i < len) {
         rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
@@ -181,18 +184,17 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    new LinearRegressionModel(this, weights.compressed, intercept)
+    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
   }
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Model produced by [[LinearRegression]].
  */
-@AlphaComponent
+@Experimental
 class LinearRegressionModel private[ml] (
-    override val parent: LinearRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
@@ -203,7 +205,7 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    copyValues(new LinearRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
   }
 }
 
@@ -307,7 +309,8 @@ private class LeastSquaresAggregator(
     val weightsArray = weights.toArray.clone()
     var sum = 0.0
     var i = 0
-    while (i < weightsArray.length) {
+    val len = weightsArray.length
+    while (i < len) {
       if (featuresStd(i) != 0.0) {
         weightsArray(i) /=  featuresStd(i)
         sum += weightsArray(i) * featuresMean(i)
@@ -318,7 +321,7 @@ private class LeastSquaresAggregator(
     }
     (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
   }
-  
+
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
 
   private val gradientSumArray = Array.ofDim[Double](dim)

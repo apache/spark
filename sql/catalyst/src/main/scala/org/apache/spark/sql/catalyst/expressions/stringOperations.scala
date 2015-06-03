@@ -25,8 +25,6 @@ import org.apache.spark.sql.types._
 trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
 
-  type EvaluatedType = Any
-
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
@@ -40,14 +38,14 @@ trait StringRegexExpression extends ExpectsInputTypes {
     case _ => null
   }
 
-  protected def compile(str: String): Pattern = if(str == null) {
+  protected def compile(str: String): Pattern = if (str == null) {
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
     Pattern.compile(escape(str))
   }
 
-  protected def pattern(str: String) = if(cache == null) compile(str) else cache
+  protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -114,8 +112,6 @@ case class RLike(left: Expression, right: Expression)
 trait CaseConversionExpression extends ExpectsInputTypes {
   self: UnaryExpression =>
 
-  type EvaluatedType = Any
-
   def convert(v: UTF8String): UTF8String
 
   override def foldable: Boolean = child.foldable
@@ -137,7 +133,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
  * A function that converts the characters of a string to uppercase.
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: UTF8String): UTF8String = v.toUpperCase()
 
   override def toString: String = s"Upper($child)"
@@ -147,7 +143,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  * A function that converts the characters of a string to lowercase.
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: UTF8String): UTF8String = v.toLowerCase()
 
   override def toString: String = s"Lower($child)"
@@ -158,8 +154,6 @@ trait StringComparison extends ExpectsInputTypes {
   self: BinaryExpression =>
 
   def compare(l: UTF8String, r: UTF8String): Boolean
-
-  override type EvaluatedType = Any
 
   override def nullable: Boolean = left.nullable || right.nullable
 
@@ -211,8 +205,6 @@ case class EndsWith(left: Expression, right: Expression)
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
-  
-  type EvaluatedType = Any
 
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
@@ -231,7 +223,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   @inline
   def slicePos(startPos: Int, sliceLen: Int, length: () => Int): (Int, Int) = {
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
-    // negative indices for start positions. If a start index i is greater than 0, it 
+    // negative indices for start positions. If a start index i is greater than 0, it
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.

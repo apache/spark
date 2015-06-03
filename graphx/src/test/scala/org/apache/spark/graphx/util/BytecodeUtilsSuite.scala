@@ -17,10 +17,10 @@
 
 package org.apache.spark.graphx.util
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
 
-class BytecodeUtilsSuite extends FunSuite {
+class BytecodeUtilsSuite extends SparkFunSuite {
 
   import BytecodeUtilsSuite.TestClass
 
