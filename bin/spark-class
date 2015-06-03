@@ -18,7 +18,7 @@
 #
 set -e
 
-# Figure out where Spark is installed
+# Figure out where Spark is installed INSTALLED
 export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$SPARK_HOME"/bin/load-spark-env.sh
