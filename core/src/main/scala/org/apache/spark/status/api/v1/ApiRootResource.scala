@@ -206,6 +206,10 @@ private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
 
+  /**
+   * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
+   * [[None]], event logs for all attempts of this application will be written out.
+   */
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
     Response.serverError()
       .entity("Event logs are only available through the history server.")
