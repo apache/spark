@@ -57,7 +57,7 @@ class OptimizeInSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("OptimizedIn test: In clause not optimized in case filter has attributes") {
     val originalQuery =
       testRelation

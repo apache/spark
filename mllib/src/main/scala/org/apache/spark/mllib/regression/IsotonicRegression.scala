@@ -170,15 +170,15 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     case class Data(boundary: Double, prediction: Double)
 
     def save(
-        sc: SparkContext, 
-        path: String, 
-        boundaries: Array[Double], 
-        predictions: Array[Double], 
+        sc: SparkContext,
+        path: String,
+        boundaries: Array[Double],
+        predictions: Array[Double],
         isotonic: Boolean): Unit = {
       val sqlContext = new SQLContext(sc)
 
       val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 

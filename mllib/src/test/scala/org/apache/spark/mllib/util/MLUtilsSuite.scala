@@ -64,7 +64,7 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
       val fastSquaredDist3 =
         fastSquaredDistance(v2, norm2, v3, norm3, precision)
       assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
-      if (m > 10) { 
+      if (m > 10) {
         val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
           indices.map(i => a(i) + 0.5).slice(0, m - 10))
         val norm4 = Vectors.norm(v4, 2.0)

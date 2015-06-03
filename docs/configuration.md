@@ -1,4 +1,4 @@
---
+---
 layout: global
 displayTitle: Spark Configuration
 title: Configuration

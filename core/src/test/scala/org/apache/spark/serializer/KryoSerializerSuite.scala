@@ -23,21 +23,20 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
-import org.scalatest.FunSuite
 
-import org.apache.spark.{SharedSparkContext, SparkConf}
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
 
-class KryoSerializerSuite extends FunSuite with SharedSparkContext {
+class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
     val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
-    
+
     def newKryoInstance(
         conf: SparkConf,
         bufferSize: String = "64k",
@@ -47,7 +46,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
       kryoConf.set(kryoBufferMaxProperty, maxBufferSize)
       new KryoSerializer(kryoConf).newInstance()
     }
-    
+
     // test default values
     newKryoInstance(conf, "64k", "64m")
     // 2048m = 2097152k
@@ -70,7 +69,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     // test configuration with mb is supported properly
     newKryoInstance(conf, "8m", "9m")
   }
-  
+
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
@@ -361,7 +360,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 }
 
-class KryoSerializerAutoResetDisabledSuite extends FunSuite with SharedSparkContext {
+class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", classOf[KryoSerializer].getName)
   conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
   conf.set("spark.kryo.referenceTracking", "true")

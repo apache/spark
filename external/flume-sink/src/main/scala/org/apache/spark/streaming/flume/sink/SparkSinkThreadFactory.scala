@@ -14,11 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.streaming.flume.sink
 
-package org.apache.spark.util.collection
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicLong
 
-private[spark] class PairIterator[K, V](iter: Iterator[Any]) extends Iterator[(K, V)] {
-  def hasNext: Boolean = iter.hasNext
+/**
+ * Thread factory that generates daemon threads with a specified name format.
+ */
+private[sink] class SparkSinkThreadFactory(nameFormat: String) extends ThreadFactory {
 
-  def next(): (K, V) = (iter.next().asInstanceOf[K], iter.next().asInstanceOf[V])
+  private val threadId = new AtomicLong()
+
+  override def newThread(r: Runnable): Thread = {
+    val t = new Thread(r, nameFormat.format(threadId.incrementAndGet()))
+    t.setDaemon(true)
+    t
+  }
+
 }

@@ -47,7 +47,7 @@ Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasin
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -62,6 +62,10 @@ val clusters = KMeans.train(parsedData, numClusters, numIterations)
 // Evaluate clustering by computing Within Set Sum of Squared Errors
 val WSSSE = clusters.computeCost(parsedData)
 println("Within Set Sum of Squared Errors = " + WSSSE)
+
+// Save and load model
+clusters.save(sc, "myModelPath")
+val sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -110,6 +114,10 @@ public class KMeansExample {
     // Evaluate clustering by computing Within Set Sum of Squared Errors
     double WSSSE = clusters.computeCost(parsedData.rdd());
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+
+    // Save and load model
+    clusters.save(sc.sc(), "myModelPath");
+    KMeansModel sameModel = KMeansModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -124,7 +132,7 @@ Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by in
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight python %}
-from pyspark.mllib.clustering import KMeans
+from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
 from math import sqrt
 
@@ -143,6 +151,10 @@ def error(point):
 
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
+
+# Save and load model
+clusters.save(sc, "myModelPath")
+sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -312,12 +324,12 @@ Calling `PowerIterationClustering.run` returns a
 which contains the computed clustering assignments.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.PowerIterationClustering
+import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 val similarities: RDD[(Long, Long, Double)] = ...
 
-val pic = new PowerIteartionClustering()
+val pic = new PowerIterationClustering()
   .setK(3)
   .setMaxIterations(20)
 val model = pic.run(similarities)
@@ -325,6 +337,10 @@ val model = pic.run(similarities)
 model.assignments.foreach { a =>
   println(s"${a.id} -> ${a.cluster}")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 A full example that produces the experiment described in the PIC paper can be found under
@@ -360,6 +376,10 @@ PowerIterationClusteringModel model = pic.run(similarities);
 for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
   System.out.println(a.id() + " -> " + a.cluster());
 }
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 

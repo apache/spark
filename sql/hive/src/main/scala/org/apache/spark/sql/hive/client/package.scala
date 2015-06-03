@@ -29,5 +29,5 @@ package object client {
     case object v13 extends HiveVersion("0.13.1", false)
   }
   // scalastyle:on
-  
+
 }

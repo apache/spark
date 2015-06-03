@@ -180,7 +180,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
     case other => sys.error(s"Type $other does not support numeric operations")
   }
-  
+
   override def eval(input: Row): Any = {
     val evalE2 = right.eval(input)
     if (evalE2 == null || evalE2 == 0) {
