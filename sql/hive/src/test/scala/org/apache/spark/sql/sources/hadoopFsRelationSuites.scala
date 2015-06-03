@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override val sqlContext: SQLContext = TestHive
@@ -529,5 +530,52 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     withTable("t") {
       checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
     }
+  }
+
+  test("SPARK-7943:DF created by hiveContext can create table to specific db by saveAstable") {
+
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+    // use dbname.tablename to specific db
+    sqlContext.sql("""create database if not exists testdb""")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("testdb.ttt1")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("ttt2")
+
+    intercept[NoSuchDatabaseException] {
+      df.write
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("testdb2.ttt1")
+    }
+
+    sqlContext.sql("""use testdb""")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("ttt3")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("default.ttt4")
+    sqlContext.sql("""use default""")
+
+    checkAnswer(
+      sqlContext.sql("show TABLES in testdb"),
+      Row("ttt1", false))
+
+    checkAnswer(
+      sqlContext.sql("show TABLES in default"),
+      Seq(Row("ttt2", false),Row("ttt3", false), Row("ttt4", false)))
+
+    sqlContext.sql("""drop table if exists ttt2 """)
+    sqlContext.sql("""drop table if exists ttt3 """)
+    sqlContext.sql("""drop table if exists ttt4 """)
+    sqlContext.sql("""drop database if exists testdb CASCADE""")
   }
 }
