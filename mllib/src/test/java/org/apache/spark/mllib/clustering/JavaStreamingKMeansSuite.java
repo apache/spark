@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.classification;
+package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
 import java.util.List;
@@ -27,18 +27,17 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.apache.spark.streaming.JavaTestUtils.*;
+
 import org.apache.spark.SparkConf;
-import org.apache.spark.mllib.classification.StreamingLogisticRegressionWithSGD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import static org.apache.spark.streaming.JavaTestUtils.*;
 
-public class JavaStreamingLogisticRegressionSuite implements Serializable {
+public class JavaStreamingKMeansSuite implements Serializable {
 
   protected transient JavaStreamingContext ssc;
 
@@ -61,21 +60,22 @@ public class JavaStreamingLogisticRegressionSuite implements Serializable {
   @Test
   @SuppressWarnings("unchecked")
   public void javaAPI() {
-    List<LabeledPoint> trainingBatch = Lists.newArrayList(
-      new LabeledPoint(1.0, Vectors.dense(1.0)),
-      new LabeledPoint(0.0, Vectors.dense(0.0)));
-    JavaDStream<LabeledPoint> training =
+    List<Vector> trainingBatch = Lists.newArrayList(
+      Vectors.dense(1.0),
+      Vectors.dense(0.0));
+    JavaDStream<Vector> training =
       attachTestInputStream(ssc, Lists.newArrayList(trainingBatch, trainingBatch), 2);
     List<Tuple2<Integer, Vector>> testBatch = Lists.newArrayList(
       new Tuple2<Integer, Vector>(10, Vectors.dense(1.0)),
       new Tuple2<Integer, Vector>(11, Vectors.dense(0.0)));
     JavaPairDStream<Integer, Vector> test = JavaPairDStream.fromJavaDStream(
       attachTestInputStream(ssc, Lists.newArrayList(testBatch, testBatch), 2));
-    StreamingLogisticRegressionWithSGD slr = new StreamingLogisticRegressionWithSGD()
-      .setNumIterations(2)
-      .setInitialWeights(Vectors.dense(0.0));
-    slr.trainOn(training);
-    JavaPairDStream<Integer, Double> prediction = slr.predictOnValues(test);
+    StreamingKMeans skmeans = new StreamingKMeans()
+      .setK(1)
+      .setDecayFactor(1.0)
+      .setInitialCenters(new Vector[]{Vectors.dense(1.0)}, new double[]{0.0});
+    skmeans.trainOn(training);
+    JavaPairDStream<Integer, Integer> prediction = skmeans.predictOnValues(test);
     attachTestOutputStream(prediction.count());
     runStreams(ssc, 2, 2);
   }
