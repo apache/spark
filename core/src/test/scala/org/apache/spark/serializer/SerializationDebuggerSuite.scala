@@ -113,7 +113,6 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("object containing writeReplace() which returns not serializable object") {
     val s = find(new SerializableClassWithWriteReplace(new NotSerializable))
-    println("-----\n" + s.zipWithIndex.mkString("\n") + "\n----")
     assert(s.size === 3)
     assert(s(0).contains("NotSerializable"))
     assert(s(1).contains("writeReplace"))
@@ -122,7 +121,6 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("object containing writeObject() and not serializable field") {
     val s = find(new SerializableClassWithWriteObject(new NotSerializable))
-    println("-----\n" + s.zipWithIndex.mkString("\n") + "\n----")
     assert(s.size === 3)
     assert(s(0).contains("NotSerializable"))
     assert(s(1).contains("writeObject data"))
@@ -132,7 +130,6 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("object containing writeObject() and serializable field") {
     assert(find(new SerializableClassWithWriteObject(new SerializableClass1)).isEmpty)
   }
-
 
   test("object of serializable subclass with more fields than superclass (SPARK-7180)") {
     // This should not throw ArrayOutOfBoundsException
