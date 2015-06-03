@@ -41,9 +41,12 @@ object MimaExcludes {
             // the maven-generated artifacts in 1.3.
             excludePackage("org.spark-project.jetty"),
             MimaBuild.excludeSparkPackage("unused"),
-            // SPARK-7805 - Some SQL test code accidentally included in src/main 
+            // JavaRDDLike is not meant to be extended by user programs
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.sql.test.SQLTestUtils.withTable")
+              "org.apache.spark.api.java.JavaRDDLike.partitioner"),
+            // Mima false positive (was a private[spark] class)
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.util.collection.PairIterator")
           )
         case v if v.startsWith("1.4") =>
           Seq(
