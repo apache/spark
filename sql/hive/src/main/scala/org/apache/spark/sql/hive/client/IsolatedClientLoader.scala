@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
@@ -28,6 +29,7 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.util.Utils
 
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -67,10 +69,7 @@ private[hive] object IsolatedClientLoader {
     val allFiles = classpath.split(",").map(new File(_)).toSet
 
     // TODO: Remove copy logic.
-    val tempDir = File.createTempFile("hive", "v" + version.toString)
-    tempDir.delete()
-    tempDir.mkdir()
-
+    val tempDir = Utils.createTempDir(namePrefix = s"hive-v${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
     tempDir.listFiles().map(_.toURL)
   }
@@ -129,7 +128,7 @@ private[hive] class IsolatedClientLoader(
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
     name.startsWith(classOf[ClientWrapper].getName) ||
-    name.startsWith(classOf[ReflectionMagic].getName) ||
+    name.startsWith(classOf[Shim].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
   protected def classToPath(name: String): String =
@@ -170,11 +169,16 @@ private[hive] class IsolatedClientLoader(
       .newInstance(version, config)
       .asInstanceOf[ClientInterface]
   } catch {
-    case ReflectionException(cnf: NoClassDefFoundError) =>
-      throw new ClassNotFoundException(
-        s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-         "Please make sure that jars for your version of hive and hadoop are included in the " +
-        s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+    case e: InvocationTargetException =>
+      if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
+        val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
+        throw new ClassNotFoundException(
+          s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
+           "Please make sure that jars for your version of hive and hadoop are included in the " +
+          s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+      } else {
+        throw e
+      }
   } finally {
     Thread.currentThread.setContextClassLoader(baseClassLoader)
   }
