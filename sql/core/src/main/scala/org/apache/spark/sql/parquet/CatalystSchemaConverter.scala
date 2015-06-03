@@ -74,7 +74,7 @@ private[parquet] class CatalystSchemaConverter(
           StructField(field.getName, convertField(field), nullable = false)
 
         case REPEATED =>
-          throw new UnsupportedOperationException(
+          throw new AnalysisException(
             s"REPEATED not supported outside LIST or MAP. Type: $field")
       }
     }
@@ -95,10 +95,10 @@ private[parquet] class CatalystSchemaConverter(
     val originalType = field.getOriginalType
 
     def typeNotImplemented() =
-      throw new UnsupportedOperationException(s"Not yet implemented: $typeName ($originalType)")
+      throw new AnalysisException(s"Not yet implemented: $typeName ($originalType)")
 
     def illegalType() =
-      throw new IllegalArgumentException(s"Illegal type: $typeName ($originalType)")
+      throw new AnalysisException(s"Illegal type: $typeName ($originalType)")
 
     // When maxPrecision = -1, we skip precision range check, and always respect the precision
     // specified in field.getDecimalMetadata.  This is useful when interpreting decimal types stored
@@ -224,7 +224,7 @@ private[parquet] class CatalystSchemaConverter(
           valueContainsNull = valueOptional)
 
       case _ =>
-        throw new UnsupportedOperationException(s"Cannot convert Parquet type $field")
+        throw new AnalysisException(s"Cannot convert Parquet type $field")
     }
   }
 
