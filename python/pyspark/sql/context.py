@@ -340,14 +340,14 @@ class SQLContext(object):
                 schema = list(data.columns)
             data = [r.tolist() for r in data.to_records(index=False)]
 
-        if isinstance(data, RDD):
-            rdd = data
-        else:
+        if not isinstance(data, RDD):
             try:
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
             except Exception:
                 raise TypeError("cannot create an RDD from type: %s" % type(data))
+        else:
+            rdd = data
 
         if schema is None or isinstance(schema, (list, tuple)):
             if isinstance(data, RDD):

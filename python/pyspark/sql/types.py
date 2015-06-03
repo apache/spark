@@ -692,9 +692,6 @@ def _python_to_sql_converter(dataType):
                 elif isinstance(obj, tuple):
                     if hasattr(obj, "__fields__") or hasattr(obj, "_fields"):
                         return tuple(c(v) for c, v in zip(converters, obj))
-                    elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
-                        d = dict(obj)
-                        return tuple(c(d.get(n)) for n, c in zip(names, converters))
                     else:
                         return tuple(c(v) for c, v in zip(converters, obj))
                 else:
