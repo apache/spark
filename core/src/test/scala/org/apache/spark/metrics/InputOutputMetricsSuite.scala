@@ -22,6 +22,7 @@ import java.io.{FileWriter, PrintWriter, File}
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListenerTaskEnd, SparkListener}
+import org.apache.spark.util.Utils
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
@@ -108,13 +109,8 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Shou
   }
 
   test("exceptions while getting IO thread statistics should not fail tasks / jobs (SPARK-8062)") {
-    // For some reason, the following code needs to be called in order for this regression test to
-    // fail and reproduce the bug. The fact that this is necessary suggests that there may be other
-    // bugs in our InputOutputMetrics code; SPARK-8086 tracks progress towards investigating this
-    // issue, since fixing it is out of scope for SPARK-8062.
-    val fs = FileSystem.getLocal(new Configuration())
-    val outPath = new Path(fs.getWorkingDirectory, "outdir")
-    SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(outPath, fs.getConf)
+    val tempDir = Utils.createTempDir()
+    val outPath = new File(tempDir, "outfile")
 
     // Intentionally call this method with a null scheme, which will store an entry for a FileSystem
     // with a null scheme into Hadoop's global `FileSystem.statisticsTable`.
@@ -122,12 +118,12 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Shou
 
     // Prior to fixing SPARK-8062, this would fail with a NullPointerException in
     // SparkHadoopUtil.getFileSystemThreadStatistics
-    val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
     try {
+      val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
       rdd.saveAsTextFile(outPath.toString)
       sc.textFile(outPath.toString).count()
     } finally {
-      fs.delete(outPath, true)
+      Utils.deleteRecursively(tempDir)
     }
   }
 }
