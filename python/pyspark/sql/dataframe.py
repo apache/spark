@@ -125,8 +125,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.parquet` instead.
         """
-        warnings.warn(
-            "saveAsParquetFile is deprecated. Use write.parquet() instead.", DeprecationWarning)
+        warnings.warn("saveAsParquetFile is deprecated. Use write.parquet() instead.")
         self._jdf.saveAsParquetFile(path)
 
     @since(1.3)
@@ -147,7 +146,7 @@ class DataFrame(object):
         """
         .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.
         """
-        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        warnings.warn("Use registerTempTable instead of registerAsTable.")
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
@@ -155,8 +154,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.insertInto` instead.
         """
-        warnings.warn(
-            "insertInto is deprecated. Use write.insertInto() instead.", DeprecationWarning)
+        warnings.warn("insertInto is deprecated. Use write.insertInto() instead.")
         self.write.insertInto(tableName, overwrite)
 
     def saveAsTable(self, tableName, source=None, mode="error", **options):
@@ -164,8 +162,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.saveAsTable` instead.
         """
-        warnings.warn(
-            "insertInto is deprecated. Use write.saveAsTable() instead.", DeprecationWarning)
+        warnings.warn("insertInto is deprecated. Use write.saveAsTable() instead.")
         self.write.saveAsTable(tableName, source, mode, **options)
 
     @since(1.3)
@@ -174,8 +171,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.save` instead.
         """
-        warnings.warn(
-            "insertInto is deprecated. Use write.save() instead.", DeprecationWarning)
+        warnings.warn("insertInto is deprecated. Use write.save() instead.")
         return self.write.save(path, source, mode, **options)
 
     @property
@@ -629,9 +625,9 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        If n is greater than 1, return a list of :class:`Row`. If n is 1, return a single Row.
-
-        :param n: int, default 1.
+        :param n: int, default 1. Number of rows to return.
+        :return: If n is greater than 1, return a list of :class:`Row`.
+            If n is 1, return a single Row.
 
         >>> df.head()
         Row(age=2, name=u'Alice')

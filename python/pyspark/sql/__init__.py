@@ -46,7 +46,7 @@ from __future__ import absolute_import
 
 def since(version):
     """
-    Annotates a function to append the version of Spark the function was added.
+    A decorator that annotates a function to append the version of Spark the function was added.
     """
     import re
     indent_p = re.compile(r'\n( +)')

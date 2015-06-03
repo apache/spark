@@ -198,8 +198,8 @@ class SQLContext(object):
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
         if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated,"
-                          "please use pyspark.sql.Row instead", DeprecationWarning)
+            warnings.warn("Using RDD of dict to inferSchema is deprecated. "
+                          "Use pyspark.sql.Row instead")
 
         if samplingRatio is None:
             schema = _infer_schema(first)
@@ -222,8 +222,7 @@ class SQLContext(object):
         """
         .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
-        warnings.warn(
-            "inferSchema is deprecated, please use createDataFrame instead.", DeprecationWarning)
+        warnings.warn("inferSchema is deprecated, please use createDataFrame instead.")
 
         if isinstance(rdd, DataFrame):
             raise TypeError("Cannot apply schema to DataFrame")
@@ -235,8 +234,7 @@ class SQLContext(object):
         """
         .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
         """
-        warnings.warn(
-            "applySchema is deprecated, please use createDataFrame instead", DeprecationWarning)
+        warnings.warn("applySchema is deprecated, please use createDataFrame instead")
 
         if isinstance(rdd, DataFrame):
             raise TypeError("Cannot apply schema to DataFrame")
@@ -369,8 +367,11 @@ class SQLContext(object):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameReader.parquet` instead.
+
+        >>> sqlContext.parquetFile('python/test_support/sql/parquet_partitioned').dtypes
+        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-        warnings.warn("parquetFile is deprecated. Use read.parquet() instead.", DeprecationWarning)
+        warnings.warn("parquetFile is deprecated. Use read.parquet() instead.")
         gateway = self._sc._gateway
         jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
         for i in range(0, len(paths)):
@@ -382,8 +383,11 @@ class SQLContext(object):
         """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameReader.json` instead.
+
+        >>> sqlContext.jsonFile('python/test_support/sql/people.json').dtypes
+        [('age', 'bigint'), ('name', 'string')]
         """
-        warnings.warn("jsonFile is deprecated. Use read.json() instead.", DeprecationWarning)
+        warnings.warn("jsonFile is deprecated. Use read.json() instead.")
         if schema is None:
             df = self._ssql_ctx.jsonFile(path, samplingRatio)
         else:
@@ -440,7 +444,7 @@ class SQLContext(object):
 
         .. note:: Deprecated in 1.4, use :func:`DataFrameReader.load` instead.
         """
-        warnings.warn("load is deprecated. Use read.load() instead.", DeprecationWarning)
+        warnings.warn("load is deprecated. Use read.load() instead.")
         return self.read.load(path, source, schema, **options)
 
     @since(1.3)
@@ -621,10 +625,14 @@ class UDFRegistration(object):
 
 
 def _test():
+    import os
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
+
+    os.chdir(os.environ["SPARK_HOME"])
+
     globs = pyspark.sql.context.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
