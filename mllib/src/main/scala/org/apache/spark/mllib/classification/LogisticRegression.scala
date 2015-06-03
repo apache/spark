@@ -388,7 +388,7 @@ class LogisticRegressionWithLBFGS
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
         lr.setElasticNetParam(elasticNetParam)
-        val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray:_*)
+        val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights.toArray: _*)
         lr.setInitialWeights(initialWeightsWithIntercept)
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
