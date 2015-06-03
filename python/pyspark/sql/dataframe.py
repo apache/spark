@@ -1214,15 +1214,24 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, colName):
+    def drop(self, col):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param colName: string, name of the column to drop.
+        :param col: a string name of the column to drop, or a
+            :class:`Column` to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.drop(df.age).collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
         """
-        jdf = self._jdf.drop(colName)
+        if isinstance(col, basestring):
+            jdf = self._jdf.drop(col)
+        elif isinstance(col, Column):
+            jdf = self._jdf.drop(col._jc)
+        else:
+            raise TypeError("col should be a string or a Column")
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
