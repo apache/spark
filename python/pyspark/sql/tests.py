@@ -131,6 +131,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
         self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
         self.assertEqual(self.sqlCtx.range(0, 1 << 40, 1 << 39).count(), 2)
+        self.assertEqual(self.sqlCtx.range(-2).count(), 0)
+        self.assertEqual(self.sqlCtx.range(3).count(), 3)
 
     def test_explode(self):
         from pyspark.sql.functions import explode
