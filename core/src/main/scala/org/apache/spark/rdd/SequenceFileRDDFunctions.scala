@@ -87,7 +87,8 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
    */
   def saveAsSequenceFile(
       path: String,
-      codec: Option[Class[_ <: CompressionCodec]] = None): Unit = self.withScope {
+      codec: Option[Class[_ <: CompressionCodec]] = None,
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration)): Unit = self.withScope {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
