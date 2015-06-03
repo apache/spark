@@ -1142,9 +1142,9 @@ object Client extends Logging {
           logDebug("HiveMetaStore configured in localmode")
         }
       } catch {
-        case e:java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
-        case e:java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
-        case e:Exception => { logError("Unexpected Exception " + e)
+        case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
+        case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
+        case e: Exception => { logError("Unexpected Exception " + e)
           throw new RuntimeException("Unexpected exception", e)
         }
       }

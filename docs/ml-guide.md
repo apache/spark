@@ -150,11 +150,12 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 # Algorithm Guides
 
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines.
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
 **Pipelines API Algorithm Guides**
 
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Ensembles](ml-ensembles.html)
 
 
 # Code Examples
@@ -206,7 +207,7 @@ val model1 = lr.fit(training.toDF)
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-println("Model 1 was fit using parameters: " + model1.fittingParamMap)
+println("Model 1 was fit using parameters: " + model1.parent.extractParamMap)
 
 // We may alternatively specify parameters using a ParamMap,
 // which supports several methods for specifying parameters.
@@ -221,7 +222,7 @@ val paramMapCombined = paramMap ++ paramMap2
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 val model2 = lr.fit(training.toDF, paramMapCombined)
-println("Model 2 was fit using parameters: " + model2.fittingParamMap)
+println("Model 2 was fit using parameters: " + model2.parent.extractParamMap)
 
 // Prepare test data.
 val test = sc.parallelize(Seq(
@@ -288,7 +289,7 @@ LogisticRegressionModel model1 = lr.fit(training);
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-System.out.println("Model 1 was fit using parameters: " + model1.fittingParamMap());
+System.out.println("Model 1 was fit using parameters: " + model1.parent().extractParamMap());
 
 // We may alternatively specify parameters using a ParamMap.
 ParamMap paramMap = new ParamMap();
@@ -304,7 +305,7 @@ ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
-System.out.println("Model 2 was fit using parameters: " + model2.fittingParamMap());
+System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
 // Prepare test documents.
 List<LabeledPoint> localTest = Lists.newArrayList(

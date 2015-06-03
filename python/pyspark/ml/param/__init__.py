@@ -147,7 +147,7 @@ class Params(Identifiable):
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
-        default value. Raises an error if either is set.
+        default value. Raises an error if neither is set.
         """
         param = self._resolveParam(param)
         if param in self._paramMap:

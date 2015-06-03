@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.4.0-SNAPSHOT</version>
+  <version>1.5.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -262,6 +262,18 @@
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
       <url>https://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <!-- TODO: This can be deleted after Spark 1.4 is posted -->
+    <repository>
+      <id>spark-1.4-staging</id>
+      <name>Spark 1.4 RC4 Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/orgapachespark-1112</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -1752,22 +1764,6 @@
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
-    </profile>
-    <profile>
-      <id>hive-0.12.0</id>
-      <properties>
-        <hive.version>0.12.0-protobuf-2.5</hive.version>
-        <hive.version.short>0.12.0</hive.version.short>
-        <derby.version>10.4.2.0</derby.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>hive-0.13.1</id>
-      <properties>
-        <hive.version>0.13.1a</hive.version>
-        <hive.version.short>0.13.1</hive.version.short>
-        <derby.version>10.10.1.1</derby.version>
-      </properties>
     </profile>
 
     <profile>

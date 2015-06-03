@@ -129,7 +129,7 @@ private[parquet] object RowReadSupport {
 }
 
 /**
- * A `parquet.hadoop.api.WriteSupport` for Row ojects.
+ * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 

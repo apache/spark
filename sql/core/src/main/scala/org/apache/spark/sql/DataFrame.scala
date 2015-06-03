@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, Unresol
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.sources.CreateTableUsingAsSelect
@@ -57,14 +57,11 @@ private[sql] object DataFrame {
  * :: Experimental ::
  * A distributed collection of data organized into named columns.
  *
- * A [[DataFrame]] is equivalent to a relational table in Spark SQL. There are multiple ways
- * to create a [[DataFrame]]:
+ * A [[DataFrame]] is equivalent to a relational table in Spark SQL. The following example creates
+ * a [[DataFrame]] by pointing Spark SQL to a Parquet data set.
  * {{{
- *   // Create a DataFrame from Parquet files
- *   val people = sqlContext.parquetFile("...")
- *
- *   // Create a DataFrame from data sources
- *   val df = sqlContext.load("...", "json")
+ *   val people = sqlContext.read.parquet("...")  // in Scala
+ *   DataFrame people = sqlContext.read().parquet("...")  // in Java
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
@@ -86,8 +83,8 @@ private[sql] object DataFrame {
  * A more concrete example in Scala:
  * {{{
  *   // To create DataFrame using SQLContext
- *   val people = sqlContext.parquetFile("...")
- *   val department = sqlContext.parquetFile("...")
+ *   val people = sqlContext.read.parquet("...")
+ *   val department = sqlContext.read.parquet("...")
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
@@ -98,8 +95,8 @@ private[sql] object DataFrame {
  * and in Java:
  * {{{
  *   // To create DataFrame using SQLContext
- *   DataFrame people = sqlContext.parquetFile("...");
- *   DataFrame department = sqlContext.parquetFile("...");
+ *   DataFrame people = sqlContext.read().parquet("...");
+ *   DataFrame department = sqlContext.read().parquet("...");
  *
  *   people.filter("age".gt(30))
  *     .join(department, people.col("deptId").equalTo(department("id")))
@@ -255,7 +252,7 @@ class DataFrame private[sql](
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
-    select(newCols :_*)
+    select(newCols : _*)
   }
 
   /**
@@ -411,7 +408,7 @@ class DataFrame private[sql](
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(expressions.EqualTo(
+        Some(catalyst.expressions.EqualTo(
           joined.left.resolve(usingColumn),
           joined.right.resolve(usingColumn))))
     )
@@ -480,8 +477,9 @@ class DataFrame private[sql](
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
     val cond = plan.condition.map { _.transform {
-      case expressions.EqualTo(a: AttributeReference, b: AttributeReference) if a.sameRef(b) =>
-        expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+          if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(plan.left.resolve(a.name), plan.right.resolve(b.name))
     }}
     plan.copy(condition = cond)
   }
@@ -499,7 +497,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): DataFrame = {
-    sort((sortCol +: sortCols).map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) : _*)
   }
 
   /**
@@ -530,7 +528,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols :_*)
+  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols : _*)
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
@@ -539,7 +537,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs :_*)
+  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -610,7 +608,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) :_*)
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -685,7 +683,53 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedData = new GroupedData(this, cols.map(_.expr))
+  def groupBy(cols: Column*): GroupedData = {
+    GroupedData(this, cols.map(_.expr), GroupedData.GroupByType)
+  }
+
+  /**
+   * Create a multi-dimensional rollup for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   df.rollup($"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   df.rollup($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def rollup(cols: Column*): GroupedData = {
+    GroupedData(this, cols.map(_.expr), GroupedData.RollupType)
+  }
+
+  /**
+   * Create a multi-dimensional cube for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns cubed by department and group.
+   *   df.cube($"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, cubed by department and gender.
+   *   df.cube($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def cube(cols: Column*): GroupedData = GroupedData(this, cols.map(_.expr), GroupedData.CubeType)
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -710,7 +754,61 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedData(this, colNames.map(colName => resolve(colName)))
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
+  }
+
+  /**
+   * Create a multi-dimensional rollup for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * This is a variant of rollup that can only group by existing columns using column names
+   * (i.e. cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   df.rollup("department", "group").avg()
+   *
+   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   df.rollup($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def rollup(col1: String, cols: String*): GroupedData = {
+    val colNames: Seq[String] = col1 +: cols
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.RollupType)
+  }
+
+  /**
+   * Create a multi-dimensional cube for the current [[DataFrame]] using the specified columns,
+   * so we can run aggregation on them.
+   * See [[GroupedData]] for all the available aggregate functions.
+   *
+   * This is a variant of cube that can only group by existing columns using column names
+   * (i.e. cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns cubed by department and group.
+   *   df.cube("department", "group").avg()
+   *
+   *   // Compute the max age and average salary, cubed by department and gender.
+   *   df.cube($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group dfops
+   * @since 1.4.0
+   */
+  @scala.annotation.varargs
+  def cube(col1: String, cols: String*): GroupedData = {
+    val colNames: Seq[String] = col1 +: cols
+    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.CubeType)
   }
 
   /**
@@ -724,7 +822,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs :_*)
+    groupBy().agg(aggExpr, aggExprs : _*)
   }
 
   /**
@@ -762,7 +860,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
@@ -938,7 +1036,7 @@ class DataFrame private[sql](
         val name = field.name
         if (resolver(name, colName)) col.as(colName) else Column(name)
       }
-      select(colNames :_*)
+      select(colNames : _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -1161,7 +1259,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
+  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() : _*)
 
   /**
    * Returns the number of rows in the [[DataFrame]].
@@ -1294,28 +1392,6 @@ class DataFrame private[sql](
   def write: DataFrameWriter = new DataFrameWriter(this)
 
   /**
-   * :: Experimental ::
-   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
-   * @group output
-   * @since 1.3.0
-   */
-  @Experimental
-  def insertInto(tableName: String, overwrite: Boolean): Unit = {
-    sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, logicalPlan, overwrite, ifNotExists = false)).toRdd
-  }
-
-  /**
-   * :: Experimental ::
-   * Adds the rows from this RDD to the specified table.
-   * Throws an exception if the table already exists.
-   * @group output
-   * @since 1.3.0
-   */
-  @Experimental
-  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
-
-  /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
    * @group rdd
    * @since 1.3.0
@@ -1365,7 +1441,9 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
-  /** Left here for backward compatibility. */
+  /**
+   * @deprecated As of 1.3.0, replaced by `toDF()`.
+   */
   @deprecated("use toDF", "1.3.0")
   def toSchemaRDD: DataFrame = this
 
@@ -1376,6 +1454,7 @@ class DataFrame private[sql](
    * given name; if you pass `false`, it will throw if the table already
    * exists.
    * @group output
+   * @deprecated As of 1.340, replaced by `write().jdbc()`.
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
@@ -1394,6 +1473,7 @@ class DataFrame private[sql](
    * the RDD in order via the simple statement
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().jdbc()`.
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
@@ -1406,6 +1486,7 @@ class DataFrame private[sql](
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().parquet()`.
    */
   @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
@@ -1429,6 +1510,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
   @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String): Unit = {
@@ -1447,16 +1529,11 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
   @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
-      // If table already exists and the save mode is Append,
-      // we will just call insertInto to append the contents of this DataFrame.
-      insertInto(tableName, overwrite = false)
-    } else {
-      write.mode(mode).saveAsTable(tableName)
-    }
+    write.mode(mode).saveAsTable(tableName)
   }
 
   /**
@@ -1472,6 +1549,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String): Unit = {
@@ -1491,6 +1569,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
@@ -1509,6 +1588,8 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
     "1.4.0")
@@ -1533,6 +1614,8 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
     "1.4.0")
@@ -1549,6 +1632,7 @@ class DataFrame private[sql](
    * using the default data source configured by spark.sql.sources.default and
    * [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().save(path)`.
    */
   @deprecated("Use write.save(path)", "1.4.0")
   def save(path: String): Unit = {
@@ -1559,6 +1643,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
    * using the default data source configured by spark.sql.sources.default.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).save(path)`.
    */
   @deprecated("Use write.mode(mode).save(path)", "1.4.0")
   def save(path: String, mode: SaveMode): Unit = {
@@ -1569,6 +1654,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path based on the given data source,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).save(path)`.
    */
   @deprecated("Use write.format(source).save(path)", "1.4.0")
   def save(path: String, source: String): Unit = {
@@ -1579,6 +1665,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path based on the given data source and
    * [[SaveMode]] specified by mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).mode(mode).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
   def save(path: String, source: String, mode: SaveMode): Unit = {
@@ -1589,6 +1676,8 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
@@ -1603,6 +1692,8 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
@@ -1612,9 +1703,33 @@ class DataFrame private[sql](
     write.format(source).mode(mode).options(options).save()
   }
 
+
+  /**
+   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
+   * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)`.
+   */
+  @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
+  def insertInto(tableName: String, overwrite: Boolean): Unit = {
+    write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).insertInto(tableName)
+  }
+
+  /**
+   * Adds the rows from this RDD to the specified table.
+   * Throws an exception if the table already exists.
+   * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().mode(SaveMode.Append).saveAsTable(tableName)`.
+   */
+  @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
+  def insertInto(tableName: String): Unit = {
+    write.mode(SaveMode.Append).insertInto(tableName)
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
-  // End of eeprecated methods
+  // End of deprecated methods
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 

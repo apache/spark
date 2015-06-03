@@ -25,9 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.scalatest.FunSuite
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -36,16 +35,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.Utils
 
-class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
+class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
-  private var sqlContext: SQLContext = _
   private var tempDir: File = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir = Utils.createTempDir()
     sc.setCheckpointDir(tempDir.getAbsolutePath)
-    sqlContext = new SQLContext(sc)
   }
 
   override def afterAll(): Unit = {

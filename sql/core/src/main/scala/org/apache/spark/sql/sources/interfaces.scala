@@ -25,11 +25,13 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
+import org.apache.spark.SerializableWritable
+import org.apache.spark.sql.{Row, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * ::DeveloperApi::
@@ -91,7 +93,7 @@ trait SchemaRelationProvider {
 }
 
 /**
- * ::DeveloperApi::
+ * ::Experimental::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
  * USING clause specified (to specify the implemented [[HadoopFsRelationProvider]]), a user defined
@@ -113,16 +115,19 @@ trait SchemaRelationProvider {
  *
  * @since 1.4.0
  */
+@Experimental
 trait HadoopFsRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
    * is enforced by the Map that is passed to the function.
+   *
+   * @param dataSchema Schema of data columns (i.e., columns that are not partition columns).
    */
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
-      schema: Option[StructType],
+      dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
 }
@@ -373,29 +378,34 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    var leafDirs = mutable.Map.empty[Path, FileStatus]
-
     def refresh(): Unit = {
+      // We don't filter files/directories whose name start with "_" except "_temporary" here, as
+      // specific data sources may take advantages over them (e.g. Parquet _metadata and
+      // _common_metadata files). "_temporary" directories are explicitly ignored since failed
+      // tasks/jobs may leave partial/corrupted data files there.
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-        val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-        files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+        if (status.getPath.getName.toLowerCase == "_temporary") {
+          Set.empty
+        } else {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
+          files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+        }
       }
 
-      leafDirs.clear()
       leafFiles.clear()
 
-      // We don't filter files/directories like _temporary/_SUCCESS here, as specific data sources
-      // may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
       val statuses = paths.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
+      }.filterNot { status =>
+        // SPARK-8037: Ignores files like ".DS_Store" and other hidden files/directories
+        status.getPath.getName.startsWith(".")
       }
 
-      val (dirs, files) = statuses.partition(_.isDir)
-      leafDirs ++= dirs.map(d => d.getPath -> d).toMap
+      val files = statuses.filterNot(_.isDir)
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
     }
@@ -414,8 +424,29 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   final private[sql] def partitionSpec: PartitionSpec = {
     if (_partitionSpec == null) {
       _partitionSpec = maybePartitionSpec
-        .map(spec => spec.copy(partitionColumns = spec.partitionColumns.asNullable))
-        .orElse(userDefinedPartitionColumns.map(PartitionSpec(_, Array.empty[Partition])))
+        .flatMap {
+          case spec if spec.partitions.nonEmpty =>
+            Some(spec.copy(partitionColumns = spec.partitionColumns.asNullable))
+          case _ =>
+            None
+        }
+        .orElse {
+          // We only know the partition columns and their data types. We need to discover
+          // partition values.
+          userDefinedPartitionColumns.map { partitionSchema =>
+            val spec = discoverPartitions()
+            val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
+              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+                case (value, dataType) => Literal.create(value, dataType)
+              }
+              val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
+                Cast(literal, field.dataType).eval()
+              }
+              p.copy(values = Row.fromSeq(castedValues))
+            }
+            PartitionSpec(partitionSchema, castedPartitions)
+          }
+        }
         .getOrElse {
           if (sqlContext.conf.partitionDiscoveryEnabled()) {
             discoverPartitions()
@@ -459,13 +490,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
-    val leafDirs = fileStatusCache.leafDirs.keys.toSeq
-
-    if (leafDirs.nonEmpty) {
-      PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
-    } else {
-      PartitionSpec(StructType(Array.empty[StructField]), Array.empty[Partition])
-    }
+    // We use leaf dirs containing data files to discover the schema.
+    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
   }
 
   /**
@@ -476,7 +503,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionSpec.partitionColumns.filterNot { column =>
+    StructType(dataSchema ++ partitionColumns.filterNot { column =>
       dataSchemaColumnNames.contains(column.name.toLowerCase)
     })
   }
@@ -484,7 +511,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private[sources] final def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[String]): RDD[Row] = {
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -499,7 +527,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildScan(requiredColumns, filters, inputStatuses)
+    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
@@ -581,6 +609,34 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       filters: Array[Filter],
       inputFiles: Array[FileStatus]): RDD[Row] = {
     buildScan(requiredColumns, inputFiles)
+  }
+
+  /**
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containing all rows within that single partition.
+   *
+   * Note: This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *                        overhead of broadcasting the Configuration for every Hadoop RDD.
+   *
+   * @since 1.4.0
+   */
+  private[sql] def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+    buildScan(requiredColumns, filters, inputFiles)
   }
 
   /**

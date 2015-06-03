@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.IntegralType
 
-class IntegralDeltaSuite extends FunSuite {
-  testIntegralDelta(new IntColumnStats,  INT,  IntDelta)
+class IntegralDeltaSuite extends SparkFunSuite {
+  testIntegralDelta(new IntColumnStats, INT, IntDelta)
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
   def testIntegralDelta[I <: IntegralType](
@@ -116,7 +115,7 @@ class IntegralDeltaSuite extends FunSuite {
 
     test(s"$scheme: simple case") {
       val input = columnType match {
-        case INT  => Seq(2: Int,  1: Int,  2: Int,  130: Int)
+        case INT => Seq(2: Int, 1: Int, 2: Int, 130: Int)
         case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
       }
 

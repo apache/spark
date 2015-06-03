@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.Identifiable
@@ -26,12 +26,12 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
  * provided "weight" vector.  In other words, it scales each column of the dataset by a scalar
  * multiplier.
  */
-@AlphaComponent
+@Experimental
 class ElementwiseProduct(override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
 
@@ -41,7 +41,7 @@ class ElementwiseProduct(override val uid: String)
     * the vector to multiply with input vectors
     * @group param
     */
-  val scalingVec: Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
+  val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)

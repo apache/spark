@@ -33,7 +33,7 @@ private[shared] object SharedParamsCodeGen {
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
-      ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
+      ParamDesc[Int]("maxIter", "maximum number of iterations (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
@@ -49,7 +49,7 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
-      ParamDesc[String]("outputCol", "output column name"),
+      ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
