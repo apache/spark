@@ -38,8 +38,8 @@ import org.apache.spark.sql.functions._
  */
 @Experimental
 trait RPParams  extends Params with HasInputCol with HasOutputCol{
-  var intrinsicDimensionParam: DoubleParam = new DoubleParam(this, 
-                                                            "intrinsicDimension", 
+  var intrinsicDimensionParam: DoubleParam = new DoubleParam(this,
+                                                            "intrinsicDimension",
                                                             "dimension to project into")
 
   /** @group setParam */

@@ -238,14 +238,48 @@ The following code demonstrates how to compute principal components on a `RowMat
 and use them to project the vectors into a low-dimensional space.
 
 {% highlight scala %}
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.feature.RandomProjection
+import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
+
+val sc: SparContext = ...
+val newDimension = 10
+val origDimension = 30
+
+val rp = new RandomProjection(newDimension)
+val data: BlockMatrix = ...
+val randomMatrix = rp.computeRPMatrix(sc, origDimension).transpose
+
+val reduced = randomMatrix.multiply(data.transpose).transpose
+
 {% endhighlight %}
+
+See the [here](https://github.com/apache/spark/tree/master/examples/src/main/scala/org/apache/spark/examples) for a full example and how to integrate RP as a pipeline stage
 
 </div>
 
 <div data-lang="java" markdown="1">
-java
-</div>
+{% highlight java %}
 
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.feature.RandomProjection;
+import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
+
+JavaSparkContext jsc = ...
+BlockMatrix matA = ...
+
+int newDimension = 10;
+int origDimension = 30;
+
+RandomProjection rp = new RandomProjection(newDimension);
+BlockMatrix bm = rp.computeRPMatrix(jsc.sc(), origDimension);
+BlockMatrix reduced = bm.transpose().multiply(matA.transpose()).transpose();
+
+{% endhighlight %}
+</div>
 </div>
