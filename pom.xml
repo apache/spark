@@ -272,8 +272,8 @@
     <!-- TODO: This can be deleted after Spark 1.4 is posted -->
     <repository>
       <id>spark-1.4-staging</id>
-      <name>Spark 1.4 RC1 Staging Repository</name>
-      <url>https://repository.apache.org/content/repositories/orgapachespark-1104</url>
+      <name>Spark 1.4 RC4 Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/orgapachespark-1112</url>
       <releases>
         <enabled>true</enabled>
       </releases>
