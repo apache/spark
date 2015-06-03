@@ -1225,6 +1225,12 @@ class DataFrame(object):
 
         >>> df.drop(df.age).collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
+        [Row(age=5, height=85, name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
+        [Row(age=5, name=u'Bob', height=85)]
         """
         if isinstance(col, basestring):
             jdf = self._jdf.drop(col)
