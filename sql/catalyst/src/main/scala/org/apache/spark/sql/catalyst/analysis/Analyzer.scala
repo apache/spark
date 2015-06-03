@@ -338,7 +338,7 @@ class Analyzer(
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild
-      case s @ Sort(ordering, global, child) =>
+      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
 
@@ -382,8 +382,9 @@ class Analyzer(
   private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
     ordering.map { order =>
       // Resolve SortOrder in one round.
-      // if throws == false, fail and return the origin one.
-      // else, throw exception.
+      // If throws == false or the desired attribute doesn't exist
+      // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
+      // Else, throw exception.
       try {
         val newOrder = order transformUp {
           case u @ UnresolvedAttribute(nameParts) =>
@@ -408,13 +409,13 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
+        val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(p.output,
-            Sort(resolvedOrdering, global,
+            Sort(newOrdering, global,
               Project(projectList ++ missing, child)))
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
@@ -429,19 +430,19 @@ class Analyzer(
         )
 
         // Find sort attributes that are projected away so we can temporarily add them back in.
-        val (resolvedOrdering, unresolved) = resolveAndFindMissing(ordering, a, groupingRelation)
+        val (newOrdering, missingAttr) = resolveAndFindMissing(ordering, a, groupingRelation)
 
         // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
         // Sort.
-        val (withAggsRemoved, aliasedAggregateList) = resolvedOrdering.map {
+        val (withAggsRemoved, aliasedAggregateList) = newOrdering.filter(_.resolved).map {
           case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
             val aliased = Alias(aggOrdering.child, "_aggOrdering")()
-            (aggOrdering.copy(child = aliased.toAttribute), aliased :: Nil)
+            (aggOrdering.copy(child = aliased.toAttribute), Some(aliased))
 
-          case other => (other, Nil)
+          case other => (other, None)
         }.unzip
 
-        val missing = unresolved ++ aliasedAggregateList.flatten
+        val missing = missingAttr ++ aliasedAggregateList.flatten
 
         if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
@@ -449,15 +450,14 @@ class Analyzer(
             Sort(withAggsRemoved, global,
               Aggregate(grouping, aggs ++ missing, child)))
         } else {
-          logDebug(s"Failed to find $missing in ${a.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
     }
 
     /**
-     * Given a child and a grandchild that are present beneath a sort operator, returns
-     * a resolved sort ordering and a list of attributes that are missing from the child
-     * but are present in the grandchild.
+     * Given a child and a grandchild that are present beneath a sort operator, try to resolve
+     * the sort ordering and returns it with a list of attributes that are missing from the
+     * child but are present in the grandchild.
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],

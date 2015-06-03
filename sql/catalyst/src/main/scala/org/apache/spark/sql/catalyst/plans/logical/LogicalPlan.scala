@@ -50,19 +50,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation UnresolvedRelation]]
    * should return `false`).
    */
-  lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
+  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
   override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 
   /**
    * Returns true if all its children of this query plan have been resolved.
    */
-  def childrenResolved: Boolean = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns true when the given logical plan will return the same results as this logical plan.
    *
-   * Since its likely undecideable to generally determine if two given plans will produce the same
+   * Since its likely undecidable to generally determine if two given plans will produce the same
    * results, it is okay for this function to return false, even if the results are actually
    * the same.  Such behavior will not affect correctness, only the application of performance
    * enhancements like caching.  However, it is not acceptable to return true if the results could
