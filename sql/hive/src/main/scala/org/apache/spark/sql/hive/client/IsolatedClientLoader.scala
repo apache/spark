@@ -69,7 +69,7 @@ private[hive] object IsolatedClientLoader {
     val allFiles = classpath.split(",").map(new File(_)).toSet
 
     // TODO: Remove copy logic.
-    val tempDir = Utils.createTempDir(namePrefix = s"hive-v${version}")
+    val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
     tempDir.listFiles().map(_.toURL)
   }
