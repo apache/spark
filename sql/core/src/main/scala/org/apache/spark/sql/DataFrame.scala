@@ -1088,7 +1088,7 @@ class DataFrame private[sql](
    * This is a no-op if the DataFrame doesn't have a column
    * with an equivalent expression.
    * @group dfops
-   * @since 1.4.0
+   * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
     val attrs = this.logicalPlan.output
