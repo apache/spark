@@ -806,6 +806,7 @@ private[spark] object SparkSubmitUtils {
     val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
       "[artifact](-[classifier]).[ext]").mkString(File.separator)
     localIvy.setPattern(ivyPattern)
+    localIvy.setUsepoms(true)
     localIvy.setName("local-ivy-cache")
     cr.add(localIvy)
 
