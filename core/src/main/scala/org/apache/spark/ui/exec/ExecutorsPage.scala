@@ -42,7 +42,8 @@ private[ui] case class ExecutorSummaryInfo(
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
     maxMemory: Long,
-    executorLogs: Map[String, String])
+    executorLogs: Map[String, String],
+    isRemoved: Boolean)
 
 
 private[ui] class ExecutorsPage(
@@ -53,9 +54,11 @@ private[ui] class ExecutorsPage(
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
-    val maxMem = storageStatusList.map(_.maxMem).sum
-    val memUsed = storageStatusList.map(_.memUsed).sum
-    val diskUsed = storageStatusList.map(_.diskUsed).sum
+    val activeStorageStatusList = storageStatusList.filter(!_.isRemoved)
+    val maxMem = activeStorageStatusList.map(_.maxMem).sum
+    val memUsed = activeStorageStatusList.map(_.memUsed).sum
+    val diskUsed = activeStorageStatusList.map(_.diskUsed).sum
+    val activeExecSize = activeStorageStatusList.size
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield
       ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
@@ -85,7 +88,7 @@ private[ui] class ExecutorsPage(
             </span>
           </th>
           {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
-          {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+          <th class="sorttable_nosort">Status</th>
         </thead>
         <tbody>
           {execInfoSorted.map(execRow(_, logsExist))}
@@ -109,7 +112,8 @@ private[ui] class ExecutorsPage(
         </div>
       </div>;
 
-    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
+    UIUtils.headerSparkPage("Executors (Active: " + activeExecSize +
+      ", Total Allocated: " + execInfo.size + ")", content, parent)
   }
 
   /** Render an HTML row representing an executor */
@@ -160,13 +164,15 @@ private[ui] class ExecutorsPage(
         }
       }
       {
-        if (threadDumpEnabled) {
+        if (info.isRemoved) {
+          <td>Removed</td>
+        } else if (threadDumpEnabled) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")
           <td>
             <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
           </td>
         } else {
-          Seq.empty
+          <td></td>
         }
       }
     </tr>
@@ -193,6 +199,7 @@ private[spark] object ExecutorsPage {
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
+    val isRemoved = status.isRemoved
 
     new ExecutorSummary(
       execId,
@@ -209,7 +216,8 @@ private[spark] object ExecutorsPage {
       totalShuffleRead,
       totalShuffleWrite,
       maxMem,
-      executorLogs
+      executorLogs,
+      isRemoved
     )
   }
 }

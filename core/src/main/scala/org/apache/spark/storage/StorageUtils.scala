@@ -57,6 +57,11 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
   private var _nonRddStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
+  private var _blockManagerRemoved = false
+
+  def isRemoved: Boolean = _blockManagerRemoved
+  def markAsRemoved(): Unit = _blockManagerRemoved = true
+
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
   def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
     this(bmid, maxMem)
