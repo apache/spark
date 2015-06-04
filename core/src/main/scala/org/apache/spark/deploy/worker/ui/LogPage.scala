@@ -159,7 +159,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
           offset
         }
       }
-      val endIndex = math.min(startIndex + totalLength, totalLength)
+      val endIndex = math.min(startIndex + byteLength, totalLength)
       logDebug(s"Getting log from $startIndex to $endIndex")
       val logText = Utils.offsetBytes(files, startIndex, endIndex)
       logDebug(s"Got log of length ${logText.length} bytes")
