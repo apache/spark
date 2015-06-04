@@ -113,11 +113,13 @@ class BlockManagerMasterEndpoint(
       context.reply(heartbeatReceived(blockManagerId))
 
     case HasCachedBlocks(executorId) =>
-      val blockManager = blockManagerIdByExecutor.get(executorId)
-      blockManager.foreach { bm =>
-        blockManagerInfo.get(bm).foreach { info => context.reply(info.cachedBlocks.nonEmpty) }
+      blockManagerIdByExecutor.get(executorId) match {
+        case Some(bm) =>
+          blockManagerInfo.get(bm).map {
+            info => context.reply(info.cachedBlocks.nonEmpty)
+          }.getOrElse(context.reply(false))
+        case None => context.reply(false)
       }
-
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
