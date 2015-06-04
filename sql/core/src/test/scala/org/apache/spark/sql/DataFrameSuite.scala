@@ -371,9 +371,9 @@ class DataFrameSuite extends QueryTest {
     val df = joinedDf.drop(col)
     checkAnswer(
       df,
-      joinedDf.collect().map { case Row(id: Int, name: String, age: Int,
-                                        idToDrop: Int, salary: Double) =>
-        Row(id, name, age, salary)
+      joinedDf.collect().map {
+        case Row(id: Int, name: String, age: Int, idToDrop: Int, salary: Double) =>
+          Row(id, name, age, salary)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
   }
