@@ -229,6 +229,10 @@ class DataFrame private[sql](
     }
 
     sb.append(sep)
+
+    // For Data that has more than 20 records.
+    if (this.count() > 20) sb.append("only showing the top 20 rows\n")
+
     sb.toString()
   }
 
@@ -354,16 +358,11 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def show(): Unit = {
-    show(20)
-    if (this.count() > 20) {
-      println("only showing the top 20 rows\n")
-    }
-  }
+  def show(): Unit = show(20)
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
-   * {{{
+   * {{{  
    *   // Dropping rows containing any null values.
    *   df.na.drop()
    * }}}
