@@ -618,7 +618,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
-  <td>true</td>
+  <td>true (false when using Spark SQL Thrift Server)</td>
   <td>
     Whether to track references to the same object when serializing data with Kryo, which is
     necessary if your object graphs have loops and useful for efficiency if they contain multiple
@@ -679,7 +679,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td>
+    org.apache.spark.serializer.<br />JavaSerializer (org.apache.spark.serializer.<br />
+    KryoSerializer when using Spark SQL Thrift Server)
+  </td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object
