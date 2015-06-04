@@ -207,7 +207,7 @@ class BlockManagerMaster(
    * cached blocks, which are not broadcast blocks.
    */
   def hasCachedBlocks(executorId: String): Boolean = {
-    driverEndpoint.askWithRetry[Boolean](hasCachedBlocks(executorId))
+    driverEndpoint.askWithRetry[Boolean](HasCachedBlocks(executorId))
   }
 
   /** Stop the driver endpoint, called only on the Spark driver node */
