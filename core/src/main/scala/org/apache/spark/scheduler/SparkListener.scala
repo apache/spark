@@ -26,6 +26,7 @@ import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.storage.BlockManagerMessages.UpdateBlockInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -97,6 +98,9 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 @DeveloperApi
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerBlockUpdated(updateBlockInfo: UpdateBlockInfo) extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.
@@ -215,6 +219,11 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+   * Called when the driver receives a block update info.
+   */
+  def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated) { }
 }
 
 /**

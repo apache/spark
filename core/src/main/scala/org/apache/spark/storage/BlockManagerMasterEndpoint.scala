@@ -59,10 +59,11 @@ class BlockManagerMasterEndpoint(
       register(blockManagerId, maxMemSize, slaveEndpoint)
       context.reply(true)
 
-    case UpdateBlockInfo(
+    case _updateBlockInfo @ UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
       context.reply(updateBlockInfo(
         blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
+      listenerBus.post(SparkListenerBlockUpdated(_updateBlockInfo))
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))

@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.RDDInfo
+import org.apache.spark.storage.{BroadcastBlockId, StreamBlockId, BlockUIData, RDDInfo}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -30,9 +30,32 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))
+    val blocks = listener.allBlocks.sortBy(_.blockId.toString)
+    val streamBlocks = blocks.filter(_.blockId.isInstanceOf[StreamBlockId])
+    val broadcastBlocks = blocks.filter(_.blockId.isInstanceOf[BroadcastBlockId])
+    val content = rddTable ++
+      blockTable("Receiver Block", streamBlocks) ++
+      blockTable("Broadcast", broadcastBlocks)
     UIUtils.headerSparkPage("Storage", content, parent)
+  }
+
+  private def rddTable: Seq[Node] = {
+    val rdds = listener.rddInfoList
+    <div>
+      <h3>RDD</h3>
+      {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
+    </div>
+  }
+
+  private def blockTable(tableName: String, blocks: Seq[BlockUIData]): Seq[Node] = {
+    if (blocks.isEmpty) {
+      Nil
+    } else {
+      <div>
+        <h3>{tableName}</h3>
+        {UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("storage-by-block-table"))}
+      </div>
+    }
   }
 
   /** Header fields for the RDD table */
@@ -64,4 +87,36 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     </tr>
     // scalastyle:on
   }
+
+  private def blockHeader = Seq(
+    "Block Id",
+    "Storage Level",
+    "Size in Memory",
+    "Size in ExternalBlockStore",
+    "Size on Disk",
+    "Locations (Address / Executor ID)")
+
+  private def blockRow(block: BlockUIData): Seq[Node] = {
+    <tr>
+      <td>
+        {block.blockId.toString}
+      </td>
+      <td>
+        {block.storageLevel.description}
+      </td>
+      <td sorttable_customkey={block.memSize.toString}>
+        {Utils.bytesToString(block.memSize)}
+      </td>
+      <td sorttable_customkey={block.externalBlockStoreSize.toString}>
+        {Utils.bytesToString(block.externalBlockStoreSize)}
+      </td>
+      <td sorttable_customkey={block.diskSize.toString}>
+        {Utils.bytesToString(block.diskSize)}
+      </td>
+      <td>
+        {block.locations.mkString(", ")}
+      </td>
+    </tr>
+  }
+
 }
