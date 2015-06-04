@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions._
  * Keeps parameter for the Random Projection
  */
 @Experimental
-trait RPParams  extends Params with HasInputCol with HasOutputCol{
+trait RPParams extends Params with HasInputCol with HasOutputCol{
   var intrinsicDimensionParam: DoubleParam = new DoubleParam(this,
                                                             "intrinsicDimension",
                                                             "dimension to project into")
