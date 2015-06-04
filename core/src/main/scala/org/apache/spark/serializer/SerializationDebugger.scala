@@ -129,8 +129,7 @@ private[spark] object SerializationDebugger extends Logging {
      * Visit an externalizable object.
      * Since writeExternal() can choose add arbitrary objects at the time of serialization,
      * the only way to capture all the objects it will serialize is by using a
-     * dummy ObjectOutput object that captures all the inner objects, and then visit all the
-     * captured objects to test their serializability.
+     * dummy ObjectOutput that collects all the relevant objects for further testing.
      */
     private def visitExternalizable(o: java.io.Externalizable, stack: List[String]): List[String] =
     {
@@ -164,8 +163,8 @@ private[spark] object SerializationDebugger extends Logging {
       // serialization code to recursively serialize the fields of an object and
       // its parent classes. For example, if there are the following classes.
       //
-      // class ParentClass(parentField: Int)
-      // class ChildClass(childField: Int) extends Parent(1)
+      //     class ParentClass(parentField: Int)
+      //     class ChildClass(childField: Int) extends ParentClass(1)
       //
       // Then serializing the an object Obj of type ChildClass requires for serializing the fields
       // of ParentClass (that is, parentField), and then serializing the fields of ChildClass
@@ -219,8 +218,7 @@ private[spark] object SerializationDebugger extends Logging {
      * Visit a serializable object which has the writeObject() defined.
      * Since writeObject() can choose add arbitrary objects at the time of serialization,
      * the only way to capture all the objects it will serialize is by using a
-     * dummy ObjectOutputStream that captures all the inner objects, and then visit all the
-     * captured objects to test their serializability.
+     * dummy ObjectOutputStream that collects all the relevant fields for further testing.
      */
     private def visitSerializableWithWriteObjectMethod(
         o: Object, stack: List[String]): List[String] = {
