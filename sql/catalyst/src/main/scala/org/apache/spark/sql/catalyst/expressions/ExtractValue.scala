@@ -94,16 +94,22 @@ trait ExtractValue extends UnaryExpression {
   self: Product =>
 }
 
+abstract class ExtractValueWithStruct extends ExtractValue {
+  self: Product =>
+
+  def field: StructField
+  override def foldable: Boolean = child.foldable
+  override def toString: String = s"$child.${field.name}"
+}
+
 /**
  * Returns the value of fields in the Struct `child`.
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
-  extends ExtractValue {
+  extends ExtractValueWithStruct {
 
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
-  override def foldable: Boolean = child.foldable
-  override def toString: String = s"$child.${field.name}"
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[InternalRow]
@@ -118,12 +124,10 @@ case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
-    containsNull: Boolean) extends ExtractValue {
+    containsNull: Boolean) extends ExtractValueWithStruct {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def nullable: Boolean = child.nullable
-  override def foldable: Boolean = child.foldable
-  override def toString: String = s"$child.${field.name}"
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]

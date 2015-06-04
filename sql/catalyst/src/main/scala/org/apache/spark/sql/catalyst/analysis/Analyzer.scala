@@ -70,6 +70,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
+      ResolveAliases ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ResolveGenerate ::
@@ -77,7 +78,6 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      TrimGroupingAliases ::
       typeCoercionRules ++
       extendedResolutionRules : _*)
   )
@@ -131,13 +131,28 @@ class Analyzer(
     }
   }
 
-  /**
-   * Removes no-op Alias expressions from the plan.
-   */
-  object TrimGroupingAliases extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Aggregate(groups, aggs, child) =>
-        Aggregate(groups.map(_.transform { case Alias(c, _) => c }), aggs, child)
+  object ResolveAliases extends Rule[LogicalPlan] {
+    private def assignAliases(exprs: Seq[Expression]) = {
+      var i = -1
+      exprs.map(_ transformDown {
+        case u @ UnresolvedAlias(child) =>
+          child match {
+            case ne: NamedExpression => ne
+            case ev: ExtractValueWithStruct => Alias(ev, ev.field.name)()
+            case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
+            case e if !e.resolved => u
+            case other =>
+              i += 1
+              Alias(other, s"c$i")()
+          }
+      }).asInstanceOf[Seq[NamedExpression]]
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case Aggregate(groups, aggs, child) if child.resolved =>
+        Aggregate(groups, assignAliases(aggs), child)
+      case Project(projectList, child) if child.resolved =>
+        Project(assignAliases(projectList), child)
     }
   }
 
@@ -228,7 +243,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
         getTable(u)
@@ -352,8 +367,12 @@ class Analyzer(
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result =
-              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
+            val result = withPosition(u) {
+              q.resolveChildren(nameParts, resolver).map {
+                case UnresolvedAlias(child) => child
+                case other => other
+              }.getOrElse(u)
+            }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -586,19 +605,7 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name)
-          if g.resolved &&
-             g.elementTypes.size > 1 &&
-             java.util.regex.Pattern.matches("_c[0-9]+", name) => {
-          // Assume the default name given by parser is "_c[0-9]+",
-          // TODO in long term, move the naming logic from Parser to Analyzer.
-          // In projection, Parser gave default name for TGF as does for normal UDF,
-          // but the TGF probably have multiple output columns/names.
-          //    e.g. SELECT explode(map(key, value)) FROM src;
-          // Let's simply ignore the default given name for this case.
-          Some((g, Nil))
-        }
-        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},

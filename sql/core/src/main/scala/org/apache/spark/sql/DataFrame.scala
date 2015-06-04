@@ -629,11 +629,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = {
     val namedExpressions = cols.map {
-      case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
-      // correct defaults after the nested expression's type has been resolved.
-      case Column(explode: Explode) => MultiAlias(explode, Nil)
-      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
+      case Column(expr: Expression) => UnresolvedAlias(expr)
     }
     // When user continuously call `select`, speed up analysis by collapsing `Project`
     import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
