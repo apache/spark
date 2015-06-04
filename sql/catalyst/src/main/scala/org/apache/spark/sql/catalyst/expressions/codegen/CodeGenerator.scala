@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.language.existentials
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.commons.compiler.CompilerFactoryFactory
+import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions
@@ -38,8 +38,6 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * expressions.
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
-
-  protected val cbe = CompilerFactoryFactory.getDefaultCompilerFactory().newClassBodyEvaluator()
 
   protected val rowType = classOf[Row].getName
   protected val stringType = classOf[UTF8String].getName
@@ -77,12 +75,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   protected def compile(code: String): Class[_] = {
     val startTime = System.nanoTime()
-    cbe.cook(code)
-    val result = cbe.getClazz()
+    val clazz = new ClassBodyEvaluator(code).getClazz()
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
-    logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
-    result
+    logDebug(s"Compiled Java code (${code.size} bytes) in $timeMs ms")
+    clazz
   }
 
   /**
@@ -98,7 +95,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     .maximumSize(1000)
     .build(
       new CacheLoader[InType, OutType]() {
-        override def load(in: InType): OutType = globalLock.synchronized {
+        override def load(in: InType): OutType = {
           val startTime = System.nanoTime()
           val result = create(in)
           val endTime = System.nanoTime()
