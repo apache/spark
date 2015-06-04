@@ -47,7 +47,9 @@ COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
 # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
 SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
-TESTS_TIMEOUT="150m" # format: http://linux.die.net/man/1/timeout
+# format: http://linux.die.net/man/1/timeout
+# must be less than the timeout configured on Jenkins (currently 180m)
+TESTS_TIMEOUT="175m"
 
 # Array to capture all tests to run on the pull request. These tests are held under the
 #+ dev/tests/ directory.
