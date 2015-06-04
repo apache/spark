@@ -20,7 +20,6 @@ package org.apache.spark.scheduler.cluster
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.rpc._
@@ -67,8 +66,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  // Maintain a map to record the preferred node location
-  protected var preferredNodeLocations: Seq[String] = Nil
+  // Maintain a map to record the preferred node location and count
+  protected var preferredLocalityToCount: Map[String, Int] = Map.empty
+  protected var localityAwarePendingTasks: Int = 0
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -335,8 +335,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.
    */
-  final override def requestExecutors(numAdditionalExecutors: Int,
-    preferredNodeLocations: Seq[String]): Boolean = synchronized {
+  final override def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
     if (numAdditionalExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of additional executor(s) " +
@@ -344,8 +343,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
-
-    this.preferredNodeLocations = preferredNodeLocations
 
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed
@@ -359,14 +356,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the request is acknowledged.
    */
   final override def requestTotalExecutors(numExecutors: Int,
-      preferredNodeLocations: Seq[String]): Boolean = synchronized {
+      localityAwarePendingTasks: Int,
+      preferredLocalityToCount: Map[String, Int]): Boolean = synchronized {
     if (numExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +
           s"$numExecutors from the cluster manager. Please specify a positive number!")
     }
 
-    this.preferredNodeLocations = preferredNodeLocations
+    this.localityAwarePendingTasks = localityAwarePendingTasks
+    this.preferredLocalityToCount = preferredLocalityToCount
 
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)

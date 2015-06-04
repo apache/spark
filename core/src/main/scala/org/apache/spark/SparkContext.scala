@@ -1386,13 +1386,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * This can result in canceling pending requests or filing additional requests.
    * This is currently only supported in YARN mode. Return whether the request is received.
    */
-  private[spark] override def requestTotalExecutors(numExecutors: Int,
-      preferredNodeLocations: Seq[String]): Boolean = {
+  private[spark] override def requestTotalExecutors(
+      numExecutors: Int,
+      localityAwarePendingTasks: Int,
+      preferredLocalityToCount: scala.Predef.Map[String, Int]): Boolean = {
     assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.requestTotalExecutors(numExecutors, preferredNodeLocations)
+        b.requestTotalExecutors(numExecutors, localityAwarePendingTasks, preferredLocalityToCount)
       case _ =>
         logWarning("Requesting executors is only supported in coarse-grained mode")
         false
@@ -1405,13 +1407,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * This is currently only supported in YARN mode. Return whether the request is received.
    */
   @DeveloperApi
-  override def requestExecutors(numAdditionalExecutors: Int,
-      preferredNodeLocations: Seq[String]): Boolean = {
+  override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.requestExecutors(numAdditionalExecutors, preferredNodeLocations)
+        b.requestExecutors(numAdditionalExecutors)
       case _ =>
         logWarning("Requesting executors is only supported in coarse-grained mode")
         false

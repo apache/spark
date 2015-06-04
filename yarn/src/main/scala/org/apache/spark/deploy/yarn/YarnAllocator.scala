@@ -127,10 +127,11 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  // Maintain a map of preferredNodeLocation to use.
-  private val preferredNodeLocationToUses = new HashMap[String, Boolean]
-  // Maintain a preferred map of rack
-  private val preferredRackLocations = new HashSet[String]
+  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
+
+  private var preferredLocalityToCounts: Map[String, Int] = Map.empty
+
+  private var localityAwarePendingTaskNum: Int = 0
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
@@ -154,7 +155,10 @@ private[yarn] class YarnAllocator(
    *
    * @return Whether the new requested total is different than the old value.
    */
-  def requestTotalExecutors(requestedTotal: Int): Boolean = synchronized {
+  def requestTotalExecutorsWithPreferredLocalities(
+      requestedTotal: Int,
+      localityAwarePendingTasks: Int,
+      preferredLocalityToCount: Map[String, Int]): Unit = synchronized {
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
@@ -162,6 +166,9 @@ private[yarn] class YarnAllocator(
     } else {
       false
     }
+
+    this.localityAwarePendingTaskNum = localityAwarePendingTasks
+    this.preferredLocalityToCounts = preferredLocalityToCounts
   }
 
   /**
@@ -174,17 +181,6 @@ private[yarn] class YarnAllocator(
       numExecutorsRunning -= 1
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
-    }
-  }
-
-  /**
-   * Update the preferred node locations
-   */
-  def updatePreferredNodeLocations(preferredNodeLocations: Seq[String]): Unit = synchronized {
-    preferredNodeLocations.foreach { node =>
-      preferredNodeLocationToUses.getOrElseUpdate(node, false)
-      val rack = RackResolver.resolve(conf, node).getNetworkLocation
-      preferredRackLocations.add(rack)
     }
   }
 
@@ -241,12 +237,74 @@ private[yarn] class YarnAllocator(
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
-      for (i <- 0 until missing) {
-        val request = createContainerRequest(resource)
-        amClient.addContainerRequest(request)
-        val nodes = request.getNodes
-        val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
-        logInfo(s"Container request (host: $hostStr, capability: $resource)")
+      // Calculated the number of executors we expected to satisfy all the preferred locality tasks
+      val localityAwareTaskCores = localityAwarePendingTaskNum * CPUS_PER_TASK
+      val expectedLocalityAwareContainerNum =
+        (localityAwareTaskCores + resource.getVirtualCores - 1) / resource.getVirtualCores
+
+      // Get the all the existed and locality matched containers
+      val existedMatchedContainers = allocatedHostToContainersMap.filter { case (host, _) =>
+        preferredLocalityToCounts.contains(host)
+      }
+      val existedMatchedContainerNum = existedMatchedContainers.values.map(_.size).sum
+
+      // The number of containers to allocate, divided into two groups, one with node locality,
+      // and the other without locality preference.
+      var requiredLocalityFreeContainerNum: Int = 0
+      var requiredLocalityAwareContainerNum: Int = 0
+
+      if (expectedLocalityAwareContainerNum <= existedMatchedContainerNum) {
+        // If the current allocated executor can satisfy all the locality preferred tasks,
+        // allocate the new container with no locality preference
+        requiredLocalityFreeContainerNum = missing
+      } else {
+        if (expectedLocalityAwareContainerNum - existedMatchedContainerNum >= missing) {
+          // If current allocated executor cannot fully satisfy all the locality preferred tasks,
+          // allocate all the new container with locality preference
+          requiredLocalityAwareContainerNum = missing
+        } else {
+          // Allocate partial of the containers with locality preference,
+          // and partial without locality preference
+          requiredLocalityAwareContainerNum =
+            expectedLocalityAwareContainerNum - existedMatchedContainerNum
+          requiredLocalityFreeContainerNum = missing -
+            (expectedLocalityAwareContainerNum - existedMatchedContainerNum)
+        }
+      }
+
+      if (requiredLocalityFreeContainerNum > 0) {
+        for (i <- 0 until requiredLocalityFreeContainerNum) {
+          val request = createContainerRequest(resource, null, null)
+          amClient.addContainerRequest(request)
+          val nodes = request.getNodes
+          val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
+          logInfo(s"Container request (host: $hostStr, capability: $resource)")
+        }
+      }
+
+      if (requiredLocalityAwareContainerNum > 0) {
+        var largestRatio = 0
+        for ( (_, ratio) <- preferredLocalityToCounts if ratio > largestRatio) {
+          largestRatio = ratio
+        }
+
+        // Calculate the ratio of locality preference
+        var preferredLocalityRatio = preferredLocalityToCounts.mapValues { ratio =>
+          val adjustedRatio = ratio.toDouble * requiredLocalityAwareContainerNum / largestRatio
+          adjustedRatio.floor.toInt
+        }
+
+        for (i <- 0 until requiredLocalityAwareContainerNum) {
+          val hosts = preferredLocalityToCounts.filter(_._2 > 0).keys.toArray
+          val racks = hosts.map(h => RackResolver.resolve(conf, h).getNetworkLocation).toSet
+          val request = createContainerRequest(resource, hosts, racks.toArray)
+          amClient.addContainerRequest(request)
+          val nodes = request.getNodes
+          val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
+          logInfo(s"Container request (host: $hostStr, capability: $resource)")
+
+          preferredLocalityRatio = preferredLocalityRatio.mapValues(i => i - 1)
+        }
       }
     } else if (missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
@@ -265,23 +323,8 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  private def createContainerRequest(resource: Resource): ContainerRequest = {
-    // filter nodes which don't have containers but node preference is required.
-    val nodes = {
-      val unusedNodes = preferredNodeLocationToUses.filterKeys(_ == false).keys
-      if (unusedNodes.isEmpty) {
-        null
-      } else {
-        unusedNodes.toArray
-      }
-    }
-
-    val racks = if (preferredRackLocations.isEmpty) {
-      null
-    } else {
-      preferredRackLocations.toArray
-    }
-
+  private def createContainerRequest(resource: Resource, nodes: Array[String], racks: Array[String]
+      ): ContainerRequest = {
     nodeLabelConstructor.map { constructor =>
       constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
         labelExpression.orNull)
@@ -326,21 +369,6 @@ private[yarn] class YarnAllocator(
         s"allocated to us")
       for (container <- remainingAfterOffRackMatches) {
         internalReleaseContainer(container)
-      }
-    }
-
-    // Marking all the valid containers where preferred locality is matched to true,
-    // to avoid allocate several containers on the same node and increase the coverage of all the
-    // preferred node localities.
-    containersToUse.foreach { container =>
-      val location = container.getNodeId.getHost
-      if (preferredNodeLocationToUses.contains(location)) {
-        val isHostUsed = preferredNodeLocationToUses(location)
-        if (isHostUsed) {
-          logDebug(s"Create a container on host $location where already has a container")
-        } else {
-          preferredNodeLocationToUses(location) = true
-        }
       }
     }
 
@@ -471,25 +499,11 @@ private[yarn] class YarnAllocator(
         containerSet.remove(containerId)
         if (containerSet.isEmpty) {
           allocatedHostToContainersMap.remove(host)
-          // If all the containers of this node are removed, remove this preferred location,
-          // since it means currently we don't need to this node locality.
-          preferredNodeLocationToUses.remove(host)
         } else {
           allocatedHostToContainersMap.update(host, containerSet)
         }
 
         allocatedContainerToHostMap.remove(containerId)
-
-        // If current there's no container allocated on this rack, remove it,
-        // since we don't need this rack currently.
-        val remainingRacks = allocatedHostToContainersMap.keys.map { h =>
-          RackResolver.resolve(conf, h).getNetworkLocation
-        }.toSet
-        remainingRacks.foreach { rack =>
-          if (!preferredRackLocations.contains(rack)) {
-            preferredRackLocations.remove(rack)
-          }
-        }
       }
     }
   }

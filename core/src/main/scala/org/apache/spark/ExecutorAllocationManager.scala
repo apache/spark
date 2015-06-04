@@ -295,7 +295,10 @@ private[spark] class ExecutorAllocationManager(
 
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
-        client.requestTotalExecutors(numExecutorsTarget)
+        val (localityAwarePendingTasks, preferredLocalities) =
+          listener.getPreferredLocalitiesAndTasks()
+        client.requestTotalExecutors(numExecutorsTarget, localityAwarePendingTasks,
+          preferredLocalities)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
       }
@@ -349,8 +352,10 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
+    val (localityAwarePendingTasks, preferredLocalities) = listener.getPreferredLocalitiesAndTasks()
     val addRequestAcknowledged = testing ||
-      client.requestTotalExecutors(numExecutorsTarget, listener.preferredNodeLocations)
+      client.requestTotalExecutors(numExecutorsTarget, localityAwarePendingTasks,
+        preferredLocalities)
     if (addRequestAcknowledged) {
       val executorsString = "executor" + { if (delta > 1) "s" else "" }
       logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
@@ -521,7 +526,7 @@ private[spark] class ExecutorAllocationManager(
     private var numRunningTasks: Int = _
 
     // stageId to preferredLocation map, maintain the preferred node location of each stage
-    private val stageIdToPreferredLocations = new mutable.HashMap[Int, mutable.ArrayBuffer[String]]
+    private val stageIdToPreferredLocations = new mutable.HashMap[Int, Seq[Seq[TaskLocation]]]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
@@ -531,10 +536,8 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
 
-        val locations = stageIdToPreferredLocations.getOrElseUpdate(stageId,
-          mutable.ArrayBuffer[String]())
-        stageSubmitted.stageInfo.rddInfos.foreach { rddInfo =>
-          rddInfo.preferredNodeLocations.foreach { l =>  locations += l }
+        stageSubmitted.stageInfo.taskToPreferredLocations.foreach { m =>
+          stageIdToPreferredLocations.put(stageId, m)
         }
       }
     }
@@ -649,8 +652,23 @@ private[spark] class ExecutorAllocationManager(
       !executorIdToTaskIds.contains(executorId)
     }
 
-    def preferredNodeLocations: Seq[String] = allocationManager.synchronized {
-      stageIdToPreferredLocations.values.flatMap(x => x).toSet.toSeq
+    def getPreferredLocalitiesAndTasks():
+        (Int, Map[String, Int]) = allocationManager.synchronized {
+      var localityAwarePendingTasks: Int = 0
+      val localityToCount = new mutable.HashMap[String, Int]()
+      stageIdToPreferredLocations.values.foreach { localities =>
+        localities.foreach { locality =>
+          if (!locality.isEmpty) {
+            localityAwarePendingTasks += 1
+            locality.foreach { location =>
+              val count = localityToCount.getOrElseUpdate(location.host, 0) + 1
+              localityToCount(location.host) = count
+            }
+          }
+        }
+      }
+
+      (localityAwarePendingTasks, localityToCount.toMap)
     }
   }
 

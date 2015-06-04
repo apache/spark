@@ -791,6 +791,19 @@ class DAGScheduler(
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     stage.makeNewStageAttempt(partitionsToCompute.size)
+    stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
+    val taskIdToLocations = stage match {
+      case s: ShuffleMapStage =>
+        partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id)) }.toMap
+      case s: ResultStage =>
+        val job = s.resultOfJob.get
+        partitionsToCompute.map { id =>
+          val p: Int = job.partitions(id)
+          (id, getPreferredLocs(stage.rdd, p))
+        }.toMap
+    }
+    stage.latestInfo.taskToPreferredLocations = Some(taskIdToLocations.values.toSeq)
+
     outputCommitCoordinator.stageStart(stage.id)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
@@ -830,7 +843,7 @@ class DAGScheduler(
       stage match {
         case stage: ShuffleMapStage =>
           partitionsToCompute.map { id =>
-            val locs = getPreferredLocs(stage.rdd, id)
+            val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
           }
@@ -840,7 +853,7 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
-            val locs = getPreferredLocs(stage.rdd, p)
+            val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
           }
       }
