@@ -30,8 +30,8 @@ package object client {
     // Hive 0.14 depends on calcite 0.9.2-incubating-SNAPSHOT which does not exist in
     // maven central anymore, so override those with a version that exists.
     case object v14 extends HiveVersion("0.14.0",
-      Seq("org.apache.calcite:calcite-core:0.9.2-incubating",
-        "org.apache.calcite:calcite-avatica:0.9.2-incubating"))
+      Seq("org.apache.calcite:calcite-core:1.3.0-incubating",
+        "org.apache.calcite:calcite-avatica:1.3.0-incubating"))
   }
   // scalastyle:on
 
