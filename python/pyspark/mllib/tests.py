@@ -25,7 +25,8 @@ import tempfile
 import array as pyarray
 from time import time, sleep
 
-from numpy import array, array_equal, zeros, inf, all, random, sum
+from numpy import array, array_equal, zeros, inf, all, random
+from numpy import sum as array_sum
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -908,7 +909,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 10.0, 0.01)
         self.assertEquals(stkm.latestModel.getClusterWeights, [25.0])
-        realCenters = sum(array(centers), axis=0)
+        realCenters = array_sum(array(centers), axis=0)
         for i in range(d):
             modelCenters = stkm.latestModel.centers[0][i]
             self.assertAlmostEqual(centers[0][i], modelCenters, 1)

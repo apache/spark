@@ -975,8 +975,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = new StreamingKMeansModel(
         clusterCenters.asScala.toArray, clusterWeights.asScala.toArray)
         .update(data, decayFactor, timeUnit)
-      List(model.clusterCenters, model.clusterWeights).
-        map(_.asInstanceOf[Object]).asJava
+      List[AnyRef](model.clusterCenters, Vectors.dense(model.clusterWeights)).asJava
   }
 
 }
