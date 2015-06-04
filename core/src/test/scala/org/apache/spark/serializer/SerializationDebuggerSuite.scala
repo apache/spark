@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{IOException, ObjectOutputStream, ObjectOutput, ObjectInput}
+import java.io._
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -141,7 +141,7 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("crazy nested objects") {
-    
+
     def findAndAssert(shouldSerialize: Boolean, obj: Any): Unit = {
       val s = find(obj)
       if (shouldSerialize) {
@@ -167,6 +167,31 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
         )
       )))
     )
+  }
+
+  test("improveException") {
+    val e = SerializationDebugger.improveException(
+      new SerializableClass2(new NotSerializable), new NotSerializableException("someClass"))
+    assert(e.getMessage.contains("someClass"))  // original exception message should be present
+    assert(e.getMessage.contains("SerializableClass2"))  // found debug trace should be present
+  }
+
+  test("improveException with error in debugger") {
+    // Object that throws exception in the SerializationDebugger
+    val o = new SerializableClass1 {
+      private def writeReplace(): Object = {
+        throw new Exception()
+      }
+    }
+    withClue("requirement: SerializationDebugger should fail trying debug this object") {
+      intercept[Exception] {
+        SerializationDebugger.find(o)
+      }
+    }
+
+    val originalException = new NotSerializableException("someClass")
+    // verify thaht original exception is returned on failure
+    assert(SerializationDebugger.improveException(o, originalException).eq(originalException))
   }
 }
 

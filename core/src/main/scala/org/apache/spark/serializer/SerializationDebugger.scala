@@ -62,7 +62,7 @@ private[spark] object SerializationDebugger extends Logging {
    *
    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
    */
-  def find(obj: Any): List[String] = {
+  private[serializer] def find(obj: Any): List[String] = {
     new SerializationDebugger().visit(obj, List.empty)
   }
 
