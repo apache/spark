@@ -201,7 +201,7 @@ class SQLContext(object):
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        first = data[0]
+        first = next(iter(data))
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
