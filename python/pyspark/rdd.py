@@ -708,7 +708,7 @@ class RDD(object):
             pipe.wait()
             if pipe.returncode:
                 raise Exception("Pipe function `%s' exited "
-                                "with error code %d" %(command, pipe.returncode))
+                                "with error code %d" % (command, pipe.returncode))
             return result
         return self.mapPartitions(func)
 
