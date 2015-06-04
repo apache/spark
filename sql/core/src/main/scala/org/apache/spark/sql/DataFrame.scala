@@ -175,20 +175,36 @@ class DataFrame private[sql](
     val sb = new StringBuilder
     val data = take(numRows)
     val numCols = schema.fieldNames.length
+    val primitive: Seq[Boolean] = schema.map(f => f.dataType.isPrimitive)
 
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    def widthCheck (x: String) : String = {
+      if (x.length>20) x.substring(0, 17) + "..." else x
+    }
+
+    // For array values, replace ArrayBuffer, with square brackets
+    def sqrBrckts (x: String) : String = {
+      if (x.last==')') '[' + x.drop(x.indexOf('(') + 1).dropRight(1) + ']'
+      else x
+    }
+
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        val str = if (cell == null) "null" else cell.toString
-        if (str.length > 20) str.substring(0, 17) + "..." else str
+        if (cell == null) "null" else cell.toString
       }: Seq[String]
     }
 
+    // Initialise the width of each column to a minimum value of '3'
+    val colWidths = Array.fill(numCols)(3)
+
     // Compute the width of each column
-    val colWidths = Array.fill(numCols)(0)
-    for (row <- rows) {
+    for ((cell, i) <- rows.head.zipWithIndex) {
+      colWidths(i) = math.max(colWidths(i), cell.length)
+    }
+    for (row <- rows.tail) {
       for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
+        if (primitive(i)) colWidths(i) = math.max(colWidths(i), widthCheck(cell).length)
+        else colWidths(i) = math.max(colWidths(i), widthCheck(sqrBrckts(cell)).length)
       }
     }
 
@@ -197,15 +213,18 @@ class DataFrame private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      StringUtils.leftPad(cell.toString, colWidths(i))
+      StringUtils.leftPad(cell, colWidths(i))
     }.addString(sb, "|", "|", "|\n")
 
     sb.append(sep)
 
     // data
     rows.tail.map {
-      _.zipWithIndex.map { case (cell, i) =>
-        StringUtils.leftPad(cell.toString, colWidths(i))
+      _.zipWithIndex.map {
+        case (cell, i) => {
+          if (primitive(i)) StringUtils.leftPad(widthCheck(cell), colWidths(i))
+          else StringUtils.leftPad(widthCheck(sqrBrckts(cell)), colWidths(i))
+        }
       }.addString(sb, "|", "|", "|\n")
     }
 
@@ -335,7 +354,12 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def show(): Unit = show(20)
+  def show(): Unit = {
+    show(20)
+    if (this.count() > 20) {
+      println("only showing the top 20 rows\n")
+    }
+  }
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
