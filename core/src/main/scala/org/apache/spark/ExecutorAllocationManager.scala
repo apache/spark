@@ -456,7 +456,7 @@ private[spark] class ExecutorAllocationManager(
     if (executorIds.contains(executorId)) {
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
 
-        val hasCachedBlocks = sparkEnv.blockManager.master.
+        val hasCachedBlocks = sparkEnv.blockManager.master.hasCachedBlocks(executorId)
 
         val now = clock.getTimeMillis()
         val timeout = {
