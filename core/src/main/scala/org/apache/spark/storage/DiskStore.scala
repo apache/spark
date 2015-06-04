@@ -33,7 +33,8 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
-  val sliceMemorySize = blockManager.conf.getSizeAsBytes("spark.storage.sliceMemoryThreshold", "64m")
+  val sliceMemorySize =
+    blockManager.conf.getSizeAsBytes("spark.storage.sliceMemoryThreshold", "64m")
 
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
