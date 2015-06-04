@@ -18,15 +18,13 @@ package org.apache.spark.scheduler
 
 import java.util.Date
 
-import org.scalatest.FunSuite
-
-import scala.collection.mutable.{ArrayBuffer,HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark._
 
-class DAGSchedulerFailureRecoverySuite extends FunSuite with Logging {
+class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
   ignore("no concurrent retries for stage attempts (SPARK-7308)") {
     // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.

@@ -107,7 +107,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   def forMapTask(shuffleId: Int, mapId: Int, stageAttemptId: Int, numBuckets: Int,
       serializer: Serializer, writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(ShuffleIdAndAttempt(shuffleId, stageAttemptId), new ShuffleState(numBuckets))
+      shuffleStates.putIfAbsent(
+        ShuffleIdAndAttempt(shuffleId, stageAttemptId), new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(ShuffleIdAndAttempt(shuffleId, stageAttemptId))
       private var fileGroup: ShuffleFileGroup = null
 
@@ -179,7 +180,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     if (consolidateShuffleFiles) {
       // Search all file groups associated with this shuffle.
-      val shuffleState = shuffleStates(ShuffleIdAndAttempt(blockId.shuffleId, blockId.stageAttemptId))
+      val shuffleState = shuffleStates(
+        ShuffleIdAndAttempt(blockId.shuffleId, blockId.stageAttemptId))
       val iter = shuffleState.allFileGroups.iterator
       while (iter.hasNext) {
         val segmentOpt = iter.next.getFileSegmentFor(blockId.mapId, blockId.reduceId)
