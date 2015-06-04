@@ -205,4 +205,29 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 //    masterTracker.stop() // this throws an exception
     rpcEnv.shutdown()
   }
+
+  test("getLocationsWithLargestOutputs with multiple outputs in same machine") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = new MapOutputTrackerMaster(conf)
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    // Setup 3 map tasks
+    // on hostA with output size 1
+    // on hostA with output size 1
+    // on hostB with output size 2
+    tracker.registerShuffle(10, 3)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+        Array(1L)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("a", "hostA", 1000),
+        Array(1L)))
+    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("b", "hostB", 1000),
+        Array(2L)))
+
+    val topLocs = tracker.getLocationsWithLargestOutputs(10, 0, 1, 1)
+    assert(topLocs.nonEmpty)
+    assert(topLocs.get.size === 1)
+    assert(topLocs.get.head === BlockManagerId("a", "hostA", 1000))
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
 }

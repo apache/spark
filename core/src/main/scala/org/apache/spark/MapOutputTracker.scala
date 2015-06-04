@@ -21,7 +21,7 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, Map, HashMap}
+import scala.collection.mutable.{HashMap, HashSet, Map}
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -30,6 +30,7 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
+import org.apache.spark.util.collection.{Utils => CollectionUtils}
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -232,11 +233,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
 
-  // For each shuffleId we also maintain a Map from reducerId -> (location, size)
+  // For each shuffleId we also maintain a Map from reducerId -> (locations with largest outputs)
   // Lazily populated whenever the statuses are requested from DAGScheduler
-  private val statusByReducer =
-    new TimeStampedHashMap[Int, HashMap[Int, Array[(BlockManagerId, Long)]]]()
-
+  private val shuffleIdToReduceLocations =
+    new TimeStampedHashMap[Int, HashMap[Int, Array[BlockManagerId]]]()
 
   // For cleaning up TimeStampedHashMaps
   private val metadataCleaner =
@@ -283,7 +283,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   override def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
     cachedSerializedStatuses.remove(shuffleId)
-    statusByReducer.remove(shuffleId)
+    shuffleIdToReduceLocations.remove(shuffleId)
   }
 
   /** Check if the given shuffle is being tracked */
@@ -291,30 +291,39 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
-  // Return the list of locations and blockSizes for each reducer.
-  // The map is keyed by reducerId and for each reducer the value contains the array
-  // of (location, size) of map outputs.
-  //
-  // This method is not thread-safe
-  def getStatusByReducer(
+  /**
+   * Return a list of locations which have the largest map outputs given a shuffleId
+   * and a reducerId.
+   *
+   * This method is not thread-safe
+   */
+  def getLocationsWithLargestOutputs(
       shuffleId: Int,
-      numReducers: Int)
-    : Option[Map[Int, Array[(BlockManagerId, Long)]]] = {
-    if (!statusByReducer.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
+      reducerId: Int,
+      numReducers: Int,
+      numTopLocs: Int)
+    : Option[Array[BlockManagerId]] = {
+    if (!shuffleIdToReduceLocations.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
+      // Pre-compute the top locations for each reducer and cache it
       val statuses = mapStatuses(shuffleId)
-      if (statuses.length > 0) {
-        statusByReducer(shuffleId) = new HashMap[Int, Array[(BlockManagerId, Long)]]
+      if (statuses.nonEmpty) {
+        val ordering = Ordering.by[(BlockManagerId, Long), Long](_._2).reverse
+        shuffleIdToReduceLocations(shuffleId) = new HashMap[Int, Array[BlockManagerId]]
         var r = 0
         while (r < numReducers) {
+          // Add up sizes of all blocks at the same location
           val locs = statuses.map { s =>
             (s.location, s.getSizeForBlock(r))
-          }
-          statusByReducer(shuffleId) += (r -> locs)
+          }.groupBy(_._1).mapValues { sizes =>
+            sizes.map(_._2).reduceLeft(_ + _)
+          }.toIterator
+          val topLocs = CollectionUtils.takeOrdered(locs, numTopLocs)(ordering)
+          shuffleIdToReduceLocations(shuffleId) += (r -> topLocs.map(_._1).toArray)
           r = r + 1
         }
       }
     }
-    statusByReducer.get(shuffleId)
+    shuffleIdToReduceLocations.get(shuffleId).flatMap(_.get(reducerId))
   }
 
   def incrementEpoch() {
@@ -364,7 +373,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
-    statusByReducer.clearOldValues(cleanupTime)
+    shuffleIdToReduceLocations.clearOldValues(cleanupTime)
   }
 }
 

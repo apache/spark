@@ -38,7 +38,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
-import org.apache.spark.util.collection.{Utils => CollectionUtils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -139,10 +138,11 @@ class DAGScheduler(
   taskScheduler.setDAGScheduler(this)
 
   // Number of map, reduce tasks above which we do not assign preferred locations
-  // based on map output sizes.
-  private val SHUFFLE_PREF_MAP_THRESHOLD = 1000
+  // based on map output sizes. We limit the size of jobs for which assign preferred locations 
+  // as sorting the locations by size becomes expensive.
+  private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
   // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
-  private val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
+  private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
   // Number of preferred locations to use for reducer tasks
   private[scheduler] val NUM_REDUCER_PREF_LOCS = 5
 
@@ -1393,11 +1393,12 @@ class DAGScheduler(
     if (rddPrefs.nonEmpty) {
       return rddPrefs.map(TaskLocation(_))
     }
-    // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
-    // that has any placement preferences. Ideally we would choose based on transfer sizes,
-    // but this will do for now.
+
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
+        // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
+        // that has any placement preferences. Ideally we would choose based on transfer sizes,
+        // but this will do for now.
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
@@ -1405,19 +1406,15 @@ class DAGScheduler(
           }
         }
       case s: ShuffleDependency[_, _, _] =>
+        // For shuffle dependencies, pick the 5 locations with the largest map outputs as preferred
+        // locations
         if (rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
             s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
-          // Assign preferred locations for reducers by looking at map output location and sizes
-          val mapStatuses = mapOutputTracker.getStatusByReducer(s.shuffleId, rdd.partitions.size)
-          mapStatuses.map { status =>
-            // Get the map output locations for this reducer
-            if (status.contains(partition)) {
-              // Select first few locations as preferred locations for the reducer
-              val topLocs = CollectionUtils.takeOrdered(
-                status(partition).iterator, NUM_REDUCER_PREF_LOCS)(
-                  Ordering.by[(BlockManagerId, Long), Long](_._2).reverse).toSeq
-              return topLocs.map(_._1).map(loc => TaskLocation(loc.host, loc.executorId))
-            }
+          // Get the preferred map output locations for this reducer
+          val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId, partition,
+            rdd.partitions.size, NUM_REDUCER_PREF_LOCS)
+          if (topLocsForReducer.nonEmpty) {
+            return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
           }
         }
 
