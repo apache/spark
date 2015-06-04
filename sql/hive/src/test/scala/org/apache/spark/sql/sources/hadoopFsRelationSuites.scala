@@ -555,6 +555,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
 
     sqlContext.sql("""use testdb""")
+
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
@@ -569,9 +570,17 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       sqlContext.sql("show TABLES in testdb"),
       Row("ttt1", false))
 
+    val result = sqlContext.sql("show TABLES in default")
     checkAnswer(
-      sqlContext.sql("show TABLES in default"),
-      Seq(Row("ttt2", false), Row("ttt3", false), Row("ttt4", false)))
+      result.filter("tableName = 'ttt2'"),
+      Row("ttt2", false))
+    checkAnswer(
+      result.filter("tableName = 'ttt3'"),
+      Row("ttt3", false))
+    checkAnswer(
+      result.filter("tableName = 'ttt4'"),
+      Row("ttt4", false))
+
 
     sqlContext.sql("""drop table if exists ttt2 """)
     sqlContext.sql("""drop table if exists ttt3 """)
