@@ -50,6 +50,9 @@
 ## List of available common sources and their properties.
 
 # org.apache.spark.metrics.source.JvmSource
+#   Note: Currently, JvmSource is the only available common source 
+#         to add additionaly to an instance, to enable this, 
+#         set the "class" option to its fully qulified class name (see examples below)
 
 ## List of available sinks and their properties.
 
