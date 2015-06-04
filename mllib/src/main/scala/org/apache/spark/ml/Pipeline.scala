@@ -63,9 +63,7 @@ abstract class PipelineStage extends Params with Logging {
     outputSchema
   }
 
-  override def copy(extra: ParamMap): PipelineStage = {
-    super.copy(extra).asInstanceOf[PipelineStage]
-  }
+  override def copy(extra: ParamMap): PipelineStage
 }
 
 /**

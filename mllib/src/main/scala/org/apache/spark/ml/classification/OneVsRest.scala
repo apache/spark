@@ -24,7 +24,7 @@ import scala.language.existentials
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{ParamMap, Param}
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
@@ -217,7 +217,7 @@ final class OneVsRest(override val uid: String)
   }
 
   override def copy(extra: ParamMap): OneVsRest = {
-    val copied = super.copy(extra).asInstanceOf[OneVsRest]
+    val copied = defaultCopyWithParams(extra).asInstanceOf[OneVsRest]
     if (isDefined(classifier)) {
       copied.setClassifier($(classifier).copy(extra))
     }

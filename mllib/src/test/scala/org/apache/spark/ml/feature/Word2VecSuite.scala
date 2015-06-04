@@ -18,12 +18,20 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new Word2Vec)
+    val model = new Word2VecModel("w2v", new OldWord2VecModel(Map("a" -> Array(0.0f))))
+    ParamsSuite.checkParams(model)
+  }
 
   test("Word2Vec") {
     val sqlContext = new SQLContext(sc)

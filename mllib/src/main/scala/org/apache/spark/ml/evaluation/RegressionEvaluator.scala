@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.{Param, ParamValidators}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -80,4 +80,6 @@ final class RegressionEvaluator(override val uid: String)
     }
     metric
   }
+
+  override def copy(extra: ParamMap): RegressionEvaluator = defaultCopyWithParams(extra)
 }

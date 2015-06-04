@@ -205,19 +205,32 @@ class ParamsSuite extends SparkFunSuite {
 object ParamsSuite extends SparkFunSuite {
 
   /**
-   * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered
-   * by names; 3) param parent has the same UID as the object's UID; 4) param name is the same as
-   * the param method name.
+   * Checks common requirements for [[Params.params]]:
+   *   - params are ordered by names
+   *   - param parent has the same UID as the object's UID
+   *   - param name is the same as the param method name
+   *   - param setters must return the same type as the obj
+   *   - obj.copy should return the same type as the obj
    */
-  def checkParams(obj: Params, expectedNumParams: Int): Unit = {
+  def checkParams(obj: Params): Unit = {
+    val clazz = obj.getClass
+    val methods = clazz.getMethods
+
     val params = obj.params
-    require(params.length === expectedNumParams,
-      s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
     val paramNames = params.map(_.name)
-    require(paramNames === paramNames.sorted)
+    require(paramNames === paramNames.sorted, "params must be ordered by names")
     params.foreach { p =>
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
+      val setterName = "set" + p.name.head.toUpper + p.name.tail
+      methods.find(_.getName === setterName).foreach { m =>
+        require(m.getReturnType === clazz, s"${m.getName} must return ${clazz.getName}.")
+      }
     }
+
+    val copyMethod = clazz.getMethod("copy", classOf[ParamMap])
+    val copyReturnType = copyMethod.getReturnType
+    require(copyReturnType === obj.getClass,
+      s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
   }
 }

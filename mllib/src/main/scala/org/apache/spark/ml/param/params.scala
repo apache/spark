@@ -494,13 +494,20 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Creates a copy of this instance with the same UID and some extra params.
-   * The default implementation tries to create a new instance with the same UID.
-   * Then it copies the embedded and extra parameters over and returns the new instance.
-   * Subclasses should override this method if the default approach is not sufficient.
+   * Subclasses should implement this method and set the return type properly.
+   *
+   * @see [[defaultCopyWithParams()]]
    */
-  def copy(extra: ParamMap): Params = {
+  def copy(extra: ParamMap): Params
+
+  /**
+   * Default implementation of copy with extra params.
+   * It tries to create a new instance with the same UID.
+   * Then it copies the embedded and extra parameters over and returns the new instance.
+   */
+  protected final def defaultCopyWithParams[T <: Params](extra: ParamMap): T = {
     val that = this.getClass.getConstructor(classOf[String]).newInstance(uid)
-    copyValues(that, extra)
+    copyValues(that, extra).asInstanceOf[T]
   }
 
   /**

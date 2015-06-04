@@ -131,6 +131,8 @@ final class GBTRegressor(override val uid: String)
     val oldModel = oldGBT.run(oldDataset)
     GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
+
+  override def copy(extra: ParamMap): GBTRegressor = defaultCopyWithParams(extra)
 }
 
 @Experimental

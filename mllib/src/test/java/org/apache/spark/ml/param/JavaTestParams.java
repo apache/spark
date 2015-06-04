@@ -83,4 +83,9 @@ public class JavaTestParams extends JavaParams {
     setDefault(myDoubleParam_, 0.5);
     setDefault(myIntParam().w(1), myDoubleParam().w(0.5));
   }
+
+  @Override
+  public JavaTestParams copy(ParamMap extra) {
+    return defaultCopyWithParams(extra);
+  }
 }

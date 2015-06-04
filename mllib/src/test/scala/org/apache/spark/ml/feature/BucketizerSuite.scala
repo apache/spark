@@ -20,12 +20,17 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new Bucketizer)
+  }
 
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.

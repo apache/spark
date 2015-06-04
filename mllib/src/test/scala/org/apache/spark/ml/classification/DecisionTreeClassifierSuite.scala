@@ -19,14 +19,14 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
-  DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-
 
 class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -53,6 +53,12 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       sc.parallelize(OldDecisionTreeSuite.generateContinuousDataPointsForMulticlass())
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new DecisionTreeClassifier)
+    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))
+    ParamsSuite.checkParams(model)
   }
 
   /////////////////////////////////////////////////////////////////////////////

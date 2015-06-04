@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator}
@@ -97,6 +96,8 @@ object CrossValidatorSuite {
     override def transformSchema(schema: StructType): StructType = {
       throw new UnsupportedOperationException
     }
+
+    override def copy(extra: ParamMap): MyEstimator = defaultCopyWithParams(extra)
   }
 
   class MyEvaluator extends Evaluator {
@@ -106,5 +107,7 @@ object CrossValidatorSuite {
     }
 
     override val uid: String = "eval"
+
+    override def copy(extra: ParamMap): MyEvaluator = defaultCopyWithParams(extra)
   }
 }

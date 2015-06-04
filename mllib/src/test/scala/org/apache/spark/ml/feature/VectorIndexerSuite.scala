@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.param.ParamsSuite
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -90,6 +92,12 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private def getIndexer: VectorIndexer =
     new VectorIndexer().setInputCol("features").setOutputCol("indexed")
+
+  test("params") {
+    ParamsSuite.checkParams(new VectorIndexer)
+    val model = new VectorIndexerModel("indexer", 1, Map.empty)
+    ParamsSuite.checkParams(model)
+  }
 
   test("Cannot fit an empty DataFrame") {
     val rdd = sqlContext.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(FeatureData))

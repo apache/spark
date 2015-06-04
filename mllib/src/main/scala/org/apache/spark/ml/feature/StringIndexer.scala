@@ -83,6 +83,8 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): StringIndexer = defaultCopyWithParams(extra)
 }
 
 /**
@@ -129,5 +131,10 @@ class StringIndexerModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): StringIndexerModel = {
+    val copied = new StringIndexerModel(uid, labels)
+    copyValues(copied, extra)
   }
 }

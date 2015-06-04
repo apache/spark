@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamsSuite, ParamMap}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
@@ -29,6 +29,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -51,6 +52,12 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     rdd = sc.parallelize(generateMultinomialLogisticInput(
       weights, xMean, xVariance, true, nPoints, 42), 2)
     dataset = sqlContext.createDataFrame(rdd)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new OneVsRest)
+    val model = new OneVsRestModel("ovr", Metadata.empty, Array.empty)
+    ParamsSuite.checkParams(model)
   }
 
   test("one-vs-rest: default params") {

@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
@@ -34,6 +35,10 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
       .fit(df)
     indexer.transform(df)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new OneHotEncoder)
   }
 
   test("OneHotEncoder dropLast = false") {

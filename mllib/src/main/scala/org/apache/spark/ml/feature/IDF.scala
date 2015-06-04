@@ -82,6 +82,8 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): IDF = defaultCopyWithParams(extra)
 }
 
 /**
@@ -108,5 +110,10 @@ class IDFModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): IDFModel = {
+    val copied = new IDFModel(uid, idfModel)
+    copyValues(copied, extra)
   }
 }
