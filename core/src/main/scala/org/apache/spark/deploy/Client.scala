@@ -82,7 +82,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.cores,
           driverArgs.supervise,
           command,
-          conf.getClusterAuthSecret)  // app secret is cluster auth secret for now
+          if (conf.authOn) conf.getClusterAuthSecret else None)
 
         // This assumes only one Master is active at a time
         for (masterActor <- masterActors) {

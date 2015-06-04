@@ -123,7 +123,7 @@ private[rest] class StandaloneSubmitRequestServlet(
    * fields used by python applications since python is not supported in standalone
    * cluster mode yet.
    */
-  private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
+  private[rest] def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
@@ -165,7 +165,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       actualDriverCores,
       actualSuperviseDriver,
       command,
-      conf.getClusterAuthSecret)  // app secret is cluster auth secret for now
+      if (conf.authOn) conf.getClusterAuthSecret else None)
   }
 
   /**

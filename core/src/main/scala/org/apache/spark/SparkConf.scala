@@ -589,8 +589,8 @@ private[spark] object SparkConf extends Logging {
 
   /**
    * Return whether the given config should be passed to an executor launched by standalone
-   * cluster manager as JVM system properties on start-up. In particular, cluster
-   * authentication secret is filtered out since it will be written to executor's stdin.
+   * cluster manager as java options on start-up. In particular, cluster authentication
+   * secret is filtered out since it will be written to executor's stdin.
    */
   private[spark] def isStandaloneExecutorStartupConf(name: String): Boolean = {
     isExecutorStartupConf(name) && isNotClusterAuthSecretConf(name)
