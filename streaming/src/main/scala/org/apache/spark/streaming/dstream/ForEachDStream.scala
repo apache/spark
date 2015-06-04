@@ -28,7 +28,7 @@ class ForEachDStream[T: ClassTag] (
     foreachFunc: (RDD[T], Time) => Unit
   ) extends DStream[Unit](parent.ssc) {
 
-  override def dependencies = List(parent)
+  override def dependencies: List[DStream[_]] = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
@@ -37,7 +37,7 @@ class ForEachDStream[T: ClassTag] (
   override def generateJob(time: Time): Option[Job] = {
     parent.getOrCompute(time) match {
       case Some(rdd) =>
-        val jobFunc = () => {
+        val jobFunc = () => createRDDWithLocalProperties(time) {
           ssc.sparkContext.setCallSite(creationSite)
           foreachFunc(rdd, time)
         }

@@ -121,7 +121,7 @@ private[spark] object FileAppender extends Logging {
     val rollingSizeBytes = conf.get(SIZE_PROPERTY, STRATEGY_DEFAULT)
     val rollingInterval = conf.get(INTERVAL_PROPERTY, INTERVAL_DEFAULT)
 
-    def createTimeBasedAppender() = {
+    def createTimeBasedAppender(): FileAppender = {
       val validatedParams: Option[(Long, String)] = rollingInterval match {
         case "daily" =>
           logInfo(s"Rolling executor logs enabled for $file with daily rolling")
@@ -149,7 +149,7 @@ private[spark] object FileAppender extends Logging {
       }
     }
 
-    def createSizeBasedAppender() = {
+    def createSizeBasedAppender(): FileAppender = {
       rollingSizeBytes match {
         case IntParam(bytes) =>
           logInfo(s"Rolling executor logs enabled for $file with rolling every $bytes bytes")

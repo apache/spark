@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,22 +25,35 @@ import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
+/**
+ * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
+ * Hive metastore and warehouse.
+ */
+class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+  val warehousePath = Utils.createTempDir()
+  val metastorePath = Utils.createTempDir()
+
+  before {
+      warehousePath.delete()
+      metastorePath.delete()
+  }
+
+  after {
+      warehousePath.delete()
+      metastorePath.delete()
+  }
+
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty)(
-      queriesAndExpectedAnswers: (String, String)*) {
+      queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
-    val warehousePath = Utils.createTempDir()
-    warehousePath.delete()
-    val metastorePath = Utils.createTempDir()
-    metastorePath.delete()
     val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
 
     val command = {
@@ -50,13 +62,13 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-         |  --driver-class-path ${sys.props("java.class.path")}
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
     var next = 0
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
+    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
+    val queryStream = new ByteArrayInputStream(queries.map(_ + "\n").mkString.getBytes)
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
@@ -96,8 +108,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
          """.stripMargin, cause)
       throw cause
     } finally {
-      warehousePath.delete()
-      metastorePath.delete()
       process.destroy()
     }
   }
@@ -118,11 +128,60 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "Time taken: "
+        -> "OK"
     )
   }
 
   test("Single command with -e") {
-    runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+  }
+
+  test("Single command with --database") {
+    runCliWithin(1.minute)(
+      "CREATE DATABASE hive_test_db;"
+        -> "OK",
+      "USE hive_test_db;"
+        -> "OK",
+      "CREATE TABLE hive_test(key INT, val STRING);"
+        -> "OK",
+      "SHOW TABLES;"
+        -> "Time taken: "
+    )
+
+    runCliWithin(1.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
+      ""
+        -> "OK",
+      ""
+        -> "hive_test"
+    )
+  }
+
+  test("Commands using SerDe provided in --jars") {
+    val jarFile =
+      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+        .split("/")
+        .mkString(File.separator)
+
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
+    runCliWithin(3.minute, Seq("--jars", s"$jarFile"))(
+      """CREATE TABLE t1(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "OK",
+      "CREATE TABLE sourceTable (key INT, val STRING);"
+        -> "OK",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+        -> "OK",
+      "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
+        -> "Time taken:",
+      "SELECT count(key) FROM t1;"
+        -> "5",
+      "DROP TABLE t1;"
+        -> "OK",
+      "DROP TABLE sourceTable;"
+        -> "OK"
+    )
   }
 }

@@ -19,45 +19,58 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.types.StructType
-
-import scala.collection.immutable
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
 object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
+  def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[Row] = {
     data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-        val schemaFields = schema.fields.toArray
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) =
-              ScalaReflection.convertToCatalyst(r.productElement(i), schemaFields(i).dataType)
-            i += 1
-          }
-
-          mutableRow
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r.productElement(i))
+          i += 1
         }
+
+        mutableRow
+      }
+    }
+  }
+
+  /**
+   * Convert the objects inside Row into the types Catalyst expected.
+   */
+  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[Row] = {
+    data.mapPartitions { iterator =>
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r(i))
+          i += 1
+        }
+
+        mutableRow
       }
     }
   }
 }
 
 /** Logical plan node for scanning data from an RDD. */
-case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
+private[sql] case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil
@@ -78,11 +91,12 @@ case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLCont
 }
 
 /** Physical plan node for scanning data from an RDD. */
-case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute(): RDD[Row] = rdd
+private[sql] case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
+  protected override def doExecute(): RDD[Row] = rdd
 }
 
 /** Logical plan node for scanning data from a local collection. */
+private[sql]
 case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[Row])(sqlContext: SQLContext)
    extends LogicalPlan with MultiInstanceRelation {
 

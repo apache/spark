@@ -35,7 +35,7 @@ private[rest] abstract class SubmitRestProtocolResponse extends SubmitRestProtoc
 /**
  * A response to a [[CreateSubmissionRequest]] in the REST application submission protocol.
  */
-private[rest] class CreateSubmissionResponse extends SubmitRestProtocolResponse {
+private[spark] class CreateSubmissionResponse extends SubmitRestProtocolResponse {
   var submissionId: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
@@ -46,7 +46,7 @@ private[rest] class CreateSubmissionResponse extends SubmitRestProtocolResponse 
 /**
  * A response to a kill request in the REST application submission protocol.
  */
-private[rest] class KillSubmissionResponse extends SubmitRestProtocolResponse {
+private[spark] class KillSubmissionResponse extends SubmitRestProtocolResponse {
   var submissionId: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
@@ -58,7 +58,7 @@ private[rest] class KillSubmissionResponse extends SubmitRestProtocolResponse {
 /**
  * A response to a status request in the REST application submission protocol.
  */
-private[rest] class SubmissionStatusResponse extends SubmitRestProtocolResponse {
+private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse {
   var submissionId: String = null
   var driverState: String = null
   var workerId: String = null

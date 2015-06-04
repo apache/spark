@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
@@ -45,12 +45,13 @@ case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: SparkPlan,
-    overwrite: Boolean) extends UnaryNode with HiveInspectors {
+    overwrite: Boolean,
+    ifNotExists: Boolean) extends UnaryNode with HiveInspectors {
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val db = Hive.get(sc.hiveconf)
+  @transient private lazy val catalog = sc.catalog
 
   private def newSerializer(tableDesc: TableDesc): Serializer = {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
@@ -58,7 +59,7 @@ case class InsertIntoHiveTable(
     serializer
   }
 
-  def output = child.output
+  def output: Seq[Attribute] = child.output
 
   def saveAsHiveFile(
       rdd: RDD[Row],
@@ -72,7 +73,6 @@ case class InsertIntoHiveTable(
     val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
     assert(outputFileFormatClassName != null, "Output format class not set")
     conf.value.set("mapred.output.format.class", outputFileFormatClassName)
-    conf.value.setOutputCommitter(classOf[FileOutputCommitter])
 
     FileOutputFormat.setOutputPath(
       conf.value,
@@ -106,7 +106,7 @@ case class InsertIntoHiveTable(
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, table.schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 
@@ -194,41 +194,52 @@ case class InsertIntoHiveTable(
     if (partition.nonEmpty) {
 
       // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
-      table.hiveQlTable.getPartCols().foreach{
-        entry=>
-          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+      table.hiveQlTable.getPartCols().foreach { entry =>
+        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
-      db.validatePartitionNameCharacters(partVals)
+
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        db.loadDynamicPartitions(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          numDynamicPartitions,
-          holdDDLTime,
-          isSkewedStoreAsSubdir
-        )
+        catalog.synchronized {
+          catalog.client.loadDynamicPartitions(
+            outputPath.toString,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            numDynamicPartitions,
+            holdDDLTime,
+            isSkewedStoreAsSubdir)
+        }
       } else {
-        db.loadPartition(
-          outputPath,
-          qualifiedTableName,
-          orderedPartitionSpec,
-          overwrite,
-          holdDDLTime,
-          inheritTableSpecs,
-          isSkewedStoreAsSubdir)
+        // scalastyle:off
+        // ifNotExists is only valid with static partition, refer to
+        // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
+        // scalastyle:on
+        val oldPart =
+          catalog.client.getPartitionOption(
+            catalog.client.getTable(table.databaseName, table.tableName),
+            partitionSpec)
+
+        if (oldPart.isEmpty || !ifNotExists) {
+            catalog.client.loadPartition(
+              outputPath.toString,
+              qualifiedTableName,
+              orderedPartitionSpec,
+              overwrite,
+              holdDDLTime,
+              inheritTableSpecs,
+              isSkewedStoreAsSubdir)
+        }
       }
     } else {
-      db.loadTable(
-        outputPath,
+      catalog.client.loadTable(
+        outputPath.toString, // TODO: URI
         qualifiedTableName,
         overwrite,
         holdDDLTime)
@@ -246,5 +257,7 @@ case class InsertIntoHiveTable(
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  protected override def doExecute(): RDD[Row] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
 }

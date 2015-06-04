@@ -22,7 +22,7 @@ package org.apache.spark.util
  */
 private[spark] class ParentClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
 
-  override def findClass(name: String) = {
+  override def findClass(name: String): Class[_] = {
     super.findClass(name)
   }
 

@@ -38,7 +38,7 @@ class UDFSuite extends QueryTest {
   }
 
   test("TwoArgument UDF") {
-    udf.register("strLenScala", (_: String).length + (_:Int))
+    udf.register("strLenScala", (_: String).length + (_: Int))
     assert(sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
   }
 
@@ -49,5 +49,11 @@ class UDFSuite extends QueryTest {
       sql("SELECT returnStruct('test', 'test2') as ret")
         .select($"ret.f1").head().getString(0)
     assert(result === "test")
+  }
+
+  test("udf that is transformed") {
+    udf.register("makeStruct", (x: Int, y: Int) => (x, y))
+    // 1 + 1 is constant folded causing a transformation.
+    assert(sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
   }
 }

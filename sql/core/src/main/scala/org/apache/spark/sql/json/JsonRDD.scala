@@ -20,17 +20,18 @@ package org.apache.spark.sql.json
 import java.sql.Timestamp
 
 import scala.collection.Map
-import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
+import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException}
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
 
@@ -49,7 +50,7 @@ private[sql] object JsonRDD extends Logging {
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
       if (schemaData.isEmpty()) {
-        Set.empty[(String,DataType)]
+        Set.empty[(String, DataType)]
       } else {
         parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
       }
@@ -140,7 +141,7 @@ private[sql] object JsonRDD extends Logging {
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
           case ArrayType(struct: StructType, containsNull) =>
             ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
+          case struct: StructType => nullTypeToStringType(struct)
           case other: DataType => other
         }
         StructField(fieldName, newType, nullable)
@@ -154,7 +155,7 @@ private[sql] object JsonRDD extends Logging {
    * Returns the most general data type for two given data types.
    */
   private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonType(t1, t2) match {
+    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2) match {
       case Some(commonType) => commonType
       case None =>
         // t1 or t2 is a StructType, ArrayType, or an unexpected type.
@@ -183,7 +184,7 @@ private[sql] object JsonRDD extends Logging {
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
     // For Integer values, use LongType by default.
     val useLongType: PartialFunction[Any, DataType] = {
-      case value: IntegerType.JvmType => LongType
+      case value: IntegerType.InternalType => LongType
     }
 
     useLongType orElse ScalaReflection.typeOfObject orElse {
@@ -215,7 +216,7 @@ private[sql] object JsonRDD extends Logging {
           case map: Map[_, _] => StructType(Nil)
           // We have an array of arrays. If those element arrays do not have the same
           // element types, we will return ArrayType[StringType].
-          case seq: Seq[_] =>  typeOfArray(seq)
+          case seq: Seq[_] => typeOfArray(seq)
           case value => typeOfPrimitiveValue(value)
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
@@ -317,7 +318,8 @@ private[sql] object JsonRDD extends Logging {
 
           parsed
         } catch {
-          case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
+          case e: JsonProcessingException =>
+            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
         }
       }
     })
@@ -391,7 +393,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       // only support string as date
       case value: java.lang.String =>
-        DateUtils.millisToDays(DataTypeConversions.stringToTime(value).getTime)
+        DateUtils.millisToDays(DateUtils.stringToTime(value).getTime)
       case value: java.sql.Date => DateUtils.fromJavaDate(value)
     }
   }
@@ -400,28 +402,31 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
       case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
     }
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any = {
     if (value == null) {
       null
     } else {
       desiredType match {
-        case StringType => toString(value)
+        case StringType => UTF8String(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
-        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
+        case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
-        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
+        case BooleanType => value.asInstanceOf[BooleanType.InternalType]
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case MapType(StringType, valueType, _) =>
           val map = value.asInstanceOf[Map[String, Any]]
-          map.mapValues(enforceCorrectType(_, valueType)).map(identity)
+          map.map {
+            case (k, v) =>
+              (UTF8String(k), enforceCorrectType(v, valueType))
+          }.map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
@@ -429,7 +434,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def asRow(json: Map[String,Any], schema: StructType): Row = {
+  private def asRow(json: Map[String, Any], schema: StructType): Row = {
     // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {
@@ -439,55 +444,5 @@ private[sql] object JsonRDD extends Logging {
     }
 
     row
-  }
-
-  /** Transforms a single Row to JSON using Jackson
-    *
-    * @param rowSchema the schema object used for conversion
-    * @param gen a JsonGenerator object
-    * @param row The row to convert
-    */
-  private[sql] def rowToJSON(rowSchema: StructType, gen: JsonGenerator)(row: Row) = {
-    def valWriter: (DataType, Any) => Unit = {
-      case (_, null) | (NullType, _)  => gen.writeNull()
-      case (StringType, v: String) => gen.writeString(v)
-      case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
-      case (IntegerType, v: Int) => gen.writeNumber(v)
-      case (ShortType, v: Short) => gen.writeNumber(v)
-      case (FloatType, v: Float) => gen.writeNumber(v)
-      case (DoubleType, v: Double) => gen.writeNumber(v)
-      case (LongType, v: Long) => gen.writeNumber(v)
-      case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
-      case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
-      case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
-      case (BooleanType, v: Boolean) => gen.writeBoolean(v)
-      case (DateType, v) => gen.writeString(v.toString)
-      case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, v)
-
-      case (ArrayType(ty, _), v: Seq[_] ) =>
-        gen.writeStartArray()
-        v.foreach(valWriter(ty,_))
-        gen.writeEndArray()
-
-      case (MapType(kv,vv, _), v: Map[_,_]) =>
-        gen.writeStartObject()
-        v.foreach { p =>
-          gen.writeFieldName(p._1.toString)
-          valWriter(vv,p._2)
-        }
-        gen.writeEndObject()
-
-      case (StructType(ty), v: Row) =>
-        gen.writeStartObject()
-        ty.zip(v.toSeq).foreach {
-          case (_, null) =>
-          case (field, v) =>
-            gen.writeFieldName(field.name)
-            valWriter(field.dataType, v)
-        }
-        gen.writeEndObject()
-    }
-
-    valWriter(rowSchema, row)
   }
 }

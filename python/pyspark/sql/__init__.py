@@ -16,26 +16,60 @@
 #
 
 """
-public classes of Spark SQL:
+Important classes of Spark SQL and DataFrames:
 
-    - L{SQLContext}
-      Main entry point for SQL functionality.
-    - L{DataFrame}
-      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, DataFrames also support SQL.
-    - L{GroupedData}
-    - L{Column}
-      Column is a DataFrame with a single column.
-    - L{Row}
-      A Row of data returned by a Spark SQL query.
-    - L{HiveContext}
-      Main entry point for accessing data stored in Apache Hive..
+    - :class:`pyspark.sql.SQLContext`
+      Main entry point for :class:`DataFrame` and SQL functionality.
+    - :class:`pyspark.sql.DataFrame`
+      A distributed collection of data grouped into named columns.
+    - :class:`pyspark.sql.Column`
+      A column expression in a :class:`DataFrame`.
+    - :class:`pyspark.sql.Row`
+      A row of data in a :class:`DataFrame`.
+    - :class:`pyspark.sql.HiveContext`
+      Main entry point for accessing data stored in Apache Hive.
+    - :class:`pyspark.sql.GroupedData`
+      Aggregation methods, returned by :func:`DataFrame.groupBy`.
+    - :class:`pyspark.sql.DataFrameNaFunctions`
+      Methods for handling missing data (null values).
+    - :class:`pyspark.sql.DataFrameStatFunctions`
+      Methods for statistics functionality.
+    - :class:`pyspark.sql.functions`
+      List of built-in functions available for :class:`DataFrame`.
+    - :class:`pyspark.sql.types`
+      List of data types available.
+    - :class:`pyspark.sql.Window`
+      For working with window functions.
 """
+from __future__ import absolute_import
 
-from pyspark.sql.context import SQLContext, HiveContext
+
+def since(version):
+    """
+    A decorator that annotates a function to append the version of Spark the function was added.
+    """
+    import re
+    indent_p = re.compile(r'\n( +)')
+
+    def deco(f):
+        indents = indent_p.findall(f.__doc__)
+        indent = ' ' * (min(len(m) for m in indents) if indents else 0)
+        f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
+        return f
+    return deco
+
+
 from pyspark.sql.types import Row
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
+from pyspark.sql.context import SQLContext, HiveContext
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.group import GroupedData
+from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
+from pyspark.sql.window import Window, WindowSpec
+
 
 __all__ = [
     'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
+    'DataFrameReader', 'DataFrameWriter'
 ]

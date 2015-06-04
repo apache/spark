@@ -25,10 +25,11 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.activemq.broker.{TransportConnector, BrokerService}
+import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
@@ -36,10 +37,10 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
+class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
 
   private val batchDuration = Milliseconds(500)
   private val master = "local[2]"
@@ -113,7 +114,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   }
 
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
@@ -137,7 +139,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
             msgTopic.publish(message)
           } catch {
             case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
-              Thread.sleep(50) // wait for Spark streaming to consume something from the message queue
+              // wait for Spark streaming to consume something from the message queue
+              Thread.sleep(50)
           }
         }
       }

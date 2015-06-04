@@ -22,7 +22,7 @@ import java.util
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
@@ -93,6 +93,15 @@ class HiveUdfSuite extends QueryTest {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
   }
 
+  test("SPARK-6409 UDAFAverage test") {
+    sql(s"CREATE TEMPORARY FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
+    checkAnswer(
+      sql("SELECT test_avg(1), test_avg(substr(value,5)) FROM src"),
+      Seq(Row(1.0, 260.182)))
+    sql("DROP TEMPORARY FUNCTION IF EXISTS test_avg")
+    TestHive.reset()
+  }
+
   test("SPARK-2693 udaf aggregates test") {
     checkAnswer(sql("SELECT percentile(key, 1) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src").collect().toSeq)
@@ -114,9 +123,10 @@ class HiveUdfSuite extends QueryTest {
       IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF()
     testData.registerTempTable("integerTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '${classOf[UDFIntegerToString].getName}'")
+    val udfName = classOf[UDFIntegerToString].getName
+    sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '$udfName'")
     checkAnswer(
-      sql("SELECT testUDFIntegerToString(i) FROM integerTable"), //.collect(),
+      sql("SELECT testUDFIntegerToString(i) FROM integerTable"),
       Seq(Row("1"), Row("2")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFIntegerToString")
 
@@ -132,7 +142,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListListInt AS '${classOf[UDFListListInt].getName}'")
     checkAnswer(
-      sql("SELECT testUDFListListInt(lli) FROM listListIntTable"), //.collect(),
+      sql("SELECT testUDFListListInt(lli) FROM listListIntTable"),
       Seq(Row(0), Row(2), Row(13)))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFListListInt")
 
@@ -147,7 +157,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
     checkAnswer(
-      sql("SELECT testUDFListString(l) FROM listStringTable"), //.collect(),
+      sql("SELECT testUDFListString(l) FROM listStringTable"),
       Seq(Row("a,b,c"), Row("d,e")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFListString")
 
@@ -161,7 +171,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUdf AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
-      sql("SELECT testStringStringUdf(\"hello\", s) FROM stringTable"), //.collect(),
+      sql("SELECT testStringStringUdf(\"hello\", s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUdf")
 
@@ -178,7 +188,7 @@ class HiveUdfSuite extends QueryTest {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
     checkAnswer(
-      sql("SELECT testUDFTwoListList(lli, lli) FROM TwoListTable"), //.collect(),
+      sql("SELECT testUDFTwoListList(lli, lli) FROM TwoListTable"),
       Seq(Row("0, 0"), Row("2, 2"), Row("13, 13")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
 
@@ -238,7 +248,8 @@ class PairUdf extends GenericUDF {
   override def initialize(p1: Array[ObjectInspector]): ObjectInspector =
     ObjectInspectorFactory.getStandardStructObjectInspector(
       Seq("id", "value"),
-      Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector, PrimitiveObjectInspectorFactory.javaIntObjectInspector)
+      Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
+        PrimitiveObjectInspectorFactory.javaIntObjectInspector)
   )
 
   override def evaluate(args: Array[DeferredObject]): AnyRef = {

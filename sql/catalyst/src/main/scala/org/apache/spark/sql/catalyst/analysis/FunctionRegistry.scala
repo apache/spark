@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.Expression
 import scala.collection.mutable
 
@@ -28,14 +29,14 @@ trait FunctionRegistry {
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 
-  def caseSensitive: Boolean
+  def conf: CatalystConf
 }
 
 trait OverrideFunctionRegistry extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
 
-  def registerFunction(name: String, builder: FunctionBuilder) = {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
@@ -44,10 +45,11 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
   }
 }
 
-class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistry {
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
+class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
 
-  def registerFunction(name: String, builder: FunctionBuilder) = {
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
@@ -57,17 +59,19 @@ class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistr
 }
 
 /**
- * A trivial catalog that returns an error when a function is requested.  Used for testing when all
- * functions are already filled in and the analyser needs only to resolve attribute references.
+ * A trivial catalog that returns an error when a function is requested. Used for testing when all
+ * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
-  def registerFunction(name: String, builder: FunctionBuilder) = ???
-
-  def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     throw new UnsupportedOperationException
   }
 
-  def caseSensitive: Boolean = ???
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    throw new UnsupportedOperationException
+  }
+
+  override def conf: CatalystConf = throw new UnsupportedOperationException
 }
 
 /**
@@ -76,7 +80,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
  * TODO move this into util folder?
  */
 object StringKeyHashMap {
-  def apply[T](caseSensitive: Boolean) = caseSensitive match {
+  def apply[T](caseSensitive: Boolean): StringKeyHashMap[T] = caseSensitive match {
     case false => new StringKeyHashMap[T](_.toLowerCase)
     case true => new StringKeyHashMap[T](identity)
   }

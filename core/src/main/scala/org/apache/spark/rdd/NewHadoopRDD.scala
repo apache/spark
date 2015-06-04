@@ -196,7 +196,7 @@ class NewHadoopRDD[K, V](
   override def getPreferredLocations(hsplit: Partition): Seq[String] = {
     val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) => 
+      case Some(c) =>
         try {
           val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
           Some(HadoopRDD.convertSplitLocationInfo(infos))
@@ -238,7 +238,7 @@ private[spark] object NewHadoopRDD {
 
     override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-    override def compute(split: Partition, context: TaskContext) = {
+    override def compute(split: Partition, context: TaskContext): Iterator[U] = {
       val partition = split.asInstanceOf[NewHadoopPartition]
       val inputSplit = partition.serializableHadoopSplit.value
       f(inputSplit, firstParent[T].iterator(split, context))

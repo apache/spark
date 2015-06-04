@@ -227,7 +227,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @param numPartitions  Number of partitions of each RDD in the new DStream.
    */
   def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
-  :JavaPairDStream[K, JIterable[V]] = {
+    : JavaPairDStream[K, JIterable[V]] = {
     dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions)
       .mapValues(asJavaIterable _)
   }
@@ -247,7 +247,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       windowDuration: Duration,
       slideDuration: Duration,
       partitioner: Partitioner
-    ):JavaPairDStream[K, JIterable[V]] = {
+    ): JavaPairDStream[K, JIterable[V]] = {
     dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner)
       .mapValues(asJavaIterable _)
   }
@@ -262,7 +262,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       batching interval
    */
   def reduceByKeyAndWindow(reduceFunc: JFunction2[V, V, V], windowDuration: Duration)
-  :JavaPairDStream[K, V] = {
+    : JavaPairDStream[K, V] = {
     dstream.reduceByKeyAndWindow(reduceFunc, windowDuration)
   }
 
@@ -281,7 +281,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       reduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration
-    ):JavaPairDStream[K, V] = {
+    ): JavaPairDStream[K, V] = {
     dstream.reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration)
   }
 
@@ -526,7 +526,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairDStream[K, U] = {
     import scala.collection.JavaConverters._
-    def fn = (x: V) => f.apply(x).asScala
+    def fn: (V) => Iterable[U] = (x: V) => f.apply(x).asScala
     implicit val cm: ClassTag[U] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     dstream.flatMapValues(fn)

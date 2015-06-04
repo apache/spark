@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import com.google.common.cache.{CacheLoader, CacheBuilder}
-
+import scala.collection.mutable
 import scala.language.existentials
+
+import com.google.common.cache.{CacheBuilder, CacheLoader}
+import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions
@@ -36,23 +38,15 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * expressions.
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
 
-  import scala.tools.reflect.ToolBox
-
-  protected val toolBox = runtimeMirror(getClass.getClassLoader).mkToolBox()
-
-  protected val rowType = typeOf[Row]
-  protected val mutableRowType = typeOf[MutableRow]
-  protected val genericRowType = typeOf[GenericRow]
-  protected val genericMutableRowType = typeOf[GenericMutableRow]
-
-  protected val projectionType = typeOf[Projection]
-  protected val mutableProjectionType = typeOf[MutableProjection]
+  protected val rowType = classOf[Row].getName
+  protected val stringType = classOf[UTF8String].getName
+  protected val decimalType = classOf[Decimal].getName
+  protected val exprType = classOf[Expression].getName
+  protected val mutableRowType = classOf[MutableRow].getName
+  protected val genericMutableRowType = classOf[GenericMutableRow].getName
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
-  private val javaSeparator = "$"
 
   /**
    * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
@@ -75,6 +69,20 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
   /**
+   * Compile the Java source code into a Java class, using Janino.
+   *
+   * It will track the time used to compile
+   */
+  protected def compile(code: String): Class[_] = {
+    val startTime = System.nanoTime()
+    val clazz = new ClassBodyEvaluator(code).getClazz()
+    val endTime = System.nanoTime()
+    def timeMs: Double = (endTime - startTime).toDouble / 1000000
+    logDebug(s"Compiled Java code (${code.size} bytes) in $timeMs ms")
+    clazz
+  }
+
+  /**
    * A cache of generated classes.
    *
    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
@@ -87,22 +95,22 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     .maximumSize(1000)
     .build(
       new CacheLoader[InType, OutType]() {
-        override def load(in: InType): OutType = globalLock.synchronized {
+        override def load(in: InType): OutType = {
           val startTime = System.nanoTime()
           val result = create(in)
           val endTime = System.nanoTime()
-          def timeMs = (endTime - startTime).toDouble / 1000000
+          def timeMs: Double = (endTime - startTime).toDouble / 1000000
           logInfo(s"Code generated expression $in in $timeMs ms")
           result
         }
       })
 
   /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def apply(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    apply(bind(expressions, inputSchema))
+  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
+    generate(bind(expressions, inputSchema))
 
   /** Generates the requested evaluator given already bound expression(s). */
-  def apply(expressions: InType): OutType = cache.get(canonicalize(expressions))
+  def generate(expressions: InType): OutType = cache.get(canonicalize(expressions))
 
   /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
@@ -110,8 +118,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  protected def freshName(prefix: String): TermName = {
-    newTermName(s"$prefix$javaSeparator${curId.getAndIncrement}")
+  protected def freshName(prefix: String): String = {
+    s"$prefix${curId.getAndIncrement}"
   }
 
   /**
@@ -125,32 +133,51 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * @param objectTerm A possibly boxed version of the result of evaluating this expression.
    */
   protected case class EvaluatedExpression(
-      code: Seq[Tree],
-      nullTerm: TermName,
-      primitiveTerm: TermName,
-      objectTerm: TermName)
+      code: String,
+      nullTerm: String,
+      primitiveTerm: String,
+      objectTerm: String)
+
+  /**
+   * A context for codegen, which is used to bookkeeping the expressions those are not supported
+   * by codegen, then they are evaluated directly. The unsupported expression is appended at the
+   * end of `references`, the position of it is kept in the code, used to access and evaluate it.
+   */
+  protected class CodeGenContext {
+    /**
+     * Holding all the expressions those do not support codegen, will be evaluated directly.
+     */
+    val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
+  }
+
+  /**
+   * Create a new codegen context for expression evaluator, used to store those
+   * expressions that don't support codegen
+   */
+  def newCodeGenContext(): CodeGenContext = {
+    new CodeGenContext()
+  }
 
   /**
    * Given an expression tree returns an [[EvaluatedExpression]], which contains Scala trees that
    * can be used to determine the result of evaluating the expression on an input row.
    */
-  def expressionEvaluator(e: Expression): EvaluatedExpression = {
+  def expressionEvaluator(e: Expression, ctx: CodeGenContext): EvaluatedExpression = {
     val primitiveTerm = freshName("primitiveTerm")
     val nullTerm = freshName("nullTerm")
     val objectTerm = freshName("objectTerm")
 
     implicit class Evaluate1(e: Expression) {
-      def castOrNull(f: TermName => Tree, dataType: DataType): Seq[Tree] = {
-        val eval = expressionEvaluator(e)
-        eval.code ++
-        q"""
-          val $nullTerm = ${eval.nullTerm}
-          val $primitiveTerm =
-            if($nullTerm)
-              ${defaultPrimitive(dataType)}
-            else
-              ${f(eval.primitiveTerm)}
-        """.children
+      def castOrNull(f: String => String, dataType: DataType): String = {
+        val eval = expressionEvaluator(e, ctx)
+        eval.code +
+        s"""
+          boolean $nullTerm = ${eval.nullTerm};
+          ${primitiveForType(dataType)} $primitiveTerm = ${defaultPrimitive(dataType)};
+          if (!$nullTerm) {
+            $primitiveTerm = ${f(eval.primitiveTerm)};
+          }
+        """
       }
     }
 
@@ -163,479 +190,508 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
        *
        * @param f a function from two primitive term names to a tree that evaluates them.
        */
-      def evaluate(f: (TermName, TermName) => Tree): Seq[Tree] =
+      def evaluate(f: (String, String) => String): String =
         evaluateAs(expressions._1.dataType)(f)
 
-      def evaluateAs(resultType: DataType)(f: (TermName, TermName) => Tree): Seq[Tree] = {
+      def evaluateAs(resultType: DataType)(f: (String, String) => String): String = {
         // TODO: Right now some timestamp tests fail if we enforce this...
         if (expressions._1.dataType != expressions._2.dataType) {
           log.warn(s"${expressions._1.dataType} != ${expressions._2.dataType}")
         }
 
-        val eval1 = expressionEvaluator(expressions._1)
-        val eval2 = expressionEvaluator(expressions._2)
+        val eval1 = expressionEvaluator(expressions._1, ctx)
+        val eval2 = expressionEvaluator(expressions._2, ctx)
         val resultCode = f(eval1.primitiveTerm, eval2.primitiveTerm)
 
-        eval1.code ++ eval2.code ++
-        q"""
-          val $nullTerm = ${eval1.nullTerm} || ${eval2.nullTerm}
-          val $primitiveTerm: ${termForType(resultType)} =
-            if($nullTerm) {
-              ${defaultPrimitive(resultType)}
-            } else {
-              $resultCode.asInstanceOf[${termForType(resultType)}]
-            }
-        """.children : Seq[Tree]
+        eval1.code + eval2.code +
+        s"""
+          boolean $nullTerm = ${eval1.nullTerm} || ${eval2.nullTerm};
+          ${primitiveForType(resultType)} $primitiveTerm = ${defaultPrimitive(resultType)};
+          if(!$nullTerm) {
+            $primitiveTerm = (${primitiveForType(resultType)})($resultCode);
+          }
+        """
       }
     }
 
-    val inputTuple = newTermName(s"i")
+    val inputTuple = "i"
 
     // TODO: Skip generation of null handling code when expression are not nullable.
-    val primitiveEvaluation: PartialFunction[Expression, Seq[Tree]] = {
+    val primitiveEvaluation: PartialFunction[Expression, String] = {
       case b @ BoundReference(ordinal, dataType, nullable) =>
-        val nullValue = q"$inputTuple.isNullAt($ordinal)"
-        q"""
-          val $nullTerm: Boolean = $nullValue
-          val $primitiveTerm: ${termForType(dataType)} =
-            if($nullTerm)
-              ${defaultPrimitive(dataType)}
-            else
-              ${getColumn(inputTuple, dataType, ordinal)}
-         """.children
+        s"""
+          final boolean $nullTerm = $inputTuple.isNullAt($ordinal);
+          final ${primitiveForType(dataType)} $primitiveTerm = $nullTerm ?
+              ${defaultPrimitive(dataType)} : (${getColumn(inputTuple, dataType, ordinal)});
+         """
 
       case expressions.Literal(null, dataType) =>
-        q"""
-          val $nullTerm = true
-          val $primitiveTerm: ${termForType(dataType)} = null.asInstanceOf[${termForType(dataType)}]
-         """.children
+        s"""
+          final boolean $nullTerm = true;
+          ${primitiveForType(dataType)} $primitiveTerm = ${defaultPrimitive(dataType)};
+        """
 
-      case expressions.Literal(value: Boolean, dataType) =>
-        q"""
-          val $nullTerm = ${value == null}
-          val $primitiveTerm: ${termForType(dataType)} = $value
-         """.children
+      case expressions.Literal(value: UTF8String, StringType) =>
+        val arr = s"new byte[]{${value.getBytes.map(_.toString).mkString(", ")}}"
+        s"""
+          final boolean $nullTerm = false;
+          ${stringType} $primitiveTerm =
+            new ${stringType}().set(${arr});
+         """
 
-      case expressions.Literal(value: String, dataType) =>
-        q"""
-          val $nullTerm = ${value == null}
-          val $primitiveTerm: ${termForType(dataType)} = $value
-         """.children
+      case expressions.Literal(value, FloatType) =>
+        s"""
+          final boolean $nullTerm = false;
+          float $primitiveTerm = ${value}f;
+         """
 
-      case expressions.Literal(value: Int, dataType) =>
-        q"""
-          val $nullTerm = ${value == null}
-          val $primitiveTerm: ${termForType(dataType)} = $value
-         """.children
+      case expressions.Literal(value, dt @ DecimalType()) =>
+        s"""
+          final boolean $nullTerm = false;
+          ${primitiveForType(dt)} $primitiveTerm = new ${primitiveForType(dt)}().set($value);
+         """
 
-      case expressions.Literal(value: Long, dataType) =>
-        q"""
-          val $nullTerm = ${value == null}
-          val $primitiveTerm: ${termForType(dataType)} = $value
-         """.children
+      case expressions.Literal(value, dataType) =>
+        s"""
+          final boolean $nullTerm = false;
+          ${primitiveForType(dataType)} $primitiveTerm = $value;
+         """
 
-      case Cast(e @ BinaryType(), StringType) =>
-        val eval = expressionEvaluator(e)
-        eval.code ++
-        q"""
-          val $nullTerm = ${eval.nullTerm}
-          val $primitiveTerm =
-            if($nullTerm)
-              ${defaultPrimitive(StringType)}
-            else
-              new String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
-        """.children
+      case Cast(child @ BinaryType(), StringType) =>
+        child.castOrNull(c =>
+          s"new ${stringType}().set($c)",
+          StringType)
 
       case Cast(child @ DateType(), StringType) =>
-        child.castOrNull(c => q"org.apache.spark.sql.types.DateUtils.toString($c)", StringType)
+        child.castOrNull(c =>
+          s"""new ${stringType}().set(
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
+          StringType)
 
-      case Cast(child @ NumericType(), IntegerType) =>
-        child.castOrNull(c => q"$c.toInt", IntegerType)
+      case Cast(child @ BooleanType(), dt: NumericType)  if !dt.isInstanceOf[DecimalType] =>
+        child.castOrNull(c => s"(${primitiveForType(dt)})($c?1:0)", dt)
 
-      case Cast(child @ NumericType(), LongType) =>
-        child.castOrNull(c => q"$c.toLong", LongType)
+      case Cast(child @ DecimalType(), IntegerType) =>
+        child.castOrNull(c => s"($c).toInt()", IntegerType)
 
-      case Cast(child @ NumericType(), DoubleType) =>
-        child.castOrNull(c => q"$c.toDouble", DoubleType)
+      case Cast(child @ DecimalType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        child.castOrNull(c => s"($c).to${termForType(dt)}()", dt)
 
-      case Cast(child @ NumericType(), FloatType) =>
-        child.castOrNull(c => q"$c.toFloat", FloatType)
+      case Cast(child @ NumericType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        child.castOrNull(c => s"(${primitiveForType(dt)})($c)", dt)
 
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
       case Cast(e, StringType) if e.dataType != TimestampType =>
-        val eval = expressionEvaluator(e)
-        eval.code ++
-        q"""
-          val $nullTerm = ${eval.nullTerm}
-          val $primitiveTerm =
-            if($nullTerm)
-              ${defaultPrimitive(StringType)}
-            else
-              ${eval.primitiveTerm}.toString
-        """.children
+        e.castOrNull(c =>
+          s"new ${stringType}().set(String.valueOf($c))",
+          StringType)
 
-      case EqualTo(e1, e2) =>
-        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 == $eval2" }
-
-      /* TODO: Fix null semantics.
-      case In(e1, list) if !list.exists(!_.isInstanceOf[expressions.Literal]) =>
-        val eval = expressionEvaluator(e1)
-
-        val checks = list.map {
-          case expressions.Literal(v: String, dataType) =>
-            q"if(${eval.primitiveTerm} == $v) return true"
-          case expressions.Literal(v: Int, dataType) =>
-            q"if(${eval.primitiveTerm} == $v) return true"
+      case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
+        (e1, e2).evaluateAs (BooleanType) {
+          case (eval1, eval2) =>
+            s"java.util.Arrays.equals((byte[])$eval1, (byte[])$eval2)"
         }
 
-        val funcName = newTermName(s"isIn${curId.getAndIncrement()}")
-
-        q"""
-            def $funcName: Boolean = {
-              ..${eval.code}
-              if(${eval.nullTerm}) return false
-              ..$checks
-              return false
-            }
-            val $nullTerm = false
-            val $primitiveTerm = $funcName
-        """.children
-      */
+      case EqualTo(e1, e2) =>
+        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 == $eval2" }
 
       case GreaterThan(e1 @ NumericType(), e2 @ NumericType()) =>
-        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 > $eval2" }
+        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 > $eval2" }
       case GreaterThanOrEqual(e1 @ NumericType(), e2 @ NumericType()) =>
-        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 >= $eval2" }
+        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 >= $eval2" }
       case LessThan(e1 @ NumericType(), e2 @ NumericType()) =>
-        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 < $eval2" }
+        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 < $eval2" }
       case LessThanOrEqual(e1 @ NumericType(), e2 @ NumericType()) =>
-        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 <= $eval2" }
+        (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 <= $eval2" }
 
       case And(e1, e2) =>
-        val eval1 = expressionEvaluator(e1)
-        val eval2 = expressionEvaluator(e2)
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        s"""
+          ${eval1.code}
+          boolean $nullTerm = false;
+          boolean $primitiveTerm  = false;
 
-        q"""
-          ..${eval1.code}
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(BooleanType)} = false
-
-          if (!${eval1.nullTerm} && ${eval1.primitiveTerm} == false) {
+          if (!${eval1.nullTerm} && !${eval1.primitiveTerm}) {
           } else {
-            ..${eval2.code}
-            if (!${eval2.nullTerm} && ${eval2.primitiveTerm} == false) {
+            ${eval2.code}
+            if (!${eval2.nullTerm} && !${eval2.primitiveTerm}) {
             } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
-              $primitiveTerm = true
+              $primitiveTerm = true;
             } else {
-              $nullTerm = true
+              $nullTerm = true;
             }
           }
-         """.children
+         """
 
       case Or(e1, e2) =>
-        val eval1 = expressionEvaluator(e1)
-        val eval2 = expressionEvaluator(e2)
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
 
-        q"""
-          ..${eval1.code}
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(BooleanType)} = false
+        s"""
+          ${eval1.code}
+          boolean $nullTerm = false;
+          boolean $primitiveTerm = false;
 
           if (!${eval1.nullTerm} && ${eval1.primitiveTerm}) {
-            $primitiveTerm = true
+            $primitiveTerm = true;
           } else {
-            ..${eval2.code}
+            ${eval2.code}
             if (!${eval2.nullTerm} && ${eval2.primitiveTerm}) {
-              $primitiveTerm = true
+              $primitiveTerm = true;
             } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
-              $primitiveTerm = false
+              $primitiveTerm = false;
             } else {
-              $nullTerm = true
+              $nullTerm = true;
             }
           }
-         """.children
+         """
 
       case Not(child) =>
         // Uh, bad function name...
-        child.castOrNull(c => q"!$c", BooleanType)
+        child.castOrNull(c => s"!$c", BooleanType)
 
-      case Add(e1, e2) =>      (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 + $eval2" }
-      case Subtract(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 - $eval2" }
-      case Multiply(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 * $eval2" }
+      case Add(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$plus($eval2)" }
+      case Subtract(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$minus($eval2)" }
+      case Multiply(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1.$$times($eval2)" }
+      case Divide(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+          s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = null;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm}.isZero()) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm}.$$div${eval2.primitiveTerm});
+          }
+          """
+      case Remainder(e1 @ DecimalType(), e2 @ DecimalType()) =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+          s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm}.isZero()) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm}.remainder(${eval2.primitiveTerm});
+          }
+         """
+
+      case Add(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 + $eval2" }
+      case Subtract(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 - $eval2" }
+      case Multiply(e1, e2) =>
+        (e1, e2) evaluate { case (eval1, eval2) => s"$eval1 * $eval2" }
       case Divide(e1, e2) =>
-        val eval1 = expressionEvaluator(e1)
-        val eval2 = expressionEvaluator(e2)
-
-        eval1.code ++ eval2.code ++
-        q"""
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(e1.dataType)} = 0
-
-          if (${eval1.nullTerm} || ${eval2.nullTerm} ) {
-            $nullTerm = true
-          } else if (${eval2.primitiveTerm} == 0)
-            $nullTerm = true
-          else {
-            $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm}
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+        s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm} == 0) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm};
           }
-         """.children
-
+        """
       case Remainder(e1, e2) =>
-        val eval1 = expressionEvaluator(e1)
-        val eval2 = expressionEvaluator(e2)
-
-        eval1.code ++ eval2.code ++
-        q"""
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(e1.dataType)} = 0
-
-          if (${eval1.nullTerm} || ${eval2.nullTerm} ) {
-            $nullTerm = true
-          } else if (${eval2.primitiveTerm} == 0)
-            $nullTerm = true
-          else {
-            $nullTerm = false
-            $primitiveTerm = ${eval1.primitiveTerm} % ${eval2.primitiveTerm}
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+        eval1.code + eval2.code +
+        s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = 0;
+          if (${eval1.nullTerm} || ${eval2.nullTerm} || ${eval2.primitiveTerm} == 0) {
+            $nullTerm = true;
+          } else {
+            $primitiveTerm = ${eval1.primitiveTerm} % ${eval2.primitiveTerm};
           }
-         """.children
+         """
 
       case IsNotNull(e) =>
-        val eval = expressionEvaluator(e)
-        q"""
-          ..${eval.code}
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(BooleanType)} = !${eval.nullTerm}
-        """.children
+        val eval = expressionEvaluator(e, ctx)
+        s"""
+          ${eval.code}
+          boolean $nullTerm = false;
+          boolean $primitiveTerm = !${eval.nullTerm};
+        """
 
       case IsNull(e) =>
-        val eval = expressionEvaluator(e)
-        q"""
-          ..${eval.code}
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(BooleanType)} = ${eval.nullTerm}
-        """.children
+        val eval = expressionEvaluator(e, ctx)
+        s"""
+          ${eval.code}
+          boolean $nullTerm = false;
+          boolean $primitiveTerm = ${eval.nullTerm};
+        """
 
-      case c @ Coalesce(children) =>
-        q"""
-          var $nullTerm = true
-          var $primitiveTerm: ${termForType(c.dataType)} = ${defaultPrimitive(c.dataType)}
-        """.children ++
+      case e @ Coalesce(children) =>
+        s"""
+          boolean $nullTerm = true;
+          ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
+        """ +
         children.map { c =>
-          val eval = expressionEvaluator(c)
-          q"""
+          val eval = expressionEvaluator(c, ctx)
+          s"""
             if($nullTerm) {
-              ..${eval.code}
+              ${eval.code}
               if(!${eval.nullTerm}) {
-                $nullTerm = false
-                $primitiveTerm = ${eval.primitiveTerm}
+                $nullTerm = false;
+                $primitiveTerm = ${eval.primitiveTerm};
               }
             }
           """
-        }
+        }.mkString("\n")
 
-      case i @ expressions.If(condition, trueValue, falseValue) =>
-        val condEval = expressionEvaluator(condition)
-        val trueEval = expressionEvaluator(trueValue)
-        val falseEval = expressionEvaluator(falseValue)
+      case e @ expressions.If(condition, trueValue, falseValue) =>
+        val condEval = expressionEvaluator(condition, ctx)
+        val trueEval = expressionEvaluator(trueValue, ctx)
+        val falseEval = expressionEvaluator(falseValue, ctx)
 
-        q"""
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(i.dataType)} = ${defaultPrimitive(i.dataType)}
-          ..${condEval.code}
+        s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
+          ${condEval.code}
           if(!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
-            ..${trueEval.code}
-            $nullTerm = ${trueEval.nullTerm}
-            $primitiveTerm = ${trueEval.primitiveTerm}
+            ${trueEval.code}
+            $nullTerm = ${trueEval.nullTerm};
+            $primitiveTerm = ${trueEval.primitiveTerm};
           } else {
-            ..${falseEval.code}
-            $nullTerm = ${falseEval.nullTerm}
-            $primitiveTerm = ${falseEval.primitiveTerm}
+            ${falseEval.code}
+            $nullTerm = ${falseEval.nullTerm};
+            $primitiveTerm = ${falseEval.primitiveTerm};
           }
-        """.children
+        """
 
       case NewSet(elementType) =>
-        q"""
-          val $nullTerm = false
-          val $primitiveTerm = new ${hashSetForType(elementType)}()
-        """.children
+        s"""
+          boolean $nullTerm = false;
+          ${hashSetForType(elementType)} $primitiveTerm = new ${hashSetForType(elementType)}();
+        """
 
       case AddItemToSet(item, set) =>
-        val itemEval = expressionEvaluator(item)
-        val setEval = expressionEvaluator(set)
+        val itemEval = expressionEvaluator(item, ctx)
+        val setEval = expressionEvaluator(set, ctx)
 
-        val ArrayType(elementType, _) = set.dataType
+        val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val htype = hashSetForType(elementType)
 
-        itemEval.code ++ setEval.code ++
-        q"""
-           if (!${itemEval.nullTerm}) {
-             ${setEval.primitiveTerm}
-               .asInstanceOf[${hashSetForType(elementType)}]
-               .add(${itemEval.primitiveTerm})
+        itemEval.code + setEval.code +
+        s"""
+           if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
+             (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
            }
-
-           val $nullTerm = false
-           val $primitiveTerm = ${setEval.primitiveTerm}
-         """.children
+           boolean $nullTerm = false;
+           ${htype} $primitiveTerm = ($htype)${setEval.primitiveTerm};
+         """
 
       case CombineSets(left, right) =>
-        val leftEval = expressionEvaluator(left)
-        val rightEval = expressionEvaluator(right)
+        val leftEval = expressionEvaluator(left, ctx)
+        val rightEval = expressionEvaluator(right, ctx)
 
-        val ArrayType(elementType, _) = left.dataType
+        val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
+        val htype = hashSetForType(elementType)
 
-        leftEval.code ++ rightEval.code ++
-        q"""
-          val $nullTerm = false
-          var $primitiveTerm: ${hashSetForType(elementType)} = null
+        leftEval.code + rightEval.code +
+        s"""
+          boolean $nullTerm = false;
+          ${htype} $primitiveTerm =
+            (${htype})${leftEval.primitiveTerm};
+          $primitiveTerm.union((${htype})${rightEval.primitiveTerm});
+        """
 
-          {
-            val leftSet = ${leftEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
-            val rightSet = ${rightEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
-            val iterator = rightSet.iterator
-            while (iterator.hasNext) {
-              leftSet.add(iterator.next())
-            }
-            $primitiveTerm = leftSet
-          }
-        """.children
+      case MaxOf(e1, e2) if !e1.dataType.isInstanceOf[DecimalType] =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
 
-      case MaxOf(e1, e2) =>
-        val eval1 = expressionEvaluator(e1)
-        val eval2 = expressionEvaluator(e2)
-
-        eval1.code ++ eval2.code ++
-        q"""
-          var $nullTerm = false
-          var $primitiveTerm: ${termForType(e1.dataType)} = ${defaultPrimitive(e1.dataType)}
+        eval1.code + eval2.code +
+        s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = ${defaultPrimitive(e1.dataType)};
 
           if (${eval1.nullTerm}) {
-            $nullTerm = ${eval2.nullTerm}
-            $primitiveTerm = ${eval2.primitiveTerm}
+            $nullTerm = ${eval2.nullTerm};
+            $primitiveTerm = ${eval2.primitiveTerm};
           } else if (${eval2.nullTerm}) {
-            $nullTerm = ${eval1.nullTerm}
-            $primitiveTerm = ${eval1.primitiveTerm}
+            $nullTerm = ${eval1.nullTerm};
+            $primitiveTerm = ${eval1.primitiveTerm};
           } else {
             if (${eval1.primitiveTerm} > ${eval2.primitiveTerm}) {
-              $primitiveTerm = ${eval1.primitiveTerm}
+              $primitiveTerm = ${eval1.primitiveTerm};
             } else {
-              $primitiveTerm = ${eval2.primitiveTerm}
+              $primitiveTerm = ${eval2.primitiveTerm};
             }
           }
-        """.children
+        """
+
+      case MinOf(e1, e2) if !e1.dataType.isInstanceOf[DecimalType] =>
+        val eval1 = expressionEvaluator(e1, ctx)
+        val eval2 = expressionEvaluator(e2, ctx)
+
+        eval1.code + eval2.code +
+        s"""
+          boolean $nullTerm = false;
+          ${primitiveForType(e1.dataType)} $primitiveTerm = ${defaultPrimitive(e1.dataType)};
+
+          if (${eval1.nullTerm}) {
+            $nullTerm = ${eval2.nullTerm};
+            $primitiveTerm = ${eval2.primitiveTerm};
+          } else if (${eval2.nullTerm}) {
+            $nullTerm = ${eval1.nullTerm};
+            $primitiveTerm = ${eval1.primitiveTerm};
+          } else {
+            if (${eval1.primitiveTerm} < ${eval2.primitiveTerm}) {
+              $primitiveTerm = ${eval1.primitiveTerm};
+            } else {
+              $primitiveTerm = ${eval2.primitiveTerm};
+            }
+          }
+        """
 
       case UnscaledValue(child) =>
-        val childEval = expressionEvaluator(child)
+        val childEval = expressionEvaluator(child, ctx)
 
-        childEval.code ++
-        q"""
-         var $nullTerm = ${childEval.nullTerm}
-         var $primitiveTerm: Long = if (!$nullTerm) {
-           ${childEval.primitiveTerm}.toUnscaledLong
-         } else {
-           ${defaultPrimitive(LongType)}
-         }
-         """.children
+        childEval.code +
+        s"""
+         boolean $nullTerm = ${childEval.nullTerm};
+         long $primitiveTerm = $nullTerm ? -1 : ${childEval.primitiveTerm}.toUnscaledLong();
+         """
 
       case MakeDecimal(child, precision, scale) =>
-        val childEval = expressionEvaluator(child)
+        val eval = expressionEvaluator(child, ctx)
 
-        childEval.code ++
-        q"""
-         var $nullTerm = ${childEval.nullTerm}
-         var $primitiveTerm: org.apache.spark.sql.types.Decimal =
-           ${defaultPrimitive(DecimalType())}
+        eval.code +
+        s"""
+         boolean $nullTerm = ${eval.nullTerm};
+         org.apache.spark.sql.types.Decimal $primitiveTerm = ${defaultPrimitive(DecimalType())};
 
          if (!$nullTerm) {
-           $primitiveTerm = new org.apache.spark.sql.types.Decimal()
-           $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale)
-           $nullTerm = $primitiveTerm == null
+           $primitiveTerm = new org.apache.spark.sql.types.Decimal();
+           $primitiveTerm = $primitiveTerm.setOrNull(${eval.primitiveTerm}, $precision, $scale);
+           $nullTerm = $primitiveTerm == null;
          }
-         """.children
+         """
     }
 
     // If there was no match in the partial function above, we fall back on calling the interpreted
     // expression evaluator.
-    val code: Seq[Tree] =
+    val code: String =
       primitiveEvaluation.lift.apply(e).getOrElse {
-        log.debug(s"No rules to generate $e")
-        val tree = reify { e }
-        q"""
-          val $objectTerm = $tree.eval(i)
-          val $nullTerm = $objectTerm == null
-          val $primitiveTerm = $objectTerm.asInstanceOf[${termForType(e.dataType)}]
-         """.children
+        logError(s"No rules to generate $e")
+        ctx.references += e
+        s"""
+          /* expression: ${e} */
+          Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
+          boolean $nullTerm = $objectTerm == null;
+          ${primitiveForType(e.dataType)} $primitiveTerm = ${defaultPrimitive(e.dataType)};
+          if (!$nullTerm) $primitiveTerm = (${termForType(e.dataType)})$objectTerm;
+         """
       }
 
-    // Only inject debugging code if debugging is turned on.
-    val debugCode =
-      if (debugLogging) {
-        val localLogger = log
-        val localLoggerTree = reify { localLogger }
-        q"""
-          $localLoggerTree.debug(${e.toString} + ": " +  (if($nullTerm) "null" else $primitiveTerm))
-        """ :: Nil
-      } else {
-        Nil
-      }
-
-    EvaluatedExpression(code ++ debugCode, nullTerm, primitiveTerm, objectTerm)
+    EvaluatedExpression(code, nullTerm, primitiveTerm, objectTerm)
   }
 
-  protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
+  protected def getColumn(inputRow: String, dataType: DataType, ordinal: Int) = {
     dataType match {
-      case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
-      case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
+      case StringType => s"(${stringType})$inputRow.apply($ordinal)"
+      case dt: DataType if isNativeType(dt) => s"$inputRow.${accessorForType(dt)}($ordinal)"
+      case _ => s"(${termForType(dataType)})$inputRow.apply($ordinal)"
     }
   }
 
   protected def setColumn(
-      destinationRow: TermName,
+      destinationRow: String,
       dataType: DataType,
       ordinal: Int,
-      value: TermName) = {
+      value: String): String = {
     dataType match {
-      case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
-      case _ => q"$destinationRow.update($ordinal, $value)"
+      case StringType => s"$destinationRow.update($ordinal, $value)"
+      case dt: DataType if isNativeType(dt) =>
+        s"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
+      case _ => s"$destinationRow.update($ordinal, $value)"
     }
   }
 
-  protected def accessorForType(dt: DataType) = newTermName(s"get${primitiveForType(dt)}")
-  protected def mutatorForType(dt: DataType) = newTermName(s"set${primitiveForType(dt)}")
+  protected def accessorForType(dt: DataType) = dt match {
+    case IntegerType => "getInt"
+    case other => s"get${termForType(dt)}"
+  }
 
-  protected def hashSetForType(dt: DataType) = dt match {
-    case IntegerType => typeOf[IntegerHashSet]
-    case LongType => typeOf[LongHashSet]
+  protected def mutatorForType(dt: DataType) = dt match {
+    case IntegerType => "setInt"
+    case other => s"set${termForType(dt)}"
+  }
+
+  protected def hashSetForType(dt: DataType): String = dt match {
+    case IntegerType => classOf[IntegerHashSet].getName
+    case LongType => classOf[LongHashSet].getName
     case unsupportedType =>
       sys.error(s"Code generation not support for hashset of type $unsupportedType")
   }
 
-  protected def primitiveForType(dt: DataType) = dt match {
-    case IntegerType => "Int"
+  protected def primitiveForType(dt: DataType): String = dt match {
+    case IntegerType => "int"
+    case LongType => "long"
+    case ShortType => "short"
+    case ByteType => "byte"
+    case DoubleType => "double"
+    case FloatType => "float"
+    case BooleanType => "boolean"
+    case dt: DecimalType => decimalType
+    case BinaryType => "byte[]"
+    case StringType => stringType
+    case DateType => "int"
+    case TimestampType => "java.sql.Timestamp"
+    case _ => "Object"
+  }
+
+  protected def defaultPrimitive(dt: DataType): String = dt match {
+    case BooleanType => "false"
+    case FloatType => "-1.0f"
+    case ShortType => "-1"
+    case LongType => "-1"
+    case ByteType => "-1"
+    case DoubleType => "-1.0"
+    case IntegerType => "-1"
+    case DateType => "-1"
+    case dt: DecimalType => "null"
+    case StringType => "null"
+    case _ => "null"
+  }
+
+  protected def termForType(dt: DataType): String = dt match {
+    case IntegerType => "Integer"
     case LongType => "Long"
     case ShortType => "Short"
     case ByteType => "Byte"
     case DoubleType => "Double"
     case FloatType => "Float"
     case BooleanType => "Boolean"
-    case StringType => "String"
+    case dt: DecimalType => decimalType
+    case BinaryType => "byte[]"
+    case StringType => stringType
+    case DateType => "Integer"
+    case TimestampType => "java.sql.Timestamp"
+    case _ => "Object"
   }
 
-  protected def defaultPrimitive(dt: DataType) = dt match {
-    case BooleanType => ru.Literal(Constant(false))
-    case FloatType => ru.Literal(Constant(-1.0.toFloat))
-    case StringType => ru.Literal(Constant("<uninit>"))
-    case ShortType => ru.Literal(Constant(-1.toShort))
-    case LongType => ru.Literal(Constant(-1L))
-    case ByteType => ru.Literal(Constant(-1.toByte))
-    case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType() => q"org.apache.spark.sql.types.Decimal(-1)"
-    case IntegerType => ru.Literal(Constant(-1))
-    case _ => ru.Literal(Constant(null))
-  }
+  /**
+   * List of data types that have special accessors and setters in [[Row]].
+   */
+  protected val nativeTypes =
+    Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType)
 
-  protected def termForType(dt: DataType) = dt match {
-    case n: NativeType => n.tag
-    case _ => typeTag[Any]
-  }
+  /**
+   * Returns true if the data type has a special accessor and setter in [[Row]].
+   */
+  protected def isNativeType(dt: DataType) = nativeTypes.contains(dt)
 }

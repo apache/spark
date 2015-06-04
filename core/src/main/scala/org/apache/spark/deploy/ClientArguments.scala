@@ -22,8 +22,7 @@ import java.net.{URI, URISyntaxException}
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
-
-import org.apache.spark.util.{IntParam, MemoryParam}
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the driver client.
@@ -35,14 +34,14 @@ private[deploy] class ClientArguments(args: Array[String]) {
   var logLevel = Level.WARN
 
   // launch parameters
-  var master: String = ""
+  var masters: Array[String] = null
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
-  def driverOptions = _driverOptions.toSeq
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
   var driverId: String = ""
@@ -80,13 +79,13 @@ private[deploy] class ClientArguments(args: Array[String]) {
       }
 
       jarUrl = _jarUrl
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       mainClass = _mainClass
       _driverOptions ++= tail
 
     case "kill" :: _master :: _driverId :: tail =>
       cmd = "kill"
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       driverId = _driverId
 
     case _ =>

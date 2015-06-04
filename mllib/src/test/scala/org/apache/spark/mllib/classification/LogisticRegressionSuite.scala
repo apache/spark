@@ -21,9 +21,9 @@ import scala.collection.JavaConversions._
 import scala.util.Random
 import scala.util.control.Breaks._
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -91,21 +91,22 @@ object LogisticRegressionSuite {
       seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
 
-    val xDim = xMean.size
+    val xDim = xMean.length
     val xWithInterceptsDim = if (addIntercept) xDim + 1 else xDim
-    val nClasses = weights.size / xWithInterceptsDim + 1
+    val nClasses = weights.length / xWithInterceptsDim + 1
 
     val x = Array.fill[Vector](nPoints)(Vectors.dense(Array.fill[Double](xDim)(rnd.nextGaussian())))
 
-    x.map(vector => {
+    x.foreach { vector =>
       // This doesn't work if `vector` is a sparse vector.
       val vectorArray = vector.toArray
       var i = 0
-      while (i < vectorArray.size) {
+      val len = vectorArray.length
+      while (i < len) {
         vectorArray(i) = vectorArray(i) * math.sqrt(xVariance(i)) + xMean(i)
         i += 1
       }
-    })
+    }
 
     val y = (0 until nPoints).map { idx =>
       val xArray = x(idx).toArray
@@ -118,7 +119,7 @@ object LogisticRegressionSuite {
       }
       // Preventing the overflow when we compute the probability
       val maxMargin = margins.max
-      if (maxMargin > 0) for (i <-0 until nClasses) margins(i) -= maxMargin
+      if (maxMargin > 0) for (i <- 0 until nClasses) margins(i) -= maxMargin
 
       // Computing the probabilities for each class from the margins.
       val norm = {
@@ -129,7 +130,7 @@ object LogisticRegressionSuite {
         }
         temp
       }
-      for (i <-0 until nClasses) probs(i) /= norm
+      for (i <- 0 until nClasses) probs(i) /= norm
 
       // Compute the cumulative probability so we can generate a random number and assign a label.
       for (i <- 1 until nClasses) probs(i) += probs(i - 1)
@@ -168,7 +169,7 @@ object LogisticRegressionSuite {
 }
 
 
-class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
+class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers {
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
@@ -425,6 +426,12 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
     val model = lr.run(testRDD)
 
+    val numFeatures = testRDD.map(_.features.size).first()
+    val initialWeights = Vectors.dense(new Array[Double]((numFeatures + 1) * 2))
+    val model2 = lr.run(testRDD, initialWeights)
+
+    LogisticRegressionSuite.checkModelsEqual(model, model2)
+
     /**
      * The following is the instruction to reproduce the model using R's glmnet package.
      *
@@ -534,7 +541,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
 }
 
-class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction using SGD optimizer") {
     val m = 4

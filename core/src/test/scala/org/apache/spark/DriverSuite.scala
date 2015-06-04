@@ -19,16 +19,15 @@ package org.apache.spark
 
 import java.io.File
 
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
 
-class DriverSuite extends FunSuite with Timeouts {
+class DriverSuite extends SparkFunSuite with Timeouts {
 
-  test("driver should exit after finishing without cleanup (SPARK-530)") {
+  ignore("driver should exit after finishing without cleanup (SPARK-530)") {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val masters = Table("master", "local", "local-cluster[2,1,512]")
     forAll(masters) { (master: String) =>

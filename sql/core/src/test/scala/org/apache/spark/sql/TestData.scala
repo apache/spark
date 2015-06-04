@@ -20,9 +20,8 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test._
 
 
 case class TestData(key: Int, value: String)
@@ -87,8 +86,6 @@ object TestData {
       TestData3(2, Some(2)) :: Nil).toDF()
   testData3.registerTempTable("testData3")
 
-  val emptyTableData = logical.LocalRelation($"a".int, $"b".int)
-
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
     TestSQLContext.sparkContext.parallelize(
@@ -112,8 +109,8 @@ object TestData {
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   val arrayData =
     TestSQLContext.sparkContext.parallelize(
-      ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
-      ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
+      ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
+      ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
   arrayData.toDF().registerTempTable("arrayData")
 
   case class MapData(data: scala.collection.Map[Int, String])
@@ -178,7 +175,7 @@ object TestData {
       "4, D4, true, 2147483644" :: Nil)
 
   case class TimestampField(time: Timestamp)
-  val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
+  val timestamps = TestSQLContext.sparkContext.parallelize((0 to 3).map { i =>
     TimestampField(new Timestamp(i))
   })
   timestamps.toDF().registerTempTable("timestamps")
@@ -199,11 +196,11 @@ object TestData {
     Salary(1, 1000.0) :: Nil).toDF()
   salary.registerTempTable("salary")
 
-  case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   val complexData =
     TestSQLContext.sparkContext.parallelize(
-      ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), true)
-        :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true)
+        :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
 }

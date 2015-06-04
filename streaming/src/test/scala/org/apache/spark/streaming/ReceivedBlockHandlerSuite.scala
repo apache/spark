@@ -24,26 +24,30 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Props}
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{AkkaUtils, ManualClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
-class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockHandlerSuite
+  extends SparkFunSuite
+  with BeforeAndAfter
+  with Matchers
+  with Logging {
 
-  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
+  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
   val hadoopConf = new Configuration()
   val storageLevel = StorageLevel.MEMORY_ONLY_SER
   val streamId = 1
@@ -54,22 +58,19 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
 
-  var actorSystem: ActorSystem = null
+  var rpcEnv: RpcEnv = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
   var tempDirectory: File = null
 
   before {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
-    conf.set("spark.driver.port", boundPort.toString)
+    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
-    blockManagerMaster = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf, true)
+    blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
-    blockManager = new BlockManager("bm", actorSystem, blockManagerMaster, serializer,
+    blockManager = new BlockManager("bm", rpcEnv, blockManagerMaster, serializer,
       blockManagerSize, conf, mapOutputTracker, shuffleManager,
       new NioBlockTransferService(conf, securityMgr), securityMgr, 0)
     blockManager.initialize("app-id")
@@ -87,9 +88,9 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       blockManagerMaster.stop()
       blockManagerMaster = null
     }
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
+    rpcEnv.shutdown()
+    rpcEnv.awaitTermination()
+    rpcEnv = null
 
     Utils.deleteRecursively(tempDirectory)
   }
@@ -99,7 +100,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -123,7 +124,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -133,10 +134,13 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
           "Unexpected store result type"
         )
         // Verify the data in write ahead log files is correct
-        val fileSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].segment}
-        val loggedData = fileSegments.flatMap { segment =>
-          val reader = new WriteAheadLogRandomReader(segment.path, hadoopConf)
-          val bytes = reader.read(segment)
+        val walSegments = storeResults.map { result =>
+          result.asInstanceOf[WriteAheadLogBasedStoreResult].walRecordHandle
+        }
+        val loggedData = walSegments.flatMap { walSegment =>
+          val fileSegment = walSegment.asInstanceOf[FileBasedWriteAheadLogSegment]
+          val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
+          val bytes = reader.read(fileSegment)
           reader.close()
           blockManager.dataDeserialize(generateBlockId(), bytes).toList
         }
@@ -151,13 +155,13 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     }
   }
 
-  test("WriteAheadLogBasedBlockHandler - cleanup old blocks") {
+  test("WriteAheadLogBasedBlockHandler - clean old blocks") {
     withWriteAheadLogBasedBlockHandler { handler =>
       val blocks = Seq.tabulate(10) { i => IteratorBlock(Iterator(1 to i)) }
       storeBlocks(handler, blocks)
 
       val preCleanupLogFiles = getWriteAheadLogFiles()
-      preCleanupLogFiles.size should be > 1
+      require(preCleanupLogFiles.size > 1)
 
       // this depends on the number of blocks inserted using generateAndStoreData()
       manualClock.getTimeMillis() shouldEqual 5000L
@@ -221,6 +225,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
 
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
   private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
+    require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
     val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, 1,
       storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
     try {

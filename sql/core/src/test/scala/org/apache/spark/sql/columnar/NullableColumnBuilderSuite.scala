@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
 
@@ -27,14 +26,15 @@ class TestNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T
   with NullableColumnBuilder
 
 object TestNullableColumnBuilder {
-  def apply[T <: DataType, JvmType](columnType: ColumnType[T, JvmType], initialSize: Int = 0) = {
+  def apply[T <: DataType, JvmType](columnType: ColumnType[T, JvmType], initialSize: Int = 0)
+    : TestNullableColumnBuilder[T, JvmType] = {
     val builder = new TestNullableColumnBuilder(columnType)
     builder.initialize(initialSize)
     builder
   }
 }
 
-class NullableColumnBuilderSuite extends FunSuite {
+class NullableColumnBuilderSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(

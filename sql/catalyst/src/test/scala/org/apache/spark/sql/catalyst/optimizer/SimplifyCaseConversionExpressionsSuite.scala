@@ -41,7 +41,7 @@ class SimplifyCaseConversionExpressionsSuite extends PlanTest {
       testRelation
         .select(Upper(Upper('a)) as 'u)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select(Upper('a) as 'u)
@@ -55,7 +55,7 @@ class SimplifyCaseConversionExpressionsSuite extends PlanTest {
       testRelation
         .select(Upper(Lower('a)) as 'u)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select(Upper('a) as 'u)
@@ -69,7 +69,7 @@ class SimplifyCaseConversionExpressionsSuite extends PlanTest {
       testRelation
         .select(Lower(Upper('a)) as 'l)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select(Lower('a) as 'l)
       .analyze
@@ -82,7 +82,7 @@ class SimplifyCaseConversionExpressionsSuite extends PlanTest {
       testRelation
         .select(Lower(Lower('a)) as 'l)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select(Lower('a) as 'l)
       .analyze

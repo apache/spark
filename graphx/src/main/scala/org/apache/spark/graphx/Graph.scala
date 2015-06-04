@@ -316,7 +316,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * satisfy the predicates
    */
   def subgraph(
-      epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+      epred: EdgeTriplet[VD, ED] => Boolean = (x => true),
       vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
 
@@ -409,7 +409,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("twittergraph")
    * val inDeg: RDD[(VertexId, Int)] =
-   *   aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
+   *   rawGraph.aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
    * }}}
    *
    * @note By expressing computation at the edge level we achieve

@@ -85,13 +85,13 @@ extends Actor with ActorHelper {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
-  override def preStart = remotePublisher ! SubscribeReceiver(context.self)
+  override def preStart(): Unit = remotePublisher ! SubscribeReceiver(context.self)
 
-  def receive = {
+  def receive: PartialFunction[Any, Unit] = {
     case msg => store(msg.asInstanceOf[T])
   }
 
-  override def postStop() = remotePublisher ! UnsubscribeReceiver(context.self)
+  override def postStop(): Unit = remotePublisher ! UnsubscribeReceiver(context.self)
 
 }
 
@@ -104,10 +104,8 @@ extends Actor with ActorHelper {
 object FeederActor {
 
   def main(args: Array[String]) {
-    if(args.length < 2){
-      System.err.println(
-        "Usage: FeederActor <hostname> <port>\n"
-      )
+    if (args.length < 2){
+      System.err.println("Usage: FeederActor <hostname> <port>\n")
       System.exit(1)
     }
     val Seq(host, port) = args.toSeq

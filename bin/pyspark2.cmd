@@ -20,8 +20,7 @@ rem
 rem Figure out where the Spark framework is installed
 set SPARK_HOME=%~dp0..
 
-rem Load environment variables from conf\spark-env.cmd, if it exists
-if exist "%SPARK_HOME%\conf\spark-env.cmd" call "%SPARK_HOME%\conf\spark-env.cmd"
+call %SPARK_HOME%\bin\load-spark-env.cmd
 
 rem Figure out which Python to use.
 if "x%PYSPARK_DRIVER_PYTHON%"=="x" (

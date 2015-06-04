@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  * @param y y coordinate
  */
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
-private[sql] class ExamplePoint(val x: Double, val y: Double)
+private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable
 
 /**
  * User-defined type for [[ExamplePoint]].

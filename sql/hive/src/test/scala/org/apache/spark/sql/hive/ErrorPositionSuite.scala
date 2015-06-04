@@ -17,14 +17,30 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream}
-
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-
 import scala.util.Try
 
-class ErrorPositionSuite extends QueryTest {
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+
+
+class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
+
+  before {
+    Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
+  }
+
+  positionTest("ambiguous attribute reference 1",
+    "SELECT a from dupAttributes", "a")
+
+  positionTest("ambiguous attribute reference 2",
+    "SELECT a, b from dupAttributes", "a")
+
+  positionTest("ambiguous attribute reference 3",
+    "SELECT b, a from dupAttributes", "a")
 
   positionTest("unresolved attribute 1",
     "SELECT x FROM src", "x")
@@ -92,25 +108,6 @@ class ErrorPositionSuite extends QueryTest {
       "SELECT 1 + array(1)", "1 + array")
   }
 
-  /** Hive can be very noisy, messing up the output of our tests. */
-  private def quietly[A](f: => A): A = {
-    val origErr = System.err
-    val origOut = System.out
-    try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-
-      f
-    } finally {
-      System.setErr(origErr)
-      System.setOut(origOut)
-    }
-  }
-
   /**
    * Creates a test that checks to see if the error thrown when analyzing a given query includes
    * the location of the given token in the query string.
@@ -119,7 +116,7 @@ class ErrorPositionSuite extends QueryTest {
    * @param query the query to analyze
    * @param token a unique token in the string that should be indicated by the exception
    */
-  def positionTest(name: String, query: String, token: String) = {
+  def positionTest(name: String, query: String, token: String): Unit = {
     def parseTree =
       Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
 
@@ -127,6 +124,10 @@ class ErrorPositionSuite extends QueryTest {
       val error = intercept[AnalysisException] {
         quietly(sql(query))
       }
+
+      assert(!error.getMessage.contains("Seq("))
+      assert(!error.getMessage.contains("List("))
+
       val (line, expectedLineNum) = query.split("\n").zipWithIndex.collect {
         case (l, i) if l.contains(token) => (l, i + 1)
       }.headOption.getOrElse(sys.error(s"Invalid test. Token $token not in $query"))

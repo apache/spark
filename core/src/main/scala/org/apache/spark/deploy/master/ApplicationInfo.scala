@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.util.Utils
 
-private[deploy] class ApplicationInfo(
+private[spark] class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,
@@ -75,9 +75,11 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  private[master] def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): 
-  ExecutorDesc = {
-    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
+  private[master] def addExecutor(
+      worker: WorkerInfo,
+      cores: Int,
+      useID: Option[Int] = None): ExecutorDesc = {
+    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerExecutorMB)
     executors(exec.id) = exec
     coresGranted += cores
     exec
@@ -91,7 +93,7 @@ private[deploy] class ApplicationInfo(
     }
   }
 
-  private[master] val requestedCores = desc.maxCores.getOrElse(defaultCores)
+  private val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
   private[master] def coresLeft: Int = requestedCores - coresGranted
 
@@ -109,6 +111,10 @@ private[deploy] class ApplicationInfo(
   private[master] def markFinished(endState: ApplicationState.Value) {
     state = endState
     endTime = System.currentTimeMillis()
+  }
+
+  private[master] def isFinished: Boolean = {
+    state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
 
   def duration: Long = {

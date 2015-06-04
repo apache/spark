@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
 /**
@@ -25,35 +25,36 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
  */
 class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
   override def checkEvaluation(
-                                expression: Expression,
-                                expected: Any,
-                                inputRow: Row = EmptyRow): Unit = {
-    lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
+      expression: Expression,
+      expected: Any,
+      inputRow: Row = EmptyRow): Unit = {
+    val ctx = GenerateProjection.newCodeGenContext()
+    lazy val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
 
     val plan = try {
-      GenerateProjection(Alias(expression, s"Optimized($expression)")() :: Nil)
+      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     } catch {
       case e: Throwable =>
         fail(
           s"""
             |Code generation of $expression failed:
-            |${evaluated.code.mkString("\n")}
+            |${evaluated.code}
             |$e
           """.stripMargin)
     }
 
     val actual = plan(inputRow)
-    val expectedRow = new GenericRow(Array[Any](expected))
+    val expectedRow = new GenericRow(Array[Any](CatalystTypeConverters.convertToCatalyst(expected)))
     if (actual.hashCode() != expectedRow.hashCode()) {
       fail(
         s"""
           |Mismatched hashCodes for values: $actual, $expectedRow
           |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
-          |${evaluated.code.mkString("\n")}
+          |${evaluated.code}
         """.stripMargin)
     }
     if (actual != expectedRow) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }

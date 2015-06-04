@@ -17,23 +17,16 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.types.StructType
+import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
-import java.sql.DriverManager
 
 import org.apache.spark.Partition
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.sources._
-
-/**
- * Data corresponding to one partition of a JDBCRDD.
- */
-private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
-  override def index: Int = idx
-}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Instructions on how to partition the table among workers.
@@ -61,7 +54,7 @@ private[sql] object JDBCRelation {
     if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions 
+    val stride: Long = (partitioning.upperBound / numPartitions
                       - partitioning.lowerBound / numPartitions)
     var i: Int = 0
     var currentValue: Long = partitioning.lowerBound
@@ -98,7 +91,7 @@ private[sql] class DefaultSource extends RelationProvider {
     val upperBound = parameters.getOrElse("upperBound", null)
     val numPartitions = parameters.getOrElse("numPartitions", null)
 
-    if (driver != null) Class.forName(driver)
+    if (driver != null) DriverRegistry.register(driver)
 
     if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
@@ -115,29 +108,42 @@ private[sql] class DefaultSource extends RelationProvider {
         numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
-    JDBCRelation(url, table, parts)(sqlContext)
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    JDBCRelation(url, table, parts, properties)(sqlContext)
   }
 }
 
 private[sql] case class JDBCRelation(
     url: String,
     table: String,
-    parts: Array[Partition])(@transient val sqlContext: SQLContext)
+    parts: Array[Partition],
+    properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
-  with PrunedFilteredScan {
+  with PrunedFilteredScan
+  with InsertableRelation {
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table)
+  override val needConversion: Boolean = false
+
+  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
+    val driver: String = DriverRegistry.getDriverClassName(url)
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
       schema,
       driver,
       url,
+      properties,
       table,
       requiredColumns,
       filters,
       parts)
+  }
+
+  override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    data.write
+      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
+      .jdbc(url, table, properties)
   }
 }

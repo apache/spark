@@ -148,6 +148,16 @@ Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
+# Algorithm Guides
+
+There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
+
+**Pipelines API Algorithm Guides**
+
+* [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Ensembles](ml-ensembles.html)
+
+
 # Code Examples
 
 This section gives code examples illustrating the functionality discussed above.
@@ -197,7 +207,7 @@ val model1 = lr.fit(training.toDF)
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-println("Model 1 was fit using parameters: " + model1.fittingParamMap)
+println("Model 1 was fit using parameters: " + model1.parent.extractParamMap)
 
 // We may alternatively specify parameters using a ParamMap,
 // which supports several methods for specifying parameters.
@@ -212,7 +222,7 @@ val paramMapCombined = paramMap ++ paramMap2
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 val model2 = lr.fit(training.toDF, paramMapCombined)
-println("Model 2 was fit using parameters: " + model2.fittingParamMap)
+println("Model 2 was fit using parameters: " + model2.parent.extractParamMap)
 
 // Prepare test data.
 val test = sc.parallelize(Seq(
@@ -228,7 +238,7 @@ model2.transform(test.toDF)
   .select("features", "label", "myProbability", "prediction")
   .collect()
   .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-    println("($features, $label) -> prob=$prob, prediction=$prediction")
+    println(s"($features, $label) -> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
@@ -279,7 +289,7 @@ LogisticRegressionModel model1 = lr.fit(training);
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
 // LogisticRegression instance.
-System.out.println("Model 1 was fit using parameters: " + model1.fittingParamMap());
+System.out.println("Model 1 was fit using parameters: " + model1.parent().extractParamMap());
 
 // We may alternatively specify parameters using a ParamMap.
 ParamMap paramMap = new ParamMap();
@@ -295,7 +305,7 @@ ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
 LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
-System.out.println("Model 2 was fit using parameters: " + model2.fittingParamMap());
+System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
 // Prepare test documents.
 List<LabeledPoint> localTest = Lists.newArrayList(
@@ -382,7 +392,7 @@ model.transform(test.toDF)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println("($id, $text) --> prob=$prob, prediction=$prediction")
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 
 sc.stop()
@@ -408,31 +418,31 @@ import org.apache.spark.sql.SQLContext;
 // Labeled and unlabeled instance types.
 // Spark SQL can infer schema from Java Beans.
 public class Document implements Serializable {
-  private Long id;
+  private long id;
   private String text;
 
-  public Document(Long id, String text) {
+  public Document(long id, String text) {
     this.id = id;
     this.text = text;
   }
 
-  public Long getId() { return this.id; }
-  public void setId(Long id) { this.id = id; }
+  public long getId() { return this.id; }
+  public void setId(long id) { this.id = id; }
 
   public String getText() { return this.text; }
   public void setText(String text) { this.text = text; }
 }
 
 public class LabeledDocument extends Document implements Serializable {
-  private Double label;
+  private double label;
 
-  public LabeledDocument(Long id, String text, Double label) {
+  public LabeledDocument(long id, String text, double label) {
     super(id, text);
     this.label = label;
   }
 
-  public Double getLabel() { return this.label; }
-  public void setLabel(Double label) { this.label = label; }
+  public double getLabel() { return this.label; }
+  public void setLabel(double label) { this.label = label; }
 }
 
 // Set up contexts.
@@ -493,7 +503,7 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.sql import Row, SQLContext
 
 sc = SparkContext(appName="SimpleTextClassificationPipeline")
-sqlCtx = SQLContext(sc)
+sqlContext = SQLContext(sc)
 
 # Prepare training documents, which are labeled.
 LabeledDocument = Row("id", "text", "label")
@@ -564,6 +574,11 @@ import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
+
+// Labeled and unlabeled instance types.
+// Spark SQL can infer schema from case classes.
+case class LabeledDocument(id: Long, text: String, label: Double)
+case class Document(id: Long, text: String)
 
 val conf = new SparkConf().setAppName("CrossValidatorExample")
 val sc = new SparkContext(conf)
@@ -654,6 +669,36 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+
+// Labeled and unlabeled instance types.
+// Spark SQL can infer schema from Java Beans.
+public class Document implements Serializable {
+  private long id;
+  private String text;
+
+  public Document(long id, String text) {
+    this.id = id;
+    this.text = text;
+  }
+
+  public long getId() { return this.id; }
+  public void setId(long id) { this.id = id; }
+
+  public String getText() { return this.text; }
+  public void setText(String text) { this.text = text; }
+}
+
+public class LabeledDocument extends Document implements Serializable {
+  private double label;
+
+  public LabeledDocument(long id, String text, double label) {
+    super(id, text);
+    this.label = label;
+  }
+
+  public double getLabel() { return this.label; }
+  public void setLabel(double label) { this.label = label; }
+}
 
 SparkConf conf = new SparkConf().setAppName("JavaCrossValidatorExample");
 JavaSparkContext jsc = new JavaSparkContext(conf);

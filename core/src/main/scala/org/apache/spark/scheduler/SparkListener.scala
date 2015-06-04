@@ -110,8 +110,13 @@ case class SparkListenerExecutorMetricsUpdate(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerApplicationStart(appName: String, appId: Option[String], time: Long,
-  sparkUser: String) extends SparkListenerEvent
+case class SparkListenerApplicationStart(
+    appName: String,
+    appId: Option[String],
+    time: Long,
+    sparkUser: String,
+    appAttemptId: Option[String],
+    driverLogs: Option[Map[String, String]] = None) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
@@ -265,7 +270,7 @@ class StatsReportListener extends SparkListener with Logging {
 private[spark] object StatsReportListener extends Logging {
 
   // For profiling, the extremes are more interesting
-  val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
+  val percentiles = Array[Int](0, 5, 10, 25, 50, 75, 90, 95, 100)
   val probabilities = percentiles.map(_ / 100.0)
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
@@ -299,8 +304,8 @@ private[spark] object StatsReportListener extends Logging {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
-    def f(d: Double) = format.format(d)
+  def showDistribution(heading: String, dOpt: Option[Distribution], format: String) {
+    def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
 
@@ -313,7 +318,7 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showBytesDistribution(
-      heading:String,
+      heading: String,
       getMetric: (TaskInfo, TaskMetrics) => Option[Long],
       taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showBytesDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
@@ -346,7 +351,7 @@ private[spark] object StatsReportListener extends Logging {
   /**
    * Reformat a time interval in milliseconds to a prettier format for output
    */
-  def millisToString(ms: Long) = {
+  def millisToString(ms: Long): String = {
     val (size, units) =
       if (ms > hours) {
         (ms.toDouble / hours, "hours")

@@ -20,23 +20,47 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
+/** The data type for expressions returning an OpenHashSet as the result. */
+private[sql] class OpenHashSetUDT(
+    val elementType: DataType) extends UserDefinedType[OpenHashSet[Any]] {
+
+  override def sqlType: DataType = ArrayType(elementType)
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def serialize(obj: Any): Seq[Any] = {
+    obj.asInstanceOf[OpenHashSet[Any]].iterator.toSeq
+  }
+
+  /** Since we are using OpenHashSet internally, usually it will not be called. */
+  override def deserialize(datum: Any): OpenHashSet[Any] = {
+    val iterator = datum.asInstanceOf[Seq[Any]].iterator
+    val set = new OpenHashSet[Any]
+    while(iterator.hasNext) {
+      set.add(iterator.next())
+    }
+
+    set
+  }
+
+  override def userClass: Class[OpenHashSet[Any]] = classOf[OpenHashSet[Any]]
+
+  private[spark] override def asNullable: OpenHashSetUDT = this
+}
+
 /**
  * Creates a new set of the specified type
  */
 case class NewSet(elementType: DataType) extends LeafExpression {
-  type EvaluatedType = Any
 
-  def nullable = false
+  override def nullable: Boolean = false
 
-  // We are currently only using these Expressions internally for aggregation.  However, if we ever
-  // expose these to users we'll want to create a proper type instead of hijacking ArrayType.
-  def dataType = ArrayType(elementType)
+  override def dataType: OpenHashSetUDT = new OpenHashSetUDT(elementType)
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     new OpenHashSet[Any]()
   }
 
-  override def toString = s"new Set($dataType)"
+  override def toString: String = s"new Set($dataType)"
 }
 
 /**
@@ -44,14 +68,14 @@ case class NewSet(elementType: DataType) extends LeafExpression {
  * For performance, this expression mutates its input during evaluation.
  */
 case class AddItemToSet(item: Expression, set: Expression) extends Expression {
-  type EvaluatedType = Any
 
-  def children = item :: set :: Nil
+  override def children: Seq[Expression] = item :: set :: Nil
 
-  def nullable = set.nullable
+  override def nullable: Boolean = set.nullable
 
-  def dataType = set.dataType
-  def eval(input: Row): Any = {
+  override def dataType: OpenHashSetUDT = set.dataType.asInstanceOf[OpenHashSetUDT]
+
+  override def eval(input: Row): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
 
@@ -67,7 +91,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
-  override def toString = s"$set += $item"
+  override def toString: String = s"$set += $item"
 }
 
 /**
@@ -75,15 +99,14 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
  * For performance, this expression mutates its left input set during evaluation.
  */
 case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
-  type EvaluatedType = Any
 
-  def nullable = left.nullable || right.nullable
+  override def nullable: Boolean = left.nullable || right.nullable
 
-  def dataType = left.dataType
+  override def dataType: OpenHashSetUDT = left.dataType.asInstanceOf[OpenHashSetUDT]
 
-  def symbol = "++="
+  override def symbol: String = "++="
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     val leftEval = left.eval(input).asInstanceOf[OpenHashSet[Any]]
     if(leftEval != null) {
       val rightEval = right.eval(input).asInstanceOf[OpenHashSet[Any]]
@@ -107,18 +130,17 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
  * Returns the number of elements in the input set.
  */
 case class CountSet(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
 
-  def nullable = child.nullable
+  override def nullable: Boolean = child.nullable
 
-  def dataType = LongType
+  override def dataType: DataType = LongType
 
-  def eval(input: Row): Any = {
+  override def eval(input: Row): Any = {
     val childEval = child.eval(input).asInstanceOf[OpenHashSet[Any]]
     if (childEval != null) {
       childEval.size.toLong
     }
   }
 
-  override def toString = s"$child.count()"
+  override def toString: String = s"$child.count()"
 }

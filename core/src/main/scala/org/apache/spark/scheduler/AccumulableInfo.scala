@@ -39,8 +39,11 @@ class AccumulableInfo (
 }
 
 object AccumulableInfo {
-  def apply(id: Long, name: String, update: Option[String], value: String) =
+  def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
     new AccumulableInfo(id, name, update, value)
+  }
 
-  def apply(id: Long, name: String, value: String) = new AccumulableInfo(id, name, None, value)
+  def apply(id: Long, name: String, value: String): AccumulableInfo = {
+    new AccumulableInfo(id, name, None, value)
+  }
 }

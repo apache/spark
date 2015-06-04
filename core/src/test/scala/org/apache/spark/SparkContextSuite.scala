@@ -18,17 +18,20 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
-import org.scalatest.FunSuite
-
-import org.apache.hadoop.io.BytesWritable
-
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.spark.util.Utils
 
-class SparkContextSuite extends FunSuite with LocalSparkContext {
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
+class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
@@ -62,6 +65,26 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     } finally {
       Option(secondSparkContext).foreach(_.stop())
     }
+  }
+
+  test("Test getOrCreate") {
+    var sc2: SparkContext = null
+    SparkContext.clearActiveContext()
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+
+    sc = SparkContext.getOrCreate(conf)
+
+    assert(sc.getConf.get("spark.app.name").equals("test"))
+    sc2 = SparkContext.getOrCreate(new SparkConf().setAppName("test2").setMaster("local"))
+    assert(sc2.getConf.get("spark.app.name").equals("test"))
+    assert(sc === sc2)
+    assert(sc eq sc2)
+
+    // Try creating second context to confirm that it's still possible, if desired
+    sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
+        .set("spark.driver.allowMultipleContexts", "true"))
+
+    sc2.stop()
   }
 
   test("BytesWritable implicit conversion is correct") {
@@ -111,11 +134,13 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
 
         if (length1 != gotten1.length()) {
           throw new SparkException(
-            s"file has different length $length1 than added file ${gotten1.length()} : " + absolutePath1)
+            s"file has different length $length1 than added file ${gotten1.length()} : " +
+              absolutePath1)
         }
         if (length2 != gotten2.length()) {
           throw new SparkException(
-            s"file has different length $length2 than added file ${gotten2.length()} : " + absolutePath2)
+            s"file has different length $length2 than added file ${gotten2.length()} : " +
+              absolutePath2)
         }
 
         if (absolutePath1 == gotten1.getAbsolutePath) {
@@ -169,6 +194,80 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       intercept[SparkException] {
         sc.addFile(dir.getAbsolutePath)
       }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
+      sc.cancelJobGroup("nonExistGroupId")
+      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+
+      // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
+      // SparkContext to shutdown, so the following assertion will fail.
+      assert(sc.parallelize(1 to 10).count() == 10L)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Comma separated paths for newAPIHadoopFile/wholeTextFiles/binaryFiles (SPARK-7155)") {
+    // Regression test for SPARK-7155
+    // dir1 and dir2 are used for wholeTextFiles and binaryFiles
+    val dir1 = Utils.createTempDir()
+    val dir2 = Utils.createTempDir()
+
+    val dirpath1 = dir1.getAbsolutePath
+    val dirpath2 = dir2.getAbsolutePath
+
+    // file1 and file2 are placed inside dir1, they are also used for
+    // textFile, hadoopFile, and newAPIHadoopFile
+    // file3, file4 and file5 are placed inside dir2, they are used for
+    // textFile, hadoopFile, and newAPIHadoopFile as well
+    val file1 = new File(dir1, "part-00000")
+    val file2 = new File(dir1, "part-00001")
+    val file3 = new File(dir2, "part-00000")
+    val file4 = new File(dir2, "part-00001")
+    val file5 = new File(dir2, "part-00002")
+
+    val filepath1 = file1.getAbsolutePath
+    val filepath2 = file2.getAbsolutePath
+    val filepath3 = file3.getAbsolutePath
+    val filepath4 = file4.getAbsolutePath
+    val filepath5 = file5.getAbsolutePath
+
+
+    try {
+      // Create 5 text files.
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
+      Files.write("someline1 in file3", file3, UTF_8)
+      Files.write("someline1 in file4\nsomeline2 in file4", file4, UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file5", file5, UTF_8)
+
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+      // Test textFile, hadoopFile, and newAPIHadoopFile for file1 and file2
+      assert(sc.textFile(filepath1 + "," + filepath2).count() == 5L)
+      assert(sc.hadoopFile(filepath1 + "," + filepath2,
+        classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      assert(sc.newAPIHadoopFile(filepath1 + "," + filepath2,
+        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+
+      // Test textFile, hadoopFile, and newAPIHadoopFile for file3, file4, and file5
+      assert(sc.textFile(filepath3 + "," + filepath4 + "," + filepath5).count() == 5L)
+      assert(sc.hadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+               classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+      assert(sc.newAPIHadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
+               classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+
+      // Test wholeTextFiles, and binaryFiles for dir1 and dir2
+      assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
+      assert(sc.binaryFiles(dirpath1 + "," + dirpath2).count() == 5L)
+
     } finally {
       sc.stop()
     }

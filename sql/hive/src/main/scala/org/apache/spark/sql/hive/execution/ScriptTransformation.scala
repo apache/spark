@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{BufferedReader, InputStreamReader}
-import java.io.{DataInputStream, DataOutputStream, EOFException}
+import java.io.{BufferedReader, DataInputStream, DataOutputStream, EOFException, InputStreamReader}
 import java.util.Properties
 
 import scala.collection.JavaConversions._
@@ -27,12 +26,14 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -51,9 +52,9 @@ case class ScriptTransformation(
     ioschema: HiveScriptIOSchema)(@transient sc: HiveContext)
   extends UnaryNode {
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  def execute() = {
+  protected override def doExecute(): RDD[Row] = {
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
@@ -61,7 +62,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
- 
+
       val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
@@ -94,7 +95,7 @@ case class ScriptTransformation(
             val raw = outputSerde.deserialize(writable)
             val dataList = outputSoi.getStructFieldsDataAsList(raw)
             val fieldList = outputSoi.getAllStructFieldRefs()
-            
+
             var i = 0
             dataList.foreach( element => {
               if (element == null) {
@@ -116,18 +117,17 @@ case class ScriptTransformation(
           if (!hasNext) {
             throw new NoSuchElementException
           }
- 
+
           if (outputSerde == null) {
             val prevLine = curLine
             curLine = reader.readLine()
- 
             if (!ioschema.schemaLess) {
-              new GenericRow(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              new GenericRow(CatalystTypeConverters.convertToCatalyst(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
                 .asInstanceOf[Array[Any]])
             } else {
-              new GenericRow(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+              new GenericRow(CatalystTypeConverters.convertToCatalyst(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
                 .asInstanceOf[Array[Any]])
             }
           } else {
@@ -145,20 +145,29 @@ case class ScriptTransformation(
       val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
 
-      iter
-        .map(outputProjection)
-        .foreach { row =>
-          if (inputSerde == null) {
-            val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
- 
-            outputStream.write(data)
-          } else {
-            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-            prepareWritable(writable).write(dataOutputStream)
+      // Put the write(output to the pipeline) into a single thread
+      // and keep the collector as remain in the main thread.
+      // otherwise it will causes deadlock if the data size greater than
+      // the pipeline / buffer capacity.
+      new Thread(new Runnable() {
+        override def run(): Unit = {
+          iter
+            .map(outputProjection)
+            .foreach { row =>
+            if (inputSerde == null) {
+              val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+                ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+
+              outputStream.write(data)
+            } else {
+              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+              prepareWritable(writable).write(dataOutputStream)
+            }
           }
+          outputStream.close()
         }
-      outputStream.close()
+      }).start()
+
       iterator
     }
   }
@@ -183,7 +192,7 @@ case class HiveScriptIOSchema (
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
-  
+
   def initInputSerDe(input: Seq[Expression]): (AbstractSerDe, ObjectInspector) = {
     val (columns, columnTypes) = parseAttrs(input)
     val serde = initSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps)
@@ -197,22 +206,22 @@ case class HiveScriptIOSchema (
   }
 
   def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-                                                
+
     val columns = attrs.map {
       case aref: AttributeReference => aref.name
       case e: NamedExpression => e.name
       case _ => null
     }
- 
+
     val columnTypes = attrs.map {
       case aref: AttributeReference => aref.dataType
       case e: NamedExpression => e.dataType
-      case _ =>  null
+      case _ => null
     }
 
     (columns, columnTypes)
   }
- 
+
   def initSerDe(serdeClassName: String, columns: Seq[String],
     columnTypes: Seq[DataType], serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
@@ -231,7 +240,7 @@ case class HiveScriptIOSchema (
         (kv._1.split("'")(1), kv._2.split("'")(1))
       }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
       propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
-    
+
       val properties = new Properties()
       properties.putAll(propsMap)
       serde.initialize(null, properties)
@@ -252,7 +261,7 @@ case class HiveScriptIOSchema (
       null
     }
   }
- 
+
   def initOutputputSoi(outputSerde: AbstractSerDe): StructObjectInspector = {
     if (outputSerde != null) {
       outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]

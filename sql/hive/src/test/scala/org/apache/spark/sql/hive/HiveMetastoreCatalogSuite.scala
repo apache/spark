@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.hive.test.TestHive
 
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types.StructType
 
-class HiveMetastoreCatalogSuite extends FunSuite {
+class HiveMetastoreCatalogSuite extends SparkFunSuite {
 
   test("struct field should accept underscore in sub-column name") {
     val metastr = "struct<a: int, b_1: string, c: string>"
@@ -35,5 +36,12 @@ class HiveMetastoreCatalogSuite extends FunSuite {
     val udt = new ExamplePointUDT
     assert(HiveMetastoreTypes.toMetastoreType(udt) ===
       HiveMetastoreTypes.toMetastoreType(udt.sqlType))
+  }
+
+  test("duplicated metastore relations") {
+    import TestHive.implicits._
+    val df = TestHive.sql("SELECT * FROM src")
+    println(df.queryExecution)
+    df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 }

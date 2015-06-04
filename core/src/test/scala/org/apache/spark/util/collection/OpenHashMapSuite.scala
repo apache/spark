@@ -19,12 +19,12 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class OpenHashMapSuite extends FunSuite with Matchers {
+class OpenHashMapSuite extends SparkFunSuite with Matchers {
 
   test("size for specialized, primitive value (int)") {
     val capacity = 1024
@@ -175,5 +175,15 @@ class OpenHashMapSuite extends FunSuite with Matchers {
     for (i <- 1 to 100) {
       assert(map(i.toString) === i.toString)
     }
+  }
+
+  test("contains") {
+    val map = new OpenHashMap[String, Int](2)
+    map("a") = 1
+    assert(map.contains("a"))
+    assert(!map.contains("b"))
+    assert(!map.contains(null))
+    map(null) = 0
+    assert(map.contains(null))
   }
 }

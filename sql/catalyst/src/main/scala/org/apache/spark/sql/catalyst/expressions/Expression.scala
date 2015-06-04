@@ -17,17 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
-
-  /** The narrowest possible type that is produced when this expression is evaluated. */
-  type EvaluatedType <: Any
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -41,19 +37,28 @@ abstract class Expression extends TreeNode[Expression] {
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
+
+  /**
+   * Returns true when the current expression always return the same result for fixed input values.
+   */
+  // TODO: Need to define explicit input values vs implicit input values.
+  def deterministic: Boolean = true
+
   def nullable: Boolean
+
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): EvaluatedType
+  def eval(input: Row = null): Any
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
-   * and `false` if it still contains any unresolved placeholders. Implementations of expressions
-   * should override this if the resolution of this type of expression involves more than just
-   * the resolution of its children.
+   * and input data types checking passed, and `false` if it still contains any unresolved
+   * placeholders or has data types mismatch.
+   * Implementations of expressions should override this if the resolution of this type of
+   * expression involves more than just the resolution of its children and type checking.
    */
-  lazy val resolved: Boolean = childrenResolved
+  lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is
@@ -65,7 +70,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
    */
-  def childrenResolved = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns a string representation of this expression that does not have developer centric
@@ -77,16 +82,40 @@ abstract class Expression extends TreeNode[Expression] {
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
+
+  /**
+   * Returns true when two expressions will always compute the same result, even if they differ
+   * cosmetically (i.e. capitalization of names in attributes may be different).
+   */
+  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    val elements1 = this.productIterator.toSeq
+    val elements2 = other.asInstanceOf[Product].productIterator.toSeq
+    elements1.length == elements2.length && elements1.zip(elements2).forall {
+      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+      case (i1, i2) => i1 == i2
+    }
+  }
+
+  /**
+   * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
+   * or returns a `TypeCheckResult` with an error message if invalid.
+   * Note: it's not valid to call this method until `childrenResolved == true`
+   * TODO: we should remove the default implementation and implement it for all
+   * expressions with proper error message.
+   */
+  def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
-  def symbol: String
+  def symbol: String = sys.error(s"BinaryExpressions must override either toString or symbol")
 
-  override def foldable = left.foldable && right.foldable
+  override def foldable: Boolean = left.foldable && right.foldable
 
-  override def toString = s"($left $symbol $right)"
+  override def nullable: Boolean = left.nullable || right.nullable
+
+  override def toString: String = s"($left $symbol $right)"
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
@@ -103,9 +132,24 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 // not like a real expressions.
 case class GroupExpression(children: Seq[Expression]) extends Expression {
   self: Product =>
-  type EvaluatedType = Seq[Any]
-  override def eval(input: Row): EvaluatedType = ???
-  override def nullable = false
-  override def foldable = false
-  override def dataType = ???
+  override def eval(input: Row): Any = throw new UnsupportedOperationException
+  override def nullable: Boolean = false
+  override def foldable: Boolean = false
+  override def dataType: DataType = throw new UnsupportedOperationException
+}
+
+/**
+ * Expressions that require a specific `DataType` as input should implement this trait
+ * so that the proper type conversions can be performed in the analyzer.
+ */
+trait ExpectsInputTypes {
+  self: Expression =>
+
+  def expectedChildTypes: Seq[DataType]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
+    // so type mismatch error won't be reported here, but for underling `Cast`s.
+    TypeCheckResult.TypeCheckSuccess
+  }
 }

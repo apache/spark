@@ -101,7 +101,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   /**
    * Return a sampled subset of this RDD.
-   * 
+   *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
@@ -109,10 +109,10 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    */
   def sample(withReplacement: Boolean, fraction: Double): JavaRDD[T] =
     sample(withReplacement, fraction, Utils.random.nextLong)
-    
+
   /**
    * Return a sampled subset of this RDD.
-   * 
+   *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
@@ -179,7 +179,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
 
-  override def toString = rdd.toString
+  override def toString: String = rdd.toString
 
   /** Assign a name to this RDD */
   def setName(name: String): JavaRDD[T] = {
@@ -192,7 +192,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    */
   def sortBy[S](f: JFunction[T, S], ascending: Boolean, numPartitions: Int): JavaRDD[T] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x)
+    def fn: (T) => S = (x: T) => f.call(x)
     import com.google.common.collect.Ordering  // shadows scala.math.Ordering
     implicit val ordering = Ordering.natural().asInstanceOf[Ordering[S]]
     implicit val ctag: ClassTag[S] = fakeClassTag

@@ -19,20 +19,24 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
- * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
+ * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
  * as an AnalysisException with the correct position information.
  */
 class NoSuchTableException extends Exception
+
+class NoSuchDatabaseException extends Exception
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
@@ -55,10 +59,10 @@ trait Catalog {
   def unregisterAllTables(): Unit
 
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (!caseSensitive) {
-      tableIdentifier.map(_.toLowerCase)
-    } else {
+    if (conf.caseSensitiveAnalysis) {
       tableIdentifier
+    } else {
+      tableIdentifier.map(_.toLowerCase)
     }
   }
 
@@ -76,7 +80,7 @@ trait Catalog {
   }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
   override def registerTable(
@@ -86,12 +90,12 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables += ((getDbTableName(tableIdent), plan))
   }
 
-  override def unregisterTable(tableIdentifier: Seq[String]) = {
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     tables -= getDbTableName(tableIdent)
   }
 
-  override def unregisterAllTables() = {
+  override def unregisterAllTables(): Unit = {
     tables.clear()
   }
 
@@ -136,7 +140,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
-  val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
+  val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
@@ -147,8 +151,8 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def lookupRelation(
-    tableIdentifier: Seq[String],
-    alias: Option[String] = None): LogicalPlan = {
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val overriddenTable = overrides.get(getDBTable(tableIdent))
     val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.last, r))
@@ -162,10 +166,10 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = if (!caseSensitive) {
-      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
-    } else {
+    val dbName = if (conf.caseSensitiveAnalysis) {
       databaseName
+    } else {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
     }
 
     val temporaryTables = overrides.filter {
@@ -201,19 +205,19 @@ trait OverrideCatalog extends Catalog {
 
 /**
  * A trivial catalog that returns an error when a relation is requested.  Used for testing when all
- * relations are already filled in and the analyser needs only to resolve attribute references.
+ * relations are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyCatalog extends Catalog {
 
-  val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
-  def tableExists(tableIdentifier: Seq[String]): Boolean = {
+  override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException
   }
 
-  def lookupRelation(
-    tableIdentifier: Seq[String],
-    alias: Option[String] = None) = {
+  override def lookupRelation(
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan = {
     throw new UnsupportedOperationException
   }
 
@@ -221,11 +225,11 @@ object EmptyCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
 
-  def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     throw new UnsupportedOperationException
   }
 

@@ -20,6 +20,11 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{ HashMap => MutableHashMap }
+import scala.reflect.ClassTag
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -28,17 +33,12 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{ HashMap => MutableHashMap }
-import scala.reflect.ClassTag
-import scala.util.Try
-
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")
@@ -93,7 +93,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    Client.populateClasspath(args, conf, sparkConf, env)
+    Client.populateClasspath(args, conf, sparkConf, env, true)
 
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -104,13 +104,16 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
         cp should not contain (uri.getPath())
       }
     })
-    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      cp should contain("{{PWD}}")
-    } else if (Utils.isWindows) {
-      cp should contain("%PWD%")
-    } else {
-      cp should contain(Environment.PWD.$())
-    }
+    val pwdVar =
+      if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
+        "{{PWD}}"
+      } else if (Utils.isWindows) {
+        "%PWD%"
+      } else {
+        Environment.PWD.$()
+      }
+    cp should contain(pwdVar)
+    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_HADOOP_CONF_DIR}")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -148,57 +151,6 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("check access nns empty") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
-  }
-
-  test("check access nns unset") {
-    val sparkConf = new SparkConf()
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set())
-  }
-
-  test("check access nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access nns space") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access two nns") {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
-    val nns = Client.getNameNodesToAccess(sparkConf)
-    nns should be(Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
-  }
-
-  test("check token renewer") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
-    hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = Client.getTokenRenewer(hadoopConf)
-    renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
-  }
-
-  test("check token renewer default") {
-    val hadoopConf = new Configuration()
-    val caught =
-      intercept[SparkException] {
-        Client.getTokenRenewer(hadoopConf)
-      }
-    assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
-  }
-
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
@@ -232,19 +184,26 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
     testCode(conf)
   }
 
-  def newEnv = MutableHashMap[String, String]()
+  def newEnv: MutableHashMap[String, String] = MutableHashMap[String, String]()
 
-  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;|<CPS>")
+  def classpath(env: MutableHashMap[String, String]): Array[String] =
+    env(Environment.CLASSPATH.name).split(":|;|<CPS>")
 
-  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]) = (a ++ b).flatten.toArray
+  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]): Array[String] =
+    (a ++ b).flatten.toArray
 
-  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
-    Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
+  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B = {
+    Try(clazz.getField(field))
+      .map(_.get(null).asInstanceOf[A])
+      .toOption
+      .map(mapTo)
+      .getOrElse(defaults)
+  }
 
   def getFieldValue2[A: ClassTag, A1: ClassTag, B](
         clazz: Class[_],
         field: String,
-        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B) : B = {
+        defaults: => B)(mapTo: A => B)(mapTo1: A1 => B): B = {
     Try(clazz.getField(field)).map(_.get(null)).map {
       case v: A => mapTo(v)
       case v1: A1 => mapTo1(v1)

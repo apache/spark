@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import time
 import threading
 import Queue
@@ -52,15 +54,15 @@ def main():
         ids = status.getJobIdsForGroup()
         for id in ids:
             job = status.getJobInfo(id)
-            print "Job", id, "status: ", job.status
+            print("Job", id, "status: ", job.status)
             for sid in job.stageIds:
                 info = status.getStageInfo(sid)
                 if info:
-                    print "Stage %d: %d tasks total (%d active, %d complete)" % \
-                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks)
+                    print("Stage %d: %d tasks total (%d active, %d complete)" %
+                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks))
         time.sleep(1)
 
-    print "Job results are:", result.get()
+    print("Job results are:", result.get())
     sc.stop()
 
 if __name__ == "__main__":

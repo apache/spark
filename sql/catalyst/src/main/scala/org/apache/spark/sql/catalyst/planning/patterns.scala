@@ -91,16 +91,18 @@ object PhysicalOperation extends PredicateHelper {
         (None, Nil, other, Map.empty)
     }
 
-  def collectAliases(fields: Seq[Expression]) = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child
+  def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
+    case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
-  def substitute(aliases: Map[Attribute, Expression])(expr: Expression) = expr.transform {
-    case a @ Alias(ref: AttributeReference, name) =>
-      aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
+  def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
+    expr.transform {
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
 
-    case a: AttributeReference =>
-      aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+      case a: AttributeReference =>
+        aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+    }
   }
 }
 
@@ -157,9 +159,10 @@ object PartialAggregation {
             // Should trim aliases around `GetField`s. These aliases are introduced while
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
+            val trimmed = e.transform { case Alias(g: ExtractValue, _) => g }
             namedGroupingExpressions
-              .get(e.transform { case Alias(g: GetField, _) => g })
-              .map(_.toAttribute)
+              .find { case (k, v) => k semanticEquals trimmed }
+              .map(_._2.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 

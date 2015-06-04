@@ -74,7 +74,7 @@ class ShuffleDependency[K, V, C](
     val mapSideCombine: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
-  override def rdd = _rdd.asInstanceOf[RDD[Product2[K, V]]]
+  override def rdd: RDD[Product2[K, V]] = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
   val shuffleId: Int = _rdd.context.newShuffleId()
 
@@ -91,7 +91,7 @@ class ShuffleDependency[K, V, C](
  */
 @DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
-  override def getParents(partitionId: Int) = List(partitionId)
+  override def getParents(partitionId: Int): List[Int] = List(partitionId)
 }
 
 
@@ -107,7 +107,7 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {
 
-  override def getParents(partitionId: Int) = {
+  override def getParents(partitionId: Int): List[Int] = {
     if (partitionId >= outStart && partitionId < outStart + length) {
       List(partitionId - outStart + inStart)
     } else {

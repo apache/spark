@@ -36,10 +36,10 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -77,6 +77,7 @@ object SparkSubmit {
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
+  private val SPARKR_SHELL = "sparkr-shell"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -113,19 +114,21 @@ object SparkSubmit {
     }
   }
 
-  /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
+  /**
+   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
+   */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .killSubmission(args.master, args.submissionToKill)
+    new RestSubmissionClient(args.master)
+      .killSubmission(args.submissionToKill)
   }
 
   /**
    * Request the status of an existing submission using the REST protocol.
-   * Standalone cluster mode only.
+   * Standalone and Mesos cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
-      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
+    new RestSubmissionClient(args.master)
+      .requestSubmissionStatus(args.submissionToRequestStatusFor)
   }
 
   /**
@@ -251,6 +254,7 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+    val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
@@ -284,12 +288,23 @@ object SparkSubmit {
       }
     }
 
+    // Require all R files to be local
+    if (args.isR && !isYarnCluster) {
+      if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
+        printErrorAndExit(s"Only local R files are supported: $args.primaryResource")
+      }
+    }
+
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+      case (MESOS, CLUSTER) if args.isPython =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "applications on standalone clusters.")
+      case (STANDALONE, CLUSTER) if args.isR =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
@@ -317,11 +332,73 @@ object SparkSubmit {
       }
     }
 
-    // In yarn-cluster mode for a python app, add primary resource and pyFiles to files
+    // In yarn mode for a python app, add pyspark archives to files
     // that can be distributed with the job
-    if (args.isPython && isYarnCluster) {
-      args.files = mergeFileLists(args.files, args.primaryResource)
-      args.files = mergeFileLists(args.files, args.pyFiles)
+    if (args.isPython && clusterManager == YARN) {
+      var pyArchives: String = null
+      val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
+      if (pyArchivesEnvOpt.isDefined) {
+        pyArchives = pyArchivesEnvOpt.get
+      } else {
+        if (!sys.env.contains("SPARK_HOME")) {
+          printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
+        }
+        val pythonPath = new ArrayBuffer[String]
+        for (sparkHome <- sys.env.get("SPARK_HOME")) {
+          val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
+          val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+          if (!pyArchivesFile.exists()) {
+            printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
+          }
+          val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+          if (!py4jFile.exists()) {
+            printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
+              "in yarn mode.")
+          }
+          pythonPath += pyArchivesFile.getAbsolutePath()
+          pythonPath += py4jFile.getAbsolutePath()
+        }
+        pyArchives = pythonPath.mkString(",")
+      }
+
+      pyArchives = pyArchives.split(",").map { localPath =>
+        val localURI = Utils.resolveURI(localPath)
+        if (localURI.getScheme != "local") {
+          args.files = mergeFileLists(args.files, localURI.toString)
+          new Path(localPath).getName
+        } else {
+          localURI.getPath
+        }
+      }.mkString(File.pathSeparator)
+      sysProps("spark.submit.pyArchives") = pyArchives
+    }
+
+    // If we're running a R app, set the main class to our specific R runner
+    if (args.isR && deployMode == CLIENT) {
+      if (args.primaryResource == SPARKR_SHELL) {
+        args.mainClass = "org.apache.spark.api.r.RBackend"
+      } else {
+        // If a R file is provided, add it to the child arguments and list of files to deploy.
+        // Usage: RRunner <main R file> [app arguments]
+        args.mainClass = "org.apache.spark.deploy.RRunner"
+        args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
+        args.files = mergeFileLists(args.files, args.primaryResource)
+      }
+    }
+
+    if (isYarnCluster) {
+      // In yarn-cluster mode for a python app, add primary resource and pyFiles to files
+      // that can be distributed with the job
+      if (args.isPython) {
+        args.files = mergeFileLists(args.files, args.primaryResource)
+        args.files = mergeFileLists(args.files, args.pyFiles)
+      }
+
+      // In yarn-cluster mode for a R app, add primary resource to files
+      // that can be distributed with the job
+      if (args.isR) {
+        args.files = mergeFileLists(args.files, args.primaryResource)
+      }
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -345,21 +422,14 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Standalone cluster only
-      // Do not set CL arguments here because there are multiple possibilities for the main class
-      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
-      OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
-        sysProp = "spark.driver.supervise"),
-
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
       OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = "spark.executor.cores"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, CLIENT, sysProp = "spark.yarn.keytab"),
 
       // Yarn cluster only
       OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
@@ -372,14 +442,26 @@ object SparkSubmit {
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
       OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
+      OptionAssigner(args.principal, YARN, CLUSTER, clOption = "--principal"),
+      OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
 
       // Other options
+      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+        sysProp = "spark.files"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.cores"),
+      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.driver.supervise"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
     )
 
     // In client mode, launch the application main class directly
@@ -405,8 +487,8 @@ object SparkSubmit {
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
-    // For python files, the primary resource is already distributed as a regular file
-    if (!isYarnCluster && !args.isPython) {
+    // For python and R files, the primary resource is already distributed as a regular file
+    if (!isYarnCluster && !args.isPython && !args.isR) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
@@ -418,7 +500,7 @@ object SparkSubmit {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
+        childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
@@ -447,6 +529,10 @@ object SparkSubmit {
           childArgs += ("--py-files", pyFilesNames)
         }
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
+      } else if (args.isR) {
+        val mainFile = new Path(args.primaryResource).getName
+        childArgs += ("--primary-r-file", mainFile)
+        childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
         if (args.primaryResource != SPARK_INTERNAL) {
           childArgs += ("--jar", args.primaryResource)
@@ -455,6 +541,15 @@ object SparkSubmit {
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
+      }
+    }
+
+    if (isMesosCluster) {
+      assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
+      childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
+      childArgs += (args.primaryResource, args.mainClass)
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
       }
     }
 
@@ -591,15 +686,15 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource represents a user jar.
    */
-  private def isUserJar(primaryResource: String): Boolean = {
-    !isShell(primaryResource) && !isPython(primaryResource) && !isInternal(primaryResource)
+  private[deploy] def isUserJar(res: String): Boolean = {
+    !isShell(res) && !isPython(res) && !isInternal(res) && !isR(res)
   }
 
   /**
    * Return whether the given primary resource represents a shell.
    */
-  private[deploy] def isShell(primaryResource: String): Boolean = {
-    primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  private[deploy] def isShell(res: String): Boolean = {
+    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
   }
 
   /**
@@ -619,12 +714,19 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource requires running python.
    */
-  private[deploy] def isPython(primaryResource: String): Boolean = {
-    primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
+  private[deploy] def isPython(res: String): Boolean = {
+    res != null && res.endsWith(".py") || res == PYSPARK_SHELL
   }
 
-  private[deploy] def isInternal(primaryResource: String): Boolean = {
-    primaryResource == SPARK_INTERNAL
+  /**
+   * Return whether the given primary resource requires running R.
+   */
+  private[deploy] def isR(res: String): Boolean = {
+    res != null && res.endsWith(".R") || res == SPARKR_SHELL
+  }
+
+  private[deploy] def isInternal(res: String): Boolean = {
+    res == SPARK_INTERNAL
   }
 
   /**
@@ -640,7 +742,7 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[deploy] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -651,7 +753,9 @@ private[deploy] object SparkSubmitUtils {
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
    */
-  private[deploy] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
+  private[deploy] case class MavenCoordinate(groupId: String, artifactId: String, version: String) {
+    override def toString: String = s"$groupId:$artifactId:$version"
+  }
 
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
@@ -674,15 +778,36 @@ private[deploy] object SparkSubmitUtils {
     }
   }
 
+  /** Path of the local Maven cache. */
+  private[spark] def m2Path: File = new File(System.getProperty("user.home"),
+    ".m2" + File.separator + "repository" + File.separator)
+
   /**
    * Extracts maven coordinates from a comma-delimited string
    * @param remoteRepos Comma-delimited string of remote repositories
+   * @param ivySettings The Ivy settings for this session
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  def createRepoResolvers(remoteRepos: Option[String]): ChainResolver = {
+  def createRepoResolvers(remoteRepos: Option[String], ivySettings: IvySettings): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("list")
+
+    val localM2 = new IBiblioResolver
+    localM2.setM2compatible(true)
+    localM2.setRoot(m2Path.toURI.toString)
+    localM2.setUsepoms(true)
+    localM2.setName("local-m2-cache")
+    cr.add(localM2)
+
+    val localIvy = new IBiblioResolver
+    localIvy.setRoot(new File(ivySettings.getDefaultIvyUserDir,
+      "local" + File.separator).toURI.toString)
+    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
+      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.setPattern(ivyPattern)
+    localIvy.setName("local-ivy-cache")
+    cr.add(localIvy)
 
     // the biblio resolver resolves POM declared dependencies
     val br: IBiblioResolver = new IBiblioResolver
@@ -716,8 +841,7 @@ private[deploy] object SparkSubmitUtils {
 
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
-   * (will append to jars in SparkSubmit). The name of the jar is given
-   * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
+   * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -726,10 +850,9 @@ private[deploy] object SparkSubmitUtils {
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
-      val artifactString = artifactInfo.toString
-      val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
       cacheDirectory.getAbsolutePath + File.separator +
-        jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
     }.mkString(",")
   }
 
@@ -746,7 +869,7 @@ private[deploy] object SparkSubmitUtils {
       md.addDependency(dd)
     }
   }
-  
+
   /** Add exclusion rules for dependencies already included in the spark-assembly */
   def addExclusionRules(
       ivySettings: IvySettings,
@@ -777,7 +900,7 @@ private[deploy] object SparkSubmitUtils {
   }
 
   /** A nice function to use in tests as well. Values are dummy strings. */
-  def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
+  def getModuleDescriptor: DefaultModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
 
   /**
@@ -797,67 +920,72 @@ private[deploy] object SparkSubmitUtils {
       ""
     } else {
       val sysOut = System.out
-      // To prevent ivy from logging to system out
-      System.setOut(printStream)
-      val artifacts = extractMavenCoordinates(coordinates)
-      // Default configuration name for ivy
-      val ivyConfName = "default"
-      // set ivy settings for location of cache
-      val ivySettings: IvySettings = new IvySettings
-      // Directories for caching downloads through ivy and storing the jars when maven coordinates
-      // are supplied to spark-submit
-      val alternateIvyCache = ivyPath.getOrElse("")
-      val packagesDirectory: File =
-        if (alternateIvyCache.trim.isEmpty) {
-          new File(ivySettings.getDefaultIvyUserDir, "jars")
+      try {
+        // To prevent ivy from logging to system out
+        System.setOut(printStream)
+        val artifacts = extractMavenCoordinates(coordinates)
+        // Default configuration name for ivy
+        val ivyConfName = "default"
+        // set ivy settings for location of cache
+        val ivySettings: IvySettings = new IvySettings
+        // Directories for caching downloads through ivy and storing the jars when maven coordinates
+        // are supplied to spark-submit
+        val alternateIvyCache = ivyPath.getOrElse("")
+        val packagesDirectory: File =
+          if (alternateIvyCache.trim.isEmpty) {
+            new File(ivySettings.getDefaultIvyUserDir, "jars")
+          } else {
+            ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
+            ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
+            new File(alternateIvyCache, "jars")
+          }
+        printStream.println(
+          s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
+        printStream.println(s"The jars for the packages stored in: $packagesDirectory")
+        // create a pattern matcher
+        ivySettings.addMatcher(new GlobPatternMatcher)
+        // create the dependency resolvers
+        val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
+        ivySettings.addResolver(repoResolver)
+        ivySettings.setDefaultResolver(repoResolver.getName)
+
+        val ivy = Ivy.newInstance(ivySettings)
+        // Set resolve options to download transitive dependencies as well
+        val resolveOptions = new ResolveOptions
+        resolveOptions.setTransitive(true)
+        val retrieveOptions = new RetrieveOptions
+        // Turn downloading and logging off for testing
+        if (isTest) {
+          resolveOptions.setDownload(false)
+          resolveOptions.setLog(LogOptions.LOG_QUIET)
+          retrieveOptions.setLog(LogOptions.LOG_QUIET)
         } else {
-          ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
-          new File(alternateIvyCache, "jars")
+          resolveOptions.setDownload(true)
         }
-      printStream.println(
-        s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
-      printStream.println(s"The jars for the packages stored in: $packagesDirectory")
-      // create a pattern matcher
-      ivySettings.addMatcher(new GlobPatternMatcher)
-      // create the dependency resolvers
-      val repoResolver = createRepoResolvers(remoteRepos)
-      ivySettings.addResolver(repoResolver)
-      ivySettings.setDefaultResolver(repoResolver.getName)
 
-      val ivy = Ivy.newInstance(ivySettings)
-      // Set resolve options to download transitive dependencies as well
-      val resolveOptions = new ResolveOptions
-      resolveOptions.setTransitive(true)
-      val retrieveOptions = new RetrieveOptions
-      // Turn downloading and logging off for testing
-      if (isTest) {
-        resolveOptions.setDownload(false)
-        resolveOptions.setLog(LogOptions.LOG_QUIET)
-        retrieveOptions.setLog(LogOptions.LOG_QUIET)
-      } else {
-        resolveOptions.setDownload(true)
+        // A Module descriptor must be specified. Entries are dummy strings
+        val md = getModuleDescriptor
+        md.setDefaultConf(ivyConfName)
+
+        // Add exclusion rules for Spark and Scala Library
+        addExclusionRules(ivySettings, ivyConfName, md)
+        // add all supplied maven artifacts as dependencies
+        addDependenciesToIvy(md, artifacts, ivyConfName)
+
+        // resolve dependencies
+        val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+        if (rr.hasError) {
+          throw new RuntimeException(rr.getAllProblemMessages.toString)
+        }
+        // retrieve all resolved dependencies
+        ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
+          packagesDirectory.getAbsolutePath + File.separator +
+            "[organization]_[artifact]-[revision].[ext]",
+          retrieveOptions.setConfs(Array(ivyConfName)))
+        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+      } finally {
+        System.setOut(sysOut)
       }
-
-      // A Module descriptor must be specified. Entries are dummy strings
-      val md = getModuleDescriptor
-      md.setDefaultConf(ivyConfName)
-
-      // Add exclusion rules for Spark and Scala Library
-      addExclusionRules(ivySettings, ivyConfName, md)
-      // add all supplied maven artifacts as dependencies
-      addDependenciesToIvy(md, artifacts, ivyConfName)
-
-      // resolve dependencies
-      val rr: ResolveReport = ivy.resolve(md, resolveOptions)
-      if (rr.hasError) {
-        throw new RuntimeException(rr.getAllProblemMessages.toString)
-      }
-      // retrieve all resolved dependencies
-      ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-        packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
-        retrieveOptions.setConfs(Array(ivyConfName)))
-      System.setOut(sysOut)
-      resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
     }
   }
 }

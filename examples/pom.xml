@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <version>1.5.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -89,6 +89,17 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.spark-project.protobuf</groupId>
+          <artifactId>protobuf-java</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -234,11 +245,12 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_${scala.binary.version}</artifactId>
-      <version>0.8.1</version>
+      <version>0.9.0</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -263,6 +275,22 @@
           <artifactId>compress-lzf</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>commons-cli</groupId>
+          <artifactId>commons-cli</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-codec</groupId>
+          <artifactId>commons-codec</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>io.netty</groupId>
           <artifactId>netty</artifactId>
         </exclusion>
@@ -271,8 +299,20 @@
           <artifactId>jline</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>net.jpountz.lz4</groupId>
+          <artifactId>lz4</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>org.apache.cassandra.deps</groupId>
           <artifactId>avro</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-math3</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -281,6 +321,17 @@
       <artifactId>scopt_${scala.binary.version}</artifactId>
       <version>3.2.0</version>
     </dependency>
+
+    <!--
+      The following dependencies are already present in the Spark assembly, so we want to force
+      them to be provided.
+    -->
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
 
   <build>
@@ -322,12 +373,6 @@
               </excludes>
             </filter>
           </filters>
-          <relocations combine.children="append">
-            <relocation>
-              <pattern>org.apache.commons.math3</pattern>
-              <shadedPattern>org.spark-project.commons.math3</shadedPattern>
-            </relocation>
-          </relocations>
           <transformers>
             <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
             <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
@@ -350,51 +395,7 @@
           <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
-        </dependency>
       </dependencies>
-    </profile>
-    <profile>
-      <!-- We add a source directory specific to Scala 2.10 since Kafka
-           only works with it -->
-      <id>scala-2.10</id>
-      <activation>
-        <property><name>!scala-2.11</name></property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-scala-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/main/scala</source>
-                    <source>scala-2.10/src/main/scala</source>
-                    <source>scala-2.10/src/main/java</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
 
     <!-- Profiles that disable inclusion of certain dependencies. -->

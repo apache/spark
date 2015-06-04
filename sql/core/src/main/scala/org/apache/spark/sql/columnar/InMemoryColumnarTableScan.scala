@@ -19,13 +19,15 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.Accumulator
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 import org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -53,11 +55,16 @@ private[sql] case class InMemoryRelation(
     child: SparkPlan,
     tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    private var _statistics: Statistics = null)
+    private var _statistics: Statistics = null,
+    private var _batchStats: Accumulable[ArrayBuffer[Row], Row] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  private val batchStats =
-    child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+  private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
+    if (_batchStats == null) {
+      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+    } else {
+      _batchStats
+    }
 
   val partitionStatistics = new PartitionStatistics(output)
 
@@ -161,7 +168,7 @@ private[sql] case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-      _cachedColumnBuffers, statisticsToBePropagated)
+      _cachedColumnBuffers, statisticsToBePropagated, batchStats)
   }
 
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -175,13 +182,20 @@ private[sql] case class InMemoryRelation(
       child,
       tableName)(
       _cachedColumnBuffers,
-      statisticsToBePropagated).asInstanceOf[this.type]
+      statisticsToBePropagated,
+      batchStats).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, statisticsToBePropagated)
+    Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
+
+  private[sql] def uncache(blocking: Boolean): Unit = {
+    Accumulators.remove(batchStats.id)
+    cachedColumnBuffers.unpersist(blocking)
+    _cachedColumnBuffers = null
+  }
 }
 
 private[sql] case class InMemoryColumnarTableScan(
@@ -222,7 +236,7 @@ private[sql] case class InMemoryColumnarTableScan(
     case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
     case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
 
-    case IsNull(a: Attribute)    => statsFor(a).nullCount > 0
+    case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
   }
 
@@ -244,15 +258,20 @@ private[sql] case class InMemoryColumnarTableScan(
     }
   }
 
+  lazy val enableAccumulators: Boolean =
+    sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
+
   // Accumulators used for testing purposes
-  val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
-  val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
+  lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
+  lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  override def execute(): RDD[Row] = {
-    readPartitions.setValue(0)
-    readBatches.setValue(0)
+  protected override def doExecute(): RDD[Row] = {
+    if (enableAccumulators) {
+      readPartitions.setValue(0)
+      readBatches.setValue(0)
+    }
 
     relation.cachedColumnBuffers.mapPartitions { cachedBatchIterator =>
       val partitionFilter = newPredicate(
@@ -295,14 +314,14 @@ private[sql] case class InMemoryColumnarTableScan(
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
-              nextRow
+              if (attributes.isEmpty) Row.empty else nextRow
             }
 
             override def hasNext: Boolean = columnAccessors(0).hasNext
           }
         }
 
-        if (rows.hasNext) {
+        if (rows.hasNext && enableAccumulators) {
           readPartitions += 1
         }
 
@@ -321,7 +340,9 @@ private[sql] case class InMemoryColumnarTableScan(
               logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {
-              readBatches += 1
+              if (enableAccumulators) {
+                readBatches += 1
+              }
               true
             }
           }

@@ -61,7 +61,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
     TestHive.sql("select KEY from tb where VALUE='just_for_test' limit 5").collect()
     TestHive.sql("drop table tb")
   }
-  
+
   test("Spark-4077: timestamp query for null value") {
     TestHive.sql("DROP TABLE IF EXISTS timestamp_query_null")
     TestHive.sql(
@@ -71,12 +71,12 @@ class HiveTableScanSuite extends HiveComparisonTest {
         FIELDS TERMINATED BY ','
         LINES TERMINATED BY '\n'
       """.stripMargin)
-    val location = 
+    val location =
       Utils.getSparkClassLoader.getResource("data/files/issue-4077-data.txt").getFile()
-     
+
     TestHive.sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE timestamp_query_null")
-    assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect() 
-      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
+    assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect()
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
   }
 

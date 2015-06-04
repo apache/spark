@@ -22,7 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.AtomicType
 
 /**
  * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.NativeType
  *       header         body
  * }}}
  */
-private[sql] trait CompressibleColumnBuilder[T <: NativeType]
+private[sql] trait CompressibleColumnBuilder[T <: AtomicType]
   extends ColumnBuilder with Logging {
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>

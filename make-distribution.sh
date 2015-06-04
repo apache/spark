@@ -26,13 +26,14 @@
 
 set -o pipefail
 set -e
+set -x
 
 # Figure out where the Spark framework is installed
 SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
-TACHYON_VERSION="0.5.0"
+TACHYON_VERSION="0.6.4"
 TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
 TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
 
@@ -57,7 +58,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-1, hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -126,7 +127,7 @@ if [ ! $(command -v "$MVN") ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null | grep -v "INFO" | tail -n 1)
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
@@ -199,7 +200,6 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
-cp "$SPARK_HOME"/launcher/target/spark-launcher_$SCALA_VERSION-$VERSION.jar "$DISTDIR/lib/"
 # This will fail if the -Pyarn profile is not provided
 # In this case, silence the error and ignore the return code of this command
 cp "$SPARK_HOME"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
@@ -231,6 +231,11 @@ cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
+# Copy SparkR if it exists
+if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
+  mkdir -p "$DISTDIR"/R/lib
+  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
+fi
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then

@@ -19,26 +19,25 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-import parquet.format.converter.ParquetMetadataConverter
-import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
-import parquet.hadoop.util.ContextUtil
-import parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
-import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
-import parquet.schema.Type.Repetition
-import parquet.schema.{ConversionPatterns, DecimalMetadata, GroupType => ParquetGroupType, MessageType, OriginalType => ParquetOriginalType, PrimitiveType => ParquetPrimitiveType, Type => ParquetType, Types => ParquetTypes}
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
+import org.apache.parquet.schema.Type.Repetition
+import org.apache.parquet.schema.{ConversionPatterns, DecimalMetadata, GroupType => ParquetGroupType, MessageType, OriginalType => ParquetOriginalType, PrimitiveType => ParquetPrimitiveType, Type => ParquetType, Types => ParquetTypes}
 
+import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SparkException}
 
-// Implicits
-import scala.collection.JavaConversions._
 
 /** A class representing Parquet info fields we care about, for passing back to Parquet */
 private[parquet] case class ParquetTypeInfo(
@@ -48,8 +47,10 @@ private[parquet] case class ParquetTypeInfo(
   length: Option[Int] = None)
 
 private[parquet] object ParquetTypesConverter extends Logging {
-  def isPrimitiveType(ctype: DataType): Boolean =
-    classOf[PrimitiveType] isAssignableFrom ctype.getClass
+  def isPrimitiveType(ctype: DataType): Boolean = ctype match {
+    case _: NumericType | BooleanType | StringType | BinaryType => true
+    case _: DataType => false
+  }
 
   def toPrimitiveDataType(
       parquetType: ParquetPrimitiveType,
@@ -64,18 +65,19 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
       case ParquetPrimitiveTypeName.FLOAT => FloatType
+      case ParquetPrimitiveTypeName.INT32
+        if originalType == ParquetOriginalType.DATE => DateType
       case ParquetPrimitiveTypeName.INT32 => IntegerType
       case ParquetPrimitiveTypeName.INT64 => LongType
       case ParquetPrimitiveTypeName.INT96 if int96AsTimestamp => TimestampType
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
-        sys.error("Potential loss of precision: cannot convert INT96")
+        throw new AnalysisException("Potential loss of precision: cannot convert INT96")
       case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
         if (originalType == ParquetOriginalType.DECIMAL && decimalInfo.getPrecision <= 18) =>
           // TODO: for now, our reader only supports decimals that fit in a Long
           DecimalType(decimalInfo.getPrecision, decimalInfo.getScale)
-      case _ => sys.error(
-        s"Unsupported parquet datatype $parquetType")
+      case _ => throw new AnalysisException(s"Unsupported parquet datatype $parquetType")
     }
   }
 
@@ -222,6 +224,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
     // There is no type for Byte or Short so we promote them to INT32.
     case ShortType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
     case ByteType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case DateType => Some(ParquetTypeInfo(
+      ParquetPrimitiveTypeName.INT32, Some(ParquetOriginalType.DATE)))
     case LongType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT64))
     case TimestampType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT96))
     case DecimalType.Fixed(precision, scale) if precision <= 18 =>
@@ -365,7 +369,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             parquetKeyType,
             parquetValueType)
         }
-        case _ => sys.error(s"Unsupported datatype $ctype")
+        case _ => throw new AnalysisException(s"Unsupported datatype $ctype")
       }
     }
   }
@@ -386,6 +390,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   def convertFromAttributes(attributes: Seq[Attribute],
                             toThriftSchemaNames: Boolean = false): MessageType = {
+    checkSpecialCharacters(attributes)
     val fields = attributes.map(
       attribute =>
         fromDataType(attribute.dataType, attribute.name, attribute.nullable,
@@ -396,11 +401,24 @@ private[parquet] object ParquetTypesConverter extends Logging {
   def convertFromString(string: String): Seq[Attribute] = {
     Try(DataType.fromJson(string)).getOrElse(DataType.fromCaseClassString(string)) match {
       case s: StructType => s.toAttributes
-      case other => sys.error(s"Can convert $string to row")
+      case other => throw new AnalysisException(s"Can convert $string to row")
+    }
+  }
+
+  private def checkSpecialCharacters(schema: Seq[Attribute]) = {
+    // ,;{}()\n\t= and space character are special characters in Parquet schema
+    schema.map(_.name).foreach { name =>
+      if (name.matches(".*[ ,;{}()\n\t=].*")) {
+        throw new AnalysisException(
+          s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" "))
+      }
     }
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
+    checkSpecialCharacters(schema)
     StructType.fromAttributes(schema).json
   }
 
@@ -469,7 +487,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     val children =
       fs
         .globStatus(path)
-        .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+        .flatMap { status => if (status.isDir) fs.listStatus(status.getPath) else List(status) }
         .filterNot { status =>
           val name = status.getPath.getName
           (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE

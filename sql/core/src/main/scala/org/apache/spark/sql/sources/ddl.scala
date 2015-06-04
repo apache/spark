@@ -17,40 +17,36 @@
 
 package org.apache.spark.sql.sources
 
-import scala.language.existentials
-import scala.language.implicitConversions
+import scala.language.{existentials, implicitConversions}
+import scala.util.matching.Regex
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
 /**
  * A parser for foreign DDL commands.
  */
 private[sql] class DDLParser(
-    parseQuery: String => LogicalPlan) extends AbstractSparkSQLParser with Logging {
+    parseQuery: String => LogicalPlan)
+  extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
-  def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
+  def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
     try {
-      Some(apply(input))
+      parse(input)
     } catch {
       case ddlException: DDLException => throw ddlException
-      case _ if !exceptionOnError => None
+      case _ if !exceptionOnError => parseQuery(input)
       case x: Throwable => throw x
-    }
-  }
-
-  def parseType(input: String): DataType = {
-    lexical.initialize(reservedWords)
-    phrase(dataType)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => throw new DDLException(s"Unsupported dataType: $x")
     }
   }
 
@@ -69,24 +65,6 @@ private[sql] class DDLParser(
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
   protected val REFRESH = Keyword("REFRESH")
-
-  // Data types.
-  protected val STRING = Keyword("STRING")
-  protected val BINARY = Keyword("BINARY")
-  protected val BOOLEAN = Keyword("BOOLEAN")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val INT = Keyword("INT")
-  protected val BIGINT = Keyword("BIGINT")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val DECIMAL = Keyword("DECIMAL")
-  protected val DATE = Keyword("DATE")
-  protected val TIMESTAMP = Keyword("TIMESTAMP")
-  protected val VARCHAR = Keyword("VARCHAR")
-  protected val ARRAY = Keyword("ARRAY")
-  protected val MAP = Keyword("MAP")
-  protected val STRUCT = Keyword("STRUCT")
 
   protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable | refreshTable
 
@@ -135,6 +113,7 @@ private[sql] class DDLParser(
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
+            Array.empty[String],
             mode,
             options,
             queryPlan)
@@ -151,7 +130,7 @@ private[sql] class DDLParser(
         }
     }
 
-  protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+  protected lazy val tableCols: Parser[Seq[StructField]] = "(" ~> repsep(column, ",") <~ ")"
 
   /*
    * describe [extended] table avroTable
@@ -159,7 +138,7 @@ private[sql] class DDLParser(
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
-      case e ~ db ~ tbl  =>
+      case e ~ db ~ tbl =>
         val tblIdentifier = db match {
           case Some(dbName) =>
             Seq(dbName, tbl)
@@ -180,7 +159,19 @@ private[sql] class DDLParser(
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
-  protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
+  override implicit def regexToParser(regex: Regex): Parser[String] = acceptMatch(
+    s"identifier matching regex $regex", {
+      case lexical.Identifier(str) if regex.unapplySeq(str).isDefined => str
+      case lexical.Keyword(str) if regex.unapplySeq(str).isDefined => str
+    }
+  )
+
+  protected lazy val optionName: Parser[String] = "[_a-zA-Z][a-zA-Z0-9]*".r ^^ {
+    case name => name
+  }
+
+  protected lazy val pair: Parser[(String, String)] =
+    optionName ~ stringLit ^^ { case k ~ v => (k, v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
@@ -189,75 +180,28 @@ private[sql] class DDLParser(
           new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
         case None => Metadata.empty
       }
+
       StructField(columnName, typ, nullable = true, meta)
     }
-
-  protected lazy val primitiveType: Parser[DataType] =
-    STRING ^^^ StringType |
-    BINARY ^^^ BinaryType |
-    BOOLEAN ^^^ BooleanType |
-    TINYINT ^^^ ByteType |
-    SMALLINT ^^^ ShortType |
-    INT ^^^ IntegerType |
-    BIGINT ^^^ LongType |
-    FLOAT ^^^ FloatType |
-    DOUBLE ^^^ DoubleType |
-    fixedDecimalType |                   // decimal with precision/scale
-    DECIMAL ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
-    DATE ^^^ DateType |
-    TIMESTAMP ^^^ TimestampType |
-    VARCHAR ~ "(" ~ numericLit ~ ")" ^^^ StringType
-
-  protected lazy val fixedDecimalType: Parser[DataType] =
-    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
-      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
-    }
-
-  protected lazy val arrayType: Parser[DataType] =
-    ARRAY ~> "<" ~> dataType <~ ">" ^^ {
-      case tpe => ArrayType(tpe)
-    }
-
-  protected lazy val mapType: Parser[DataType] =
-    MAP ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
-    }
-
-  protected lazy val structField: Parser[StructField] =
-    ident ~ ":" ~ dataType ^^ {
-      case fieldName ~ _ ~ tpe => StructField(fieldName, tpe, nullable = true)
-    }
-
-  protected lazy val structType: Parser[DataType] =
-    (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-    case fields => StructType(fields)
-    }) |
-    (STRUCT ~> "<>" ^^ {
-      case fields => StructType(Nil)
-    })
-
-  private[sql] lazy val dataType: Parser[DataType] =
-    arrayType |
-    mapType |
-    structType |
-    primitiveType
 }
 
 private[sql] object ResolvedDataSource {
 
   private val builtinSources = Map(
-    "jdbc" -> classOf[org.apache.spark.sql.jdbc.DefaultSource],
-    "json" -> classOf[org.apache.spark.sql.json.DefaultSource],
-    "parquet" -> classOf[org.apache.spark.sql.parquet.DefaultSource]
+    "jdbc" -> "org.apache.spark.sql.jdbc.DefaultSource",
+    "json" -> "org.apache.spark.sql.json.DefaultSource",
+    "parquet" -> "org.apache.spark.sql.parquet.DefaultSource",
+    "orc" -> "org.apache.spark.sql.hive.orc.DefaultSource"
   )
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
+    val loader = Utils.getContextOrSparkClassLoader
+
     if (builtinSources.contains(provider)) {
-      return builtinSources(provider)
+      return loader.loadClass(builtinSources(provider))
     }
 
-    val loader = Utils.getContextOrSparkClassLoader
     try {
       loader.loadClass(provider)
     } catch {
@@ -266,7 +210,11 @@ private[sql] object ResolvedDataSource {
           loader.loadClass(provider + ".DefaultSource")
         } catch {
           case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
+            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              sys.error("The ORC data source must be used with Hive support enabled.")
+            } else {
+              sys.error(s"Failed to load class for data source: $provider")
+            }
         }
     }
   }
@@ -275,31 +223,79 @@ private[sql] object ResolvedDataSource {
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
+    def className: String = clazz.getCanonicalName
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+        case dataSource: HadoopFsRelationProvider =>
+          val maybePartitionsSchema = if (partitionColumns.isEmpty) {
+            None
+          } else {
+            Some(partitionColumnsSchema(schema, partitionColumns))
+          }
+
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          val paths = {
+            val patternPath = new Path(caseInsensitiveOptions("path"))
+            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+          }
+
+          val dataSchema =
+            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
+
+          dataSource.createRelation(
+            sqlContext,
+            paths,
+            Some(dataSchema),
+            maybePartitionsSchema,
+            caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-          sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
+          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+        case _ =>
+          throw new AnalysisException(s"$className is not a RelationProvider.")
       }
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
           dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+        case dataSource: HadoopFsRelationProvider =>
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          val paths = {
+            val patternPath = new Path(caseInsensitiveOptions("path"))
+            SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
+          }
+          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-          sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
+          throw new AnalysisException(
+            s"A schema needs to be specified when using $className.")
+        case _ =>
+          throw new AnalysisException(
+            s"$className is neither a RelationProvider nor a FSBasedRelationProvider.")
       }
     }
     new ResolvedDataSource(clazz, relation)
+  }
+
+  private def partitionColumnsSchema(
+      schema: StructType,
+      partitionColumns: Array[String]): StructType = {
+    StructType(partitionColumns.map { col =>
+      schema.find(_.name == col).getOrElse {
+        throw new RuntimeException(s"Partition column $col not found in schema $schema")
+      }
+    }).asNullable
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given [[DataFrame]]. */
   def apply(
       sqlContext: SQLContext,
       provider: String,
+      partitionColumns: Array[String],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -307,6 +303,34 @@ private[sql] object ResolvedDataSource {
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
+      case dataSource: HadoopFsRelationProvider =>
+        // Don't glob path for the write path.  The contracts here are:
+        //  1. Only one output path can be specified on the write path;
+        //  2. Output path must be a legal HDFS style file system path;
+        //  3. It's OK that the output path doesn't exist yet;
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val outputPath = {
+          val path = new Path(caseInsensitiveOptions("path"))
+          val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        }
+        val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
+        val r = dataSource.createRelation(
+          sqlContext,
+          Array(outputPath.toString),
+          Some(dataSchema.asNullable),
+          Some(partitionColumnsSchema(data.schema, partitionColumns)),
+          caseInsensitiveOptions)
+
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+        // will be adjusted within InsertIntoHadoopFsRelation.
+        sqlContext.executePlan(
+          InsertIntoHadoopFsRelation(
+            r,
+            data.logicalPlan,
+            mode)).toRdd
+        r
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
@@ -324,8 +348,10 @@ private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRel
  */
 private[sql] case class DescribeCommand(
     table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override val output = Seq(
+    isExtended: Boolean) extends LogicalPlan with Command {
+
+  override def children: Seq[LogicalPlan] = Seq.empty
+  override val output: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
@@ -347,7 +373,11 @@ private[sql] case class CreateTableUsing(
     temporary: Boolean,
     options: Map[String, String],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends Command
+    managedIfNoPath: Boolean) extends LogicalPlan with Command {
+
+  override def output: Seq[Attribute] = Seq.empty
+  override def children: Seq[LogicalPlan] = Seq.empty
+}
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
@@ -359,6 +389,7 @@ private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    partitionColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
@@ -374,7 +405,8 @@ private[sql] case class CreateTempTableUsing(
     options: Map[String, String]) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+    val resolved = ResolvedDataSource(
+      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
@@ -384,13 +416,14 @@ private[sql] case class CreateTempTableUsing(
 private[sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
+    partitionColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
     sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
@@ -402,7 +435,24 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Refresh the given table's metadata first.
     sqlContext.catalog.refreshTable(databaseName, tableName)
+
+    // If this table is cached as a InMemoryColumnarRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sqlContext.catalog.lookupRelation(Seq(databaseName, tableName))
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = DataFrame(sqlContext, logicalPlan)
+      // Uncache the logicalPlan.
+      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      // Cache it again.
+      sqlContext.cacheManager.cacheQuery(df, Some(tableName))
+    }
+
     Seq.empty[Row]
   }
 }

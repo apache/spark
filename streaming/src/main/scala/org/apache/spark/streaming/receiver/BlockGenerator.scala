@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{SystemClock, Utils}
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -79,9 +79,9 @@ private[streaming] class BlockGenerator(
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
   private val clock = new SystemClock()
-  private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
+  private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
   private val blockIntervalTimer =
-    new RecurringTimer(clock, blockInterval, updateCurrentBuffer, "BlockGenerator")
+    new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
@@ -120,10 +120,24 @@ private[streaming] class BlockGenerator(
    * `BlockGeneratorListener.onAddData` callback will be called. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def addDataWithCallback(data: Any, metadata: Any) = synchronized {
+  def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
     waitToPush()
     currentBuffer += data
     listener.onAddData(data, metadata)
+  }
+
+  /**
+   * Push multiple data items into the buffer. After buffering the data, the
+   * `BlockGeneratorListener.onAddData` callback will be called. All received data items
+   * will be periodically pushed into BlockManager. Note that all the data items is guaranteed
+   * to be present in a single block.
+   */
+  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
+    dataIterator.foreach { data =>
+      waitToPush()
+      currentBuffer += data
+    }
+    listener.onAddData(dataIterator, metadata)
   }
 
   /** Change the buffer to which single records are added to. */
@@ -132,7 +146,7 @@ private[streaming] class BlockGenerator(
       val newBlockBuffer = currentBuffer
       currentBuffer = new ArrayBuffer[Any]
       if (newBlockBuffer.size > 0) {
-        val blockId = StreamBlockId(receiverId, time - blockInterval)
+        val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
         val newBlock = new Block(blockId, newBlockBuffer)
         listener.onGenerateBlock(blockId)
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
@@ -150,7 +164,7 @@ private[streaming] class BlockGenerator(
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
     try {
-      while(!stopped) {
+      while (!stopped) {
         Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
@@ -177,7 +191,7 @@ private[streaming] class BlockGenerator(
     logError(message, t)
     listener.onError(message, t)
   }
-  
+
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
