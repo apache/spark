@@ -19,6 +19,8 @@ package org.apache.spark.streaming.ui
 
 import java.util.Properties
 
+import org.apache.spark.storage.{StorageLevel, BlockStatus, StreamBlockId}
+import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, ReceivedBlockStoreResult}
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.SparkListenerJobStart
@@ -134,6 +136,30 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.receiverInfo(1) should be (Some(receiverInfoError))
     listener.receiverInfo(2) should be (Some(receiverInfoStopped))
     listener.receiverInfo(3) should be (None)
+
+    // onBlockAdded
+    val block = BlockManagerBasedStoreResult(
+      StreamBlockId(streamId = 0, uniqueId = 0),
+      BlockStatus(StorageLevel.MEMORY_AND_DISK, 100, 100, 0)
+    )
+    val blockInfo = ReceivedBlockInfo(streamId = 0, 100, None, block)
+    listener.onBlockAdded(StreamingListenerBlockAdded(blockInfo))
+    val blocks = listener.getAllBlocks
+    blocks should have size (1)
+    val expectedUIData =
+      StreamBlockUIData(
+        StreamBlockId(streamId = 0, uniqueId = 0),
+        StorageLevel.MEMORY_AND_DISK,
+        100,
+        100,
+        0
+      )
+    blocks(0) should be (expectedUIData)
+
+    // onBlockRemoved
+    listener.onBlockRemoved(
+      StreamingListenerBlockRemoved(Seq(StreamBlockId(streamId = 0, uniqueId = 0))))
+    listener.getAllBlocks should be (Seq.empty)
   }
 
   test("Remove the old completed batches when exceeding the limit") {
@@ -210,7 +236,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
 
     val limit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
 
-    for (_ <- 0 until 2 * limit) {
+    for (i <- 0 until 2 * limit) {
       val streamIdToNumRecords = Map(0 -> 300L, 1 -> 300L)
 
       // onBatchSubmitted
@@ -237,6 +263,18 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
       // onBatchCompleted
       val batchInfoCompleted = BatchInfo(Time(1000), streamIdToNumRecords, 1000, Some(2000), None)
       listener.onBatchCompleted(StreamingListenerBatchCompleted(batchInfoCompleted))
+
+      // onBlockAdded
+      val block = BlockManagerBasedStoreResult(
+        StreamBlockId(streamId = i, uniqueId = i),
+        BlockStatus(StorageLevel.MEMORY_AND_DISK, 100, 100, 0)
+      )
+      val blockInfo = ReceivedBlockInfo(streamId = i, 100, None, block)
+      listener.onBlockAdded(StreamingListenerBlockAdded(blockInfo))
+
+      // onBlockRemoved
+      listener.onBlockRemoved(
+        StreamingListenerBlockRemoved(Seq(StreamBlockId(streamId = i, uniqueId = i))))
     }
 
     listener.waitingBatches.size should be (0)
@@ -245,6 +283,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.batchTimeToOutputOpIdSparkJobIdPair.size() should be <=
       (listener.waitingBatches.size + listener.runningBatches.size +
         listener.retainedCompletedBatches.size + 10)
+    listener.getAllBlocks should be (Seq.empty)
   }
 
 }

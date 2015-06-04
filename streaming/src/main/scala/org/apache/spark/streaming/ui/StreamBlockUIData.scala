@@ -17,18 +17,11 @@
 
 package org.apache.spark.streaming.ui
 
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.storage.{StreamBlockId, StorageLevel}
 
-/**
- * Spark Web UI tab that shows statistics of a streaming job.
- * This assumes the given SparkContext has enabled its SparkUI.
- */
-private[spark] class StreamingTab(parent: SparkUI, val ssc: StreamingContext)
-  extends SparkUITab(parent, "streaming") {
-
-  val listener = ssc.progressListener
-
-  attachPage(new StreamingPage(this))
-  attachPage(new BatchPage(this))
-}
+case class StreamBlockUIData(
+    blockId: StreamBlockId,
+    storageLevel: StorageLevel,
+    memSize: Long,
+    diskSize: Long,
+    externalBlockStoreSize: Long)

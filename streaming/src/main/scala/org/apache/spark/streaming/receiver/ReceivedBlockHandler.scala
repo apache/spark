@@ -33,6 +33,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 /** Trait that represents the metadata related to storage of blocks */
 private[streaming] trait ReceivedBlockStoreResult {
   def blockId: StreamBlockId  // Any implementation of this trait will store a block id
+  def blockStatus: BlockStatus
 }
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
@@ -51,8 +52,8 @@ private[streaming] trait ReceivedBlockHandler {
  * that stores the metadata related to storage of blocks using
  * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
  */
-private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId)
-  extends ReceivedBlockStoreResult
+private[streaming] case class BlockManagerBasedStoreResult(
+    blockId: StreamBlockId, blockStatus: BlockStatus) extends ReceivedBlockStoreResult
 
 
 /**
@@ -75,11 +76,11 @@ private[streaming] class BlockManagerBasedBlockHandler(
         throw new SparkException(
           s"Could not store $blockId to block manager, unexpected block type ${o.getClass.getName}")
     }
-    if (!putResult.map { _._1 }.contains(blockId)) {
+    val blockStatus = putResult.filter(_._1 == blockId).map(_._2).headOption.getOrElse {
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
-    BlockManagerBasedStoreResult(blockId)
+    BlockManagerBasedStoreResult(blockId, blockStatus)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -96,6 +97,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
+    blockStatus: BlockStatus,
     walRecordHandle: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
@@ -167,10 +169,11 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     val storeInBlockManagerFuture = Future {
       val putResult =
         blockManager.putBytes(blockId, serializedBlock, effectiveStorageLevel, tellMaster = true)
-      if (!putResult.map { _._1 }.contains(blockId)) {
+      val blockStatus = putResult.filter(_._1 == blockId).map(_._2).headOption.getOrElse {
         throw new SparkException(
           s"Could not store $blockId to block manager with storage level $storageLevel")
       }
+      blockStatus
     }
 
     // Store the block in write ahead log
@@ -179,9 +182,9 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
-    val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
-    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
-    WriteAheadLogBasedStoreResult(blockId, walRecordHandle)
+    val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture)
+    val (blockStatus, walRecordHandle) = Await.result(combinedFuture, blockStoreTimeout)
+    WriteAheadLogBasedStoreResult(blockId, blockStatus, walRecordHandle)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
