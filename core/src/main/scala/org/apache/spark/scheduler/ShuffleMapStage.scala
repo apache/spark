@@ -45,17 +45,6 @@ private[spark] class ShuffleMapStage(
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
-  private val partitionComputeCount = HashMap[Int, Int]()
-
-  def incComputeCount(partition: Int): Int = {
-    partitionComputeCount(partition) = partitionComputeCount.getOrElse(partition, 0) + 1
-    partitionComputeCount(partition)
-  }
-
-  def clearPartitionComputeCount(): Unit = {
-    partitionComputeCount.clear()
-  }
-
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList

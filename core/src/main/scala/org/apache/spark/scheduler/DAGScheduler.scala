@@ -833,10 +833,6 @@ class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
-    stage match {
-      case smt: ShuffleMapStage => smt.clearPartitionComputeCount()
-      case _ =>
-    }
 
 
     // First figure out the indexes of partition ids to compute.
@@ -981,7 +977,6 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
-    // REVIEWERS: does this need special handling for multiple completions of the same task?
     outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
       event.taskInfo.attempt, event.reason)
 
@@ -1039,31 +1034,15 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            val computeCount = shuffleStage.incComputeCount(smt.partitionId)
             updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
-            if (computeCount > 1) {
-              // REVIEWERS: do I need to worry about speculation here, when multiple completion
-              // events are normal?
-
-              // REVIEWERS: is this really only a problem on a ShuffleMapTask?? does it also cause
-              // problems for ResultTask?
-
-              // This can happen when a retry runs a task, but there was a lingering task from an
-              // earlier attempt which also finished.  The results might be OK, or they might not.
-              // To be safe, we'll retry the task, and do it in yet another attempt, to avoid more
-              // task output clobbering.
-              logInfo(s"Multiple completion events for task $task.  Results may be corrupt," +
-                s" assuming task needs to be rerun.")
-              shuffleStage.removeOutputLoc(task.partitionId)
-            } else if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+            if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
+              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
-
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
@@ -1127,19 +1106,13 @@ class DAGScheduler(
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the scheduler.
         if (runningStages.contains(failedStage)) {
-          if (failedStage.attemptId - 1 > task.stageAttemptId) {
-            logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
-              s" ${task.stageAttemptId}, which has already failed")
-          } else {
-            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-              s"due to a fetch failure from $mapStage (${mapStage.name})")
-            markStageAsFinished(failedStage, Some(failureMessage))
-          }
+          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+            s"due to a fetch failure from $mapStage (${mapStage.name})")
+          markStageAsFinished(failedStage, Some(failureMessage))
         }
 
         if (disallowStageRetryForTest) {
-          abortStage(failedStage,
-            s"Fetch failure will not retry stage due to testing config. Failure = $failureMessage")
+          abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
         } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled.
@@ -1156,16 +1129,6 @@ class DAGScheduler(
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)
           mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-        }
-
-        // We also have to mark this map output as unavailable.  Its possible that a *later* attempt
-        // has finished this task in the meantime, but when this task fails, it might end up
-        // deleting the mapOutput from the earlier successful attempt.
-        failedStage match {
-          case smt: ShuffleMapStage =>
-            smt.incComputeCount(reduceId)
-            smt.removeOutputLoc(reduceId)
-          case _ =>
         }
 
         // TODO: mark the executor as failed only if there were lots of fetch failures on it

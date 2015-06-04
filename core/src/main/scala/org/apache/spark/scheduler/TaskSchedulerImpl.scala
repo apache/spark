@@ -166,7 +166,8 @@ private[spark] class TaskSchedulerImpl(
       val taskSetsPerStage = activeTaskSets.values.filterNot(_.isZombie).groupBy(_.stageId)
       taskSetsPerStage.foreach { case (stage, taskSets) =>
         if (taskSets.size > 1) {
-          throw new SparkIllegalStateException("more than one active taskSet for stage " + stage)
+          logWarning("more than one active taskSet for stage " + stage)
+//          throw new SparkIllegalStateException("more than one active taskSet for stage " + stage)
         }
       }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
