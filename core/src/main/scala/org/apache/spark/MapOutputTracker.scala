@@ -21,7 +21,7 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, Map}
+import scala.collection.mutable.{HashSet, Map, HashMap}
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 

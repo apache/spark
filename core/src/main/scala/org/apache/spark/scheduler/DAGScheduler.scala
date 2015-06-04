@@ -138,8 +138,6 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val outputCommitCoordinator = env.outputCommitCoordinator
-
   // Number of map, reduce tasks above which we do not assign preferred locations
   // based on map output sizes.
   private val SHUFFLE_PREF_MAP_THRESHOLD = 1000
