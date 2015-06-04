@@ -37,7 +37,7 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
   /**
    * Set the edge properties of this triplet.
    */
-  protected[spark] def set(other: Edge[ED]): EdgeTriplet[VD,ED] = {
+  protected[spark] def set(other: Edge[ED]): EdgeTriplet[VD, ED] = {
     srcId = other.srcId
     dstId = other.dstId
     attr = other.attr

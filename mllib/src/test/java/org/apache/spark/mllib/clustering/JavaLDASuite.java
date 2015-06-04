@@ -107,6 +107,10 @@ public class JavaLDASuite implements Serializable {
     // Check: log probabilities
     assert(model.logLikelihood() < 0.0);
     assert(model.logPrior() < 0.0);
+
+    // Check: topic distributions
+    JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
+    assertEquals(topicDistributions.count(), corpus.count());
   }
 
   @Test

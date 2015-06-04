@@ -93,11 +93,11 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("column pruning for Project(ne, Limit)") {
     val originalQuery =
       testRelation
-        .select('a,'b)
+        .select('a, 'b)
         .limit(2)
         .select('a)
 
@@ -109,7 +109,7 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   // After this line is unimplemented.
   test("simple push down") {
     val originalQuery =

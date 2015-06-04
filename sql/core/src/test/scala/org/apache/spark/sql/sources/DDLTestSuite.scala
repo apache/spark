@@ -43,7 +43,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       StructField("bigintType", LongType, nullable = false),
       StructField("tinyintType", ByteType, nullable = false),
       StructField("decimalType", DecimalType.Unlimited, nullable = false),
-      StructField("fixedDecimalType", DecimalType(5,1), nullable = false),
+      StructField("fixedDecimalType", DecimalType(5, 1), nullable = false),
       StructField("binaryType", BinaryType, nullable = false),
       StructField("booleanType", BooleanType, nullable = false),
       StructField("smallIntType", ShortType, nullable = false),
@@ -51,8 +51,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       StructField("mapType", MapType(StringType, StringType)),
       StructField("arrayType", ArrayType(StringType)),
       StructField("structType",
-        StructType(StructField("f1",StringType) ::
-          (StructField("f2",IntegerType)) :: Nil
+        StructType(StructField("f1", StringType) :: StructField("f2", IntegerType) :: Nil
         )
       )
     ))
@@ -99,4 +98,10 @@ class DDLTestSuite extends DataSourceTest {
         Row("arrayType", "array<string>", ""),
         Row("structType", "struct<f1:string,f2:int>", "")
       ))
+
+  test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
+    val attributes = sql("describe ddlPeople").queryExecution.executedPlan.output
+    assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
+    assert(attributes.map(_.dataType).toSet === Set(StringType))
+  }
 }
