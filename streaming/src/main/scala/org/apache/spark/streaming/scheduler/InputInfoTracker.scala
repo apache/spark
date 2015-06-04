@@ -22,7 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.Logging
 import org.apache.spark.streaming.{Time, StreamingContext}
 
-/** To track the information of input stream at specified batch time. */
+/**
+ * To track the information of input stream at specified batch time.
+ *
+ * Note: `numRecords` must be >= 0.
+ */
 private[streaming] case class InputInfo(inputStreamId: Int, numRecords: Long)
 
 /**

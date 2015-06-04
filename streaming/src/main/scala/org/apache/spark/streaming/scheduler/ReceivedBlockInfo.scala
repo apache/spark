@@ -24,7 +24,7 @@ import org.apache.spark.streaming.util.WriteAheadLogRecordHandle
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
     streamId: Int,
-    numRecords: Long,
+    numRecords: Long, // -1 means unknown
     metadataOption: Option[Any],
     blockStoreResult: ReceivedBlockStoreResult
   ) {
