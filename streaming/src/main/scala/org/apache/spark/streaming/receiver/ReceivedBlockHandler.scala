@@ -52,7 +52,8 @@ private[streaming] trait ReceivedBlockHandler {
  * that stores the metadata related to storage of blocks using
  * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
  */
-private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId , numRecords: Long)
+private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId ,
+      numRecords: Long)
   extends ReceivedBlockStoreResult
 
 
@@ -89,7 +90,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     if(countIterator !=null) {
       numRecords = Some(countIterator.count)
     }
-    BlockManagerBasedStoreResult(blockId,numRecords.getOrElse(-1))
+    BlockManagerBasedStoreResult(blockId, numRecords.getOrElse(-1))
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -223,10 +224,10 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
 /**
  * A utility that will wrap the Iterator to get the count
  */
-class CountingIterator[T: Manifest](iterator: Iterator[T]) extends Iterator[T] {
+private class CountingIterator[T: Manifest](iterator: Iterator[T]) extends Iterator[T] {
    var count = 0
    def hasNext(): Boolean = iterator.hasNext
-   def next() = {
+   def next(): T = {
     count+=1
     iterator.next()
    }
