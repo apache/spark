@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
