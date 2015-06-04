@@ -30,7 +30,8 @@ class BaseHook(object):
 
     def get_connection(self, conn_id):
         conn = random.choice(self.get_connections(conn_id))
-        logging.info("Using connection to: " + conn.host)
+        if conn.host:
+            logging.info("Using connection to: " + conn.host)
         return conn
 
     def get_conn(self):
