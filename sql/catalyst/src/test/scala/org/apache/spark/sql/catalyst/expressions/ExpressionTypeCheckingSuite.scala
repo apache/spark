@@ -89,9 +89,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(BitwiseAnd('booleanField, 'booleanField), "operator & accepts integral type")
     assertError(BitwiseOr('booleanField, 'booleanField), "operator | accepts integral type")
     assertError(BitwiseXor('booleanField, 'booleanField), "operator ^ accepts integral type")
-
-    assertError(MaxOf('complexField, 'complexField), "function maxOf accepts non-complex type")
-    assertError(MinOf('complexField, 'complexField), "function minOf accepts non-complex type")
   }
 
   test("check types for predicates") {
@@ -114,15 +111,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
-
-    assertError(
-      LessThan('complexField, 'complexField), "operator < accepts non-complex type")
-    assertError(
-      LessThanOrEqual('complexField, 'complexField), "operator <= accepts non-complex type")
-    assertError(
-      GreaterThan('complexField, 'complexField), "operator > accepts non-complex type")
-    assertError(
-      GreaterThanOrEqual('complexField, 'complexField), "operator >= accepts non-complex type")
 
     assertError(
       If('intField, 'stringField, 'stringField),
