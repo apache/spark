@@ -398,6 +398,26 @@ class DataFrame private[sql](
     join(right, Seq(usingColumn))
   }
 
+  /**
+   * Inner equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * {{{
+   *   // Joining df1 and df2 using the columns "user_id" and "user_name"
+   *   df1.join(df2, Seq("user_id", "user_name"))
+   * }}}
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @group dfops
+   * @since 1.4.0
+   */
   def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
@@ -408,13 +428,8 @@ class DataFrame private[sql](
     val joinedCols = usingColumns.map(col => joined.right.resolve(col))
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col))
-    }.foldLeft[Option[catalyst.expressions.BinaryExpression]](None) { (opt, eqTo) =>
-      opt match {
-        case Some(cond) =>
-          Some(catalyst.expressions.And(cond, eqTo))
-        case None =>
-          Some(eqTo)
-      }
+    }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
+      catalyst.expressions.And(cond, eqTo)
     }
 
     Project(
@@ -438,7 +453,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, Seq(joinExprs), "inner")
+  def join(right: DataFrame, joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
    * Join with another [[DataFrame]], using the given join expression. The following performs
@@ -461,10 +476,6 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    join(right, Seq(joinExprs), joinType)
-  }
-
-  def join(right: DataFrame, joinExprs: Seq[Column], joinType: String): DataFrame = {
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -475,17 +486,7 @@ class DataFrame private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-    val condition = joinExprs
-      .foldLeft[Option[catalyst.expressions.Expression]](None) { (opt, condNext) =>
-        opt match {
-          case Some(cond) =>
-            Some(catalyst.expressions.And(cond, condNext.expr))
-          case None =>
-            Some(condNext.expr)
-        }
-      }
-
-    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), condition)
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.

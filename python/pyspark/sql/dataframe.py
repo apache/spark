@@ -503,17 +503,17 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def join(self, other, joinExprs=None, joinType=None):
+    def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: a string for join column name, a list of column names,
+        :param on: a string for join column name, a list of column names,
             , a join expression (Column) or a list of Columns.
-            If joinExprs is a string or a list of string indicating the name of the join column(s),
+            If `on` is a string or a list of string indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an inner equi-join.
-        :param joinType: str, default 'inner'.
+        :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
@@ -530,21 +530,25 @@ class DataFrame(object):
         [Row(name=u'Bob', age=5)]
         """
 
-        if joinExprs is not None and not isinstance(joinExprs, list):
-            joinExprs = [joinExprs]
+        if on is not None and not isinstance(on, list):
+            on = [on]
 
-        if joinExprs is None or len(joinExprs) == 0:
+        if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
 
-        if isinstance(joinExprs[0], basestring):
-            jdf = self._jdf.join(other._jdf, self._jseq(joinExprs))
+        if isinstance(on[0], basestring):
+            jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
-            assert isinstance(joinExprs[0], Column), "joinExprs should be Column or list of Column"
-            if joinType is None:
-                jdf = self._jdf.join(other._jdf, self._jcols(joinExprs), "inner")
+            assert isinstance(on[0], Column), "on should be Column or list of Column"
+            if len(on) > 1:
+                on = reduce(lambda x, y: x.__and__(y), on)
             else:
-                assert isinstance(joinType, basestring), "joinType should be basestring"
-                jdf = self._jdf.join(other._jdf, self._jcols(joinExprs), joinType)
+                on = on[0]
+            if how is None:
+                jdf = self._jdf.join(other._jdf, on._jc, "inner")
+            else:
+                assert isinstance(how, basestring), "how should be basestring"
+                jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
