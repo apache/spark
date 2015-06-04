@@ -84,7 +84,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,command,
-      appUIAddress, conf.getAuthSecret, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+      appUIAddress, conf.getClusterAuthSecret, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()

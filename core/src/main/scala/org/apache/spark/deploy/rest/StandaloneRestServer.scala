@@ -150,7 +150,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isNotAuthSecretConf)
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isNotClusterAuthSecretConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
@@ -165,7 +165,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       actualDriverCores,
       actualSuperviseDriver,
       command,
-      conf.getAuthSecret)  // app secret is cluster auth secret for now
+      conf.getClusterAuthSecret)  // app secret is cluster auth secret for now
   }
 
   /**

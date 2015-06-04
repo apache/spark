@@ -337,7 +337,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Check to see if authentication for the Spark communication protocols is enabled
    * @return true if authentication is enabled, otherwise false
    */
-  private[spark] def isAuthOn: Boolean = getBoolean(SecurityManager.AUTH_CONFIG, false)
+  private[spark] def authOn: Boolean = {
+    getBoolean(SecurityManager.CLUSTER_AUTH_CONF, false)
+  }
 
   /**
    * Return the authentication key for standalone cluster managers (Master and Worker).
@@ -345,7 +347,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * In non-YARN deployments, this key is also used for authentication in apps (e.g.,
    * between driver and executor). See [[org.apache.spark.SecurityManager]] for details.
    */
-  private[spark] def getAuthSecret: Option[String] = getOption(SecurityManager.AUTH_SECRET)
+  private[spark] def getClusterAuthSecret: Option[String] = {
+    getOption(SecurityManager.CLUSTER_AUTH_SECRET_CONF)
+  }
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.containsKey(key)
@@ -577,18 +581,20 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Return true if the given config is NOT for authentication secret.
+   * Return true if the given config is NOT for cluster authentication secret.
    */
-  private[spark] def isNotAuthSecretConf(name: String): Boolean =
-    name != SecurityManager.AUTH_SECRET
+  private[spark] def isNotClusterAuthSecretConf(name: String): Boolean = {
+    name != SecurityManager.CLUSTER_AUTH_SECRET_CONF
+  }
 
   /**
    * Return whether the given config should be passed to an executor launched by standalone
-   * cluster manager as JVM system properties on start-up. In particular, authentication
-   * secret is filtered out since it will be written to executor's stdin.
+   * cluster manager as JVM system properties on start-up. In particular, cluster
+   * authentication secret is filtered out since it will be written to executor's stdin.
    */
-  private[spark] def isStandaloneExecutorStartupConf(name: String): Boolean =
-    isExecutorStartupConf(name) && isNotAuthSecretConf(name)
+  private[spark] def isStandaloneExecutorStartupConf(name: String): Boolean = {
+    isExecutorStartupConf(name) && isNotClusterAuthSecretConf(name)
+  }
 
   /**
    * Return true if the given config matches either `spark.*.port` or `spark.port.*`.

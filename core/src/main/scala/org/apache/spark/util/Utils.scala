@@ -331,7 +331,7 @@ private[spark] object Utils extends Logging {
       process: Process,
       secret: Option[String],
       conf: SparkConf): Unit =
-    for (value <- secret if conf.isAuthOn) {
+    for (value <- secret if conf.authOn) {
       val out = new BufferedOutputStream(process.getOutputStream)
       out.write(value.getBytes)
       out.close
@@ -344,12 +344,12 @@ private[spark] object Utils extends Logging {
    * Note: This mutates state in the given SparkConf and in this JVM's system properties.
    */
   def setAndExportAppSecretIfNeeded(conf: SparkConf): Unit = {
-    if (conf.isAuthOn) {
+    if (conf.authOn) {
       val in = new BufferedReader(new InputStreamReader(System.in))
       Option(in.readLine) match {
         case Some(value) =>
-          conf.set(SecurityManager.AUTH_SECRET, value)
-          sys.props.update(SecurityManager.AUTH_SECRET, value)
+          conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
+          sys.props.update(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
 
         case None => throw new Exception("Error: authentication is enabled but " +
           "failed to obtain authentication key from stdin")

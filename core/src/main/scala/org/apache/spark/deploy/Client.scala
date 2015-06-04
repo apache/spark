@@ -70,7 +70,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         val extraJavaOptsConf = "spark.driver.extraJavaOptions"
         val extraJavaOpts = sys.props.get(extraJavaOptsConf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
-        val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isNotAuthSecretConf)
+        val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isNotClusterAuthSecretConf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
@@ -82,7 +82,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.cores,
           driverArgs.supervise,
           command,
-          conf.getAuthSecret)  // app secret is cluster auth secret for now
+          conf.getClusterAuthSecret)  // app secret is cluster auth secret for now
 
         // This assumes only one Master is active at a time
         for (masterActor <- masterActors) {
