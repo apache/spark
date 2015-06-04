@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.types._
 
-class ColumnStatsSuite extends FunSuite {
+class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
   testColumnStats(classOf[ShortColumnStats], SHORT, Row(Short.MaxValue, Short.MinValue, 0))
   testColumnStats(classOf[IntColumnStats], INT, Row(Int.MaxValue, Int.MinValue, 0))
@@ -34,7 +33,7 @@ class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
   testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
 
-  def testColumnStats[T <: NativeType, U <: ColumnStats](
+  def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
       initialStatistics: Row): Unit = {
@@ -55,8 +54,8 @@ class ColumnStatsSuite extends FunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_(0).asInstanceOf[T#JvmType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
+      val values = rows.take(10).map(_(0).asInstanceOf[T#InternalType])
+      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))

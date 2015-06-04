@@ -77,7 +77,8 @@ object Checkpoint extends Logging {
   }
 
   /** Get checkpoint files present in the give directory, ordered by oldest-first */
-  def getCheckpointFiles(checkpointDir: String, fs: FileSystem): Seq[Path] = {
+  def getCheckpointFiles(checkpointDir: String, fsOption: Option[FileSystem] = None): Seq[Path] = {
+
     def sortFunc(path1: Path, path2: Path): Boolean = {
       val (time1, bk1) = path1.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
       val (time2, bk2) = path2.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
@@ -85,6 +86,7 @@ object Checkpoint extends Logging {
     }
 
     val path = new Path(checkpointDir)
+    val fs = fsOption.getOrElse(path.getFileSystem(new Configuration()))
     if (fs.exists(path)) {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
@@ -98,6 +100,44 @@ object Checkpoint extends Logging {
     } else {
       logInfo("Checkpoint directory " + path + " does not exist")
       Seq.empty
+    }
+  }
+
+  /** Serialize the checkpoint, or throw any exception that occurs */
+  def serialize(checkpoint: Checkpoint, conf: SparkConf): Array[Byte] = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    val bos = new ByteArrayOutputStream()
+    val zos = compressionCodec.compressedOutputStream(bos)
+    val oos = new ObjectOutputStream(zos)
+    Utils.tryWithSafeFinally {
+      oos.writeObject(checkpoint)
+    } {
+      oos.close()
+    }
+    bos.toByteArray
+  }
+
+  /** Deserialize a checkpoint from the input stream, or throw any exception that occurs */
+  def deserialize(inputStream: InputStream, conf: SparkConf): Checkpoint = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    var ois: ObjectInputStreamWithLoader = null
+    Utils.tryWithSafeFinally {
+
+      // ObjectInputStream uses the last defined user-defined class loader in the stack
+      // to find classes, which maybe the wrong class loader. Hence, a inherited version
+      // of ObjectInputStream is used to explicitly use the current thread's default class
+      // loader to find and load classes. This is a well know Java issue and has popped up
+      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+      val zis = compressionCodec.compressedInputStream(inputStream)
+      ois = new ObjectInputStreamWithLoader(zis,
+        Thread.currentThread().getContextClassLoader)
+      val cp = ois.readObject.asInstanceOf[Checkpoint]
+      cp.validate()
+      cp
+    } {
+      if (ois != null) {
+        ois.close()
+      }
     }
   }
 }
@@ -160,7 +200,7 @@ class CheckpointWriter(
           }
 
           // Delete old checkpoint files
-          val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs)
+          val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
             allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
               logInfo("Deleting " + file)
@@ -187,17 +227,10 @@ class CheckpointWriter(
   }
 
   def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
-    val bos = new ByteArrayOutputStream()
-    val zos = compressionCodec.compressedOutputStream(bos)
-    val oos = new ObjectOutputStream(zos)
-    Utils.tryWithSafeFinally {
-      oos.writeObject(checkpoint)
-    } {
-      oos.close()
-    }
     try {
+      val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
-        checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
+        checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
       logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
@@ -234,15 +267,24 @@ class CheckpointWriter(
 private[streaming]
 object CheckpointReader extends Logging {
 
-  def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] =
-  {
+  /**
+   * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
+   * files, then return None, else try to return the latest valid checkpoint object. If no
+   * checkpoint files could be read correctly, then return None (if ignoreReadError = true),
+   * or throw exception (if ignoreReadError = false).
+   */
+  def read(
+      checkpointDir: String,
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
     // TODO(rxin): Why is this a def?!
     def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
-    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs).reverse
+    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse
     if (checkpointFiles.isEmpty) {
       return None
     }
@@ -253,25 +295,8 @@ object CheckpointReader extends Logging {
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
       try {
-        var ois: ObjectInputStreamWithLoader = null
-        var cp: Checkpoint = null
-        Utils.tryWithSafeFinally {
-          val fis = fs.open(file)
-          // ObjectInputStream uses the last defined user-defined class loader in the stack
-          // to find classes, which maybe the wrong class loader. Hence, a inherited version
-          // of ObjectInputStream is used to explicitly use the current thread's default class
-          // loader to find and load classes. This is a well know Java issue and has popped up
-          // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
-          val zis = compressionCodec.compressedInputStream(fis)
-          ois = new ObjectInputStreamWithLoader(zis,
-            Thread.currentThread().getContextClassLoader)
-          cp = ois.readObject.asInstanceOf[Checkpoint]
-        } {
-          if (ois != null) {
-            ois.close()
-          }
-        }
-        cp.validate()
+        val fis = fs.open(file)
+        val cp = Checkpoint.deserialize(fis, conf)
         logInfo("Checkpoint successfully loaded from file " + file)
         logInfo("Checkpoint was generated at time " + cp.checkpointTime)
         return Some(cp)
@@ -282,7 +307,10 @@ object CheckpointReader extends Logging {
     })
 
     // If none of checkpoint files could be read, then throw exception
-    throw new SparkException("Failed to read checkpoint from directory " + checkpointPath)
+    if (!ignoreReadError) {
+      throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
+    }
+    None
   }
 }
 

@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
 import org.apache.spark.sql.types._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
-class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
-  val catalog = new SimpleCatalog(false)
-  val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = false)
+class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
+  val conf = new SimpleCatalystConf(true)
+  val catalog = new SimpleCatalog(conf)
+  val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 
   val relation = LocalRelation(
     AttributeReference("i", IntegerType)(),
@@ -48,12 +52,12 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Seq(Alias(expression, "c")()), relation)
-    assert(analyzer(plan).schema.fields(0).dataType === expectedType)
+    assert(analyzer.execute(plan).schema.fields(0).dataType === expectedType)
   }
 
   private def checkComparison(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Alias(expression, "c")() :: Nil, relation)
-    val comparison = analyzer(plan).collect {
+    val comparison = analyzer.execute(plan).collect {
       case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
     }.head
     assert(comparison.left.dataType === expectedType)
@@ -64,7 +68,7 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     val plan =
       Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
-    val (l, r) = analyzer(plan).collect {
+    val (l, r) = analyzer.execute(plan).collect {
       case Union(left, right) => (left.output.head, right.output.head)
     }.head
     assert(l.dataType === expectedType)
@@ -88,8 +92,10 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Comparison operations") {
-    checkComparison(LessThan(i, d1), DecimalType.Unlimited)
-    checkComparison(LessThanOrEqual(d1, d2), DecimalType.Unlimited)
+    checkComparison(EqualTo(i, d1), DecimalType(10, 1))
+    checkComparison(EqualNullSafe(d2, d1), DecimalType(5, 2))
+    checkComparison(LessThan(i, d1), DecimalType(10, 1))
+    checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
     checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))

@@ -42,6 +42,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
+  var principal: String = null
+  var keytab: String = null
   def isClusterMode: Boolean = userClass != null
 
   private var driverMemory: Int = 512 // MB
@@ -96,6 +98,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
       numExecutors = initialNumExecutors
     }
+    principal = Option(principal)
+      .orElse(sparkConf.getOption("spark.yarn.principal"))
+      .orNull
+    keytab = Option(keytab)
+      .orElse(sparkConf.getOption("spark.yarn.keytab"))
+      .orNull
   }
 
   /**
@@ -229,6 +237,14 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
         case ("--archives") :: value :: tail =>
           archives = value
+          args = tail
+
+        case ("--principal") :: value :: tail =>
+          principal = value
+          args = tail
+
+        case ("--keytab") :: value :: tail =>
+          keytab = value
           args = tail
 
         case Nil =>

@@ -60,12 +60,12 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression => GradientBoostedTrees.boost(input, input, boostingStrategy, validate=false)
+      case Regression =>
+        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput,
-          remappedInput, boostingStrategy, validate=false)
+        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -93,8 +93,8 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
       validationInput: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression => GradientBoostedTrees.boost(
-        input, validationInput, boostingStrategy, validate=true)
+      case Regression =>
+        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -102,7 +102,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate=true)
+          validate = true)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -177,8 +177,11 @@ object GradientBoostedTrees extends Logging {
     treeStrategy.assertValid()
 
     // Cache input
-    if (input.getStorageLevel == StorageLevel.NONE) {
+    val persistedInput = if (input.getStorageLevel == StorageLevel.NONE) {
       input.persist(StorageLevel.MEMORY_AND_DISK)
+      true
+    } else {
+      false
     }
 
     timer.stop("init")
@@ -265,6 +268,9 @@ object GradientBoostedTrees extends Logging {
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
+
+    if (persistedInput) input.unpersist()
+
     if (validate) {
       new GradientBoostedTreesModel(
         boostingStrategy.treeStrategy.algo,

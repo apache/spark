@@ -63,7 +63,7 @@ case class HiveTableScan(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
-  // Create a local copy of hiveconf,so that scan specific modifications should not impact 
+  // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
   private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
@@ -72,7 +72,7 @@ case class HiveTableScan(
   addColumnMetadataToConf(hiveExtraConf)
 
   @transient
-  private[this] val hadoopReader = 
+  private[this] val hadoopReader =
     new HadoopTableReader(attributes, relation, context, hiveExtraConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
@@ -129,7 +129,7 @@ case class HiveTableScan(
     }
   }
 
-  override def execute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
+  protected override def doExecute(): RDD[Row] = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))

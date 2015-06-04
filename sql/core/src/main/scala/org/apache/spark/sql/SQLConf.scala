@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
-import java.util.Properties
+import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
@@ -30,7 +32,9 @@ private[spark] object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
+  val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
   val DIALECT = "spark.sql.dialect"
+  val CASE_SENSITIVE = "spark.sql.caseSensitive"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_INT96_AS_TIMESTAMP = "spark.sql.parquet.int96AsTimestamp"
@@ -38,6 +42,8 @@ private[spark] object SQLConf {
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
+
+  val ORC_FILTER_PUSHDOWN_ENABLED = "spark.sql.orc.filterPushdown"
 
   val HIVE_VERIFY_PARTITIONPATH = "spark.sql.hive.verifyPartitionPath"
 
@@ -51,6 +57,8 @@ private[spark] object SQLConf {
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
+  val THRIFTSERVER_UI_STATEMENT_LIMIT = "spark.sql.thriftserver.ui.retainedStatements"
+  val THRIFTSERVER_UI_SESSION_LIMIT = "spark.sql.thriftserver.ui.retainedSessions"
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
@@ -60,11 +68,27 @@ private[spark] object SQLConf {
   // to its length exceeds the threshold.
   val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
 
+  // Whether to perform partition discovery when loading external data sources.  Default to true.
+  val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
+
+  // The output committer class used by FSBasedRelation. The specified class needs to be a
+  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
+
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
+  // Whether to automatically resolve ambiguity in join conditions for self-joins.
+  // See SPARK-6231.
+  val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY = "spark.sql.selfJoinAutoResolveAmbiguity"
+
+  // Whether to retain group by columns or not in GroupedData.agg.
+  val DATAFRAME_RETAIN_GROUP_COLUMNS = "spark.sql.retainGroupColumns"
+
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
+
+  val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -80,7 +104,8 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable {
+
+private[sql] class SQLConf extends Serializable with CatalystConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -124,6 +149,9 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
 
+  private[spark] def orcFilterPushDown =
+    getConf(ORC_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
+
   /** When true uses verifyPartitionPath to prune the path which is not exists. */
   private[spark] def verifyPartitionPath =
     getConf(HIVE_VERIFY_PARTITIONPATH, "true").toBoolean
@@ -149,7 +177,26 @@ private[sql] class SQLConf extends Serializable {
    */
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
+  /**
+   * caseSensitive analysis true by default
+   */
+  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, "true").toBoolean
+
+  /**
+   * When set to true, Spark SQL will use managed memory for certain operations.  This option only
+   * takes effect if codegen is enabled.
+   *
+   * Defaults to false as this feature is currently experimental.
+   */
+  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
+
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
+
+  /**
+   * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0
+   */
+  private[spark] def useJacksonStreamingAPI: Boolean =
+    getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -200,6 +247,9 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
 
+  private[spark] def partitionDiscoveryEnabled() =
+    getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   private[spark] def schemaStringLengthThreshold: Int =
@@ -207,6 +257,12 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def dataFrameEagerAnalysis: Boolean =
     getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
+
+  private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
+    getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY, "true").toBoolean
+
+  private[spark] def dataFrameRetainGroupColumns: Boolean =
+    getConf(DATAFRAME_RETAIN_GROUP_COLUMNS, "true").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 

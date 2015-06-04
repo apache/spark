@@ -78,6 +78,9 @@ To verify that the Mesos cluster is ready for Spark, navigate to the Mesos maste
 To use Mesos from Spark, you need a Spark binary package available in a place accessible by Mesos, and
 a Spark driver program configured to connect to Mesos.
 
+Alternatively, you can also install Spark in the same location in all the Mesos slaves, and configure
+`spark.mesos.executor.home` (defaults to SPARK_HOME) to point to that location.
+
 ## Uploading Spark Package
 
 When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
@@ -107,7 +110,11 @@ the `make-distribution.sh` script included in a Spark source tarball/checkout.
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
 cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
 
-The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
+## Client Mode
+
+In client mode, a Spark Mesos framework is launched directly on the client machine and waits for the driver output.
+
+The driver needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
 1. In `spark-env.sh` set some environment variables:
  * `export MESOS_NATIVE_JAVA_LIBRARY=<path to libmesos.so>`. This path is typically
@@ -129,8 +136,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 (You can also use [`spark-submit`](submitting-applications.html) and configure `spark.executor.uri`
-in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file. Note
-that `spark-submit` currently only supports deploying the Spark driver in `client` mode for Mesos.)
+in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file.)
 
 When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
 it does not need to be redundantly passed in as a system property.
@@ -139,6 +145,17 @@ it does not need to be redundantly passed in as a system property.
 ./bin/spark-shell --master mesos://host:5050
 {% endhighlight %}
 
+## Cluster mode
+
+Spark on Mesos also supports cluster mode, where the driver is launched in the cluster and the client
+can find the results of the driver from the Mesos Web UI.
+
+To use cluster mode, you must start the MesosClusterDispatcher in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
+passing in the Mesos master url (e.g: mesos://host:5050).
+
+From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
+to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
+Spark cluster Web UI.
 
 # Mesos Run Modes
 
@@ -166,6 +183,16 @@ In addition, for coarse-grained mode, you can control the maximum number of reso
 acquire. By default, it will acquire *all* cores in the cluster (that get offered by Mesos), which
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
+
+# Mesos Docker Support
+
+Spark can make use of a Mesos Docker containerizer by setting the property `spark.mesos.executor.docker.image`
+in your [SparkConf](configuration.html#spark-properties).
+
+The Docker image used must have an appropriate version of Spark already part of the image, or you can
+have Mesos download Spark via the usual methods.
+
+Requires Mesos version 0.20.1 or later.
 
 # Running Alongside Hadoop
 
@@ -218,6 +245,38 @@ See the [configuration page](configuration.html) for information on Spark config
     include the cores used to run the Spark tasks. In other words, even if no Spark task
     is being run, each Mesos executor will occupy the number of cores configured here.
     The value can be a floating point number.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.image</code></td>
+  <td>(none)</td>
+  <td>
+    Set the name of the docker image that the Spark executors will run in. The selected
+    image must have Spark installed, as well as a compatible version of the Mesos library.
+    The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.volumes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of volumes which will be mounted into the Docker image, which was set using
+    <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
+
+    <pre>[host_path:]container_path[:ro|:rw]</pre>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.portmaps</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of incoming ports exposed by the Docker image, which was set using
+    <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings which take the form:
+
+    <pre>host_port:container_port[:tcp|:udp]</pre>
   </td>
 </tr>
 <tr>

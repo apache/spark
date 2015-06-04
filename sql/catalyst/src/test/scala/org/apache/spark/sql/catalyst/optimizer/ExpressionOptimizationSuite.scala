@@ -30,7 +30,7 @@ class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer(plan)
+    val optimizedPlan = DefaultOptimizer.execute(plan)
     super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
   }
 }

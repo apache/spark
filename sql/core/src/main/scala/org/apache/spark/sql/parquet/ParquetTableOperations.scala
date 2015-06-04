@@ -77,7 +77,7 @@ private[sql] case class ParquetTableScan(
     }
   }.toArray
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
 
     val sc = sqlContext.sparkContext
@@ -255,7 +255,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -268,7 +268,7 @@ private[sql] case class InsertIntoParquetTable(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
 
     val writeSupport =
-      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
+      if (child.output.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
         log.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
@@ -381,6 +381,7 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   extends parquet.hadoop.ParquetOutputFormat[Row] {
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
+  var committer: OutputCommitter = null
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
@@ -402,6 +403,26 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
   private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
+  }
+
+  // override to create output committer from configuration
+  override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (committer == null) {
+      val output = getOutputPath(context)
+      val cls = context.getConfiguration.getClass("spark.sql.parquet.output.committer.class",
+        classOf[ParquetOutputCommitter], classOf[ParquetOutputCommitter])
+      val ctor = cls.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+      committer = ctor.newInstance(output, context).asInstanceOf[ParquetOutputCommitter]
+    }
+    committer
+  }
+
+  // FileOutputFormat.getOutputPath takes JobConf in hadoop-1 but JobContext in hadoop-2
+  private def getOutputPath(context: TaskAttemptContext): Path = {
+    context.getConfiguration().get("mapred.output.dir") match {
+      case null => null
+      case name => new Path(name)
+    }
   }
 }
 
@@ -520,7 +541,7 @@ private[parquet] class FilteringParquetRowInputFormat
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val filter: Filter = ParquetInputFormat.getFilter(configuration)
     var rowGroupsDropped: Long = 0
-    var totalRowGroups: Long  = 0
+    var totalRowGroups: Long = 0
 
     // Ugly hack, stuck with it until PR:
     // https://github.com/apache/incubator-parquet-mr/pull/17
@@ -643,7 +664,7 @@ private[parquet] object FileSystemHelper {
         s"ParquetTableOperations: path $path does not exist or is not a directory")
     }
     fs.globStatus(path)
-      .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+      .flatMap { status => if (status.isDir) fs.listStatus(status.getPath) else List(status) }
       .map(_.getPath)
   }
 
@@ -653,7 +674,7 @@ private[parquet] object FileSystemHelper {
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
+    val nameP = new scala.util.matching.Regex("""part-.-(\d{1,}).*""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt

@@ -23,17 +23,19 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.io.Source
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
+  SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -41,7 +43,7 @@ import org.apache.spark.util.Utils
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
-class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
+class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
 
   // log4j configuration for the YARN containers, so that their output is collected
   // by YARN instead of trying to overwrite unit-tests.log.
@@ -86,6 +88,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
+    System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, UTF_8)
@@ -128,6 +131,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
   override def afterAll() {
     yarnCluster.stop()
+    System.clearProperty("SPARK_YARN_MODE")
     super.afterAll()
   }
 
@@ -288,9 +292,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+  var driverLogs: Option[collection.Map[String, String]] = None
 
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+
+  override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
+    driverLogs = appStart.driverLogs
   }
 }
 
@@ -312,11 +321,12 @@ private object YarnClusterDriver extends Logging with Matchers {
     val sc = new SparkContext(new SparkConf()
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val conf = sc.getConf
     val status = new File(args(0))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
-      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
@@ -332,6 +342,20 @@ private object YarnClusterDriver extends Logging with Matchers {
     assert(executorInfos.nonEmpty)
     executorInfos.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
+    }
+
+    // If we are running in yarn-cluster mode, verify that driver logs are downloadable.
+    if (conf.get("spark.master") == "yarn-cluster") {
+      assert(listener.driverLogs.nonEmpty)
+      val driverLogs = listener.driverLogs.get
+      assert(driverLogs.size === 2)
+      assert(driverLogs.containsKey("stderr"))
+      assert(driverLogs.containsKey("stdout"))
+      val stderr = driverLogs("stderr") // YARN puts everything in stderr.
+      val lines = Source.fromURL(stderr).getLines()
+      // Look for a line that contains YarnClusterSchedulerBackend, since that is guaranteed in
+      // cluster mode.
+      assert(lines.exists(_.contains("YarnClusterSchedulerBackend")))
     }
   }
 

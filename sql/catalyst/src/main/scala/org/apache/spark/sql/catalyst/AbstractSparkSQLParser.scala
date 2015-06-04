@@ -25,14 +25,10 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
-private[sql] object KeywordNormalizer {
-  def apply(str: String): String = str.toLowerCase()
-}
-
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def apply(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
     lexical.initialize(reservedWords)
     phrase(start)(new lexical.Scanner(input)) match {
@@ -42,7 +38,7 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 
   protected case class Keyword(str: String) {
-    def normalize: String = KeywordNormalizer(str)
+    def normalize: String = lexical.normalizeKeyword(str)
     def parser: Parser[String] = normalize
   }
 
@@ -90,13 +86,16 @@ class SqlLexical extends StdLexical {
     reserved ++= keywords
   }
 
+  /* Normal the keyword string */
+  def normalizeKeyword(str: String): String = str.toLowerCase
+
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
 
   protected override def processIdent(name: String) = {
-    val token = KeywordNormalizer(name)
+    val token = normalizeKeyword(name)
     if (reserved contains token) Keyword(token) else Identifier(name)
   }
 
@@ -104,7 +103,7 @@ class SqlLexical extends StdLexical {
     ( identChar ~ (identChar | digit).* ^^
       { case first ~ rest => processIdent((first :: rest).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
-        case i ~ None    => NumericLit(i.mkString)
+        case i ~ None => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^

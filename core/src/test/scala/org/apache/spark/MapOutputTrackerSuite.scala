@@ -19,14 +19,13 @@ package org.apache.spark
 
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, isA}
-import org.scalatest.FunSuite
 
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 
-class MapOutputTrackerSuite extends FunSuite {
+class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
@@ -154,7 +153,7 @@ class MapOutputTrackerSuite extends FunSuite {
   test("remote fetch below akka frame size") {
     val newConf = new SparkConf
     newConf.set("spark.akka.frameSize", "1")
-    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     val rpcEnv = createRpcEnv("spark")
@@ -180,7 +179,7 @@ class MapOutputTrackerSuite extends FunSuite {
   test("remote fetch exceeds akka frame size") {
     val newConf = new SparkConf
     newConf.set("spark.akka.frameSize", "1")
-    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     val rpcEnv = createRpcEnv("test")

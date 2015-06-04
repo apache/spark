@@ -60,9 +60,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   @deprecated("Use partitions() instead.", "1.1.0")
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
-  
+
   /** Set of partitions in this RDD. */
   def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+
+  /** The partitioner of this RDD. */
+  def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -96,7 +99,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def mapPartitionsWithIndex[R](
       f: JFunction2[jl.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
-    new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
+    new JavaRDD(rdd.mapPartitionsWithIndex(((a, b) => f(a, asJavaIterator(b))),
         preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
@@ -386,9 +389,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
-   * modify t1 and return it as its result value to avoid object allocation; however, it should not
-   * modify t2.
+   * given associative and commutative function and a neutral "zero value". The function
+   * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
+   * allocation; however, it should not modify t2.
+   *
+   * This behaves somewhat differently from fold operations implemented for non-distributed
+   * collections in functional languages like Scala. This fold operation may be applied to
+   * partitions individually, and then fold those results into the final result, rather than
+   * apply the fold to each element sequentially in some defined ordering. For functions
+   * that are not commutative, the result may differ from that of a fold applied to a
+   * non-distributed collection.
    */
   def fold(zeroValue: T)(f: JFunction2[T, T, T]): T =
     rdd.fold(zeroValue)(f)
@@ -485,9 +495,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new java.util.ArrayList(arr)
   }
 
-  def takeSample(withReplacement: Boolean, num: Int): JList[T] = 
+  def takeSample(withReplacement: Boolean, num: Int): JList[T] =
     takeSample(withReplacement, num, Utils.random.nextLong)
-    
+
   def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.takeSample(withReplacement, num, seed).toSeq
