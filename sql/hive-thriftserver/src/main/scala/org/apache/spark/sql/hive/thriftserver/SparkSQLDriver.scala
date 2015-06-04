@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
+import java.util.{ArrayList => JArrayList, List => JList}
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -27,8 +27,12 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
-private[hive] abstract class AbstractSparkSQLDriver(
-    val context: HiveContext = SparkSQLEnv.hiveContext) extends Driver with Logging {
+import scala.collection.JavaConversions._
+
+private[hive] class SparkSQLDriver(
+    val context: HiveContext = SparkSQLEnv.hiveContext)
+  extends Driver
+  with Logging {
 
   private[hive] var tableSchema: Schema = _
   private[hive] var hiveResponse: Seq[String] = _
@@ -69,6 +73,16 @@ private[hive] abstract class AbstractSparkSQLDriver(
     hiveResponse = null
     tableSchema = null
     0
+  }
+
+  override def getResults(res: JList[_]): Boolean = {
+    if (hiveResponse == null) {
+      false
+    } else {
+      res.asInstanceOf[JArrayList[String]].addAll(hiveResponse)
+      hiveResponse = null
+      true
+    }
   }
 
   override def getSchema: Schema = tableSchema
