@@ -413,6 +413,118 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           }
          """.children
 
+      case cell @ SumCell(e) if e.dataType.isInstanceOf[ArrayType] =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+              .asInstanceOf[Seq[${termForType(cell.dataType)}]]
+              .reduce((a,b) => a + b)
+          }
+         """.children
+
+      case cell @ SumCell(e @ NumericType()) =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+          }
+         """.children
+
+      case cell @ CountCell(e) if e.dataType.isInstanceOf[ArrayType] =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+              .asInstanceOf[Seq[${termForType(cell.dataType)}]]
+              .size
+          }
+         """.children
+
+      case cell @ CountCell(e @ NumericType()) =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = 1L
+          }
+         """.children
+
+      case cell @ MinCell(e) if e.dataType.isInstanceOf[ArrayType] =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+              .asInstanceOf[Seq[${termForType(cell.dataType)}]]
+              .min
+          }
+         """.children
+
+      case cell @ MinCell(e @ NumericType()) =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+          }
+         """.children
+
+      case cell @ MaxCell(e) if e.dataType.isInstanceOf[ArrayType] =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+              .asInstanceOf[Seq[${termForType(cell.dataType)}]]
+              .max
+          }
+         """.children
+
+      case cell @ MaxCell(e @ NumericType()) =>
+        val eval = expressionEvaluator(e)
+        q"""
+          ..${eval.code}
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(cell.dataType)} = 0
+          if (${eval.nullTerm}) {
+            $nullTerm = true
+          } else {
+            $primitiveTerm = ${eval.primitiveTerm}
+          }
+         """.children
+
       case IsNotNull(e) =>
         val eval = expressionEvaluator(e)
         q"""
