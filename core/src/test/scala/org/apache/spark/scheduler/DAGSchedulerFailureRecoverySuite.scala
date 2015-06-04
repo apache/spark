@@ -26,12 +26,16 @@ import org.apache.spark._
 
 class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
-  ignore("no concurrent retries for stage attempts (SPARK-7308)") {
+  test("no concurrent retries for stage attempts (SPARK-7308)") {
     // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.
     // note that this is somewhat convoluted for a test case, but isn't actually very unusual
     // under a real workload.  Note that we only fail the first attempt of stage 2, but that
     // could be enough to cause havoc.
 
+
+    // even when we address the main issues we're trying to fix here, we still see some occasional
+    // failures from broadcast -- maybe the same as SPARK-5812 or SPARK-5594.  So just allow
+    // some extra slop for it
     var overallBroadcastFailures = 0
 
     (0 until 100).foreach { idx =>
