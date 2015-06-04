@@ -698,7 +698,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    cacheManager.tryUncacheQuery(table(tableName))
+    dropTempTable(tableName, ifExists = false)
+  }
+
+  /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   * @param ifExists whether ignore non-existent table
+   *
+   * @group basic
+   * @since 1.5.0
+   */
+  def dropTempTable(tableName: String, ifExists: Boolean): Unit = {
+    try {
+      cacheManager.tryUncacheQuery(table(tableName))
+    } catch {
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException if ifExists =>
+    }
     catalog.unregisterTable(Seq(tableName))
   }
 
