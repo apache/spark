@@ -1254,6 +1254,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
+              <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
@@ -1286,6 +1287,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
+              <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
