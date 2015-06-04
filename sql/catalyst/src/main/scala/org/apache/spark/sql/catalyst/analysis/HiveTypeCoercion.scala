@@ -184,14 +184,14 @@ trait HiveTypeCoercion {
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
           // When a string is found on one side, make the other side a string too.
-          case (l, r) if l.dataType == StringType && r.dataType != StringType =>
-            (l, Alias(Cast(r, StringType), r.name)())
-          case (l, r) if l.dataType != StringType && r.dataType == StringType =>
-            (Alias(Cast(l, StringType), l.name)(), r)
+          case (lhs, rhs) if lhs.dataType == StringType && rhs.dataType != StringType =>
+            (lhs, Alias(Cast(rhs, StringType), rhs.name)())
+          case (lhs, rhs) if lhs.dataType != StringType && rhs.dataType == StringType =>
+            (Alias(Cast(lhs, StringType), lhs.name)(), rhs)
 
-          case (l, r) if l.dataType != r.dataType =>
-            logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            findTightestCommonTypeOfTwo(l.dataType, r.dataType).map { widestType =>
+          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+            logDebug(s"Resolving mismatched union input ${lhs.dataType}, ${rhs.dataType}")
+            findTightestCommonTypeOfTwo(lhs.dataType, rhs.dataType).map { widestType =>
               val newLeft =
                 if (lhs.dataType == widestType) lhs else Alias(Cast(lhs, widestType), lhs.name)()
               val newRight =
@@ -232,11 +232,9 @@ trait HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
-          findTightestCommonType(left.dataType, right.dataType).map { widestType =>
-            val newLeft =
-              if (left.dataType == widestType) left else Cast(left, widestType)
-            val newRight =
-              if (right.dataType == widestType) right else Cast(right, widestType)
+          findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
+            val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
+            val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
             b.makeCopy(Array(newLeft, newRight))
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
       }
@@ -619,7 +617,7 @@ trait HiveTypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
 
-      case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
+      case Divide(left, right) => Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
   }
 
