@@ -269,7 +269,11 @@ private[spark] class ExecutorAllocationManager(
   private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
     val maxNeeded = maxNumExecutorsNeeded
 
-    if (maxNeeded < numExecutorsTarget) {
+    if (initializing) {
+      // Do not change our target while we are still initializing,
+      // Otherwise the first job may have to ramp up unnecessarily
+      0
+    } else if (maxNeeded < numExecutorsTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests
       val oldNumExecutorsTarget = numExecutorsTarget
@@ -279,7 +283,7 @@ private[spark] class ExecutorAllocationManager(
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
         client.requestTotalExecutors(numExecutorsTarget)
-        logInfo(s"Lowering target number of executors to $numExecutorsTarget (previously " +
+        logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
       }
       numExecutorsTarget - oldNumExecutorsTarget
