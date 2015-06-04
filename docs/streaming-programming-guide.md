@@ -1915,7 +1915,7 @@ In that case, consider
 [reducing](#reducing-the-processing-time-of-each-batch) the batch processing time.
 
 The progress of a Spark Streaming program can also be monitored using the
-[StreamingListener](api/scala/index.html#org.apache.spark.scheduler.StreamingListener) interface,
+[StreamingListener](api/scala/index.html#org.apache.spark.streaming.scheduler.StreamingListener) interface,
 which allows you to get receiver status and processing times. Note that this is a developer API
 and it is likely to be improved upon (i.e., more information reported) in the future.
 
@@ -1946,10 +1946,10 @@ creates a single receiver (running on a worker machine) that receives a single s
 Receiving multiple data streams can therefore be achieved by creating multiple input DStreams
 and configuring them to receive different partitions of the data stream from the source(s).
 For example, a single Kafka input DStream receiving two topics of data can be split into two
-Kafka input streams, each receiving only one topic. This would run two receivers on two workers,
-thus allowing data to be received in parallel, and increasing overall throughput. These multiple
-DStream can be unioned together to create a single DStream. Then the transformations that was
-being applied on the single input DStream can applied on the unified stream. This is done as follows.
+Kafka input streams, each receiving only one topic. This would run two receivers,
+allowing data to be received in parallel, and increasing overall throughput. These multiple
+DStreams can be unioned together to create a single DStream. Then the transformations that were
+being applied on a single input DStream can be applied on the unified stream. This is done as follows.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

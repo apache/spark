@@ -23,15 +23,14 @@ import java.sql.Timestamp
 import com.esotericsoftware.kryo.{Serializer, Kryo}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.serializer.KryoRegistrator
-import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
 
-class ColumnTypeSuite extends FunSuite with Logging {
+class ColumnTypeSuite extends SparkFunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
@@ -73,7 +72,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
     val binary = Array.fill[Byte](4)(0: Byte)
-    checkActualSize(BINARY,  binary, 4 + 4)
+    checkActualSize(BINARY, binary, 4 + 4)
 
     val generic = Map(1 -> "a")
     checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
@@ -167,7 +166,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     val serializer = new SparkSqlSerializer(conf).newInstance()
 
     val buffer = ByteBuffer.allocate(512)
-    val obj = CustomClass(Int.MaxValue,Long.MaxValue)
+    val obj = CustomClass(Int.MaxValue, Long.MaxValue)
     val serializedObj = serializer.serialize(obj).array()
 
     GENERIC.append(serializer.serialize(obj).array(), buffer)
@@ -278,7 +277,7 @@ private[columnar] object CustomerSerializer extends Serializer[CustomClass] {
   override def read(kryo: Kryo, input: Input, aClass: Class[CustomClass]): CustomClass = {
     val a = input.readInt()
     val b = input.readLong()
-    CustomClass(a,b)
+    CustomClass(a, b)
   }
 }
 

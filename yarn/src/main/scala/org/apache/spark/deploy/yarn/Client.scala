@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream}
+import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException}
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
@@ -91,30 +91,52 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    // Setup the credentials before doing anything else, so we have don't have issues at any point.
-    setupCredentials()
-    yarnClient.init(yarnConf)
-    yarnClient.start()
+    var appId: ApplicationId = null
+    try {
+      // Setup the credentials before doing anything else,
+      // so we have don't have issues at any point.
+      setupCredentials()
+      yarnClient.init(yarnConf)
+      yarnClient.start()
 
-    logInfo("Requesting a new application from cluster with %d NodeManagers"
-      .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      logInfo("Requesting a new application from cluster with %d NodeManagers"
+        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
-    // Get a new application from our RM
-    val newApp = yarnClient.createApplication()
-    val newAppResponse = newApp.getNewApplicationResponse()
-    val appId = newAppResponse.getApplicationId()
+      // Get a new application from our RM
+      val newApp = yarnClient.createApplication()
+      val newAppResponse = newApp.getNewApplicationResponse()
+      appId = newAppResponse.getApplicationId()
 
-    // Verify whether the cluster has enough resources for our AM
-    verifyClusterResources(newAppResponse)
+      // Verify whether the cluster has enough resources for our AM
+      verifyClusterResources(newAppResponse)
 
-    // Set up the appropriate contexts to launch our AM
-    val containerContext = createContainerLaunchContext(newAppResponse)
-    val appContext = createApplicationSubmissionContext(newApp, containerContext)
+      // Set up the appropriate contexts to launch our AM
+      val containerContext = createContainerLaunchContext(newAppResponse)
+      val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
-    // Finally, submit and monitor the application
-    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-    yarnClient.submitApplication(appContext)
-    appId
+      // Finally, submit and monitor the application
+      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      yarnClient.submitApplication(appContext)
+      appId
+    } catch {
+      case e: Throwable =>
+        if (appId != null) {
+          val appStagingDir = getAppStagingDir(appId)
+          try {
+            val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+            val stagingDirPath = new Path(appStagingDir)
+            val fs = FileSystem.get(hadoopConf)
+            if (!preserveFiles && fs.exists(stagingDirPath)) {
+              logInfo("Deleting staging directory " + stagingDirPath)
+              fs.delete(stagingDirPath, true)
+            }
+          } catch {
+            case ioe: IOException =>
+              logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
+          }
+        }
+        throw e
+    }
   }
 
   /**
@@ -466,6 +488,17 @@ private[spark] class Client(
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
       env("SPARK_YARN_USER_ENV") = userEnvs
+    }
+
+    // if spark.submit.pyArchives is in sparkConf, append pyArchives to PYTHONPATH
+    // that can be passed on to the ApplicationMaster and the executors.
+    if (sparkConf.contains("spark.submit.pyArchives")) {
+      var pythonPath = sparkConf.get("spark.submit.pyArchives")
+      if (env.contains("PYTHONPATH")) {
+        pythonPath = Seq(env.get("PYTHONPATH"), pythonPath).mkString(File.pathSeparator)
+      }
+      env("PYTHONPATH") = pythonPath
+      sparkConf.setExecutorEnv("PYTHONPATH", pythonPath)
     }
 
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
@@ -1074,7 +1107,7 @@ object Client extends Logging {
         val hiveConf = hiveClass.getMethod("getConf").invoke(hive)
         val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
 
-        val hiveConfGet = (param:String) => Option(hiveConfClass
+        val hiveConfGet = (param: String) => Option(hiveConfClass
           .getMethod("get", classOf[java.lang.String])
           .invoke(hiveConf, param))
 
@@ -1096,7 +1129,7 @@ object Client extends Logging {
 
             val hive2Token = new Token[DelegationTokenIdentifier]()
             hive2Token.decodeFromUrlString(tokenStr)
-            credentials.addToken(new Text("hive.server2.delegation.token"),hive2Token)
+            credentials.addToken(new Text("hive.server2.delegation.token"), hive2Token)
             logDebug("Added hive.Server2.delegation.token to conf.")
             hiveClass.getMethod("closeCurrent").invoke(null)
           } else {
@@ -1109,9 +1142,9 @@ object Client extends Logging {
           logDebug("HiveMetaStore configured in localmode")
         }
       } catch {
-        case e:java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
-        case e:java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
-        case e:Exception => { logError("Unexpected Exception " + e)
+        case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
+        case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
+        case e: Exception => { logError("Unexpected Exception " + e)
           throw new RuntimeException("Unexpected exception", e)
         }
       }
@@ -1141,13 +1174,13 @@ object Client extends Logging {
 
         logInfo("Added HBase security token to credentials.")
       } catch {
-        case e:java.lang.NoSuchMethodException =>
+        case e: java.lang.NoSuchMethodException =>
           logInfo("HBase Method not found: " + e)
-        case e:java.lang.ClassNotFoundException =>
+        case e: java.lang.ClassNotFoundException =>
           logDebug("HBase Class not found: " + e)
-        case e:java.lang.NoClassDefFoundError =>
+        case e: java.lang.NoClassDefFoundError =>
           logDebug("HBase Class not found: " + e)
-        case e:Exception =>
+        case e: Exception =>
           logError("Exception when obtaining HBase security token: " + e)
       }
     }

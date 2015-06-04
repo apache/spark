@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
-import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.sql.types._
 
-class UnsafeFixedWidthAggregationMapSuite extends FunSuite with Matchers with BeforeAndAfterEach {
+class UnsafeFixedWidthAggregationMapSuite
+  extends SparkFunSuite
+  with Matchers
+  with BeforeAndAfterEach {
 
   import UnsafeFixedWidthAggregationMap._
 

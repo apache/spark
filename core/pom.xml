@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <version>1.5.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -338,6 +338,12 @@
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
       <artifactId>selenium-java</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>test</scope>
     </dependency>
     <!-- Added for selenium: -->
@@ -362,14 +368,30 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>net.razorvine</groupId>
+          <artifactId>serpent</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
@@ -381,35 +403,6 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <!-- Unzip py4j so we can include its files in the jar -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>generate-resources</phase>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <target>
-            <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="../python/build" />
-          </target>
-        </configuration>
-      </plugin>
-      <plugin>
-        <artifactId>maven-clean-plugin</artifactId>
-        <configuration>
-          <filesets>
-            <fileset>
-              <directory>${basedir}/../python/build</directory>
-            </fileset>
-          </filesets>
-          <verbose>true</verbose>
-        </configuration>
-      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
@@ -438,24 +431,6 @@
         </executions>
       </plugin>
     </plugins>
-
-    <resources>
-      <resource>
-        <directory>src/main/resources</directory>
-      </resource>
-      <resource>
-        <directory>../python</directory>
-        <includes>
-          <include>pyspark/*.py</include>
-        </includes>
-      </resource>
-      <resource>
-        <directory>../python/build</directory>
-        <includes>
-          <include>py4j/*.py</include>
-        </includes>
-      </resource>
-    </resources>
   </build>
 
   <profiles>
@@ -501,6 +476,29 @@
             </executions>
             <configuration>
               <executable>..${path.separator}R${path.separator}install-dev${script.extension}</executable>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>sparkr-docs</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sparkr-pkg-docs</id>
+                <phase>compile</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <executable>..${path.separator}R${path.separator}create-docs${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

@@ -47,10 +47,7 @@ abstract class DataType {
    *     ...
    * }}}
    */
-  private[sql] def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType == this => true
-    case _ => false
-  }
+  private[sql] def unapply(e: Expression): Boolean = e.dataType == this
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
@@ -110,7 +107,7 @@ protected[sql] abstract class AtomicType extends DataType {
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
-  // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
+  // type parameter and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
@@ -137,10 +134,7 @@ private[sql] object IntegralType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
 }
 
 
@@ -157,10 +151,7 @@ private[sql] object FractionalType {
    *     ...
    * }}}
    */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 }
 
 
@@ -174,6 +165,9 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
+  /**
+   * @deprecated As of 1.2.0, replaced by `DataType.fromJson()`
+   */
   @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
@@ -280,7 +274,7 @@ object DataType {
 
     protected lazy val structField: Parser[StructField] =
       ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-        case name ~ tpe ~ nullable  =>
+        case name ~ tpe ~ nullable =>
           StructField(name, tpe, nullable = nullable)
       }
 

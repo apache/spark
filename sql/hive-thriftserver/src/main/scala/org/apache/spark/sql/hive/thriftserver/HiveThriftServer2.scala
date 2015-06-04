@@ -17,23 +17,23 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
-import org.apache.spark.sql.SQLConf
 
-import org.apache.spark.{SparkContext, SparkConf, Logging}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerApplicationEnd, SparkListener}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
+import org.apache.spark.sql.hive.{HiveContext, HiveShim}
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -51,6 +51,7 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
+    sqlContext.setConf("spark.sql.hive.version", HiveShim.version)
     server.init(sqlContext.hiveconf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
@@ -147,7 +148,7 @@ object HiveThriftServer2 extends Logging {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
-
+    var onlineSessionNum: Int = 0
     val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     val retainedStatements =
@@ -170,11 +171,13 @@ object HiveThriftServer2 extends Logging {
     def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
       val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
       sessionList.put(sessionId, info)
+      onlineSessionNum += 1
       trimSessionIfNecessary()
     }
 
     def onSessionClosed(sessionId: String): Unit = {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      onlineSessionNum -= 1
     }
 
     def onStatementStart(

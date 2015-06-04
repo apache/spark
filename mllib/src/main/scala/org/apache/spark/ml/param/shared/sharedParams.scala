@@ -45,10 +45,10 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for max number of iterations (>= 0).
+   * Param for maximum number of iterations (>= 0).
    * @group param
    */
-  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidators.gtEq(0))
+  final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getMaxIter: Int = $(maxIter)
@@ -128,10 +128,10 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for column name for predicted class conditional probabilities.
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "column name for predicted class conditional probabilities")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
 
   setDefault(probabilityCol, "probability")
 
@@ -178,14 +178,14 @@ private[ml] trait HasInputCols extends Params {
    * Param for input column names.
    * @group param
    */
-  final val inputCols: Param[Array[String]] = new Param[Array[String]](this, "inputCols", "input column names")
+  final val inputCols: StringArrayParam = new StringArrayParam(this, "inputCols", "input column names")
 
   /** @group getParam */
   final def getInputCols: Array[String] = $(inputCols)
 }
 
 /**
- * (private[ml]) Trait for shared param outputCol.
+ * (private[ml]) Trait for shared param outputCol (default: uid + "__output").
  */
 private[ml] trait HasOutputCol extends Params {
 
@@ -194,6 +194,8 @@ private[ml] trait HasOutputCol extends Params {
    * @group param
    */
   final val outputCol: Param[String] = new Param[String](this, "outputCol", "output column name")
+
+  setDefault(outputCol, uid + "__output")
 
   /** @group getParam */
   final def getOutputCol: String = $(outputCol)
@@ -232,7 +234,7 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {
 
@@ -242,7 +244,7 @@ private[ml] trait HasSeed extends Params {
    */
   final val seed: LongParam = new LongParam(this, "seed", "random seed")
 
-  setDefault(seed, Utils.random.nextLong())
+  setDefault(seed, this.getClass.getName.hashCode.toLong)
 
   /** @group getParam */
   final def getSeed: Long = $(seed)

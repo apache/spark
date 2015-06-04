@@ -169,6 +169,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
+    keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
+    principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {

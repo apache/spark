@@ -17,7 +17,11 @@
 
 package org.apache.spark.ui.jobs
 
+import java.util.concurrent.TimeoutException
+
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+
+import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -119,7 +123,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       "failedStages" -> failedStages.size
     )
   }
-  
+
   // These collections may grow arbitrarily, but once Spark becomes idle they should shrink back to
   // some bound based on the `spark.ui.retainedStages` and `spark.ui.retainedJobs` settings:
   private[spark] def getSizesOfSoftSizeLimitedCollections: Map[String, Int] = {
@@ -525,5 +529,31 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
     startTime = appStarted.time
+  }
+
+  /**
+   * For testing only. Wait until at least `numExecutors` executors are up, or throw
+   * `TimeoutException` if the waiting time elapsed before `numExecutors` executors up.
+   *
+   * @param numExecutors the number of executors to wait at least
+   * @param timeout time to wait in milliseconds
+   */
+  @VisibleForTesting
+  private[spark] def waitUntilExecutorsUp(numExecutors: Int, timeout: Long): Unit = {
+    val finishTime = System.currentTimeMillis() + timeout
+    while (System.currentTimeMillis() < finishTime) {
+      val numBlockManagers = synchronized {
+        blockManagerIds.size
+      }
+      if (numBlockManagers >= numExecutors + 1) {
+        // Need to count the block manager in driver
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Can't find $numExecutors executors before $timeout milliseconds elapsed")
   }
 }

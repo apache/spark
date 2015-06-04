@@ -24,16 +24,34 @@ import scala.collection.mutable.SynchronizedBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
+
+/**
+ * A dummy stream that does absolutely nothing.
+ */
+private[streaming] class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
+  override def dependencies: List[DStream[Int]] = List.empty
+  override def slideDuration: Duration = Seconds(1)
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
+
+/**
+ * A dummy input stream that does absolutely nothing.
+ */
+private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
+  override def start(): Unit = { }
+  override def stop(): Unit = { }
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -73,9 +91,11 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
  *
  * The buffer contains a sequence of RDD's, each containing a sequence of items
  */
-class TestOutputStream[T: ClassTag](parent: DStream[T],
-    val output: ArrayBuffer[Seq[T]] = ArrayBuffer[Seq[T]]())
-  extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+class TestOutputStream[T: ClassTag](
+    parent: DStream[T],
+    val output: SynchronizedBuffer[Seq[T]] =
+      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+  ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
   }) {
@@ -95,8 +115,10 @@ class TestOutputStream[T: ClassTag](parent: DStream[T],
  * The buffer contains a sequence of RDD's, each containing a sequence of partitions, each
  * containing a sequence of items.
  */
-class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
-    val output: ArrayBuffer[Seq[Seq[T]]] = ArrayBuffer[Seq[Seq[T]]]())
+class TestOutputStreamWithPartitions[T: ClassTag](
+    parent: DStream[T],
+    val output: SynchronizedBuffer[Seq[Seq[T]]] =
+      new ArrayBuffer[Seq[Seq[T]]] with SynchronizedBuffer[Seq[Seq[T]]])
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
     output += collected
@@ -107,10 +129,6 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
-  }
-
-  def toTestOutputStream: TestOutputStream[T] = {
-    new TestOutputStream[T](this.parent, this.output.map(_.flatten))
   }
 }
 
@@ -186,7 +204,7 @@ class BatchCounter(ssc: StreamingContext) {
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
+trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
   def framework: String = this.getClass.getSimpleName
@@ -425,12 +443,21 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("--------------------------------")
 
     // Match the output with the expected output
-    assert(output.size === expectedOutput.size, "Number of outputs do not match")
     for (i <- 0 until output.size) {
       if (useSet) {
-        assert(output(i).toSet === expectedOutput(i).toSet)
+        assert(
+          output(i).toSet === expectedOutput(i).toSet,
+          s"Set comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       } else {
-        assert(output(i).toList === expectedOutput(i).toList)
+        assert(
+          output(i).toList === expectedOutput(i).toList,
+          s"Ordered list comparison failed\n" +
+            s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+            s"Generated output (${output.size} items): ${output.mkString("\n")}"
+        )
       }
     }
     logInfo("Output verified successfully")

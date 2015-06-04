@@ -82,6 +82,18 @@ object MLUtils {
           val value = indexAndValue(1).toDouble
           (index, value)
         }.unzip
+
+        // check if indices are one-based and in ascending order
+        var previous = -1
+        var i = 0
+        val indicesLength = indices.length
+        while (i < indicesLength) {
+          val current = indices(i)
+          require(current > previous, "indices should be one-based and in ascending order" )
+          previous = current
+          i += 1
+        }
+
         (label, indices.toArray, values.toArray)
       }
 
@@ -265,7 +277,7 @@ object MLUtils {
     }
     Vectors.fromBreeze(vector1)
   }
- 
+
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:
@@ -331,7 +343,7 @@ object MLUtils {
    * @param x a floating-point value as input.
    * @return the result of `math.log(1 + math.exp(x))`.
    */
-  private[mllib] def log1pExp(x: Double): Double = {
+  private[spark] def log1pExp(x: Double): Double = {
     if (x > 0) {
       x + math.log1p(math.exp(-x))
     } else {

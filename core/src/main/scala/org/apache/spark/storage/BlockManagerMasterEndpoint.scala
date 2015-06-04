@@ -292,16 +292,16 @@ class BlockManagerMasterEndpoint(
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
-          logError("Got two different block manager registrations on same executor - " 
+          logError("Got two different block manager registrations on same executor - "
               + s" will replace old one $oldId with new one $id")
-          removeExecutor(id.executorId)  
+          removeExecutor(id.executorId)
         case None =>
       }
       logInfo("Registering block manager %s with %s RAM, %s".format(
         id.hostPort, Utils.bytesToString(maxMemSize), id))
-      
+
       blockManagerIdByExecutor(id.executorId) = id
-      
+
       blockManagerInfo(id) = new BlockManagerInfo(
         id, System.currentTimeMillis(), maxMemSize, slaveEndpoint)
     }

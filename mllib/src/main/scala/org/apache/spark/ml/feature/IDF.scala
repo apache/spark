@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -58,11 +58,13 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
-@AlphaComponent
-final class IDF extends Estimator[IDFModel] with IDFBase {
+@Experimental
+final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase {
+
+  def this() = this(Identifiable.randomUID("idf"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -74,7 +76,7 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val idf = new feature.IDF($(minDocFreq)).fit(input)
-    copyValues(new IDFModel(this, idf))
+    copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -83,12 +85,12 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[IDF]].
  */
-@AlphaComponent
+@Experimental
 class IDFModel private[ml] (
-    override val parent: IDF,
+    override val uid: String,
     idfModel: feature.IDFModel)
   extends Model[IDFModel] with IDFBase {
 
