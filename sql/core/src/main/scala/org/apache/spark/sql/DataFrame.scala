@@ -1083,6 +1083,22 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This version of drop accepts a Column rather than a name.
+   * This is a no-op if the DataFrame doesn't have a column
+   * with an equivalent expression.
+   * @group dfops
+   * @since 1.4.1
+   */
+  def drop(col: Column): DataFrame = {
+    val attrs = this.logicalPlan.output
+    val colsAfterDrop = attrs.filter { attr =>
+      attr != col.expr
+    }.map(attr => Column(attr))
+    select(colsAfterDrop : _*)
+  }
+
+  /**
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
    * This is an alias for `distinct`.
    * @group dfops
