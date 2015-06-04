@@ -597,9 +597,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("SPARK-8079: Avoid NPE thrown from BaseWriterContainer.abortJob") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val cause = intercept[Throwable] {
+      intercept[AnalysisException] {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
@@ -607,15 +605,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")
-          .save(path)
-      }
-
-      cause match {
-        case _: NullPointerException =>
-          fail("Shouldn't throw NPE")
-
-        case e: RuntimeException =>
-          assert(e.getMessage.contains("Attribute name \"a b\" contains invalid character"))
+          .save(dir.getCanonicalPath)
       }
     }
   }
