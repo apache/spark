@@ -46,7 +46,10 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.partitioner"),
             // Mima false positive (was a private[spark] class)
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.util.collection.PairIterator")
+              "org.apache.spark.util.collection.PairIterator"),
+            // Removing a testing method from a private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset")
           )
         case v if v.startsWith("1.4") =>
           Seq(
