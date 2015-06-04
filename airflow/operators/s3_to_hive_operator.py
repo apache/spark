@@ -54,9 +54,6 @@ class S3ToHiveTransfer(BaseOperator):
     :type hive_conn_id: str
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'S3ToHiveOperator'
-    }
     template_fields = ('s3_key', 'partition', 'hive_table')
     template_ext = ()
     ui_color = '#a0e08c'

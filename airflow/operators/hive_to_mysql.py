@@ -27,9 +27,6 @@ class HiveToMySqlTransfer(BaseOperator):
     :type mysql_preoperator: str
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'HiveToMySqlTransfer'
-    }
     template_fields = ('sql', 'mysql_table')
     template_ext = ('.sql',)
     ui_color = '#a0e08c'

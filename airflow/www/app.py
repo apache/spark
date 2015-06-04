@@ -1097,7 +1097,10 @@ class Airflow(BaseView):
             for ti in dag.get_task_instances(session, dttm, dttm)
         }
         tasks = {
-            t.task_id: utils.alchemy_to_dict(t)
+            t.task_id: {
+                'dag_id': t.dag_id,
+                'task_type': t.task_type,
+            }
             for t in dag.tasks
         }
         if not tasks:

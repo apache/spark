@@ -40,9 +40,6 @@ class HiveStatsCollectionOperator(BaseOperator):
     :type assignment_func: function
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'HiveStatsCollectionOperator'
-    }
     template_fields = ('table', 'partition', 'ds', 'dttm')
     ui_color = '#aff7a6'
 

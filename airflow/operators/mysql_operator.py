@@ -16,9 +16,6 @@ class MySqlOperator(BaseOperator):
         a '.sql' extensions.
     """
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'MySqlOperator'
-    }
     template_fields = ('sql',)
     template_ext = ('.sql',)
     ui_color = '#ededed'

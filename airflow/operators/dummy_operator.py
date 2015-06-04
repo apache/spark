@@ -11,10 +11,6 @@ class DummyOperator(BaseOperator):
     template_fields = tuple()
     ui_color = '#e8f7e4'
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'DummyOperator'
-    }
-
     @apply_defaults
     def __init__(self, *args, **kwargs):
         super(DummyOperator, self).__init__(*args, **kwargs)

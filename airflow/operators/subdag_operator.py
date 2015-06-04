@@ -9,10 +9,6 @@ class SubDagOperator(BaseOperator):
     ui_color = '#555'
     ui_fgcolor = '#fff'
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'SubDagOperator'
-    }
-
     @apply_defaults
     def __init__(
             self,

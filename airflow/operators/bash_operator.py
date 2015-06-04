@@ -18,10 +18,6 @@ class BashOperator(BaseOperator):
     template_ext = ('.sh', '.bash',)
     ui_color = '#f0ede4'
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'BashOperator'
-    }
-
     @apply_defaults
     def __init__(self, bash_command, *args, **kwargs):
         super(BashOperator, self).__init__(*args, **kwargs)

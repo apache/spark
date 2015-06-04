@@ -26,10 +26,6 @@ class PythonOperator(BaseOperator):
     template_fields = tuple()
     ui_color = '#ffefeb'
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'PythonOperator'
-    }
-
     @apply_defaults
     def __init__(
             self,
