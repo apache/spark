@@ -1246,10 +1246,25 @@
             </execution>
           </executions>
         </plugin>
+        <!-- Build test-jar's for all projects, since some projects depend on tests from others -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
           <version>2.4</version>
+          <executions>
+            <execution>
+              <id>prepare-test-jar</id>
+              <phase>prepare-package</phase>
+              <goals>
+                <goal>test-jar</goal>
+              </goals>
+              <configuration>
+                <excludes>
+                  <exclude>log4j.properties</exclude>
+                </excludes>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
