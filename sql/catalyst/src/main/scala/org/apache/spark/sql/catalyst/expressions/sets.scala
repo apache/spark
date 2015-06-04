@@ -62,11 +62,15 @@ case class NewSet(elementType: DataType) extends LeafExpression {
   }
 
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
-    s"""
-      boolean ${ev.nullTerm} = false;
-      ${ctx.hashSetForType(elementType)} ${ev.primitiveTerm} =
-        new ${ctx.hashSetForType(elementType)}();
-    """
+    elementType match {
+      case IntegerType | LongType =>
+        s"""
+          boolean ${ev.nullTerm} = false;
+          ${ctx.hashSetForType(elementType)} ${ev.primitiveTerm} =
+            new ${ctx.hashSetForType(elementType)}();
+        """
+      case _ => super.genSource(ctx, ev)
+    }
   }
 
   override def toString: String = s"new Set($dataType)"
@@ -101,20 +105,22 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
   }
 
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
-    val itemEval = item.gen(ctx)
-    val setEval = set.gen(ctx)
-
     val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
-    val htype = ctx.hashSetForType(elementType)
+    elementType match {
+      case IntegerType | LongType =>
+        val itemEval = item.gen(ctx)
+        val setEval = set.gen(ctx)
+        val htype = ctx.hashSetForType(elementType)
 
-    itemEval.code + setEval.code +
-    s"""
-       if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
-         (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
-       }
-       boolean ${ev.nullTerm} = false;
-       ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
-     """
+        itemEval.code + setEval.code +  s"""
+           if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
+             (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
+           }
+           boolean ${ev.nullTerm} = false;
+           ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
+         """
+      case _ => super.genSource(ctx, ev)
+    }
   }
 
   override def toString: String = s"$set += $item"
@@ -152,19 +158,20 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
   }
 
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
-    val leftEval = left.gen(ctx)
-    val rightEval = right.gen(ctx)
-
     val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
-    val htype = ctx.hashSetForType(elementType)
+    elementType match {
+      case IntegerType | LongType =>
+        val leftEval = left.gen(ctx)
+        val rightEval = right.gen(ctx)
+        val htype = ctx.hashSetForType(elementType)
 
-    leftEval.code + rightEval.code +
-    s"""
-      boolean ${ev.nullTerm} = false;
-      ${htype} ${ev.primitiveTerm} =
-        (${htype})${leftEval.primitiveTerm};
-      ${ev.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
-    """
+        leftEval.code + rightEval.code + s"""
+          boolean ${ev.nullTerm} = false;
+          ${htype} ${ev.primitiveTerm} = ${leftEval.primitiveTerm};
+          ${ev.primitiveTerm}.union(${rightEval.primitiveTerm});
+        """
+      case _ => super.genSource(ctx, ev)
+    }
   }
 }
 
@@ -182,6 +189,10 @@ case class CountSet(child: Expression) extends UnaryExpression {
     if (childEval != null) {
       childEval.size.toLong
     }
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    castOrNull(ctx, ev, c => s"$c.size().toLong()")
   }
 
   override def toString: String = s"$child.count()"

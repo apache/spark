@@ -221,8 +221,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     eval1.code + eval2.code +
       s"""
       boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveForType(left.dataType)} ${ev.primitiveTerm} =
-        ${ctx.defaultPrimitive(left.dataType)};
+      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+        ${ctx.defaultValue(left.dataType)};
       if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
         ${ev.nullTerm} = true;
       } else {
@@ -279,8 +279,8 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     eval1.code + eval2.code +
       s"""
       boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveForType(left.dataType)} ${ev.primitiveTerm} =
-        ${ctx.defaultPrimitive(left.dataType)};
+      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+        ${ctx.defaultValue(left.dataType)};
       if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
         ${ev.nullTerm} = true;
       } else {
@@ -412,8 +412,8 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
       val eval2 = right.gen(ctx)
       eval1.code + eval2.code + s"""
         boolean ${ev.nullTerm} = false;
-        ${ctx.primitiveForType(left.dataType)} ${ev.primitiveTerm} =
-          ${ctx.defaultPrimitive(left.dataType)};
+        ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+          ${ctx.defaultValue(left.dataType)};
 
         if (${eval1.nullTerm}) {
           ${ev.nullTerm} = ${eval2.nullTerm};
@@ -468,8 +468,8 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
       eval1.code + eval2.code + s"""
         boolean ${ev.nullTerm} = false;
-        ${ctx.primitiveForType(left.dataType)} ${ev.primitiveTerm} =
-          ${ctx.defaultPrimitive(left.dataType)};
+        ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+          ${ctx.defaultValue(left.dataType)};
 
         if (${eval1.nullTerm}) {
           ${ev.nullTerm} = ${eval2.nullTerm};

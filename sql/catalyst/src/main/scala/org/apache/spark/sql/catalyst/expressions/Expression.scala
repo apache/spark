@@ -90,10 +90,10 @@ abstract class Expression extends TreeNode[Expression] {
           /* expression: ${this} */
           Object ${ev.objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
           boolean ${ev.nullTerm} = ${ev.objectTerm} == null;
-          ${ctx.primitiveForType(e.dataType)} ${ev.primitiveTerm} =
-            ${ctx.defaultPrimitive(e.dataType)};
+          ${ctx.primitiveType(e.dataType)} ${ev.primitiveTerm} =
+            ${ctx.defaultValue(e.dataType)};
           if (!${ev.nullTerm}) ${ev.primitiveTerm} =
-            (${ctx.termForType(e.dataType)})${ev.objectTerm};
+            (${ctx.boxedType(e.dataType)})${ev.objectTerm};
     """
   }
 
@@ -173,12 +173,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
    */
   def evaluate(ctx: CodeGenContext,
                ev: EvaluatedExpression,
-               f: (String, String) => String): String =
-    evaluateAs(left.dataType)(ctx, ev, f)
-
-  def evaluateAs(resultType: DataType)(ctx: CodeGenContext,
-                                       ev: EvaluatedExpression,
-                                       f: (String, String) => String): String = {
+               f: (String, String) => String): String = {
     // TODO: Right now some timestamp tests fail if we enforce this...
     if (left.dataType != right.dataType) {
       // log.warn(s"${left.dataType} != ${right.dataType}")
@@ -188,14 +183,19 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
     val eval2 = right.gen(ctx)
     val resultCode = f(eval1.primitiveTerm, eval2.primitiveTerm)
 
-    eval1.code + eval2.code +
-      s"""
-          boolean ${ev.nullTerm} = ${eval1.nullTerm} || ${eval2.nullTerm};
-          ${ctx.primitiveForType(resultType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(resultType)};
-          if(!${ev.nullTerm}) {
-            ${ev.primitiveTerm} = (${ctx.primitiveForType(resultType)})($resultCode);
-          }
-        """
+    s"""
+      ${eval1.code}
+      boolean ${ev.nullTerm} = ${eval1.nullTerm};
+      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
+      if (!${ev.nullTerm}) {
+        ${eval2.code}
+        if(!${eval2.nullTerm}) {
+          ${ev.primitiveTerm} = (${ctx.primitiveType(dataType)})($resultCode);
+        } else {
+          ${ev.nullTerm} = true;
+        }
+      }
+    """
   }
 }
 
@@ -207,16 +207,15 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
   self: Product =>
   def castOrNull(ctx: CodeGenContext,
                  ev: EvaluatedExpression,
-                 f: String => String, dataType: DataType): String = {
+                 f: String => String): String = {
     val eval = child.gen(ctx)
-    eval.code +
-      s"""
-          boolean ${ev.nullTerm} = ${eval.nullTerm};
-          ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
-          if (!${ev.nullTerm}) {
-            ${ev.primitiveTerm} = ${f(eval.primitiveTerm)};
-          }
-        """
+    eval.code + s"""
+      boolean ${ev.nullTerm} = ${eval.nullTerm};
+      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
+      if (!${ev.nullTerm}) {
+        ${ev.primitiveTerm} = ${f(eval.primitiveTerm)};
+      }
+    """
   }
 }
 

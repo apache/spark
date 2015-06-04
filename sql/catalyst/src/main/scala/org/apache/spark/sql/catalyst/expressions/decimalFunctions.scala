@@ -68,7 +68,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
     eval.code + s"""
       boolean ${ev.nullTerm} = ${eval.nullTerm};
       org.apache.spark.sql.types.Decimal ${ev.primitiveTerm} =
-       ${ctx.defaultPrimitive(DecimalType())};
+       ${ctx.defaultValue(DecimalType())};
 
       if (!${ev.nullTerm}) {
        ${ev.primitiveTerm} = new org.apache.spark.sql.types.Decimal();

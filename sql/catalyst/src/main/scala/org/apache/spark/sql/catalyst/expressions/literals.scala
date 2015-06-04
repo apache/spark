@@ -85,7 +85,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     if (value == null) {
       s"""
           final boolean ${ev.nullTerm} = true;
-          ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
+          ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
         """
     } else {
       dataType match {
@@ -93,25 +93,25 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           val v = value.asInstanceOf[UTF8String]
           val arr = s"new byte[]{${v.getBytes.map(_.toString).mkString(", ")}}"
           s"""
-          final boolean ${ev.nullTerm} = false;
-          org.apache.spark.sql.types.UTF8String ${ev.primitiveTerm} =
-            new org.apache.spark.sql.types.UTF8String().set(${arr});
-         """
+            final boolean ${ev.nullTerm} = false;
+            org.apache.spark.sql.types.UTF8String ${ev.primitiveTerm} =
+              new org.apache.spark.sql.types.UTF8String().set(${arr});
+           """
         case FloatType =>
           s"""
-          final boolean ${ev.nullTerm} = false;
-          float ${ev.primitiveTerm} = ${value}f;
-         """
+            final boolean ${ev.nullTerm} = false;
+            float ${ev.primitiveTerm} = ${value}f;
+           """
         case dt: DecimalType =>
           s"""
-          final boolean ${ev.nullTerm} = false;
-          ${ctx.primitiveForType(dt)} ${ev.primitiveTerm} = new ${ctx.primitiveForType(dt)}().set($value);
-         """
+            final boolean ${ev.nullTerm} = false;
+            ${ctx.primitiveType(dt)} ${ev.primitiveTerm} = new ${ctx.primitiveType(dt)}().set($value);
+           """
         case dt: NumericType =>
           s"""
-          final boolean ${ev.nullTerm} = false;
-          ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = $value;
-         """
+            final boolean ${ev.nullTerm} = false;
+            ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = $value;
+           """
         case other =>
           super.genSource(ctx, ev)
       }

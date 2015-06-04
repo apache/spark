@@ -56,7 +56,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
     s"""
       boolean ${ev.nullTerm} = true;
-      ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
+      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
     """ +
     children.map { e =>
       val eval = e.gen(ctx)
@@ -130,5 +130,26 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       i += 1
     }
     numNonNulls >= n
+  }
+
+  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+    val nonnull = ctx.freshName("nonnull")
+    val code = children.map { e =>
+      val eval = e.gen(ctx)
+      s"""
+        if($nonnull < $n) {
+          ${eval.code}
+          if(!${eval.nullTerm}) {
+            $nonnull += 1;
+          }
+        }
+      """
+    }.mkString("\n")
+    s"""
+      int $nonnull = 0;
+      $code
+      boolean ${ev.nullTerm} = false;
+      boolean ${ev.primitiveTerm} = $nonnull >= $n;
+     """
   }
 }

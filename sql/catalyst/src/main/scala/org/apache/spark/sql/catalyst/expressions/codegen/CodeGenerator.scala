@@ -71,7 +71,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     dataType match {
       case StringType => s"(org.apache.spark.sql.types.UTF8String)i.apply($ordinal)"
       case dt: DataType if isNativeType(dt) => s"i.${accessorForType(dt)}($ordinal)"
-      case _ => s"(${termForType(dataType)})i.apply($ordinal)"
+      case _ => s"(${boxedType(dataType)})i.apply($ordinal)"
     }
   }
 
@@ -86,12 +86,12 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
 
   def accessorForType(dt: DataType): String = dt match {
     case IntegerType => "getInt"
-    case other => s"get${termForType(dt)}"
+    case other => s"get${boxedType(dt)}"
   }
 
   def mutatorForType(dt: DataType): String = dt match {
     case IntegerType => "setInt"
-    case other => s"set${termForType(dt)}"
+    case other => s"set${boxedType(dt)}"
   }
 
   def hashSetForType(dt: DataType): String = dt match {
@@ -101,7 +101,10 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
       sys.error(s"Code generation not support for hashset of type $unsupportedType")
   }
 
-  def primitiveForType(dt: DataType): String = dt match {
+  /**
+   * Return the primitive type for a DataType
+   */
+  def primitiveType(dt: DataType): String = dt match {
     case IntegerType => "int"
     case LongType => "long"
     case ShortType => "short"
@@ -117,7 +120,10 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     case _ => "Object"
   }
 
-  def defaultPrimitive(dt: DataType): String = dt match {
+  /**
+   * Return the representation of default value for given DataType
+   */
+  def defaultValue(dt: DataType): String = dt match {
     case BooleanType => "false"
     case FloatType => "-1.0f"
     case ShortType => "-1"
@@ -131,7 +137,10 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     case _ => "null"
   }
 
-  def termForType(dt: DataType): String = dt match {
+  /**
+   * Return the boxed type in Java
+   */
+  def boxedType(dt: DataType): String = dt match {
     case IntegerType => "Integer"
     case LongType => "Long"
     case ShortType => "Short"
@@ -145,6 +154,15 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     case DateType => "Integer"
     case TimestampType => "java.sql.Timestamp"
     case _ => "Object"
+  }
+
+  /**
+   * Returns a function to generate equal expression in Java
+   */
+  def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
+    case BinaryType => { case (eval1, eval2) => s"java.util.Arrays.equals($eval1, $eval2)" }
+    case dt if isNativeType(dt) => { case (eval1, eval2) => s"$eval1 == $eval2" }
+    case other => { case (eval1, eval2) => s"$eval1.equals($eval2)" }
   }
 
   /**
@@ -166,7 +184,6 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val rowType = classOf[Row].getName
   protected val exprType = classOf[Expression].getName
   protected val mutableRowType = classOf[MutableRow].getName
   protected val genericMutableRowType = classOf[GenericMutableRow].getName

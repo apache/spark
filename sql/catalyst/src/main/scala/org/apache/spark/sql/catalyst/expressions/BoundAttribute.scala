@@ -46,8 +46,8 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
     s"""
         final boolean ${ev.nullTerm} = i.isNullAt($ordinal);
-        final ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ev.nullTerm} ?
-            ${ctx.defaultPrimitive(dataType)} : (${ctx.getColumn(dataType, ordinal)});
+        final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ev.nullTerm} ?
+            ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
     """
   }
 }

@@ -439,33 +439,30 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
     case Cast(child @ BinaryType(), StringType) =>
       castOrNull (ctx, ev, c =>
-        s"new org.apache.spark.sql.types.UTF8String().set($c)",
-        StringType)
+        s"new org.apache.spark.sql.types.UTF8String().set($c)")
 
     case Cast(child @ DateType(), StringType) =>
       castOrNull(ctx, ev, c =>
         s"""new org.apache.spark.sql.types.UTF8String().set(
-                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
-        StringType)
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
 
-    case Cast(child @ BooleanType(), dt: NumericType)  if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"(${ctx.primitiveForType(dt)})($c?1:0)", dt)
+    case Cast(child @ BooleanType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+      castOrNull(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c?1:0)")
 
     case Cast(child @ DecimalType(), IntegerType) =>
-      castOrNull(ctx, ev, c => s"($c).toInt()", IntegerType)
+      castOrNull(ctx, ev, c => s"($c).toInt()")
 
     case Cast(child @ DecimalType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"($c).to${ctx.termForType(dt)}()", dt)
+      castOrNull(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
 
     case Cast(child @ NumericType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"(${ctx.primitiveForType(dt)})($c)", dt)
+      castOrNull(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c)")
 
     // Special handling required for timestamps in hive test cases since the toString function
     // does not match the expected output.
     case Cast(e, StringType) if e.dataType != TimestampType =>
       castOrNull(ctx, ev, c =>
-        s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))",
-        StringType)
+        s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))")
 
     case other =>
       super.genSource(ctx, ev)

@@ -85,8 +85,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
   }
 
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
-    // Uh, bad function name...
-    castOrNull(ctx, ev, c => s"!($c)", BooleanType)
+    castOrNull(ctx, ev, c => s"!($c)")
   }
 }
 
@@ -221,13 +220,14 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
     left.dataType match {
-      case dt: NumericType => evaluateAs(BooleanType) (ctx, ev, {
-        (eval1, eval2) => s"$eval1 $symbol $eval2"
+      case dt: NumericType if ctx.isNativeType(dt) => evaluate (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
       })
-      case dt: TimestampType =>
+      case TimestampType =>
+        // java.sql.Timestamp does not have compare()
         super.genSource(ctx, ev)
-      case other => evaluateAs(BooleanType) (ctx, ev, {
-        (eval1, eval2) => s"$eval1.compare($eval2) $symbol 0"
+      case other => evaluate (ctx, ev, {
+        (c1, c2) => s"$c1.compare($c2) $symbol 0"
       })
     }
   }
@@ -277,15 +277,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression) = {
-    left.dataType match {
-      case BinaryType() =>
-        evaluateAs (BooleanType) (ctx, ev, {
-          case (eval1, eval2) =>
-            s"java.util.Arrays.equals((byte[])$eval1, (byte[])$eval2)"
-        })
-      case other =>
-        evaluateAs (BooleanType) (ctx, ev, { case (eval1, eval2) => s"$eval1 == $eval2" })
-    }
+    evaluate(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
 
@@ -311,16 +303,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val cmpCode = if (left.dataType.isInstanceOf[BinaryType]) {
-      s"java.util.Arrays.equals((byte[])${eval1.primitiveTerm}, (byte[])${eval2.primitiveTerm})"
-    } else {
-      s"${eval1.primitiveTerm} == ${eval2.primitiveTerm}"
-    }
-    eval1.code + eval2.code +
-      s"""
+    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitiveTerm, eval2.primitiveTerm)
+    eval1.code + eval2.code + s"""
         final boolean ${ev.nullTerm} = false;
         final boolean ${ev.primitiveTerm} = (${eval1.nullTerm} && ${eval2.nullTerm}) ||
-           (!${eval1.nullTerm} && $cmpCode);
+           (!${eval1.nullTerm} && $equalCode);
       """
   }
 }
@@ -403,7 +390,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
     s"""
       boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveForType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultPrimitive(dataType)};
+      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
       ${condEval.code}
       if(!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
         ${trueEval.code}
