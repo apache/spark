@@ -25,7 +25,7 @@ import tempfile
 import array as pyarray
 from time import time, sleep
 
-from numpy import array, array_equal, zeros, inf, all
+from numpy import array, array_equal, zeros, inf, all, random, sum
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -883,19 +883,50 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.assertEquals(stkm._decayFactor, 0.0)
 
         # Model not set yet.
-        self.assertIsNone(stkm.model)
+        self.assertIsNone(stkm.latestModel)
         self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
 
         stkm.setInitialCenters([[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0])
-        self.assertEquals(stkm.model.centers, [[0.0, 0.0], [1.0, 1.0]])
-        self.assertEquals(stkm.model.getClusterWeights, [1.0, 1.0])
+        self.assertEquals(stkm.latestModel.centers, [[0.0, 0.0], [1.0, 1.0]])
+        self.assertEquals(stkm.latestModel.getClusterWeights, [1.0, 1.0])
 
-    def _ssc_wait(self, start_time, end_time, sleep_time):
+    @staticmethod
+    def _ssc_wait(start_time, end_time, sleep_time):
         while time() - start_time < end_time:
             sleep(0.01)
 
+    def test_accuracy_for_single_center(self):
+        numBatches, numPoints, k, d, r, seed = 5, 5, 1, 5, 0.1, 0
+        centers, batches = self.streamingKMeansDataGenerator(
+            numBatches, numPoints, k, d, r, seed)
+        stkm = StreamingKMeans(1)
+        stkm.setInitialCenters([[0., 0., 0., 0., 0.]], [0.])
+        input_stream = self.ssc.queueStream(
+            [self.sc.parallelize(batch, 1) for batch in batches])
+        stkm.trainOn(input_stream)
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 10.0, 0.01)
+        self.assertEquals(stkm.latestModel.getClusterWeights, [25.0])
+        realCenters = sum(array(centers), axis=0)
+        for i in range(d):
+            modelCenters = stkm.latestModel.centers[0][i]
+            self.assertAlmostEqual(centers[0][i], modelCenters, 1)
+            self.assertAlmostEqual(realCenters[i], modelCenters, 1)
+
+    def streamingKMeansDataGenerator(self, batches, numPoints,
+                                     k, d, r, seed, centers=None):
+        rng = random.RandomState(seed)
+
+        # Generate centers.
+        centers = [rng.randn(d) for i in range(k)]
+
+        return centers, [[Vectors.dense(centers[j % k] + r * rng.randn(d))
+                          for j in range(numPoints)]
+                         for i in range(batches)]
+
     def test_trainOn_model(self):
-        # Test the model on toy data.
+        # Test the model on toy data with four clusters.
         stkm = StreamingKMeans()
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
         weights = [1.0, 1.0, 1.0, 1.0]
@@ -916,16 +947,15 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         # Give enough time to train the model.
         self._ssc_wait(t, 6.0, 0.01)
-        finalModel = stkm.model
+        finalModel = stkm.latestModel
         self.assertTrue(all(finalModel.centers == array(initCenters)))
         self.assertEquals(finalModel.getClusterWeights, [5.0, 5.0, 5.0, 5.0])
 
     def test_predictOn_model(self):
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
         weights = [1.0, 1.0, 1.0, 1.0]
-        model = StreamingKMeansModel(initCenters, weights)
         stkm = StreamingKMeans()
-        stkm.model = model
+        stkm.latestModel = StreamingKMeansModel(initCenters, weights)
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
         predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
@@ -935,10 +965,9 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         result = []
 
         def update(rdd):
-            if rdd:
-                rdd_collect = rdd.collect()
-                if rdd_collect:
-                    result.append(rdd_collect)
+            rdd_collect = rdd.collect()
+            if rdd_collect:
+                result.append(rdd_collect)
 
         predict_val.foreachRDD(update)
         t = time()

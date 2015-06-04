@@ -384,17 +384,17 @@ class StreamingKMeans(object):
             raise ValueError(
                 "timeUnit should be 'batches' or 'points', got %s." % timeUnit)
         self._timeUnit = timeUnit
-        self.model = None
+        self.latestModel = None
 
     def _validate(self, dstream):
-        if self.model is None:
+        if self.latestModel is None:
             raise ValueError(
                 "Initial centers should be set either by setInitialCenters "
                 "or setRandomCenters.")
         if not isinstance(dstream, DStream):
             raise TypeError(
                 "Expected dstream to be of type DStream, "
-                "got type %d" % type(dstream))
+                "got type %s" % type(dstream))
 
     def setK(self, k):
         """Set number of clusters."""
@@ -416,7 +416,7 @@ class StreamingKMeans(object):
         return self
 
     def setInitialCenters(self, centers, weights):
-        self.model = StreamingKMeansModel(centers, weights)
+        self.latestModel = StreamingKMeansModel(centers, weights)
         return self
 
     def setRandomCenters(self, dim, weight, seed):
@@ -427,7 +427,7 @@ class StreamingKMeans(object):
         rng = random.RandomState(seed)
         clusterCenters = rng.randn(self._k, dim)
         clusterWeights = tile(weight, self._k)
-        self.model = StreamingKMeansModel(clusterCenters, clusterWeights)
+        self.latestModel = StreamingKMeansModel(clusterCenters, clusterWeights)
         return self
 
     def trainOn(self, dstream):
@@ -435,7 +435,7 @@ class StreamingKMeans(object):
         self._validate(dstream)
 
         def update(rdd):
-            self.model.update(rdd, self._decayFactor, self._timeUnit)
+            self.latestModel.update(rdd, self._decayFactor, self._timeUnit)
 
         dstream.foreachRDD(update)
 
@@ -445,7 +445,7 @@ class StreamingKMeans(object):
         Returns a transformed dstream object
         """
         self._validate(dstream)
-        return dstream.map(self.model.predict)
+        return dstream.map(self.latestModel.predict)
 
     def predictOnValues(self, dstream):
         """
@@ -453,7 +453,7 @@ class StreamingKMeans(object):
         Returns a transformed dstream object.
         """
         self._validate(dstream)
-        return dstream.mapValues(self.model.predict)
+        return dstream.mapValues(self.latestModel.predict)
 
 
 def _test():
