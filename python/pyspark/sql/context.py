@@ -201,7 +201,7 @@ class SQLContext(object):
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        first = next(iter(data))
+        first = data[0]
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
@@ -341,6 +341,8 @@ class SQLContext(object):
             data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):
+            if not isinstance(data, list):
+                data = list(data)
             try:
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
