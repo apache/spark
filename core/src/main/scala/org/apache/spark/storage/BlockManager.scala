@@ -1241,12 +1241,6 @@ private[spark] class BlockManager(
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }
-
-  private[storage] def hasCachedBlocks: Boolean = {
-    blockInfo.exists { case (blockId, info) =>
-      !blockId.isBroadcast && getCurrentBlockStatus(blockId, info).isCached
-    }
-  }
 }
 
 

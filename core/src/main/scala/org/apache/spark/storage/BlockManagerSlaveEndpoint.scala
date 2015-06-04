@@ -70,7 +70,6 @@ class BlockManagerSlaveEndpoint(
 
     case GetMatchingBlockIds(filter, _) =>
       context.reply(blockManager.getMatchingBlockIds(filter))
-
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {

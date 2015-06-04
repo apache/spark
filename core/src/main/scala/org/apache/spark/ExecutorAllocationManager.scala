@@ -23,11 +23,8 @@ import scala.collection.mutable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.executor.ExecutorEndpoint
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler._
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.storage.BlockManagerMessages.HasCachedBlocks
 import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
 
 /**
@@ -106,8 +103,6 @@ private[spark] class ExecutorAllocationManager(
 
   private val cachedExecutorTimeoutS = conf.getTimeAsSeconds(
     "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${Long.MaxValue / 1000}s")
-
-  val executorsWithCachedBlocks = new mutable.HashSet[String]()
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
@@ -418,7 +413,6 @@ private[spark] class ExecutorAllocationManager(
         logDebug(s"Executor $executorId is no longer pending to " +
           s"be removed (${executorsPendingToRemove.size} left)")
       }
-//      executorEndpoints -= executorId
     } else {
       logWarning(s"Unknown executor $executorId has been removed!")
     }
@@ -461,17 +455,17 @@ private[spark] class ExecutorAllocationManager(
         val now = clock.getTimeMillis()
         val timeout = {
           if (hasCachedBlocks) {
-            val newExpiry = now + cachedExecutorTimeoutS * 1000
-            if (newExpiry < 0) Long.MaxValue // Overflow
-            else newExpiry
+            now + cachedExecutorTimeoutS * 1000
           } else {
             now + executorIdleTimeoutS * 1000
           }
         }
 
-        removeTimes(executorId) = timeout
+        val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
+        removeTimes(executorId) = realTimeout
+
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor")
+          s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
       }
     } else {
       logWarning(s"Attempted to mark unknown executor $executorId idle")
