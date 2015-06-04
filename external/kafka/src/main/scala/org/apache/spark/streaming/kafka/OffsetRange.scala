@@ -55,6 +55,9 @@ final class OffsetRange private(
     val untilOffset: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
 
+  /** Number of messages this OffsetRange refers to */
+  def count(): Long = untilOffset - fromOffset
+
   override def equals(obj: Any): Boolean = obj match {
     case that: OffsetRange =>
       this.topic == that.topic &&

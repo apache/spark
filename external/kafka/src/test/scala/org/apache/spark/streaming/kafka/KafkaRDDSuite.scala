@@ -70,6 +70,14 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val received = rdd.map(_._2).collect.toSet
     assert(received === messages)
+
+    // size-related method optimizations return sane results
+    assert(rdd.count === messages.size)
+    assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
+    assert(! rdd.isEmpty)
+    assert(rdd.take(1).size === 1)
+    assert(messages(rdd.take(1).head._2))
+    assert(rdd.take(messages.size + 10).size === messages.size)
   }
 
   test("iterator boundary conditions") {
