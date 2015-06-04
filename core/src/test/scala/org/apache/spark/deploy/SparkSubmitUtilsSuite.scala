@@ -28,6 +28,7 @@ import org.apache.ivy.plugins.resolver.IBiblioResolver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.util.Utils
 
 class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -90,7 +91,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("ivy path works correctly") {
-    val ivyPath = "dummy" + File.separator +  "ivy"
+    val ivyPath = Utils.createTempDir(namePrefix = "ivy").getAbsolutePath()
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")
     var jPaths = SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(ivyPath))
