@@ -74,7 +74,7 @@ class LogisticRegression(override val uid: String)
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */
@@ -90,7 +90,11 @@ class LogisticRegression(override val uid: String)
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  /** @group setParam */
+  /**
+   * Whether to fit an intercept term.
+   * Default is true.
+   * @group setParam
+   * */
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 

@@ -173,7 +173,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
           new Timestamp(i),
           (1 to i).toSeq,
           (0 to i).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
-          Row((i - 0.25).toFloat, (1 to i).toSeq))
+          Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
     createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
     // Cache the table.

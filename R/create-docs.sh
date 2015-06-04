@@ -23,6 +23,9 @@
 # After running this script the html docs can be found in 
 # $SPARK_HOME/R/pkg/html
 
+set -o pipefail
+set -e
+
 # Figure out where the script is
 export FWDIR="$(cd "`dirname "$0"`"; pwd)"
 pushd $FWDIR
