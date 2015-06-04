@@ -45,7 +45,11 @@ private[client] sealed abstract class Shim {
 
   def setCurrentSessionState(state: SessionState): Unit
 
-  def getDataLocation(table: Table): String
+  /**
+   * This shim is necessary because the return type is different on different versions of Hive.
+   * All parameters are the same, though.
+   */
+  def getDataLocation(table: Table): Option[String]
 
   def setDataLocation(table: Table, loc: String): Unit
 
@@ -119,8 +123,8 @@ private[client] class Shim_v0_12 extends Shim {
 
   override def setCurrentSessionState(state: SessionState): Unit = startMethod.invoke(null, state)
 
-  override def getDataLocation(table: Table): String =
-    getDataLocationMethod.invoke(table).toString()
+  override def getDataLocation(table: Table): Option[String] =
+    Option(getDataLocationMethod.invoke(table)).map(_.toString())
 
   override def setDataLocation(table: Table, loc: String): Unit =
     setDataLocationMethod.invoke(table, new URI(loc))

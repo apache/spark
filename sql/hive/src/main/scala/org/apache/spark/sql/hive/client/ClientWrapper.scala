@@ -196,7 +196,7 @@ private[hive] class ClientWrapper(
           case HTableType.VIRTUAL_VIEW => VirtualView
           case HTableType.INDEX_TABLE => IndexTable
         },
-        location = Option(shim.getDataLocation(h)),
+        location = shim.getDataLocation(h),
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
         serde = Option(h.getSerializationLib),
