@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
@@ -322,19 +322,13 @@ private[sql] object ResolvedDataSource {
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
 
-        // For partitioned relation r, r.schema's column ordering is different with the column
-        // ordering of data.logicalPlan. We need a Project to adjust the ordering.
-        // So, inside InsertIntoHadoopFsRelation, we can safely apply the schema of r.schema to
-        // the data.
-        val project =
-          Project(
-            r.schema.map(field => new UnresolvedAttribute(Seq(field.name))),
-            data.logicalPlan)
-
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+        // will be adjusted within InsertIntoHadoopFsRelation.
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
-            project,
+            data.logicalPlan,
             mode)).toRdd
         r
       case _ =>

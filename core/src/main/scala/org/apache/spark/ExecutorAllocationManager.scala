@@ -266,10 +266,14 @@ private[spark] class ExecutorAllocationManager(
       // executors and inform the cluster manager to cancel the extra pending requests
       val oldNumExecutorsTarget = numExecutorsTarget
       numExecutorsTarget = math.max(maxNeeded, minNumExecutors)
-      client.requestTotalExecutors(numExecutorsTarget)
       numExecutorsToAdd = 1
-      logInfo(s"Lowering target number of executors to $numExecutorsTarget because " +
-        s"not all requests are actually needed (previously $oldNumExecutorsTarget)")
+
+      // If the new target has not changed, avoid sending a message to the cluster manager
+      if (numExecutorsTarget < oldNumExecutorsTarget) {
+        client.requestTotalExecutors(numExecutorsTarget)
+        logInfo(s"Lowering target number of executors to $numExecutorsTarget (previously " +
+          s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
+      }
       numExecutorsTarget - oldNumExecutorsTarget
     } else if (addTime != NOT_SET && now >= addTime) {
       val delta = addExecutors(maxNeeded)

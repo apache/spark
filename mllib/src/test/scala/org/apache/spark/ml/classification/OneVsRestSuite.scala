@@ -95,7 +95,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ova.fit(datasetWithLabelMetadata)
   }
 
-  test("one-vs-rest: ensure label features and prediction cols are configurable") {
+  test("SPARK-8092: ensure label features and prediction cols are configurable") {
     val numClasses = 3
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
@@ -117,6 +117,15 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val transformedDataset = ovaModel.transform(indexedDataset)
     val outputFields = transformedDataset.schema.fieldNames.toSet
     assert(outputFields.contains("p"))
+  }
+
+  test("SPARK-8049: OneVsRest shouldn't output temp columns") {
+    val logReg = new LogisticRegression()
+      .setMaxIter(1)
+    val ovr = new OneVsRest()
+      .setClassifier(logReg)
+    val output = ovr.fit(dataset).transform(dataset)
+    assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
   }
 }
 

@@ -26,6 +26,8 @@
 # NOTE(shivaram): Right now we use $SPARK_HOME/R/lib to be the installation directory
 # to load the SparkR package on the worker nodes.
 
+set -o pipefail
+set -e
 
 FWDIR="$(cd `dirname $0`; pwd)"
 LIB_DIR="$FWDIR/lib"
