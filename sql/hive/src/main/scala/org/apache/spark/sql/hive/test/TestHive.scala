@@ -103,7 +103,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution(plan)
+    new this.QueryExecution(this, plan)
 
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
@@ -167,9 +167,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   /**
    * Override QueryExecution with special debug workflow.
    */
-  class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
-    def this(sql: String) = this(parseSql(sql))
+  class QueryExecution(hiveContext: HiveContext, logicalPlan: LogicalPlan)
+    extends HiveQueryExecution(hiveContext, logicalPlan) {
+    def this(sql: String) = this(self, parseSql(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil

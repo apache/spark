@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -24,13 +25,63 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
+
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
+import org.apache.spark.sql.{catalyst, SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
-  self: SQLContext#SparkPlanner =>
+  def sqlContext: SQLContext
+  def sparkContext: SparkContext
+  def codegenEnabled: Boolean
+  def unsafeEnabled: Boolean
+  def numPartitions: Int
+
+  lazy val planner = sqlContext.planner
+  
+  /**
+   * Used to build table scan operators where complex projection and filtering are done using
+   * separate physical operators.  This function returns the given scan operator with Project and
+   * Filter nodes added only when needed.  For example, a Project operator is only used when the
+   * final desired output requires complex expressions to be evaluated or when columns can be
+   * further eliminated out after filtering has been done.
+   *
+   * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
+   * away by the filter pushdown optimization.
+   *
+   * The required attributes for both filtering and expression evaluation are passed to the
+   * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
+   */
+  def pruneFilterProject(
+                          projectList: Seq[NamedExpression],
+                          filterPredicates: Seq[Expression],
+                          prunePushedDownFilters: Seq[Expression] => Seq[Expression],
+                          scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
+
+    val projectSet = AttributeSet(projectList.flatMap(_.references))
+    val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
+    val filterCondition =
+      prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
+
+    // Right now we still use a projection even if the only evaluation is applying an alias
+    // to a column.  Since this is a no-op, it could be avoided. However, using this
+    // optimization with the current implementation would change the output schema.
+    // TODO: Decouple final output schema from expression evaluation so this copy can be
+    // avoided safely.
+
+    if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+      filterSet.subsetOf(projectSet)) {
+      // When it is possible to just use column pruning to get the right projection and
+      // when the columns of this projection are enough to evaluate all filter conditions,
+      // just do a scan followed by a filter, with no extra project.
+      val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
+      filterCondition.map(Filter(_, scan)).getOrElse(scan)
+    } else {
+      val scan = scanBuilder((projectSet ++ filterSet).toSeq)
+      Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+    }
+  }
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -131,7 +182,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
+               planner.codegenEnabled =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -251,7 +302,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else {
             identity[Seq[Expression]] _
           }
-        pruneFilterProject(
+        planner.pruneFilterProject(
           projectList,
           filters,
           prunePushedDownFilters,
@@ -267,7 +318,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
-        pruneFilterProject(
+        planner.pruneFilterProject(
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
@@ -278,7 +329,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions: Int = self.numPartitions
+    def numPartitions: Int = planner.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
@@ -356,7 +407,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
       case describe @ LogicalDescribeCommand(table, isExtended) =>
-        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        val resultPlan = sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
           RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
 

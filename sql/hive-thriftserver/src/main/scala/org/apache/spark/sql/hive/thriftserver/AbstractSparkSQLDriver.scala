@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.{HiveContext, HiveQueryExecution, HiveMetastoreTypes}
 
 private[hive] abstract class AbstractSparkSQLDriver(
     val context: HiveContext = SparkSQLEnv.hiveContext) extends Driver with Logging {
@@ -36,7 +36,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
   override def init(): Unit = {
   }
 
-  private def getResultSetSchema(query: context.QueryExecution): Schema = {
+  private def getResultSetSchema(query: HiveQueryExecution): Schema = {
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.size == 0) {
