@@ -25,8 +25,8 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, S
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.shuffle.FileShuffleBlockResolver
-import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
+import org.apache.spark.shuffle.{FileShuffleBlockResolver, ShuffleIdAndAttempt}
+import org.apache.spark.storage.{FileSegment, ShuffleBlockId}
 
 class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   private val testConf = new SparkConf(false)
@@ -99,7 +99,7 @@ class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
     shuffle3.releaseWriters(success = true)
     checkSegments(shuffle2Segment, shuffleBlockResolver.getBlockData(ShuffleBlockId(1, 2, 0, 0)))
-    shuffleBlockResolver.removeShuffle((1, 0))
+    shuffleBlockResolver.removeShuffle(ShuffleIdAndAttempt(1, 0))
   }
 
   def writeToFile(file: File, numBytes: Int) {

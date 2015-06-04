@@ -63,7 +63,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     stageAttemptsForShuffle(shuffleId).forall { stageAttemptId =>
-      shuffleBlockResolver.removeShuffle(shuffleId, stageAttemptId)
+      shuffleBlockResolver.removeShuffle(ShuffleIdAndAttempt(shuffleId, stageAttemptId))
     }
   }
 
