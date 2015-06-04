@@ -323,12 +323,10 @@ private[hive] object HiveQl {
     colList.map(nodeToAttribute)
   }
 
-  
-
   /** Extractor for matching Hive's AST Tokens. */
   case class Token(name: String, children: Seq[ASTNode]) extends Node {
-    def getName() = name
-    def getChildren()  = {
+    def getName(): String = name
+    def getChildren(): java.util.List[Node] = {
       val col = new java.util.ArrayList[Node]
       children.foreach(col.add(_))
       col
@@ -1470,35 +1468,49 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Specific Window Functions */
-    case Token("TOK_FUNCTION", Token(ROW_NUMBER(), Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(ROW_NUMBER(), Nil) :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.rowNumber(nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(RANK(), Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(RANK(), Nil) :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.rank(nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(DENSE_RANK(), Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(DENSE_RANK(), Nil) :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.denseRank(nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(CUME_DIST(), Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(CUME_DIST(), Nil) :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.cumeDist(nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(PERCENT_RANK(), Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(PERCENT_RANK(), Nil) :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) => 
       WindowFunction.percentRank(nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(NTILE(), Nil) :: Token(arg, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(NTILE(), Nil) :: Token(arg, Nil) ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.ntile(arg.toInt, nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.lead(nodeToExpr(arg), 1, null, nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg :: Token(offset, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg :: Token(offset, Nil) ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.lead(nodeToExpr(arg), offset.toInt, null, nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg :: Token(offset, Nil) :: default :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
-      WindowFunction.lead(nodeToExpr(arg), offset.toInt, nodeToExpr(default), nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(LEAD(), Nil) :: arg :: Token(offset, Nil) :: default ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
+      WindowFunction.lead(nodeToExpr(arg), offset.toInt,
+        nodeToExpr(default), nodesToWindowSpecification(spec))
+    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: 
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.lag(nodeToExpr(arg), 1, null, nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: Token(offset, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
+    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: Token(offset, Nil) ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
       WindowFunction.lag(nodeToExpr(arg), offset.toInt, null, nodesToWindowSpecification(spec))
-    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: Token(offset, Nil) :: default :: Token("TOK_WINDOWSPEC", spec) :: Nil) => 
-      WindowFunction.lag(nodeToExpr(arg), offset.toInt, nodeToExpr(default), nodesToWindowSpecification(spec))
+    case Token("TOK_FUNCTION", Token(LAG(), Nil) :: arg :: Token(offset, Nil) :: default ::
+      Token("TOK_WINDOWSPEC", spec) :: Nil) =>
+      WindowFunction.lag(nodeToExpr(arg), offset.toInt, nodeToExpr(default),
+        nodesToWindowSpecification(spec))
 
     /* Generic Window Functions. */
     case Token(name, args :+ Token("TOK_WINDOWSPEC", spec)) =>
       val function = nodeToExpr(Token(name, args))
-      val definition = nodesToWindowSpecification(spec) 
+      val definition = nodesToWindowSpecification(spec)
       WindowExpression(function, definition)
 
     /* UDFs - Must be last otherwise will preempt built in functions */

@@ -734,7 +734,7 @@ class Analyzer(
         spec.copy(partitionSpec = newPartitionSpec,
                   orderSpec = newOrderSpec)
       }
-      
+
       // Now, we extract regular expressions from expressionsWithWindowFunctions
       // by using extractExpr.
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
@@ -750,7 +750,7 @@ class Analyzer(
           case we @ WindowExpression(e: Expression,
                   spec @ WindowSpecDefinition(_, _,
                     SpecifiedWindowFrame(RowFrame,
-                      FrameBoundaryExtractor(l), 
+                      FrameBoundaryExtractor(l),
                       FrameBoundaryExtractor(h))), _, _)
                       if (l == h) =>
             we.copy(windowFunction = extractExpr(e),
@@ -894,9 +894,10 @@ class Analyzer(
       if (spec == WindowSpecDefinition.empty) failAnalysis("Cannot replace window expression, " +
         "the used specification is empty.")
       // Do not replace a non-empty child spec
-      else if (expr.windowSpec != WindowSpecDefinition.empty && expr.windowSpec != spec) failAnalysis(
-        "Cannot replace window expression, the target expression already has " 
+      else if (expr.windowSpec != WindowSpecDefinition.empty && expr.windowSpec != spec) {
+        failAnalysis("Cannot replace window expression, the target expression already has "
           + "a different valid window specification.")
+      }
       // Create a copy with the updated specifica
       else expr.copy(windowSpec = spec)
     }
@@ -912,11 +913,11 @@ class Analyzer(
           // Subtree Case, a parent window expression and a window-function-containing subtree. The
           // specification of the parent window expression gets injected into the child window
           // expressions. The parent is then replaced by the transformed subtree.
-          case we @ WindowExpression(ComposedWindowFunction(subtree), 
-                      spec: WindowSpecDefinition, _, _)  =>
+          case we @ WindowExpression(ComposedWindowFunction(subtree),
+                      spec: WindowSpecDefinition, _, _) =>
             subtree.transformDown {
-              // TODO see if there are any use cases when we have a partially defined subtree with a
-              // different window spec. That will currently fail miserably.
+              // TODO see if there are any use cases when we have a partially defined subtree with
+              // a different window spec. That will currently fail miserably.
               case cwe: WindowExpression => mergeSpec(cwe, spec)
             }
           // Fully Configured Window Function containing SubTree. Eliminate the expression.
@@ -934,11 +935,12 @@ class Analyzer(
                                     frame: SpecifiedWindowFrame, _) =>
             we.copy(windowSpec = spec.copy(frameSpecification = frame))
           // Replace the Spec's frame with a default frame.
-          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _, UnspecifiedFrame), _, _) =>
-            we.copy(windowSpec = spec.copy(frameSpecification = 
+          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _,
+                      UnspecifiedFrame), _, _) =>
+            we.copy(windowSpec = spec.copy(frameSpecification =
               SpecifiedWindowFrame.defaultWindowFrame(!spec.orderSpec.isEmpty, true)))
           // Fail when two frames are defined and they DO NOT match.
-          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _, 
+          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _,
                       frame: SpecifiedWindowFrame), fixedFrame: SpecifiedWindowFrame, _)
                       if (frame != fixedFrame) =>
             failAnalysis(s"The frame of the window '$frame' does not match the required " +
