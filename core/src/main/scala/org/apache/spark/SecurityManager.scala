@@ -188,11 +188,12 @@ import org.apache.spark.util.Utils
 
 private[spark] class SecurityManager(sparkConf: SparkConf)
   extends Logging with SecretKeyHolder {
+  import SecurityManager._
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
 
-  private val authOn = sparkConf.getBoolean("spark.authenticate", false)
+  private val authOn = sparkConf.isAuthOn
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
@@ -365,10 +366,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       cookie
     } else {
       // user must have set spark.authenticate.secret config
-      sparkConf.getOption("spark.authenticate.secret") match {
+      sparkConf.getAuthSecret match {
         case Some(value) => value
         case None => throw new Exception("Error: a secret key must be specified via the " +
-          "spark.authenticate.secret config")
+          AUTH_SECRET + " config")
       }
     }
     sCookie
@@ -448,4 +449,11 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
   override def getSecretKey(appId: String): String = getSecretKey()
+}
+
+private[spark] object SecurityManager {
+
+  val AUTH_CONFIG: String = "spark.authenticate"
+  val AUTH_SECRET: String = "spark.authenticate.secret"
+
 }

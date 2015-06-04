@@ -25,6 +25,7 @@ private[spark] class ApplicationDescription(
     val memoryPerExecutorMB: Int,
     val command: Command,
     var appUiUrl: String,
+    val appSecret: Option[String] = None,
     val eventLogDir: Option[URI] = None,
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
     val eventLogCodec: Option[String] = None,
@@ -39,10 +40,12 @@ private[spark] class ApplicationDescription(
       memoryPerExecutorMB: Int = memoryPerExecutorMB,
       command: Command = command,
       appUiUrl: String = appUiUrl,
+      appSecret: Option[String] = appSecret,
       eventLogDir: Option[URI] = eventLogDir,
       eventLogCodec: Option[String] = eventLogCodec): ApplicationDescription =
     new ApplicationDescription(
-      name, maxCores, memoryPerExecutorMB, command, appUiUrl, eventLogDir, eventLogCodec)
+      name, maxCores, memoryPerExecutorMB, command, appUiUrl,
+      appSecret, eventLogDir, eventLogCodec)
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

@@ -87,7 +87,7 @@ private[deploy] class DriverRunner(
           // TODO: If we add ability to submit multiple jars they should also be added here
           val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
             sparkHome.getAbsolutePath, substituteVariables)
-          launchDriver(builder, driverDir, driverDesc.supervise)
+          launchDriver(builder, driverDir, driverDesc.supervise, driverDesc.appSecret, conf)
         }
         catch {
           case e: Exception => finalException = Some(e)
@@ -164,9 +164,16 @@ private[deploy] class DriverRunner(
     localJarFilename
   }
 
-  private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
+  private def launchDriver(
+      builder: ProcessBuilder,
+      baseDir: File,
+      supervise: Boolean,
+      appSecret: Option[String],
+      sparkConf: SparkConf) {
     builder.directory(baseDir)
     def initialize(process: Process): Unit = {
+      // send app secret to driver via stdin if needed
+      Utils.pipeOutAppSecretIfNeeded(process, appSecret, sparkConf)
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
       CommandUtils.redirectStream(process.getInputStream, stdout)

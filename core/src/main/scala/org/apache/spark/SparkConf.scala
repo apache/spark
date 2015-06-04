@@ -333,6 +333,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def getAppId: String = get("spark.app.id")
 
+  /**
+   * Check to see if authentication for the Spark communication protocols is enabled
+   * @return true if authentication is enabled, otherwise false
+   */
+  private[spark] def isAuthOn: Boolean = getBoolean(SecurityManager.AUTH_CONFIG, false)
+
+  /**
+   * Return the authentication key for standalone cluster managers (Master and Worker).
+   *
+   * In non-YARN deployments, this key is also used for authentication in apps (e.g.,
+   * between driver and executor). See [[org.apache.spark.SecurityManager]] for details.
+   */
+  private[spark] def getAuthSecret: Option[String] = getOption(SecurityManager.AUTH_SECRET)
+
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.containsKey(key)
 
@@ -561,6 +575,20 @@ private[spark] object SparkConf extends Logging {
     name.startsWith("spark.ssl") ||
     isSparkPortConf(name)
   }
+
+  /**
+   * Return true if the given config is NOT for authentication secret.
+   */
+  private[spark] def isNotAuthSecretConf(name: String): Boolean =
+    name != SecurityManager.AUTH_SECRET
+
+  /**
+   * Return whether the given config should be passed to an executor launched by standalone
+   * cluster manager as JVM system properties on start-up. In particular, authentication
+   * secret is filtered out since it will be written to executor's stdin.
+   */
+  private[spark] def isStandaloneExecutorStartupConf(name: String): Boolean =
+    isExecutorStartupConf(name) && isNotAuthSecretConf(name)
 
   /**
    * Return true if the given config matches either `spark.*.port` or `spark.port.*`.

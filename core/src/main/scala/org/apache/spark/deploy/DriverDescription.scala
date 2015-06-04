@@ -22,7 +22,8 @@ private[deploy] class DriverDescription(
     val mem: Int,
     val cores: Int,
     val supervise: Boolean,
-    val command: Command)
+    val command: Command,
+    val appSecret: Option[String] = None)
   extends Serializable {
 
   def copy(
@@ -30,8 +31,9 @@ private[deploy] class DriverDescription(
       mem: Int = mem,
       cores: Int = cores,
       supervise: Boolean = supervise,
-      command: Command = command): DriverDescription =
-    new DriverDescription(jarUrl, mem, cores, supervise, command)
+      command: Command = command,
+      appSecret: Option[String] = appSecret): DriverDescription =
+    new DriverDescription(jarUrl, mem, cores, supervise, command, appSecret)
 
   override def toString: String = s"DriverDescription (${command.mainClass})"
 }

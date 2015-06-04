@@ -324,6 +324,40 @@ private[spark] object Utils extends Logging {
     dir
   }
 
+  /**
+   * If authentication is enabled, send app secret to process via its stdin.
+   */
+  def pipeOutAppSecretIfNeeded(
+      process: Process,
+      secret: Option[String],
+      conf: SparkConf): Unit =
+    for (value <- secret if conf.isAuthOn) {
+      val out = new BufferedOutputStream(process.getOutputStream)
+      out.write(value.getBytes)
+      out.close
+    }
+
+  /**
+   * If authentication is enabled, retrieve app secret from stdin, set it in conf and 
+   * export it to system properties.
+   *
+   * Note: This mutates state in the given SparkConf and in this JVM's system properties.
+   */
+  def setAndExportAppSecretIfNeeded(conf: SparkConf): Unit = {
+    if (conf.isAuthOn) {
+      val in = new BufferedReader(new InputStreamReader(System.in))
+      Option(in.readLine) match {
+        case Some(value) =>
+          conf.set(SecurityManager.AUTH_SECRET, value)
+          sys.props.update(SecurityManager.AUTH_SECRET, value)
+
+        case None => throw new Exception("Error: authentication is enabled but " +
+          "failed to obtain authentication key from stdin")
+      }
+      in.close
+    }
+  }
+
   /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
     * copying is disabled by default unless explicitly set transferToEnabled as true,
     * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].

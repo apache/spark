@@ -102,6 +102,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually {
         memoryPerExecutorMB = 0,
         command = commandToPersist,
         appUiUrl = "",
+        appSecret = None,
         eventLogDir = None,
         eventLogCodec = None,
         coresPerExecutor = None),
