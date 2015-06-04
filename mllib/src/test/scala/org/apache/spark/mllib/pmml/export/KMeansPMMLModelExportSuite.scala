@@ -45,5 +45,5 @@ class KMeansPMMLModelExportSuite extends SparkFunSuite {
     val pmmlClusteringModel = pmml.getModels.get(0).asInstanceOf[ClusteringModel]
     assert(pmmlClusteringModel.getNumberOfClusters === clusterCenters.length)
   }
-  
+
 }

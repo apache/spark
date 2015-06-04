@@ -53,13 +53,13 @@ class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
     // ensure logistic regression has normalization method set to LOGIT
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.LOGIT)
   }
-  
+
   test("linear SVM PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
-    
+
     val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
-    
+
     // assert that the PMML format is as expected
     assert(svmModelExport.isInstanceOf[PMMLModelExport])
     val pmml = svmModelExport.getPmml
@@ -80,5 +80,5 @@ class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
     // ensure linear SVM has normalization method set to NONE
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.NONE)
   }
-  
+
 }

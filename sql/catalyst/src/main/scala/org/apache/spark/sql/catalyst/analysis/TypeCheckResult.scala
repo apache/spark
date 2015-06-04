@@ -15,10 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.sql.catalyst.analysis
 
-private[spark] class PairIterator[K, V](iter: Iterator[Any]) extends Iterator[(K, V)] {
-  def hasNext: Boolean = iter.hasNext
+/**
+ * Represents the result of `Expression.checkInputDataTypes`.
+ * We will throw `AnalysisException` in `CheckAnalysis` if `isFailure` is true.
+ */
+trait TypeCheckResult {
+  def isFailure: Boolean = !isSuccess
+  def isSuccess: Boolean
+}
 
-  def next(): (K, V) = (iter.next().asInstanceOf[K], iter.next().asInstanceOf[V])
+object TypeCheckResult {
+
+  /**
+   * Represents the successful result of `Expression.checkInputDataTypes`.
+   */
+  object TypeCheckSuccess extends TypeCheckResult {
+    def isSuccess: Boolean = true
+  }
+
+  /**
+   * Represents the failing result of `Expression.checkInputDataTypes`,
+   * with a error message to show the reason of failure.
+   */
+  case class TypeCheckFailure(message: String) extends TypeCheckResult {
+    def isSuccess: Boolean = false
+  }
 }

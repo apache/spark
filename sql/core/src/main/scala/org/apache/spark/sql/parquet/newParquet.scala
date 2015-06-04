@@ -155,7 +155,7 @@ private[sql] class ParquetRelation2(
     meta
   }
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
@@ -190,7 +190,7 @@ private[sql] class ParquetRelation2(
     }
   }
 
-  override def dataSchema: StructType = metadataCache.dataSchema
+  override def dataSchema: StructType = maybeDataSchema.getOrElse(metadataCache.dataSchema)
 
   override private[sql] def refresh(): Unit = {
     super.refresh()

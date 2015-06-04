@@ -328,7 +328,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     reduceByKeyLocally(func)
   }
 
-  /** 
+  /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
