@@ -132,20 +132,21 @@ object ComplexPipelineExample {
 
     val model = pipeline.fit(train)
     val predictions = model.transform(test).cache()
-
     val predictionAndLabels = predictions.select($"prediction", $"label")
       .map { case Row(prediction: Double, label: Double) => (prediction, label)}
 
     // compute multiclass metrics
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    println(metrics.confusionMatrix)
 
     val labelToIndexMap = predictions.select($"label", $"newsgroup").distinct
-      .map {case Row(x: Double, y: String) => (y,x)}
+      .map {case Row(x: Double, y: String) => (y, x)}
       .collectAsMap()
+
     val fprs = labelToIndexMap.map { case (newsgroup, label) =>
       (newsgroup, metrics.falsePositiveRate(label))
     }
+
+    println(metrics.confusionMatrix)
     println("label\tfpr")
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
 
