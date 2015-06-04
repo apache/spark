@@ -24,7 +24,7 @@ import scala.language.existentials
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
@@ -154,6 +154,15 @@ final class OneVsRest(override val uid: String)
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
+  /** @group setParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  /** @group setParam */
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
@@ -191,7 +200,11 @@ final class OneVsRest(override val uid: String)
       val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
       val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
       val classifier = getClassifier
-      classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
+      val paramMap = new ParamMap()
+      paramMap.put(classifier.labelCol -> labelColName)
+      paramMap.put(classifier.featuresCol -> getFeaturesCol)
+      paramMap.put(classifier.predictionCol -> getPredictionCol)
+      classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
 
     if (handlePersistence) {
