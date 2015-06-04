@@ -464,9 +464,10 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
-    sdf <- callJMethod(sqlContext, "load", source, schema$jobj, options)
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sqlContext, source,
+                       schema$jobj, options)
   } else {
-    sdf <- callJMethod(sqlContext, "load", source, options)
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sqlContext, source, options)
   }
   dataFrame(sdf)
 }
