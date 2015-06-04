@@ -19,6 +19,7 @@ TODO
 * Distributed scheduler
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Raise errors when setting dependencies on task in foreign DAGs
+* Add an is_test flag to the run context
 
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library
