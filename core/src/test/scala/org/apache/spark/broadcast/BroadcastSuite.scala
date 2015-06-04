@@ -19,10 +19,10 @@ package org.apache.spark.broadcast
 
 import scala.util.Random
 
-import org.scalatest.{Assertions, FunSuite}
+import org.scalatest.Assertions
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkEnv}
+import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
@@ -44,7 +44,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-class BroadcastSuite extends FunSuite with LocalSparkContext {
+class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   private val httpConf = broadcastConf("HttpBroadcastFactory")
   private val torrentConf = broadcastConf("TorrentBroadcastFactory")

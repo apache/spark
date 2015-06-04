@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.param
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ParamsSuite extends FunSuite {
+class ParamsSuite extends SparkFunSuite {
 
   test("param") {
     val solver = new TestParams()
@@ -202,7 +202,7 @@ class ParamsSuite extends FunSuite {
   }
 }
 
-object ParamsSuite extends FunSuite {
+object ParamsSuite extends SparkFunSuite {
 
   /**
    * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered

@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class PMMLModelExportFactorySuite extends FunSuite {
+class PMMLModelExportFactorySuite extends SparkFunSuite {
 
   test("PMMLModelExportFactory create KMeansPMMLModelExport when passing a KMeansModel") {
     val clusterCenters = Array(

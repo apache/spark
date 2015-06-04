@@ -19,7 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 import org.mockito.Mockito.when
 
@@ -36,8 +35,10 @@ import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 
+import org.apache.spark.SparkFunSuite
 
-class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
+
+class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar {
 
   class MockClientDistributedCacheManager extends ClientDistributedCacheManager {
     override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]):

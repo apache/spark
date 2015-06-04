@@ -17,13 +17,14 @@
 
 package org.apache.spark.shuffle
 
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 
-class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
+import org.apache.spark.SparkFunSuite
+
+class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
   /** Launch a thread with the given body block and return it. */
   private def startThread(name: String)(body: => Unit): Thread = {
     val thread = new Thread("ShuffleMemorySuite " + name) {

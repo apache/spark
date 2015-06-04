@@ -30,9 +30,18 @@ import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.event.EventBuilder
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+
+// Due to MNG-1378, there is not a way to include test dependencies transitively.
+// We cannot include Spark core tests as a dependency here because it depends on
+// Spark core main, which has too many dependencies to require here manually.
+// For this reason, we continue to use FunSuite and ignore the scalastyle checks
+// that fail if this is detected.
+//scalastyle:off
 import org.scalatest.FunSuite
 
 class SparkSinkSuite extends FunSuite {
+//scalastyle:on
+
   val eventsPerBatch = 1000
   val channelCapacity = 5000
 

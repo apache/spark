@@ -21,13 +21,11 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
-class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
+class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging {
   var checkpointDir: File = _
   val partitioner = new HashPartitioner(2)
 

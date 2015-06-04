@@ -17,12 +17,10 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.rdd._
 
-class PregelSuite extends FunSuite with LocalSparkContext {
+class PregelSuite extends SparkFunSuite with LocalSparkContext {
 
   test("1 iteration") {
     withSpark { sc =>

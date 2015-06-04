@@ -20,9 +20,11 @@ package org.apache.spark.deploy.worker.ui
 import java.io.{File, FileWriter}
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
-class LogPageSuite extends FunSuite with PrivateMethodTester {
+import org.apache.spark.SparkFunSuite
+
+class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("get logs simple") {
     val webui = mock(classOf[WorkerWebUI])

@@ -27,14 +27,14 @@ import scala.language.postfixOps
 import akka.actor.Address
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy._
 
-class MasterSuite extends FunSuite with Matchers with Eventually {
+class MasterSuite extends SparkFunSuite with Matchers with Eventually {
 
   test("toAkkaUrl") {
     val conf = new SparkConf(loadDefaults = false)

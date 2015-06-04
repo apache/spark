@@ -20,7 +20,6 @@ package org.apache.spark.util
 import java.util.concurrent.TimeoutException
 
 import akka.actor.ActorNotFound
-import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.rpc.RpcEnv
@@ -32,7 +31,7 @@ import org.apache.spark.SSLSampleConfigs._
 /**
   * Test the AkkaUtils with various security settings.
   */
-class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
 
   test("remote fetch security bad password") {
     val conf = new SparkConf
