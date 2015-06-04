@@ -232,37 +232,6 @@ case class ExternalSort(
 
 /**
  * :: DeveloperApi ::
- * Computes the set of distinct input rows using a HashSet.
- * @param partial when true the distinct operation is performed partially, per partition, without
- *                shuffling the data.
- * @param child the input query plan.
- */
-@DeveloperApi
-case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (partial) UnspecifiedDistribution :: Nil else ClusteredDistribution(child.output) :: Nil
-
-  protected override def doExecute(): RDD[Row] = {
-    child.execute().mapPartitions { iter =>
-      val hashSet = new scala.collection.mutable.HashSet[Row]()
-
-      var currentRow: Row = null
-      while (iter.hasNext) {
-        currentRow = iter.next()
-        if (!hashSet.contains(currentRow)) {
-          hashSet.add(currentRow.copy())
-        }
-      }
-
-      hashSet.iterator
-    }
-  }
-}
-
-/**
- * :: DeveloperApi ::
  * Return a new RDD that has exactly `numPartitions` partitions.
  */
 @DeveloperApi

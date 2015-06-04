@@ -1311,7 +1311,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  override def distinct: DataFrame = Distinct(logicalPlan)
+  override def distinct: DataFrame = dropDuplicates()
 
   /**
    * @group basic
