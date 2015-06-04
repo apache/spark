@@ -1,3 +1,4 @@
+import logging
 import random
 
 from airflow import settings
@@ -28,7 +29,9 @@ class BaseHook(object):
         return db
 
     def get_connection(self, conn_id):
-        return random.choice(self.get_connections(conn_id))
+        conn = random.choice(self.get_connections(conn_id))
+        logging.info("Using connection to: " + conn.host)
+        return conn
 
     def get_conn(self):
         raise NotImplemented()
