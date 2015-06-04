@@ -230,8 +230,10 @@ class DataFrame private[sql](
 
     sb.append(sep)
 
-    // For Data that has more than 20 records.
-    if (this.count() > 20) sb.append("only showing the top 20 rows\n")
+    // For Data that has more than N(numRows) records.
+    if (take(numRows + 1).length > numRows) {
+      sb.append("only showing the top " + numRows.toString + " rows\n")
+    }
 
     sb.toString()
   }
@@ -362,7 +364,7 @@ class DataFrame private[sql](
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
-   * {{{  
+   * {{{
    *   // Dropping rows containing any null values.
    *   df.na.drop()
    * }}}
