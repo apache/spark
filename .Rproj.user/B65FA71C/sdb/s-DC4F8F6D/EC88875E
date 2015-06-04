@@ -1,0 +1,17 @@
+{
+    "contents" : "#\n# Author:   Daniel Emaasit (@emaasit)\n# Purpose: This script shows several ways to create Spark DataFrames \n# Date:    06/04/2015\n#\n\n\nsource(\"./examples/src/main/r/1-data.R\")\n\nhourly_delay <- filter(\n  summarise(\n    group_by(\n      filter(flights, !is.na(dep_delay)), \n      date, hour), \n    delay = mean(dep_delay), \n    n = n()), \n  n > 10\n)\n\nhourly_delay <- flights %>% \n  filter(!is.na(dep_delay)) %>%\n  group_by(date, hour) %>%\n  summarise(\n    delay = mean(dep_delay),\n    n = n()\n  ) %>% \n  filter(n > 10)\n\n\n# Challenges -------------------------------------------------------------------\n\nflights %>%\n  group_by(dest) %>%\n  summarise(arr_delay = mean(arr_delay, na.rm = TRUE), n = n()) %>%\n  arrange(desc(arr_delay))\n\nflights %>% \n  group_by(carrier, flight, dest) %>% \n  tally(sort = TRUE) %>%\n  filter(n == 365)\n\nflights %>% \n  group_by(carrier, flight, dest) %>% \n  filter(n() == 365)\n\nper_hour <- flights %>%\n  filter(cancelled == 0) %>%\n  mutate(time = hour + minute / 60) %>%\n  group_by(time) %>%\n  summarise(arr_delay = mean(arr_delay, na.rm = TRUE), n = n())\n\nqplot(time, arr_delay, data = per_hour)\nqplot(time, arr_delay, data = per_hour, size = n) + scale_size_area()\nqplot(time, arr_delay, data = filter(per_hour, n > 30), size = n) + scale_size_area()\n\nggplot(filter(per_hour, n > 30), aes(time, arr_delay)) + \n  geom_vline(xintercept = 5:24, colour = \"white\", size = 2) +\n  geom_point()\n",
+    "created" : 1433379719972.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "855655503",
+    "id" : "EC88875E",
+    "lastKnownWriteTime" : 1433410259,
+    "path" : "C:/Users/Emaasit/Dropbox/BigData/ApacheSpark/spark/examples/src/main/r/3-pipelines.R",
+    "project_path" : "examples/src/main/r/3-pipelines.R",
+    "properties" : {
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "type" : "r_source"
+}

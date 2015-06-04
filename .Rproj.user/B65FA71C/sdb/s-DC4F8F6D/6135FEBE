@@ -1,0 +1,25 @@
+{
+    "contents" : "",
+    "created" : 1433416078796.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "6135FEBE",
+    "lastKnownWriteTime" : 33777473953071216,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "vd5v6xxekb",
+        "caption" : "flights",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=flights&cache_key=vd5v6xxekb",
+        "displayedObservations" : 227496,
+        "environment" : "",
+        "object" : "flights",
+        "totalObservations" : 227496,
+        "variables" : 14
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "type" : "r_dataframe"
+}

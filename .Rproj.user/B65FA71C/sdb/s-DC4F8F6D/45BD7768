@@ -1,0 +1,17 @@
+{
+    "contents" : "#\n# Author:   Daniel Emaasit (@emaasit)\n# Purpose: This script shows how to explore and manipulate Spark DataFrames \n# Date:    06/04/2015\n#\n\nsource(\"./examples/src/main/r/1-data.R\")\n\n\n# Install the magrittr pipeline operator\ninstall.packages(\"magrittr\")\nlibrary(magrittr)\n\n# Print the first 6 rows of the DataFrame\nshowDF(flightsDF, numRows = 6) ## Or\nhead(flightsDF)\n\n# Show the column names in the DataFrame\ncolumns(flightsDF)\n\n# Show the number of rows in the DataFrame\ncount(flightsDF)\n\n# Show summary statistics for numeric colums\nDescribe(flightsDF)\n\n# Select specific columns\ndestDF <- select(flightsDF, \"dest\", \"cancelled\")\n\n# Using SQL to select columns of data\n# First, register the flights DataFrame as a table\nregisterTempTable(flightsDF, \"flightsTable\")\ndestDF <- sql(sqlCtx, \"SELECT dest, cancelled FROM flightsTable\")\n\n# Use collect to create a local R data frame\ndest_df <- collect(destDF)\n\n# Print the newly created local data frame\nprint(dest_df)\n\n# Filter flights whose destination is JFK\njfkDF <- filter(flightsDF, \"dest == JFK\") ##OR\njfkDF <- filter(flightsDF, flightsDF$dest == JFK)\n\n# Group the flights by date and then find the average daily delay\n# Write the result into a DataFrame\ngroupBy(flightsDF, \"date\") %>%\n  avg(dep_delay = \"avg\", arr_delay = \"avg\") -> dailyDelayDF\n\n# Stop the SparkContext now\nsparkR.stop()\n",
+    "created" : 1433411004148.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "600704515",
+    "id" : "45BD7768",
+    "lastKnownWriteTime" : 1433417617,
+    "path" : "C:/Users/Emaasit/Dropbox/BigData/ApacheSpark/spark/examples/src/main/r/2-data-manipulation.R",
+    "project_path" : "examples/src/main/r/2-data-manipulation.R",
+    "properties" : {
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "type" : "r_source"
+}

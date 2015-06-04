@@ -1,0 +1,17 @@
+{
+    "contents" : "#\n# Author:   Daniel Emaasit (@emaasit)\n# Purpose: This script shows several ways to create Spark DataFrames \n# Date:    06/04/2015\n#\n\nsource(\"./examples/src/main/r/1-data.R\")\n\n# Motivating examples ----------------------------------------------------------\n\nplanes <- flights %>%\n  filter(!is.na(arr_delay)) %>%\n  group_by(plane) %>%\n  filter(n() > 30)\n\nplanes %>%\n  mutate(z_delay = (arr_delay - mean(arr_delay)) / sd(arr_delay)) %>%\n  filter(z_delay > 5)\n\nplanes %>% filter(min_rank(arr_delay) < 5)\n\n# Ranking functions ------------------------------------------------------------\n\nmin_rank(c(1, 1, 2, 3))\ndense_rank(c(1, 1, 2, 3))\nrow_number(c(1, 1, 2, 3))\n\nflights %>% group_by(plane) %>% filter(row_number(desc(arr_delay)) <= 2)\nflights %>% group_by(plane) %>% filter(min_rank(desc(arr_delay)) <= 2)\nflights %>% group_by(plane) %>% filter(dense_rank(desc(arr_delay)) <= 2)\n\n# Lead and lag -----------------------------------------------------------------\n\ndaily <- flights %>% \n  group_by(date) %>% \n  summarise(delay = mean(dep_delay, na.rm = TRUE))\n\ndaily %>% mutate(delay - lag(delay))\ndaily %>% mutate(delay - lag(delay))\n",
+    "created" : 1433379735284.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1151132038",
+    "id" : "A95A8646",
+    "lastKnownWriteTime" : 1433410256,
+    "path" : "C:/Users/Emaasit/Dropbox/BigData/ApacheSpark/spark/examples/src/main/r/4-grouped-mutate.R",
+    "project_path" : "examples/src/main/r/4-grouped-mutate.R",
+    "properties" : {
+    },
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "type" : "r_source"
+}

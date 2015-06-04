@@ -1,0 +1,17 @@
+{
+    "contents" : "#\n# Licensed to the Apache Software Foundation (ASF) under one or more\n# contributor license agreements.  See the NOTICE file distributed with\n# this work for additional information regarding copyright ownership.\n# The ASF licenses this file to You under the Apache License, Version 2.0\n# (the \"License\"); you may not use this file except in compliance with\n# the License.  You may obtain a copy of the License at\n#\n#    http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n#\n\nlibrary(SparkR)\n\n# Initialize SparkContext and SQLContext\nsc <- sparkR.init(appName=\"SparkR-DataFrame-example\")\nsqlContext <- sparkRSQL.init(sc)\n\n# Create a simple local data.frame\nlocalDF <- data.frame(name=c(\"John\", \"Smith\", \"Sarah\"), age=c(19, 23, 18))\n\n# Convert local data frame to a SparkR DataFrame\ndf <- createDataFrame(sqlContext, localDF)\n\n# Print its schema\nprintSchema(df)\n# root\n#  |-- name: string (nullable = true)\n#  |-- age: double (nullable = true)\n\n# Create a DataFrame from a JSON file\npath <- file.path(Sys.getenv(\"SPARK_HOME\"), \"examples/src/main/resources/people.json\")\npeopleDF <- jsonFile(sqlContext, path)\nprintSchema(peopleDF)\n\n# Register this DataFrame as a table.\nregisterTempTable(peopleDF, \"people\")\n\n# SQL statements can be run by using the sql methods provided by sqlContext\nteenagers <- sql(sqlContext, \"SELECT name FROM people WHERE age >= 13 AND age <= 19\")\n\n# Call collect to get a local data.frame\nteenagersLocalDF <- collect(teenagers)\n\n# Print the teenagers in our dataset \nprint(teenagersLocalDF)\n\n# Stop the SparkContext now\nsparkR.stop()\n",
+    "created" : 1433379431561.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1208171616",
+    "id" : "89E31263",
+    "lastKnownWriteTime" : 1433378752,
+    "path" : "C:/Users/Emaasit/Dropbox/BigData/ApacheSpark/spark/examples/src/main/r/dataframe.R",
+    "project_path" : "examples/src/main/r/dataframe.R",
+    "properties" : {
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "type" : "r_source"
+}
