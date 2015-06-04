@@ -754,6 +754,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, catalog.lookupRelation(Seq(tableName)))
 
   /**
+   * Returns the specified database table as a [[DataFrame]]
+   * @group ddl_ops
+   * @since 1.5.0
+   */
+  def table(databaseName: String, tableName: String): DataFrame =
+    DataFrame(this, catalog.lookupRelation(Seq(databaseName, tableName)))
+
+
+  /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.
    * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
