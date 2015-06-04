@@ -118,7 +118,6 @@
     <akka.version>2.3.4-spark</akka.version>
     <java.version>1.6</java.version>
     <sbt.project.name>spark</sbt.project.name>
-    <scala.macros.version>2.0.1</scala.macros.version>
     <mesos.version>0.21.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
@@ -1217,15 +1216,6 @@
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
             </javacArgs>
-            <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
-                 by Spark SQL for code generation. -->
-            <compilerPlugins>
-              <compilerPlugin>
-                <groupId>org.scalamacros</groupId>
-                <artifactId>paradise_${scala.version}</artifactId>
-                <version>${scala.macros.version}</version>
-              </compilerPlugin>
-            </compilerPlugins>
           </configuration>
         </plugin>
         <plugin>
