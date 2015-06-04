@@ -1438,6 +1438,8 @@
         <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <!-- Work around MSHADE-148 -->
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->
