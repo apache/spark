@@ -50,6 +50,7 @@ private[ui] class ExecutorsPage(
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
   private val listener = parent.listener
+  private val isHistoryUI = parent.isHistoryUI
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
@@ -100,6 +101,11 @@ private[ui] class ExecutorsPage(
               {Utils.bytesToString(memUsed)} Used
               ({Utils.bytesToString(maxMem)} Total) </li>
             <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
+            {
+              if (isHistoryUI) {
+                <li><a href="logPage">Aggregated Logs</a></li>
+              }
+            }
           </ul>
         </div>
       </div>
