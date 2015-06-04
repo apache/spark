@@ -476,7 +476,7 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
 #' @export
 
 loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
-  read.df(sqlContext, path, source, ...)
+  read.df(sqlContext, path, source, schema, ...)
 }
 
 #' Create an external table
