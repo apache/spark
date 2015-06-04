@@ -172,8 +172,9 @@ class HivePartitionSensor(BaseSensorOperator):
         logging.info(
             'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
-        self.hook = hooks.HiveMetastoreHook(
-            metastore_conn_id=self.metastore_conn_id)
+        if not hasattr(self, 'hook'):
+            self.hook = hooks.HiveMetastoreHook(
+                metastore_conn_id=self.metastore_conn_id)
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)
 
