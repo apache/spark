@@ -91,7 +91,7 @@ public class ExternalShuffleBlockResolver {
    */
   public ManagedBuffer getBlockData(String appId, String execId, String blockId) {
     String[] blockIdParts = blockId.split("_");
-    if (blockIdParts.length < 4) {
+    if (blockIdParts.length != 5) {
       throw new IllegalArgumentException("Unexpected block id format: " + blockId);
     } else if (!blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException("Expected shuffle block id, got: " + blockId);
@@ -99,6 +99,7 @@ public class ExternalShuffleBlockResolver {
     int shuffleId = Integer.parseInt(blockIdParts[1]);
     int mapId = Integer.parseInt(blockIdParts[2]);
     int reduceId = Integer.parseInt(blockIdParts[3]);
+    int stageAttemptId = Integer.parseInt(blockIdParts[4]);
 
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
@@ -109,7 +110,7 @@ public class ExternalShuffleBlockResolver {
     if ("org.apache.spark.shuffle.hash.HashShuffleManager".equals(executor.shuffleManager)) {
       return getHashBasedShuffleBlockData(executor, blockId);
     } else if ("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executor.shuffleManager)) {
-      return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+      return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId, stageAttemptId);
     } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager: " + executor.shuffleManager);
@@ -182,9 +183,10 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
+    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int stageAttemptId) {
+    String baseFileName = "shuffle_" + shuffleId + "_" + mapId + "_0_" + stageAttemptId;
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
-      "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+      baseFileName + ".index");
 
     DataInputStream in = null;
     try {
@@ -194,8 +196,7 @@ public class ExternalShuffleBlockResolver {
       long nextOffset = in.readLong();
       return new FileSegmentManagedBuffer(
         conf,
-        getFile(executor.localDirs, executor.subDirsPerLocalDir,
-          "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
+        getFile(executor.localDirs, executor.subDirsPerLocalDir, baseFileName + ".data"),
         offset,
         nextOffset - offset);
     } catch (IOException e) {

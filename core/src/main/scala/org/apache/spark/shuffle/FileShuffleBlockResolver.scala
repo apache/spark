@@ -104,11 +104,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
-      writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
+  def forMapTask(shuffleId: Int, mapId: Int, stageAttemptId: Int, numBuckets: Int,
+      serializer: Serializer, writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
-      private val shuffleState = shuffleStates(shuffleId)
+      shuffleStates.putIfAbsent((shuffleId, stageAttemptId), new ShuffleState(numBuckets))
+      private val shuffleState = shuffleStates((shuffleId, stageAttemptId))
       private var fileGroup: ShuffleFileGroup = null
 
       val openStartTime = System.nanoTime
@@ -116,13 +116,13 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       val writers: Array[BlockObjectWriter] = if (consolidateShuffleFiles) {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId, stageAttemptId)
           blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
             writeMetrics)
         }
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId, stageAttemptId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
@@ -179,7 +179,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     if (consolidateShuffleFiles) {
       // Search all file groups associated with this shuffle.
-      val shuffleState = shuffleStates(blockId.shuffleId)
+      val shuffleState = shuffleStates((blockId.shuffleId, blockId.stageAttemptId))
       val iter = shuffleState.allFileGroups.iterator
       while (iter.hasNext) {
         val segmentOpt = iter.next.getFileSegmentFor(blockId.mapId, blockId.reduceId)
@@ -215,7 +215,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
           }
         } else {
           for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
-            val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
+            val blockId = new ShuffleBlockId(shuffleId._1, mapId, reduceId, shuffleId._2)
             blockManager.diskBlockManager.getFile(blockId).delete()
           }
         }

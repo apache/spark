@@ -28,6 +28,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
@@ -476,7 +477,7 @@ class DAGSchedulerSuite
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
         (Success, makeMapStatus("hostB", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
            Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
@@ -503,7 +504,7 @@ class DAGSchedulerSuite
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId.host) ===
       Array("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
@@ -520,7 +521,7 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId.host) ===
       Array("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
@@ -562,7 +563,7 @@ class DAGSchedulerSuite
     // should be ignored for being too old
     runEvent(CompletionEvent(
       taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
-    // should work because it's a non-failed host
+    // its a non-failed host, but we can't be sure if the results were clobbered
     runEvent(CompletionEvent(
       taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
     // should be ignored for being too old
@@ -572,9 +573,21 @@ class DAGSchedulerSuite
     taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(
       taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
+
+    // now we should have a new taskSet for stage 0, which has us retry partition 0
+    assert(taskSets.size === 2)
+    val newTaskSet = taskSets(1)
+    assert(newTaskSet.stageId === 0)
+    assert(newTaskSet.attempt === 1)
+    assert(newTaskSet.tasks.size === 1)
+    val newTask = newTaskSet.tasks(0)
+    assert(newTask.epoch === newEpoch + 1)
+    runEvent(CompletionEvent(
+      newTask, Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
+
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
-    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    complete(taskSets(2), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
@@ -668,7 +681,7 @@ class DAGSchedulerSuite
        (Success, makeMapStatus("hostB", 1))))
     // have hostC complete the resubmitted task
     complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_.bmId) ===
            Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
@@ -800,6 +813,66 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  ignore("no concurrent retries for stage attempts (SPARK-7308)") {
+    // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.
+    // note that this is somewhat convoluted for a test case, but isn't actually very unusual
+    // under a real workload.  Note that we only fail the first attempt of stage 2, but that
+    // could be enough to cause havoc.
+
+    val conf = new SparkConf().set("spark.executor.memory", "100m")
+    val clusterSc = new SparkContext("local-cluster[5,4,100]", "test-cluster", conf)
+    val bms = ArrayBuffer[BlockManagerId]()
+    val stageFailureCount = HashMap[Int, Int]()
+    clusterSc.addSparkListener(new SparkListener {
+      override def onBlockManagerAdded(bmAdded: SparkListenerBlockManagerAdded): Unit = {
+        bms += bmAdded.blockManagerId
+      }
+
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+        if (stageCompleted.stageInfo.failureReason.isDefined) {
+          val stage = stageCompleted.stageInfo.stageId
+          stageFailureCount(stage) = stageFailureCount.getOrElse(stage, 0) + 1
+          println("stage " + stage + " failed: " + stageFailureCount(stage))
+        }
+      }
+    })
+    try {
+      val rawData = clusterSc.parallelize(1 to 1e6.toInt, 20).map { x => (x % 100) -> x }.cache()
+      rawData.count()
+      val aBm = bms(0)
+      val shuffled = rawData.groupByKey(100).mapPartitionsWithIndex { case (idx, itr) =>
+        // we want one failure quickly, and more failures after stage 0 has finished its
+        // second attempt
+        if (TaskContext.get().asInstanceOf[TaskContextImpl].stageAttemptId == 0) {
+          if (idx == 0) {
+            throw new FetchFailedException(aBm, 0, 0, idx, 0,
+              cause = new RuntimeException("simulated fetch failure"))
+          } else if (idx > 0 && math.random < 0.2) {
+            Thread.sleep(5000)
+            throw new FetchFailedException(aBm, 0, 0, idx, 0,
+              cause = new RuntimeException("simulated fetch failure"))
+          } else {
+            // want to make sure plenty of these finish after task 0 fails, and some even finish
+            // after the previous stage is retried and this stage retry is started
+            Thread.sleep((500 + math.random * 5000).toLong)
+          }
+        }
+        itr.map { x => ((x._1 + 5) % 100) -> x._2 }
+      }
+      val shuffledAgain = shuffled.flatMap { case (k, vs) => vs.map(k -> _) }.groupByKey(100)
+      val data = shuffledAgain.mapPartitions { itr => itr.flatMap(_._2) }.cache().collect()
+      val count = data.size
+      assert(count === 1e6.toInt)
+      assert(data.toSet === (1 to 1e6.toInt).toSet)
+      // we should only get one failure from stage 2, everything else should be fine
+      assert(stageFailureCount(2) === 1)
+      assert(stageFailureCount.getOrElse(1, 0) === 0)
+      assert(stageFailureCount.getOrElse(3, 0) == 0)
+    } finally {
+      clusterSc.stop()
+    }
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -812,7 +885,7 @@ class DAGSchedulerSuite
   }
 
   private def makeMapStatus(host: String, reduces: Int): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(2))
+    MapStatus(makeBlockManagerId(host), 0, Array.fill[Long](reduces)(2))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

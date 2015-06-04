@@ -67,7 +67,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // All blocks must have non-zero size
     (0 until NUM_BLOCKS).foreach { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      assert(statuses.forall(s => s._2 > 0))
+      assert(statuses.forall(s => s.size > 0))
     }
   }
 
@@ -106,7 +106,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      statuses.map(x => x._2)
+      statuses.map(x => x.size)
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
 
@@ -131,7 +131,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
-      statuses.map(x => x._2)
+      statuses.map(x => x.size)
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
 
@@ -268,8 +268,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     rdd.count()
 
     // Delete one of the local shuffle blocks.
-    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
-    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0, 0))
+    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0, 0))
     assert(hashFile.exists() || sortFile.exists())
 
     if (hashFile.exists()) {

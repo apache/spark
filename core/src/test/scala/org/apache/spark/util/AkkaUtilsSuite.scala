@@ -102,13 +102,13 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+           Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -148,13 +148,13 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
-      BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security on and passwords match
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+           Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -227,13 +227,13 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     // this should succeed since security off
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+      Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -274,12 +274,12 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0,
-      MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L)))
+      MapStatus(BlockManagerId("a", "hostA", 1000), 0, Array(1000L)))
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+      Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()

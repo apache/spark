@@ -50,7 +50,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
   private val temporaryFilesCreated: mutable.Buffer[File] = new ArrayBuffer[File]()
   private val blockIdToFileMap: mutable.Map[BlockId, File] = new mutable.HashMap[BlockId, File]
-  private val shuffleBlockId: ShuffleBlockId = new ShuffleBlockId(0, 0, 0)
+  private val shuffleBlockId: ShuffleBlockId = new ShuffleBlockId(0, 0, 0, 0)
   private val serializer: Serializer = new JavaSerializer(conf)
 
   override def beforeEach(): Unit = {

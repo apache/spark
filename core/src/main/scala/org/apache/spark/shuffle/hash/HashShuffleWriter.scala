@@ -28,6 +28,7 @@ private[spark] class HashShuffleWriter[K, V](
     shuffleBlockResolver: FileShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
+    stageAttemptId: Int,
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
@@ -45,8 +46,8 @@ private[spark] class HashShuffleWriter[K, V](
 
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
-  private val shuffle = shuffleBlockResolver.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
-    writeMetrics)
+  private val shuffle = shuffleBlockResolver.forMapTask(dep.shuffleId, mapId, stageAttemptId,
+    numOutputSplits, ser, writeMetrics)
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
@@ -106,7 +107,7 @@ private[spark] class HashShuffleWriter[K, V](
       writer.commitAndClose()
       writer.fileSegment().length
     }
-    MapStatus(blockManager.shuffleServerId, sizes)
+    MapStatus(blockManager.shuffleServerId, stageAttemptId, sizes)
   }
 
   private def revertWrites(): Unit = {

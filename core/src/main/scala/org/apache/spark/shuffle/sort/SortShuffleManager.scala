@@ -53,20 +53,29 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
-  override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
+  override def getWriter[K, V](
+      handle: ShuffleHandle,
+      mapId: Int,
+      stageAttemptId: Int,
+      context: TaskContext)
       : ShuffleWriter[K, V] = {
     val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, V, _]]
+    val shuffleId = baseShuffleHandle.shuffleId
+    addShuffleAttempt(shuffleId, stageAttemptId)
     shuffleMapNumber.putIfAbsent(baseShuffleHandle.shuffleId, baseShuffleHandle.numMaps)
     new SortShuffleWriter(
-      shuffleBlockResolver, baseShuffleHandle, mapId, context)
+      shuffleBlockResolver, baseShuffleHandle, mapId, stageAttemptId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     if (shuffleMapNumber.containsKey(shuffleId)) {
       val numMaps = shuffleMapNumber.remove(shuffleId)
+      val attempts = stageAttemptsForShuffle(shuffleId)
       (0 until numMaps).map{ mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+        attempts.foreach { stageAttemptId =>
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
+        }
       }
     }
     true

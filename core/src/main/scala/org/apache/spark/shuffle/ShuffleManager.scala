@@ -17,6 +17,10 @@
 
 package org.apache.spark.shuffle
 
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{TaskContext, ShuffleDependency}
 
 /**
@@ -37,7 +41,11 @@ private[spark] trait ShuffleManager {
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
-  def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext): ShuffleWriter[K, V]
+  def getWriter[K, V](
+      handle: ShuffleHandle,
+      mapId: Int,
+      stageAttemptId: Int,
+      context: TaskContext): ShuffleWriter[K, V]
 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
@@ -62,4 +70,18 @@ private[spark] trait ShuffleManager {
 
   /** Shut down this ShuffleManager. */
   def stop(): Unit
+
+  private[this] val shuffleToAttempts = new ConcurrentHashMap[Int, ConcurrentHashMap[Int, Int]]()
+  protected def addShuffleAttempt(shuffleId: Int, stageAttemptId: Int): Unit = {
+    shuffleToAttempts.putIfAbsent(shuffleId, new ConcurrentHashMap[Int, Int]())
+    shuffleToAttempts.get(shuffleId).putIfAbsent(stageAttemptId, stageAttemptId)
+  }
+  protected def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
+    val attempts = shuffleToAttempts.get(shuffleId)
+    if (attempts == null) {
+      Iterable[Int]()
+    } else {
+      attempts.values().asScala
+    }
+  }
 }

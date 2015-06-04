@@ -32,6 +32,7 @@ private[spark] class FetchFailedException(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
+    stageAttemptId: Int,
     message: String,
     cause: Throwable = null)
   extends Exception(message, cause) {
@@ -41,8 +42,9 @@ private[spark] class FetchFailedException(
       shuffleId: Int,
       mapId: Int,
       reduceId: Int,
+      stageAttemptId: Int,
       cause: Throwable) {
-    this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause)
+    this(bmAddress, shuffleId, mapId, reduceId, stageAttemptId, cause.getMessage, cause)
   }
 
   def toTaskEndReason: TaskEndReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
@@ -56,4 +58,4 @@ private[spark] class MetadataFetchFailedException(
     shuffleId: Int,
     reduceId: Int,
     message: String)
-  extends FetchFailedException(null, shuffleId, -1, reduceId, message)
+  extends FetchFailedException(null, shuffleId, -1, reduceId, -1, message)

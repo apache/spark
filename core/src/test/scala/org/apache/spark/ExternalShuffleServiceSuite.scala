@@ -78,5 +78,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
       rdd.count()
     }
     e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+
+    // TODO make sure we have some tests with stage retry (maybe just inherited from ShuffleSuite)
+
   }
 }
