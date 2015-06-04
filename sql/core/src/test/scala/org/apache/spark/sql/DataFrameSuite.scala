@@ -334,6 +334,51 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
+  test("drop column using drop with column reference") {
+    val col = testData("key")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column (no-op) with column reference") {
+    val col = Column("random")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("drop unknown column with same name (no-op) with column reference") {
+    val col = Column("key")
+    val df = testData.drop(col)
+    checkAnswer(
+      df,
+      testData.collect().toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("drop column after join with duplicate columns using column reference") {
+    val newSalary = salary.withColumnRenamed("personId", "id")
+    val col = newSalary("id")
+    // this join will result in duplicate "id" columns
+    val joinedDf = person.join(newSalary,
+      person("id") === newSalary("id"), "inner")
+    // remove only the "id" column that was associated with newSalary
+    val df = joinedDf.drop(col)
+    checkAnswer(
+      df,
+      joinedDf.collect().map {
+        case Row(id: Int, name: String, age: Int, idToDrop: Int, salary: Double) =>
+          Row(id, name, age, salary)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
+    assert(df("id") == person("id"))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
@@ -451,10 +496,13 @@ class DataFrameSuite extends QueryTest {
   test("SPARK-6899") {
     val originalValue = TestSQLContext.conf.codegenEnabled
     TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
-    checkAnswer(
-      decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
-    TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+    try{
+      checkAnswer(
+        decimalData.agg(avg('a)),
+        Row(new java.math.BigDecimal(2.0)))
+    } finally {
+      TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+    }
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -576,5 +624,13 @@ class DataFrameSuite extends QueryTest {
     val res9 = TestSQLContext.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
     assert(res9.count == 2)
     assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
+
+    // only end provided as argument
+    val res10 = TestSQLContext.range(10).select("id")
+    assert(res10.count == 10)
+    assert(res10.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
+
+    val res11 = TestSQLContext.range(-1).select("id")
+    assert(res11.count == 0)
   }
 }

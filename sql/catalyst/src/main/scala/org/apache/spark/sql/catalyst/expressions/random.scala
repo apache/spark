@@ -38,6 +38,8 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    */
   @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
 
+  override def deterministic: Boolean = false
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType

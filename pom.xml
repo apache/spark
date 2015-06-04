@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.4.0-SNAPSHOT</version>
+  <version>1.5.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -118,7 +118,6 @@
     <akka.version>2.3.4-spark</akka.version>
     <java.version>1.6</java.version>
     <sbt.project.name>spark</sbt.project.name>
-    <scala.macros.version>2.0.1</scala.macros.version>
     <mesos.version>0.21.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
@@ -137,7 +136,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>0.13.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
-    <parquet.version>1.6.0rc3</parquet.version>
+    <parquet.version>1.7.0</parquet.version>
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
@@ -262,6 +261,18 @@
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
       <url>https://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <!-- TODO: This can be deleted after Spark 1.4 is posted -->
+    <repository>
+      <id>spark-1.4-staging</id>
+      <name>Spark 1.4 RC4 Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/orgapachespark-1112</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -1069,13 +1080,13 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.twitter</groupId>
+        <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-column</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>com.twitter</groupId>
+        <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-hadoop</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
@@ -1205,15 +1216,6 @@
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
             </javacArgs>
-            <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
-                 by Spark SQL for code generation. -->
-            <compilerPlugins>
-              <compilerPlugin>
-                <groupId>org.scalamacros</groupId>
-                <artifactId>paradise_${scala.version}</artifactId>
-                <version>${scala.macros.version}</version>
-              </compilerPlugin>
-            </compilerPlugins>
           </configuration>
         </plugin>
         <plugin>
@@ -1426,6 +1428,8 @@
         <version>2.3</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <!-- Work around MSHADE-148 -->
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <!-- At a minimum we must include this to force effective pom generation -->

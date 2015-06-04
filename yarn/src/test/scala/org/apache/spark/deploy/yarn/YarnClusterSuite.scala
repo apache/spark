@@ -345,7 +345,7 @@ private object YarnClusterDriver extends Logging with Matchers {
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
-      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {

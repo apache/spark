@@ -75,6 +75,7 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
+  private val allocatorLock = new Object()
 
   // Fields used in client mode.
   private var rpcEnv: RpcEnv = null
@@ -367,7 +368,9 @@ private[spark] class ApplicationMaster(
               }
             logDebug(s"Number of pending allocations is $numPendingAllocate. " +
                      s"Sleeping for $sleepInterval.")
-            Thread.sleep(sleepInterval)
+            allocatorLock.synchronized {
+              allocatorLock.wait(sleepInterval)
+            }
           } catch {
             case e: InterruptedException =>
           }
@@ -554,8 +557,15 @@ private[spark] class ApplicationMaster(
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RequestExecutors(requestedTotal) =>
         Option(allocator) match {
-          case Some(a) => a.requestTotalExecutors(requestedTotal)
-          case None => logWarning("Container allocator is not ready to request executors yet.")
+          case Some(a) =>
+            allocatorLock.synchronized {
+              if (a.requestTotalExecutors(requestedTotal)) {
+                allocatorLock.notifyAll()
+              }
+            }
+
+          case None =>
+            logWarning("Container allocator is not ready to request executors yet.")
         }
         context.reply(true)
 
