@@ -58,7 +58,8 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
-  private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit = {
+  private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit =
+  {
     checkAnswer(
       nnDoubleData.select(c('a)),
       (1 to 10).map(n => Row(f(n * 0.1)))
