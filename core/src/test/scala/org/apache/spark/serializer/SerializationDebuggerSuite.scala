@@ -119,7 +119,11 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(s(2).contains("SerializableClassWithWriteReplace"))
   }
 
-  test("object containing writeObject() and not serializable field") {
+  test("object containing writeReplace() which returns serializable object") {
+    assert(find(new SerializableClassWithWriteReplace(new SerializableClass1)).isEmpty)
+  }
+
+    test("object containing writeObject() and not serializable field") {
     val s = find(new SerializableClassWithWriteObject(new NotSerializable))
     assert(s.size === 3)
     assert(s(0).contains("NotSerializable"))
@@ -137,16 +141,32 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("crazy nested objects") {
-    val s = find(
-      new SerializableClassWithWriteReplace(
-        new ExternalizableClass(
-          new SerializableSubclass(
-            new SerializableArray(
-              Array(new SerializableClass1, new SerializableClass2(new NotSerializable))
-            ))))
+    
+    def findAndAssert(shouldSerialize: Boolean, obj: Any): Unit = {
+      val s = find(obj)
+      if (shouldSerialize) {
+        assert(s.isEmpty)
+      } else {
+        assert(s.nonEmpty)
+        assert(s.head.contains("NotSerializable"))
+      }
+    }
+
+    findAndAssert(false,
+      new SerializableClassWithWriteReplace(new ExternalizableClass(new SerializableSubclass(
+        new SerializableArray(
+          Array(new SerializableClass1, new SerializableClass2(new NotSerializable))
+        )
+      )))
     )
-    assert(s.nonEmpty)
-    assert(s.head.contains("NotSerializable"))
+
+    findAndAssert(true,
+      new SerializableClassWithWriteReplace(new ExternalizableClass(new SerializableSubclass(
+        new SerializableArray(
+          Array(new SerializableClass1, new SerializableClass2(new SerializableClass1))
+        )
+      )))
+    )
   }
 }
 
