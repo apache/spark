@@ -22,11 +22,11 @@ import java.util.concurrent.TimeoutException
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Awaitable, Await, Future}
 import scala.language.postfixOps
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.{ThreadUtils, RpcUtils, Utils}
 
 
 /**
@@ -188,6 +188,13 @@ private[spark] object RpcAddress {
 
 
 /**
+ * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
+ */
+private[rpc] class RpcTimeoutException(message: String)
+  extends TimeoutException(message)
+
+
+/**
  * Associates a timeout with a description so that a when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.
  * @param timeout timeout duration in seconds
@@ -202,17 +209,44 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
   def message: String = description
 
   /** Amends the standard message of TimeoutException to include the description */
-  def amend(te: TimeoutException): TimeoutException = {
-    new TimeoutException(te.getMessage() + " " + description)
+  def createRpcTimeoutException(te: TimeoutException): RpcTimeoutException = {
+    new RpcTimeoutException(te.getMessage() + " " + description)
   }
 
-  /** Wait on a future result to catch and amend a TimeoutException */
-  def awaitResult[T](future: Future[T]): T = {
+  /**
+   * Add a callback to the given Future so that if it completes as failed with a TimeoutException
+   * then the timeout description is added to the message
+   */
+  def addMessageIfTimeout[T](future: Future[T]): Future[T] = {
+    future.recover {
+      // Add a warning message if Future is passed to addMessageIfTimeoutTest more than once
+      case rte: RpcTimeoutException => throw new RpcTimeoutException(rte.getMessage() +
+        " (Future has multiple calls to RpcTimeout.addMessageIfTimeoutTest)")
+      // Any other TimeoutException get converted to a RpcTimeoutException with modified message
+      case te: TimeoutException => throw createRpcTimeoutException(te)
+    }(ThreadUtils.sameThread)
+  }
+
+  /** Applies the duration to create future before calling addMessageIfTimeout*/
+  def addMessageIfTimeout[T](f: FiniteDuration => Future[T]): Future[T] = {
+    addMessageIfTimeout(f(duration))
+  }
+
+  /**
+   * Waits for a completed result to catch and amend a TimeoutException message
+   * @param  awaitable  the `Awaitable` to be awaited
+   * @throws RpcTimeoutException if after waiting for the specified time `awaitable`
+   *         is still not ready
+   */
+  def awaitResult[T](awaitable: Awaitable[T]): T = {
     try {
-      Await.result(future, duration)
+      Await.result(awaitable, duration)
     }
     catch {
-      case te: TimeoutException => throw amend(te)
+      // The exception has already been converted to a RpcTimeoutException so just raise it
+      case rte: RpcTimeoutException => throw rte
+      // Any other TimeoutException get converted to a RpcTimeoutException with modified message
+      case te: TimeoutException => throw createRpcTimeoutException(te)
     }
   }
 }
