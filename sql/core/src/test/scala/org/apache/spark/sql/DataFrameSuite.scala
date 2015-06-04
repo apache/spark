@@ -376,6 +376,7 @@ class DataFrameSuite extends QueryTest {
           Row(id, name, age, salary)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
+    assert(df("id") == person("id"))
   }
 
   test("withColumnRenamed") {
