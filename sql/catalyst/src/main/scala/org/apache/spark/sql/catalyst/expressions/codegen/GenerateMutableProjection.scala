@@ -27,7 +27,6 @@ abstract class BaseMutableProjection extends MutableProjection {}
  * input [[Row]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -54,17 +53,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         return new SpecificProjection(expr);
       }
 
-      class SpecificProjection extends ${typeOf[BaseMutableProjection]} {
+      class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
 
-        $exprType[] expressions = null;
-        $mutableRowType mutableRow = null;
+        private $exprType[] expressions = null;
+        private $mutableRowType mutableRow = null;
 
         public SpecificProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
         }
 
-        public ${typeOf[BaseMutableProjection]} target($mutableRowType row) {
+        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
           mutableRow = row;
           return this;
         }
@@ -75,7 +74,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         }
 
         public Object apply(Object _i) {
-          Row i = (Row)_i;
+          Row i = (Row) _i;
           $projectionCode
 
           return mutableRow;
@@ -87,6 +86,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
+    // fetch the only one method `generate(Expression[])`
     val m = c.getDeclaredMethods()(0)
     () => {
       m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseMutableProjection]

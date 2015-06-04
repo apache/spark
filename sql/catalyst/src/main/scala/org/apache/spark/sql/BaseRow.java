@@ -30,13 +30,14 @@ import org.apache.spark.sql.types.StructType;
 public abstract class BaseRow implements Row {
 
   @Override
-  public int length() {
+  final public int length() {
     return size();
   }
 
   @Override
   public boolean anyNull() {
-    for (int i=0; i< size(); i++) {
+    final int n = size();
+    for (int i=0; i < n; i++) {
       if (isNullAt(i)) {
         return true;
       }
@@ -48,7 +49,7 @@ public abstract class BaseRow implements Row {
   public StructType schema() { throw new UnsupportedOperationException(); }
 
   @Override
-  public Object apply(int i) {
+  final public Object apply(int i) {
     return get(i);
   }
 
@@ -149,8 +150,9 @@ public abstract class BaseRow implements Row {
 
   @Override
   public Row copy() {
-    Object[] arr = new Object[size()];
-    for (int i = 0; i < size(); i++) {
+    final int n = size();
+    Object[] arr = new Object[n];
+    for (int i = 0; i < n; i++) {
       arr[i] = get(i);
     }
     return new GenericRow(arr);
@@ -158,8 +160,9 @@ public abstract class BaseRow implements Row {
 
   @Override
   public Seq<Object> toSeq() {
-    final ArraySeq<Object> values = new ArraySeq<Object>(size());
-    for (int i = 0; i < size(); i++) {
+    final int n = size();
+    final ArraySeq<Object> values = new ArraySeq<Object>(n);
+    for (int i = 0; i < n; i++) {
       values.update(i, get(i));
     }
     return values;

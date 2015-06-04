@@ -18,10 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.Private
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{BinaryType, NumericType}
 
+/**
+ * Inherits some default implementation for Java from `Ordering[Row]`
+ */
+@Private
 class BaseOrdering extends Ordering[Row] {
   def compare(a: Row, b: Row): Int = {
     throw new UnsupportedOperationException
@@ -126,6 +131,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
     logDebug(s"Generated Ordering: $code")
 
     val c = compile(code)
+    // fetch the only one method `generate(Expression[])`
     val m = c.getDeclaredMethods()(0)
     m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseOrdering]
   }

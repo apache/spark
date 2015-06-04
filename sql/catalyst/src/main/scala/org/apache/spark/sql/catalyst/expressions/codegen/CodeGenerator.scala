@@ -38,18 +38,15 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * expressions.
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
-  import scala.reflect.runtime.universe._
 
   protected val cbe = CompilerFactoryFactory.getDefaultCompilerFactory().newClassBodyEvaluator()
 
-  protected val rowType = typeOf[Row]
-  protected val exprType = typeOf[Expression]
-  protected val mutableRowType = typeOf[MutableRow]
-  protected val genericRowType = typeOf[GenericRow]
-  protected val genericMutableRowType = typeOf[GenericMutableRow]
-
-  protected val projectionType = typeOf[Projection]
-  protected val mutableProjectionType = typeOf[MutableProjection]
+  protected val rowType = classOf[Row].getName
+  protected val stringType = classOf[UTF8String].getName
+  protected val decimalType = classOf[Decimal].getName
+  protected val exprType = classOf[Expression].getName
+  protected val mutableRowType = classOf[MutableRow].getName
+  protected val genericMutableRowType = classOf[GenericMutableRow].getName
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -145,17 +142,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       objectTerm: String)
 
   /**
-   * A context for codegen
-   * @param references the expressions that don't support codegen
+   * A context for codegen, which is used to bookkeeping the expressions those are not supported
+   * by codegen, then they are evaluated directly. The unsupported expression is appended at the
+   * end of `references`, the position of it is kept in the code, used to access and evaluate it.
    */
-  protected case class CodeGenContext(references: mutable.ArrayBuffer[Expression])
+  protected class CodeGenContext {
+    /**
+     * Holding all the expressions those do not support codegen, will be evaluated directly.
+     */
+    val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
+  }
 
   /**
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
   def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext(new mutable.ArrayBuffer[Expression]())
+    new CodeGenContext()
   }
 
   /**
@@ -214,7 +217,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       }
     }
 
-    val inputTuple = newTermName(s"i")
+    val inputTuple = "i"
 
     // TODO: Skip generation of null handling code when expression are not nullable.
     val primitiveEvaluation: PartialFunction[Expression, String] = {
@@ -235,8 +238,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val arr = s"new byte[]{${value.getBytes.map(_.toString).mkString(", ")}}"
         s"""
           final boolean $nullTerm = false;
-          org.apache.spark.sql.types.UTF8String $primitiveTerm =
-            new org.apache.spark.sql.types.UTF8String().set(${arr});
+          ${stringType} $primitiveTerm =
+            new ${stringType}().set(${arr});
          """
 
       case expressions.Literal(value, FloatType) =>
@@ -259,12 +262,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
       case Cast(child @ BinaryType(), StringType) =>
         child.castOrNull(c =>
-          s"new org.apache.spark.sql.types.UTF8String().set($c)",
+          s"new ${stringType}().set($c)",
           StringType)
 
       case Cast(child @ DateType(), StringType) =>
         child.castOrNull(c =>
-          s"""new org.apache.spark.sql.types.UTF8String().set(
+          s"""new ${stringType}().set(
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""",
           StringType)
 
@@ -284,7 +287,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       // does not match the expected output.
       case Cast(e, StringType) if e.dataType != TimestampType =>
         e.castOrNull(c =>
-          s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))",
+          s"new ${stringType}().set(String.valueOf($c))",
           StringType)
 
       case EqualTo(e1 @ BinaryType(), e2 @ BinaryType()) =>
@@ -295,31 +298,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
       case EqualTo(e1, e2) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 == $eval2" }
-
-      /* TODO: Fix null semantics.
-      case In(e1, list) if !list.exists(!_.isInstanceOf[expressions.Literal]) =>
-        val eval = expressionEvaluator(e1)
-
-        val checks = list.map {
-          case expressions.Literal(v: String, dataType) =>
-            q"if(${eval.primitiveTerm} == $v) return true"
-          case expressions.Literal(v: Int, dataType) =>
-            q"if(${eval.primitiveTerm} == $v) return true"
-        }
-
-        val funcName = newTermName(s"isIn${curId.getAndIncrement()}")
-
-        """
-            def $funcName: Boolean = {
-              ..${eval.code}
-              if(${eval.nullTerm}) return false
-              ..$checks
-              return false
-            }
-            val $nullTerm = false
-            val $primitiveTerm = $funcName
-        """
-      */
 
       case GreaterThan(e1 @ NumericType(), e2 @ NumericType()) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => s"$eval1 > $eval2" }
@@ -333,7 +311,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case And(e1, e2) =>
         val eval1 = expressionEvaluator(e1, ctx)
         val eval2 = expressionEvaluator(e2, ctx)
-        // TODO(davies): This is different than And.eval()
         s"""
           ${eval1.code}
           boolean $nullTerm = false;
@@ -623,25 +600,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
          """
       }
 
-    // Only inject debugging code if debugging is turned on.
-    val debugCode =
-      if (debugLogging) {
-        val localLogger = log
-        val localLoggerTree = reify { localLogger }
-        s"""
-          $localLoggerTree.debug(
-            ${e.toString} + ": " + (if ($nullTerm) "null" else $primitiveTerm.toString))
-        """
-      } else {
-        ""
-      }
-
-    EvaluatedExpression(code + debugCode, nullTerm, primitiveTerm, objectTerm)
+    EvaluatedExpression(code, nullTerm, primitiveTerm, objectTerm)
   }
 
-  protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
+  protected def getColumn(inputRow: String, dataType: DataType, ordinal: Int) = {
     dataType match {
-      case StringType => s"(org.apache.spark.sql.types.UTF8String)$inputRow.apply($ordinal)"
+      case StringType => s"(${stringType})$inputRow.apply($ordinal)"
       case dt: DataType if isNativeType(dt) => s"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => s"(${termForType(dataType)})$inputRow.apply($ordinal)"
     }
@@ -651,7 +615,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       destinationRow: String,
       dataType: DataType,
       ordinal: Int,
-      value: String) = {
+      value: String): String = {
     dataType match {
       case StringType => s"$destinationRow.update($ordinal, $value)"
       case dt: DataType if isNativeType(dt) =>
@@ -670,9 +634,9 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case other => s"set${termForType(dt)}"
   }
 
-  protected def hashSetForType(dt: DataType) = dt match {
-    case IntegerType => typeOf[IntegerHashSet]
-    case LongType => typeOf[LongHashSet]
+  protected def hashSetForType(dt: DataType): String = dt match {
+    case IntegerType => classOf[IntegerHashSet].getName
+    case LongType => classOf[LongHashSet].getName
     case unsupportedType =>
       sys.error(s"Code generation not support for hashset of type $unsupportedType")
   }
@@ -685,9 +649,9 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "double"
     case FloatType => "float"
     case BooleanType => "boolean"
-    case dt @ DecimalType() => "org.apache.spark.sql.types.Decimal"
+    case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
-    case StringType => "org.apache.spark.sql.types.UTF8String"
+    case StringType => stringType
     case DateType => "int"
     case TimestampType => "java.sql.Timestamp"
     case _ => "Object"
@@ -702,7 +666,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"
-    case dt @ DecimalType() => "null"
+    case dt: DecimalType => "null"
     case StringType => "null"
     case _ => "null"
   }
@@ -715,13 +679,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case DoubleType => "Double"
     case FloatType => "Float"
     case BooleanType => "Boolean"
-    case dt @ DecimalType() => "org.apache.spark.sql.types.Decimal"
+    case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
-    case StringType => "org.apache.spark.sql.types.UTF8String"
+    case StringType => stringType
     case DateType => "Integer"
     case TimestampType => "java.sql.Timestamp"
-    case _ =>
-      "Object"
+    case _ => "Object"
   }
 
   /**

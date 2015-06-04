@@ -42,15 +42,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
   // Make Mutablility optional...
   protected def create(expressions: Seq[Expression]): Projection = {
-    /* TODO: Configurable...
-    val nullFunctions =
-      s"""
-        private final val nullSet = new org.apache.spark.util.collection.BitSet(length)
-        final def setNullAt(i: Int) = nullSet.set(i)
-        final def isNullAt(i: Int) = nullSet.get(i)
-      """
-     */
-
     val ctx = newCodeGenContext()
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
@@ -166,7 +157,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (Row)r);
+        return new SpecificRow(expressions, (Row) r);
       }
     }
 
@@ -226,6 +217,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
     val c = compile(code)
+    // fetch the only one method `generate(Expression[])`
     val m = c.getDeclaredMethods()(0)
     m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Projection]
   }

@@ -235,11 +235,6 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public Object apply(int i) {
-    return get(i);
-  }
-
-  @Override
   public Object get(int i) {
     assertIndexIsValid(i);
     assert (schema != null) : "Schema must be defined when calling generic get() method";

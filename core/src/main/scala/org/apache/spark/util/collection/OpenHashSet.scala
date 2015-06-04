@@ -20,6 +20,8 @@ package org.apache.spark.util.collection
 import scala.reflect._
 import com.google.common.hash.Hashing
 
+import org.apache.spark.annotation.Private
+
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
  * removed.
@@ -37,6 +39,7 @@ import com.google.common.hash.Hashing
  * It uses quadratic probing with a power-of-2 hash table size, which is guaranteed
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
+@Private
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
