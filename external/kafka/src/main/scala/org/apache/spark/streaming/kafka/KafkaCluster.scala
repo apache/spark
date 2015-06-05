@@ -360,6 +360,14 @@ private[spark]
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]
 
+  /** If the result is right, return it, otherwise throw SparkException */
+  def checkErrors[T](result: Either[Err, T]): T = {
+    result.fold(
+      errs => throw new SparkException(errs.mkString("\n")),
+      ok => ok
+    )
+  }
+
   private[spark]
   case class LeaderOffset(host: String, port: Int, offset: Long)
 

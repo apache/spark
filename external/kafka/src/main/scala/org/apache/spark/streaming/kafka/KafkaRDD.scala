@@ -75,25 +75,24 @@ class KafkaRDD[
   override def isEmpty(): Boolean = count == 0L
 
   override def take(num: Int): Array[R] = {
-    val nonEmpty = this.partitions
+    val nonEmptyPartitions = this.partitions
       .map(_.asInstanceOf[KafkaRDDPartition])
       .filter(_.count > 0)
 
-    if (num < 1 || nonEmpty.size < 1) {
+    if (num < 1 || nonEmptyPartitions.size < 1) {
       return new Array[R](0)
     }
 
-    var remain = num.toLong
     // Determine in advance how many messages need to be taken from each partition
-    val parts = nonEmpty.flatMap { part =>
+    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+      val remain = num - result.values.sum
       if (remain > 0) {
         val taken = Math.min(remain, part.count)
-        remain = remain - taken
-        Some((part.index -> taken.toInt))
+        result + (part.index -> taken.toInt)
       } else {
-        None
+        result
       }
-    }.toMap
+    }
 
     val buf = new ArrayBuffer[R]
     val res = context.runJob(

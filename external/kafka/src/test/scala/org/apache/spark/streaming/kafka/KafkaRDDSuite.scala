@@ -78,6 +78,13 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(1).size === 1)
     assert(messages(rdd.take(1).head._2))
     assert(rdd.take(messages.size + 10).size === messages.size)
+
+    // invalid offset ranges throw exceptions
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    intercept[SparkException] {
+      KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
+        sc, kafkaParams, badRanges)
+    }
   }
 
   test("iterator boundary conditions") {
