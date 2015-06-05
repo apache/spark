@@ -208,7 +208,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     shuffleStates.remove(shuffleId)
     cleaned
   }
-  
+
   @VisibleForTesting
   private[shuffle] def getShuffleFiles(blockId: ShuffleBlockId): Seq[File] = {
     Seq(blockManager.diskBlockManager.getFile(blockId))

@@ -48,7 +48,7 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
       .set("spark.shuffle.unsafe.testing.allowSpillMove", "false")
     val noCompression = kryoAndNoSpillMove.clone()
       .set("spark.shuffle.compress", "false")
-      .set("spark.file.transferTo","false")
+      .set("spark.file.transferTo", "false")
     Seq(
       "slow merge path" -> kryoAndNoSpillMove,
       "filestream based fast merge" -> noCompression
