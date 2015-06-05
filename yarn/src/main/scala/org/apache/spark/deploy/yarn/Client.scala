@@ -286,6 +286,9 @@ private[spark] class Client(
     /**
      * Distribute a file to the cluster.
      *
+     * If the file's path is a "local:" URI, it's actually not distributed. Other files are copied
+     * to HDFS (if not already there) and added to the application's distributed cache.
+     *
      * @param path URI of the file to distribute.
      * @param resType Type of resource being distributed.
      * @param destName Name of the file in the distributed cache.
@@ -293,6 +296,7 @@ private[spark] class Client(
      * @param appMasterOnly Whether to distribute only to the AM.
      * @return A 2-tuple. First item is whether the file is a "local:" URI. Second item is the
      *         localized path for non-local paths, or the input `path` for local paths.
+     *         The localized path will be null if the URI has already been added to the cache.
      */
     def distribute(
         path: String,
@@ -327,7 +331,7 @@ private[spark] class Client(
       val (_, localizedPath) = distribute(args.keytab,
         destName = Some(sparkConf.get("spark.yarn.keytab")),
         appMasterOnly = true)
-      require(localizedPath != null)
+      require(localizedPath != null, "Keytab file already distributed.")
     }
 
     /**
@@ -343,12 +347,12 @@ private[spark] class Client(
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
       ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
-      if (path != null && !path.isEmpty()) {
+      if (path != null && !path.trim().isEmpty()) {
         val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
         if (isLocal && confKey != null) {
+          require(localizedPath != null, s"Path $path already distributed.")
           // If the resource is intended for local use only, handle this downstream
           // by setting the appropriate property
-          require(localizedPath != null)
           sparkConf.set(confKey, localizedPath)
         }
       }
@@ -369,7 +373,7 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
         flist.split(',').foreach { file =>
-          val (isLocal, localizedPath) = distribute(file, resType = resType)
+          val (_, localizedPath) = distribute(file, resType = resType)
           require(localizedPath != null)
           if (addToClasspath) {
             cachedSecondaryJarLinks += localizedPath
@@ -546,7 +550,7 @@ private[spark] class Client(
       val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
         .mkString(YarnSparkHadoopUtil.getClassPathSeparator)
       env("PYTHONPATH") = pythonPathStr
-      sparkConf.set(PYTHON_PATH_CONF_KEY, pythonPathStr)
+      sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
     }
 
     // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
@@ -941,18 +945,11 @@ object Client extends Logging {
   // Subdirectory where the user's Spark and Hadoop config files will be placed.
   val LOCALIZED_CONF_DIR = "__spark_conf__"
 
-  // Name fo the file in the conf archive containing Spark configuration.
+  // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
-
-  // Key in SparkConf where to find the executors' PYTHONPATH. This cannot be set using
-  // `SparkConf.setExecutorEnv`, because that would cause it to propagate to the python
-  // code via the configuration, and then override the process's own environment when
-  // launching workers. Since it contains variables that are expanded by YARN, that cannot
-  // happen.
-  val PYTHON_PATH_CONF_KEY = "spark.yarn.pythonPath"
 
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this

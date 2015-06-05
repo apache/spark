@@ -500,6 +500,8 @@ private[spark] class ApplicationMaster(
 
     var userArgs = args.userArgs
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
+      // Second argument is the list of files to add to PYTHONPATH, which Client.scala already
+      // handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {

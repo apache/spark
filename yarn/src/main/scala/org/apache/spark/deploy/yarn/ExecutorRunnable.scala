@@ -285,10 +285,6 @@ class ExecutorRunnable(
       YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
     }
 
-    sparkConf.getOption(Client.PYTHON_PATH_CONF_KEY).foreach { path =>
-      YarnSparkHadoopUtil.addPathToEnvironment(env, "PYTHONPATH", path)
-    }
-
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)

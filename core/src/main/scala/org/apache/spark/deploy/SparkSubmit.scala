@@ -315,58 +315,57 @@ object SparkSubmit {
       case _ =>
     }
 
-    if (args.isPython) {
+    if (args.isPython && clusterManager == YARN) {
       // In yarn mode for a python app, add pyspark archives to files
       // that can be distributed with the job
-      if (clusterManager == YARN) {
-        var pyArchives: String = null
-        val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
-        if (pyArchivesEnvOpt.isDefined) {
-          pyArchives = pyArchivesEnvOpt.get
-        } else {
-          if (!sys.env.contains("SPARK_HOME")) {
-            printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
-          }
-          val pythonPath = new ArrayBuffer[String]
-          for (sparkHome <- sys.env.get("SPARK_HOME")) {
-            val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
-            val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
-            if (!pyArchivesFile.exists()) {
-              printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
-            }
-            val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
-            if (!py4jFile.exists()) {
-              printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
-                "in yarn mode.")
-            }
-            pythonPath += pyArchivesFile.getAbsolutePath()
-            pythonPath += py4jFile.getAbsolutePath()
-          }
-          pyArchives = pythonPath.mkString(",")
+      var pyArchives: String = null
+      val pyArchivesEnvOpt = sys.env.get("PYSPARK_ARCHIVES_PATH")
+      if (pyArchivesEnvOpt.isDefined) {
+        pyArchives = pyArchivesEnvOpt.get
+      } else {
+        if (!sys.env.contains("SPARK_HOME")) {
+          printErrorAndExit("SPARK_HOME does not exist for python application in yarn mode.")
         }
-        args.pyFiles = mergeFileLists(args.pyFiles, pyArchives)
+        val pythonPath = new ArrayBuffer[String]
+        for (sparkHome <- sys.env.get("SPARK_HOME")) {
+          val pyLibPath = Seq(sparkHome, "python", "lib").mkString(File.separator)
+          val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+          if (!pyArchivesFile.exists()) {
+            printErrorAndExit("pyspark.zip does not exist for python application in yarn mode.")
+          }
+          val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+          if (!py4jFile.exists()) {
+            printErrorAndExit("py4j-0.8.2.1-src.zip does not exist for python application " +
+              "in yarn mode.")
+          }
+          pythonPath += pyArchivesFile.getAbsolutePath()
+          pythonPath += py4jFile.getAbsolutePath()
+        }
+        pyArchives = pythonPath.mkString(",")
       }
+      args.pyFiles = mergeFileLists(args.pyFiles, pyArchives)
+    }
 
-      // If we're running a python app, set the main class to our specific python runner
-      if (deployMode == CLIENT) {
-        if (args.primaryResource == PYSPARK_SHELL) {
-          args.mainClass = "org.apache.spark.api.python.PythonGatewayServer"
-        } else {
-          // If a python file is provided, add it to the child arguments and list of files to
-          // deploy.
-          // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
-          args.mainClass = "org.apache.spark.deploy.PythonRunner"
-          args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
-          if (clusterManager != YARN) {
-            args.files = mergeFileLists(args.files, args.primaryResource)
-          }
-        }
+    // If we're running a python app, set the main class to our specific python runner
+    if (args.isPython && deployMode == CLIENT) {
+      if (args.primaryResource == PYSPARK_SHELL) {
+        args.mainClass = "org.apache.spark.api.python.PythonGatewayServer"
+      } else {
+        // If a python file is provided, add it to the child arguments and list of files to deploy.
+        // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
+        args.mainClass = "org.apache.spark.deploy.PythonRunner"
+        args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
         if (clusterManager != YARN) {
-          args.files = mergeFileLists(args.files, args.pyFiles)
+          // The YARN backend distributes the primary file differently, so don't merge it.
+          args.files = mergeFileLists(args.files, args.primaryResource)
         }
-        if (args.pyFiles != null) {
-          sysProps("spark.submit.pyFiles") = args.pyFiles
-        }
+      }
+      if (clusterManager != YARN) {
+        // The YARN backend handles python files differently, so don't merge the lists.
+        args.files = mergeFileLists(args.files, args.pyFiles)
+      }
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
       }
     }
 
@@ -383,12 +382,10 @@ object SparkSubmit {
       }
     }
 
-    if (isYarnCluster) {
+    if (isYarnCluster && args.isR) {
       // In yarn-cluster mode for a R app, add primary resource to files
       // that can be distributed with the job
-      if (args.isR) {
-        args.files = mergeFileLists(args.files, args.primaryResource)
-      }
+      args.files = mergeFileLists(args.files, args.primaryResource)
     }
 
     // Special flag to avoid deprecation warnings at the client
