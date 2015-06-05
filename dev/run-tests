@@ -77,69 +77,10 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
   fi
 }
 
-# Only run Hive tests if there are SQL changes.
-# Partial solution for SPARK-1455.
-if [ -n "$AMPLAB_JENKINS" ]; then
-  target_branch="$ghprbTargetBranch"
-  git fetch origin "$target_branch":"$target_branch"
-
-  # AMP_JENKINS_PRB indicates if the current build is a pull request build.
-  if [ -n "$AMP_JENKINS_PRB" ]; then
-    # It is a pull request build.
-    sql_diffs=$(
-      git diff --name-only "$target_branch" \
-      | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
-    )
-
-    non_sql_diffs=$(
-      git diff --name-only "$target_branch" \
-      | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
-    )
-
-    if [ -n "$sql_diffs" ]; then
-      echo "[info] Detected changes in SQL. Will run Hive test suite."
-      _RUN_SQL_TESTS=true
-
-      if [ -z "$non_sql_diffs" ]; then
-        echo "[info] Detected no changes except in SQL. Will only run SQL tests."
-        _SQL_TESTS_ONLY=true
-      fi
-    fi
-  else
-    # It is a regular build. We should run SQL tests.
-    _RUN_SQL_TESTS=true
-  fi
-fi
 
 set -o pipefail
 trap 'handle_error $LINENO' ERR
 
-echo ""
-echo "========================================================================="
-echo "Running Apache RAT checks"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_RAT
-
-./dev/check-license
-
-echo ""
-echo "========================================================================="
-echo "Running Scala style checks"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_SCALA_STYLE
-
-./dev/lint-scala
-
-echo ""
-echo "========================================================================="
-echo "Running Python style checks"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
-
-./dev/lint-python
 
 echo ""
 echo "========================================================================="
@@ -165,34 +106,14 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 echo ""
 echo "========================================================================="
-echo "Detecting binary incompatibilities with MiMa"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_MIMA
-
-./dev/mima
-
-echo ""
-echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
 {
-  # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
-  # This must be a single argument, as it is.
-  if [ -n "$_RUN_SQL_TESTS" ]; then
-    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
-  fi
-
-  if [ -n "$_SQL_TESTS_ONLY" ]; then
-    # This must be an array of individual arguments. Otherwise, having one long string
-    # will be interpreted as a single test, which doesn't work.
-    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test" "mllib/test")
-  else
-    SBT_MAVEN_TEST_ARGS=("test")
-  fi
+  SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+  SBT_MAVEN_TEST_ARGS=("hive/test")
 
   echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
 
@@ -212,29 +133,4 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }
-
-echo ""
-echo "========================================================================="
-echo "Running PySpark tests"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
-
-# add path for python 3 in jenkins
-export PATH="${PATH}:/home/anaconda/envs/py3k/bin"
-./python/run-tests
-
-echo ""
-echo "========================================================================="
-echo "Running SparkR tests"
-echo "========================================================================="
-
-CURRENT_BLOCK=$BLOCK_SPARKR_UNIT_TESTS
-
-if [ $(command -v R) ]; then
-  ./R/install-dev.sh
-  ./R/run-tests.sh
-else
-  echo "Ignoring SparkR tests as R was not found in PATH"
-fi
 
