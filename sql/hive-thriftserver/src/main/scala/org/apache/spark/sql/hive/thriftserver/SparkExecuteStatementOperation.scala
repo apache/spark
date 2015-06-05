@@ -279,7 +279,8 @@ private[hive] class SparkExecuteStatementOperation(
    * If there are query specific settings to overlay, then create a copy of config
    * There are two cases we need to clone the session config that's being passed to hive driver
    * 1. Async query -
-   *    If the client changes a config setting, that shouldn't reflect in the execution already underway
+   *    If the client changes a config setting, that shouldn't reflect in the execution
+   *    already underway
    * 2. confOverlay -
    *    The query specific settings should only be applied to the query config and not session
    * @return new configuration
