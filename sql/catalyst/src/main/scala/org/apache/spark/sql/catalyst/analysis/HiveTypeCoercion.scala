@@ -68,6 +68,42 @@ object HiveTypeCoercion {
   }
 
   /**
+   * Implicit promote the DataType to StringType if
+   * one of the data type in (dt1, dt2) is StringType, and the other is not either
+   * BooleanType or BinaryType, the TightestCommonType should be StringType
+   * eg: 1. CaseWhenLike  case when ... then dt1 else dt2 end
+   *     2. Coalesce(null, dt1, dt2)
+
+   */
+  val promoteToStringTypeOfTwo: (DataType, DataType) => Option[DataType] = {
+    case (t1: StringType, t2: DataType) if (t2 != BinaryType && t2 != BooleanType) =>
+      Some(StringType)
+
+    case (t1: DataType, t2: StringType) if (t1 != BinaryType && t1 != BooleanType) =>
+      Some(StringType)
+
+    case _ => None
+  }
+
+  /**
+   * Find the tightest common type of a set of types by continuously applying
+   * `findTightestCommonTypeOfTwo` on these types.
+   */
+  private def findTightestCommonTypeAndTryPromoteToString(types: Seq[DataType]) = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case None => None
+      case Some(d) =>
+        val dt = findTightestCommonTypeOfTwo(d, c)
+        if (dt == None) {
+          promoteToStringTypeOfTwo(d, c)
+        } else {
+          dt
+        }
+    })
+  }
+
+
+  /**
    * Find the tightest common type of a set of types by continuously applying
    * `findTightestCommonTypeOfTwo` on these types.
    */
@@ -599,7 +635,7 @@ trait HiveTypeCoercion {
       // compatible with every child column.
       case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
         val types = es.map(_.dataType)
-        findTightestCommonType(types) match {
+        findTightestCommonTypeAndTryPromoteToString(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None =>
             sys.error(s"Could not determine return type of Coalesce for ${types.mkString(",")}")
@@ -634,7 +670,7 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
         logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
-        val maybeCommonType = findTightestCommonType(c.valueTypes)
+        val maybeCommonType = findTightestCommonTypeAndTryPromoteToString(c.valueTypes)
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, value) if value.dataType != commonType =>
@@ -650,7 +686,8 @@ trait HiveTypeCoercion {
         }.getOrElse(c)
 
       case c: CaseKeyWhen if c.childrenResolved && !c.resolved =>
-        val maybeCommonType = findTightestCommonType((c.key +: c.whenList).map(_.dataType))
+        val maybeCommonType =
+          findTightestCommonTypeAndTryPromoteToString((c.key +: c.whenList).map(_.dataType))
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, then) if when.dataType != commonType =>
