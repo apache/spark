@@ -338,7 +338,7 @@ private[spark] object Utils extends Logging {
     }
 
   /**
-   * If authentication is enabled, retrieve app secret from stdin, set it in conf and 
+   * If authentication is enabled, retrieve app secret from stdin, set it in conf and
    * export it to system properties.
    *
    * Note: This mutates state in the given SparkConf and in this JVM's system properties.
