@@ -56,7 +56,8 @@ private[spark] abstract class YarnSchedulerBackend(
     if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
       return yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
     }
-    false  }
+    false
+  }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
