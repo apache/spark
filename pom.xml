@@ -180,7 +180,7 @@
     <parquet.deps.scope>compile</parquet.deps.scope>
 
     <!--
-      Overridable test home. So that you can call individual pom files directly without
+      Overridable test home. So that you can call individual pom files directory without
       things breaking.
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
@@ -1253,7 +1253,6 @@
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
-              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
@@ -1286,7 +1285,6 @@
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
-              <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
