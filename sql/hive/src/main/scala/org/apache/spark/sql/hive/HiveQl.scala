@@ -911,7 +911,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
                     (BaseSemanticAnalyzer.unescapeSQLString(name),
                       BaseSemanticAnalyzer.unescapeSQLString(value))
-                } 
+                }
                 (Nil, BaseSemanticAnalyzer.unescapeSQLString(serdeClass), serdeProps)
 
               case Nil => (Nil, "", Nil)

@@ -72,7 +72,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val dataInputStream = new DataInputStream(inputStream)
- 
+
       val outputTableDesc = ioschema.initOutputSerDe(output)
       val outputSerde = outputTableDesc.getDeserializerClass().newInstance()
       outputSerde.initialize(null, outputTableDesc.getProperties())
@@ -106,7 +106,7 @@ case class ScriptTransformation(
           val raw = outputSerde.deserialize(writable)
           val dataList = outputSoi.getStructFieldsDataAsList(raw)
           val fieldList = outputSoi.getAllStructFieldRefs()
-            
+
           var i = 0
           dataList.foreach( element => {
             if (element == null) {
@@ -227,7 +227,7 @@ case class HiveScriptIOSchema (
       case (e: NamedExpression, _) => e.name
       case (o, index) => "c_$index"
     }
- 
+
     val columnTypes = attrs.map(_.dataType)
 
     (columns, columnTypes)
@@ -247,7 +247,7 @@ case class HiveScriptIOSchema (
 
       val tblDesc: TableDesc = PlanUtils.getTableDesc(serdeClass, Utilities.tabCode.toString,
         columns.mkString(","), columnTypesNames, false)
- 
+
       var propsMap = serdeProps.map(kv => {
         (kv._1, kv._2)
       }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
@@ -311,7 +311,7 @@ case class HiveScriptIOSchema (
       }
     Utils.classForName(writerName).newInstance.asInstanceOf[RecordWriter]
   }
- 
+
   def initInputSoi(input: Seq[Expression]): ObjectInspector = {
     val (columns, columnTypes) = parseAttrs(input)
     val fieldObjectInspectors = columnTypes.map(toInspector(_))
@@ -319,7 +319,7 @@ case class HiveScriptIOSchema (
       .getStandardStructObjectInspector(columns, fieldObjectInspectors)
       .asInstanceOf[ObjectInspector]
   }
- 
+
   def initOutputputSoi(outputSerde: Deserializer): StructObjectInspector = {
     outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
   }
