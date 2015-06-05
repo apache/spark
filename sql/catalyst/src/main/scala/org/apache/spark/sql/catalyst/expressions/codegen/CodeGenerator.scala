@@ -166,9 +166,12 @@ class CodeGenContext {
    * Returns a function to generate equal expression in Java
    */
   def equalFunc(dataType: DataType): ((Term, Term) => Code) = dataType match {
-    case BinaryType => { case (eval1, eval2) => s"java.util.Arrays.equals($eval1, $eval2)" }
-    case dt if isNativeType(dt) => { case (eval1, eval2) => s"$eval1 == $eval2" }
-    case other => { case (eval1, eval2) => s"$eval1.equals($eval2)" }
+    case BinaryType => { case (eval1, eval2) =>
+      s"java.util.Arrays.equals($eval1, $eval2)" }
+    case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType =>
+      { case (eval1, eval2) => s"$eval1 == $eval2" }
+    case other =>
+      { case (eval1, eval2) => s"$eval1.equals($eval2)" }
   }
 
   /**
@@ -221,7 +224,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   protected def compile(code: String): Class[_] = {
     val startTime = System.nanoTime()
-    val clazz = new ClassBodyEvaluator(code).getClazz()
+    val clazz = try {
+      new ClassBodyEvaluator(code).getClazz()
+    } catch {
+      case e: Exception =>
+        logError(s"failed to compile:\n $code", e)
+        throw e
+    }
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
     logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")

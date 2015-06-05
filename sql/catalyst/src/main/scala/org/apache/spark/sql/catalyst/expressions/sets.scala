@@ -167,8 +167,8 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
         leftEval.code + rightEval.code + s"""
           boolean ${ev.nullTerm} = false;
-          ${htype} ${ev.primitiveTerm} = ${leftEval.primitiveTerm};
-          ${ev.primitiveTerm}.union(${rightEval.primitiveTerm});
+          ${htype} ${ev.primitiveTerm} = (${htype})${leftEval.primitiveTerm};
+          ${ev.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
         """
       case _ => super.genCode(ctx, ev)
     }
@@ -189,10 +189,6 @@ case class CountSet(child: Expression) extends UnaryExpression {
     if (childEval != null) {
       childEval.size.toLong
     }
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    castOrNull(ctx, ev, c => s"$c.size().toLong()")
   }
 
   override def toString: String = s"$child.count()"
