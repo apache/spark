@@ -333,7 +333,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         if (hasLocationPreferences) {
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        } else if(roundRobin) {
+        } else if (roundRobin) {
           val roundRobinReceivers = receivers.map(r => (r, Seq(r.host.get)))
           ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
         } else {
