@@ -207,6 +207,9 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def toString: String = s"$child[$extraction]"
 }
 
+/**
+ * Holds the expression that has yet to be aliased.
+ */
 case class UnresolvedAlias(child: Expression) extends NamedExpression
   with trees.UnaryNode[Expression] {
 

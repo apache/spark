@@ -131,10 +131,15 @@ class Analyzer(
     }
   }
 
+  /**
+   * Replaces [[UnresolvedAlias]]s with concrete aliases.
+   */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[Expression]) = {
       var i = -1
-      exprs.map(_ transformDown {
+      // The `UnresolvedAlias`s will appear only at root of a expression tree, we don't need
+      // to transform down the whole tree.
+      exprs.map {
         case u @ UnresolvedAlias(child) =>
           child match {
             case _: UnresolvedAttribute => u
@@ -146,7 +151,7 @@ class Analyzer(
               i += 1
               Alias(other, s"c$i")()
           }
-      }).asInstanceOf[Seq[NamedExpression]]
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
