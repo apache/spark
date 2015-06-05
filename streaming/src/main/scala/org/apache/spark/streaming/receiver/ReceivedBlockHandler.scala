@@ -87,7 +87,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
-    if(countIterator !=null) {
+    if(countIterator != null) {
       numRecords = Some(countIterator.count)
     }
     BlockManagerBasedStoreResult(blockId, numRecords.getOrElse(-1))
@@ -199,7 +199,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
     val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
-    if(countIterator !=null) {
+    if(countIterator != null) {
       numRecords = Some(countIterator.count)
     }
     WriteAheadLogBasedStoreResult(blockId, numRecords.getOrElse(-1), walRecordHandle)
