@@ -289,6 +289,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // If no location preferences are specified, set host location for each receiver
       // so as to distribute them evenly over executors in a round-robin fashion
+      // If num_receivers > num_executors, distribute receivers among executors
       // If num_executors > num_receivers, distribute executors among receivers
       val locations = new Array[ArrayBuffer[String]](receivers.length)
       var roundRobin = false
