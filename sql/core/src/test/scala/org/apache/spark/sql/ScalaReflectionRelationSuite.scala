@@ -98,7 +98,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
 
   test("query case class RDD with Nones") {
     val data = OptionalReflectData(None, None, None, None, None, None, None)
-    Seq(data :: Nil).toDF().registerTempTable("reflectOptionalData")
+    Seq(data).toDF().registerTempTable("reflectOptionalData")
 
     assert(ctx.sql("SELECT * FROM reflectOptionalData").collect().head ===
       Row.fromSeq(Seq.fill(7)(null)))
