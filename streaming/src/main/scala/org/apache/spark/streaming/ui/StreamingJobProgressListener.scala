@@ -29,7 +29,7 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
-
+import org.apache.spark.storage.StreamBlockId
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   extends StreamingListener with SparkListener {
@@ -42,6 +42,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
+  // Store the block infos for all blocks used by Streaming
+  private val blockInfos = new HashMap[StreamBlockId, StreamBlockUIData]
 
   // Because onJobStart and onBatchXXX messages are processed in different threads,
   // we may not be able to get the corresponding BatchUIData when receiving onJobStart. So here we
@@ -244,6 +246,33 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
       _batchUIData.outputOpIdSparkJobIdPairs = outputOpIdToSparkJobIds
     }
     batchUIData
+  }
+
+  override def onBlockAdded(blockAdded: StreamingListenerBlockAdded): Unit = {
+    val blockId = blockAdded.blockInfo.blockId
+    val blockStatus = blockAdded.blockInfo.blockStoreResult.blockStatus
+    val blockUIData = StreamBlockUIData(
+      blockId,
+      blockStatus.storageLevel,
+      blockStatus.memSize,
+      blockStatus.diskSize,
+      blockStatus.externalBlockStoreSize)
+    synchronized {
+      blockInfos += (blockId -> blockUIData)
+    }
+  }
+
+  override def onBlockRemoved(blockRemoved: StreamingListenerBlockRemoved): Unit = {
+    // The block ids must be StreamBlockId. The `isInstanceOf` check is just for safety.
+    val blockedToRemoved =
+      blockRemoved.blockIds.filter(_.isInstanceOf[StreamBlockId]).map(_.asInstanceOf[StreamBlockId])
+    synchronized {
+      blockInfos --= blockedToRemoved
+    }
+  }
+
+  def getAllBlocks: Seq[StreamBlockUIData] = synchronized {
+    blockInfos.values.toSeq
   }
 }
 

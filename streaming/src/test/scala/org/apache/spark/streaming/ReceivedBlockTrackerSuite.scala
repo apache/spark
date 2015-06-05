@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{Logging, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.storage.{BlockStatus, StreamBlockId, StorageLevel}
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.{WriteAheadLogUtils, FileBasedWriteAheadLogReader}
@@ -225,7 +225,9 @@ class ReceivedBlockTrackerSuite
   /** Generate blocks infos using random ids */
   def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
     List.fill(5)(ReceivedBlockInfo(streamId, 0, None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)))))
+      BlockManagerBasedStoreResult(
+        StreamBlockId(streamId, math.abs(Random.nextInt)),
+        BlockStatus(StorageLevel.MEMORY_AND_DISK, 100, 100, 0))))
   }
 
   /** Get all the data written in the given write ahead log file. */

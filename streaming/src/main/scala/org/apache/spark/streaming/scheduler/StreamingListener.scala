@@ -19,8 +19,9 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.Queue
 
-import org.apache.spark.util.Distribution
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.BlockId
+import org.apache.spark.util.Distribution
 
 /**
  * :: DeveloperApi ::
@@ -50,6 +51,14 @@ case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
 case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
+@DeveloperApi
+case class StreamingListenerBlockAdded(blockInfo: ReceivedBlockInfo)
+  extends StreamingListenerEvent
+
+@DeveloperApi
+case class StreamingListenerBlockRemoved(blockIds: Seq[BlockId])
+  extends StreamingListenerEvent
+
 /**
  * :: DeveloperApi ::
  * A listener interface for receiving information about an ongoing streaming
@@ -75,6 +84,12 @@ trait StreamingListener {
 
   /** Called when processing of a batch of jobs has completed. */
   def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) { }
+
+  /** Called when adding a block to the block manager. */
+  def onBlockAdded(blockAdded: StreamingListenerBlockAdded) { }
+
+  /** Called when removing blocks from the block manager. */
+  def onBlockRemoved(blockRemoved: StreamingListenerBlockRemoved) { }
 }
 
 

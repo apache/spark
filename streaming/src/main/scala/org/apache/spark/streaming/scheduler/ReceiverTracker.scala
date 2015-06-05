@@ -178,7 +178,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
-    receivedBlockTracker.addBlock(receivedBlockInfo)
+    if (receivedBlockTracker.addBlock(receivedBlockInfo)) {
+      listenerBus.post(StreamingListenerBlockAdded(receivedBlockInfo))
+      true
+    } else {
+      false
+    }
   }
 
   /** Report error sent by a receiver */

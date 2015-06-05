@@ -30,7 +30,7 @@ import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
-import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.scheduler.{Job, StreamingListenerBlockRemoved}
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
 
@@ -445,6 +445,7 @@ abstract class DStream[T: ClassTag] (
           case b: BlockRDD[_] =>
             logInfo("Removing blocks of RDD " + b + " of time " + time)
             b.removeBlocks()
+            ssc.scheduler.listenerBus.post(StreamingListenerBlockRemoved(b.blockIds))
           case _ =>
         }
       }

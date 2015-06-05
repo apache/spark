@@ -42,7 +42,7 @@ import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
-import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
+import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingUI}
 import org.apache.spark.util.{CallSite, Utils}
 
 /**
@@ -185,9 +185,9 @@ class StreamingContext private[streaming] (
 
   private[streaming] val progressListener = new StreamingJobProgressListener(this)
 
-  private[streaming] val uiTab: Option[StreamingTab] =
+  private[streaming] val streamingUI: Option[StreamingUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
-      Some(new StreamingTab(this))
+      Some(new StreamingUI(this))
     } else {
       None
     }
@@ -598,7 +598,7 @@ class StreamingContext private[streaming] (
         }
         shutdownHookRef = Utils.addShutdownHook(
           StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
-        uiTab.foreach(_.attach())
+        streamingUI.foreach(_.start())
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
@@ -674,7 +674,7 @@ class StreamingContext private[streaming] (
           logWarning("StreamingContext has already been stopped")
         case ACTIVE =>
           scheduler.stop(stopGracefully)
-          uiTab.foreach(_.detach())
+          streamingUI.foreach(_.stop())
           StreamingContext.setActiveContext(null)
           waiter.notifyStop()
           if (shutdownHookRef != null) {

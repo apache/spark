@@ -86,9 +86,14 @@ class UISeleniumSuite
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.appUIAddress.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
+        find(cssSelector( """ul li a[href*="streaming storage"]""")) should not be (None)
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        // check whether streaming storage page exists
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming%20storage")
+        findAll(cssSelector("h3")).map(_.text).toSeq should contain("Receiver Blocks")
+
         // check whether streaming page exists
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
@@ -190,6 +195,10 @@ class UISeleniumSuite
         go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should not contain("Streaming Statistics")
+
+        // check whether streaming storage page exists
+        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming%20storage")
+        findAll(cssSelector("h3")).map(_.text).toSeq should not contain("Receiver Blocks")
       }
     }
   }

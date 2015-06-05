@@ -43,6 +43,10 @@ private[spark] class StreamingListenerBus
         listener.onBatchStarted(batchStarted)
       case batchCompleted: StreamingListenerBatchCompleted =>
         listener.onBatchCompleted(batchCompleted)
+      case blockAdded: StreamingListenerBlockAdded =>
+        listener.onBlockAdded(blockAdded)
+      case blockRemoved: StreamingListenerBlockRemoved =>
+        listener.onBlockRemoved(blockRemoved)
       case _ =>
     }
   }
