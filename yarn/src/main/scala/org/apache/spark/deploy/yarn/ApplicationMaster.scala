@@ -598,10 +598,6 @@ object ApplicationMaster extends Logging {
   def main(args: Array[String]): Unit = {
     SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
-    if (amArgs.userClass != null) {
-      System.setProperty("spark.executor.cores", amArgs.executorCores.toString)
-    }
-
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
