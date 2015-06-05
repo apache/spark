@@ -107,7 +107,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       // end to end
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, Option(repo),
         Option(tempIvyPath), isTest = true)
-      assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
+      assert(jarPath.indexOf(tempIvyPath) >= 0, "should use non-default ivy path")
     }
   }
 
