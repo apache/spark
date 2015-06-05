@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.util.SerializableConfiguration
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -260,7 +261,7 @@ private[sql] abstract class BaseWriterContainer(
   with Logging
   with Serializable {
 
-  protected val serializableConf = new SerializableWritable(ContextUtil.getConfiguration(job))
+  protected val serializableConf = new SerializableConfiguration(ContextUtil.getConfiguration(job))
 
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job

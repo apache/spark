@@ -37,6 +37,7 @@ import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableJobConf
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -57,7 +58,7 @@ private[hive] class SparkHiveWriterContainer(
     PlanUtils.configureOutputJobPropertiesForStorageHandler(tableDesc)
     Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
   }
-  protected val conf = new SerializableWritable(jobConf)
+  protected val conf = new SerializableJobConf(jobConf)
 
   private var jobID = 0
   private var splitID = 0

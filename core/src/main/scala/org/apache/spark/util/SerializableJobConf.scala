@@ -15,34 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
-import java.io._
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io.ObjectWritable
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred.JobConf
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
-@DeveloperApi
-class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
-
-  def value: T = t
-
-  override def toString: String = t.toString
-
+private[spark]
+class SerializableJobConf(@transient var value: JobConf) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
-    new ObjectWritable(t).write(out)
+    value.write(out)
   }
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    val ow = new ObjectWritable()
-    ow.setConf(new Configuration(false))
-    ow.readFields(in)
-    t = ow.get().asInstanceOf[T]
+    value = new JobConf(false)
+    value.readFields(in)
   }
 }
