@@ -172,7 +172,7 @@ def list_dags(args):
 
 
 def list_tasks(args):
-    dagbag = DagBag()
+    dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
         raise Exception('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
@@ -491,6 +491,9 @@ def get_parser():
         "-t", "--tree", help="Tree view", action="store_true")
     parser_list_tasks.add_argument(
         "dag_id", help="The id of the dag")
+    parser_list_tasks.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
     parser_list_tasks.set_defaults(func=list_tasks)
 
     ht = "Start a Celery worker node"
