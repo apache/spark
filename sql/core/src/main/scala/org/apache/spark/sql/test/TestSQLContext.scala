@@ -46,7 +46,7 @@ class LocalSQLContext
    * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier way to
    * construct [[DataFrame]] directly out of local data without relying on implicits.
    */
-  protected[sql] implicit def logicalPlanToSparkQueryInTest(plan: LogicalPlan): DataFrame = {
+  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     DataFrame(this, plan)
   }
 

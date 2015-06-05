@@ -30,7 +30,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
-  import ctx.logicalPlanToSparkQueryInTest
+  import ctx.logicalPlanToSparkQuery
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
