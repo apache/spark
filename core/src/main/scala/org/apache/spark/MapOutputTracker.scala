@@ -310,14 +310,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         val ordering = Ordering.by[(BlockManagerId, Long), Long](_._2).reverse
         shuffleIdToReduceLocations(shuffleId) = new HashMap[Int, Array[BlockManagerId]]
         var r = 0
+        // HashMap to add up sizes of all blocks at the same location
+        val locs = new HashMap[BlockManagerId, Long]
         while (r < numReducers) {
-          // Add up sizes of all blocks at the same location
-          val locs = statuses.map { s =>
-            (s.location, s.getSizeForBlock(r))
-          }.groupBy(_._1).mapValues { sizes =>
-            sizes.map(_._2).reduceLeft(_ + _)
-          }.toIterator
-          val topLocs = CollectionUtils.takeOrdered(locs, numTopLocs)(ordering)
+          var i = 0
+          locs.clear()
+          while (i < statuses.length) {
+            locs(statuses(i).location) = locs.getOrElse(statuses(i).location, 0L) +
+              statuses(i).getSizeForBlock(r)
+            i = i + 1
+          }
+          val topLocs = CollectionUtils.takeOrdered(locs.toIterator, numTopLocs)(ordering)
           shuffleIdToReduceLocations(shuffleId) += (r -> topLocs.map(_._1).toArray)
           r = r + 1
         }

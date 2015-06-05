@@ -143,7 +143,9 @@ class DAGScheduler(
   private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
   // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
   private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
-  // Number of preferred locations to use for reducer tasks
+  // Number of preferred locations to use for reducer tasks.
+  // Making this smaller will focus on the locations where the most data can be read locally, but
+  // may lead to more delay in scheduling if all of those locations are busy.
   private[scheduler] val NUM_REDUCER_PREF_LOCS = 5
 
   // Called by TaskScheduler to report task's starting.
