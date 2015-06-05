@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
+
+import org.apache.spark.SparkFunSuite
 
 import org.apache.spark.sql.{SQLConf, SQLContext, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-class UnsafeExternalSortSuite extends FunSuite with Matchers {
+class UnsafeExternalSortSuite extends SparkFunSuite with Matchers {
 
   private def createRow(values: Any*): Row = {
     new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
