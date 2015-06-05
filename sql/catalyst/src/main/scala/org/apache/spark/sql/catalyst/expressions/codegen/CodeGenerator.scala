@@ -39,12 +39,8 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  *                 to null.
  * @param primitiveTerm A term for a possible primitive value of the result of the evaluation. Not
  *                      valid if `nullTerm` is set to `true`.
- * @param objectTerm A possibly boxed version of the result of evaluating this expression.
  */
-case class GeneratedExpressionCode(var code: Code,
-                                   nullTerm: Term,
-                                   primitiveTerm: Term,
-                                   objectTerm: Term)
+case class GeneratedExpressionCode(var code: Code, var nullTerm: Term, primitiveTerm: Term)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -73,38 +69,42 @@ class CodeGenContext {
     s"$prefix${curId.getAndIncrement}"
   }
 
+  /**
+   * Return the code to access a column for given DataType
+   */
   def getColumn(dataType: DataType, ordinal: Int): Code = {
-    dataType match {
-      case StringType => s"($stringType)i.apply($ordinal)"
-      case dt: DataType if isNativeType(dt) => s"i.${accessorForType(dt)}($ordinal)"
-      case _ => s"(${boxedType(dataType)})i.apply($ordinal)"
+    if (isNativeType(dataType)) {
+      s"i.${accessorForType(dataType)}($ordinal)"
+    } else {
+      s"(${boxedType(dataType)})i.apply($ordinal)"
     }
   }
 
-  def setColumn(destinationRow: Term, dataType: DataType, ordinal: Int, value: Term): Code = {
-    dataType match {
-      case StringType => s"$destinationRow.update($ordinal, $value)"
-      case dt: DataType if isNativeType(dt) =>
-        s"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
-      case _ => s"$destinationRow.update($ordinal, $value)"
+  /**
+   * Return the code to update a column in Row for given DataType
+   */
+  def setColumn(dataType: DataType, ordinal: Int, value: Term): Code = {
+    if (isNativeType(dataType)) {
+      s"${mutatorForType(dataType)}($ordinal, $value)"
+    } else {
+      s"update($ordinal, $value)"
     }
   }
 
+  /**
+   * Return the name of accessor in Row for a DataType
+   */
   def accessorForType(dt: DataType): Term = dt match {
     case IntegerType => "getInt"
     case other => s"get${boxedType(dt)}"
   }
 
+  /**
+   * Return the name of mutator in Row for a DataType
+   */
   def mutatorForType(dt: DataType): Term = dt match {
     case IntegerType => "setInt"
     case other => s"set${boxedType(dt)}"
-  }
-
-  def hashSetForType(dt: DataType): Term = dt match {
-    case IntegerType => classOf[IntegerHashSet].getName
-    case LongType => classOf[LongHashSet].getName
-    case unsupportedType =>
-      sys.error(s"Code generation not support for hashset of type $unsupportedType")
   }
 
   /**
@@ -123,7 +123,24 @@ class CodeGenContext {
     case StringType => stringType
     case DateType => "int"
     case TimestampType => "java.sql.Timestamp"
+    case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
+    case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
+  }
+
+  /**
+   * Return the boxed type in Java
+   */
+  def boxedType(dt: DataType): Term = dt match {
+    case IntegerType => "Integer"
+    case LongType => "Long"
+    case ShortType => "Short"
+    case ByteType => "Byte"
+    case DoubleType => "Double"
+    case FloatType => "Float"
+    case BooleanType => "Boolean"
+    case DateType => "Integer"
+    case _ => primitiveType(dt)
   }
 
   /**
@@ -138,28 +155,7 @@ class CodeGenContext {
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"
-    case dt: DecimalType => "null"
-    case StringType => "null"
     case _ => "null"
-  }
-
-  /**
-   * Return the boxed type in Java
-   */
-  def boxedType(dt: DataType): Term = dt match {
-    case IntegerType => "Integer"
-    case LongType => "Long"
-    case ShortType => "Short"
-    case ByteType => "Byte"
-    case DoubleType => "Double"
-    case FloatType => "Float"
-    case BooleanType => "Boolean"
-    case dt: DecimalType => decimalType
-    case BinaryType => "byte[]"
-    case StringType => stringType
-    case DateType => "Integer"
-    case TimestampType => "java.sql.Timestamp"
-    case _ => "Object"
   }
 
   /**

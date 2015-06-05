@@ -85,34 +85,21 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     if (value == null) {
       s"""
           final boolean ${ev.nullTerm} = true;
-          ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
+          final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
         """
     } else {
-      // TODO(cg): Add support for more data types.
       dataType match {
-        case StringType =>
-          val v = value.asInstanceOf[UTF8String]
-          val arr = s"new byte[]{${v.getBytes.map(_.toString).mkString(", ")}}"
-          s"""
-            final boolean ${ev.nullTerm} = false;
-            ${ctx.stringType} ${ev.primitiveTerm} = new ${ctx.stringType}().set(${arr});
-           """
         case FloatType =>  // This must go before NumericType
           s"""
             final boolean ${ev.nullTerm} = false;
-            float ${ev.primitiveTerm} = ${value}f;
+            final float ${ev.primitiveTerm} = ${value}f;
            """
-        case dt: DecimalType =>  // This must go before NumericType
+        case dt: NumericType if !dt.isInstanceOf[DecimalType]=>
           s"""
             final boolean ${ev.nullTerm} = false;
-            ${ctx.primitiveType(dt)} ${ev.primitiveTerm} =
-              new ${ctx.primitiveType(dt)}().set($value);
+            final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = $value;
            """
-        case dt: NumericType =>
-          s"""
-            final boolean ${ev.nullTerm} = false;
-            ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = $value;
-           """
+        // eval() version may be faster for non-primitive types
         case other =>
           super.genCode(ctx, ev)
       }

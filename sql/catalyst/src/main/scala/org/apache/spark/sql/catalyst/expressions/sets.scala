@@ -66,8 +66,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
       case IntegerType | LongType =>
         s"""
           boolean ${ev.nullTerm} = false;
-          ${ctx.hashSetForType(elementType)} ${ev.primitiveTerm} =
-            new ${ctx.hashSetForType(elementType)}();
+          ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = new ${ctx.primitiveType(dataType)}();
         """
       case _ => super.genCode(ctx, ev)
     }
@@ -110,14 +109,14 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
       case IntegerType | LongType =>
         val itemEval = item.gen(ctx)
         val setEval = set.gen(ctx)
-        val htype = ctx.hashSetForType(elementType)
+        val htype = ctx.primitiveType(dataType)
 
         itemEval.code + setEval.code +  s"""
-           if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
-             (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
-           }
-           boolean ${ev.nullTerm} = false;
-           ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
+          if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
+           (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
+          }
+          boolean ${ev.nullTerm} = false;
+          ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
          """
       case _ => super.genCode(ctx, ev)
     }
@@ -163,7 +162,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
       case IntegerType | LongType =>
         val leftEval = left.gen(ctx)
         val rightEval = right.gen(ctx)
-        val htype = ctx.hashSetForType(elementType)
+        val htype = ctx.primitiveType(dataType)
 
         leftEval.code + rightEval.code + s"""
           boolean ${ev.nullTerm} = false;

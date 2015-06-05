@@ -67,12 +67,11 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.nullTerm} = ${eval.nullTerm};
-      org.apache.spark.sql.types.Decimal ${ev.primitiveTerm} = ${ctx.defaultValue(DecimalType())};
+      ${ctx.decimalType} ${ev.primitiveTerm} = null;
 
       if (!${ev.nullTerm}) {
-        ${ev.primitiveTerm} = new org.apache.spark.sql.types.Decimal();
-        ${ev.primitiveTerm} =
-          ${ev.primitiveTerm}.setOrNull(${eval.primitiveTerm}, $precision, $scale);
+        ${ev.primitiveTerm} = (new ${ctx.decimalType}()).setOrNull(
+          ${eval.primitiveTerm}, $precision, $scale);
         ${ev.nullTerm} = ${ev.primitiveTerm} == null;
       }
       """

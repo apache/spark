@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext, Term}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -62,8 +62,7 @@ abstract class Expression extends TreeNode[Expression] {
   def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
     val nullTerm = ctx.freshName("nullTerm")
     val primitiveTerm = ctx.freshName("primitiveTerm")
-    val objectTerm = ctx.freshName("objectTerm")
-    val ve = GeneratedExpressionCode("", nullTerm, primitiveTerm, objectTerm)
+    val ve = GeneratedExpressionCode("", nullTerm, primitiveTerm)
     ve.code = genCode(ctx, ve)
     ve
   }
@@ -77,17 +76,18 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val e = this.asInstanceOf[Expression]
     ctx.references += e
+    val objectTerm = ctx.freshName("obj")
     s"""
-          /* expression: ${this} */
-          Object ${ev.objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
-          boolean ${ev.nullTerm} = ${ev.objectTerm} == null;
-          ${ctx.primitiveType(e.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(e.dataType)};
-          if (!${ev.nullTerm}) {
-            ${ev.primitiveTerm} = (${ctx.boxedType(e.dataType)})${ev.objectTerm};
-          }
+      /* expression: ${this} */
+      final Object ${objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
+      final boolean ${ev.nullTerm} = ${objectTerm} == null;
+      ${ctx.primitiveType(e.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(e.dataType)};
+      if (!${ev.nullTerm}) {
+        ${ev.primitiveTerm} = (${ctx.boxedType(e.dataType)})${objectTerm};
+      }
     """
   }
 
@@ -167,7 +167,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   protected def defineCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: (String, String) => String): String = {
+      f: (Term, Term) => Code): String = {
     // TODO: Right now some timestamp tests fail if we enforce this...
     if (left.dataType != right.dataType) {
       // log.warn(s"${left.dataType} != ${right.dataType}")
@@ -214,10 +214,11 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
   protected def defineCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: String => String): String = {
+      f: Term => Code): Code = {
     val eval = child.gen(ctx)
+    // reuse the previous nullTerm
+    ev.nullTerm = eval.nullTerm
     eval.code + s"""
-      boolean ${ev.nullTerm} = ${eval.nullTerm};
       ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
       if (!${ev.nullTerm}) {
         ${ev.primitiveTerm} = ${f(eval.primitiveTerm)};
