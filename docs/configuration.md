@@ -1202,6 +1202,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code></td>
+  <td>120s</td>
+  <td>
+    If dynamic allocation is enabled and an executor which has cached data blocks has been idle for more than this duration,
+    the executor will be removed. If this parameter is not specified, it defaults to twice the value specified by 
+    <code>spark.dynamicAllocation.executorIdleTimeout</code>. For more details, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.dynamicAllocation.initialExecutors</code></td>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>

@@ -101,8 +101,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorIdleTimeoutS = conf.getTimeAsSeconds(
     "spark.dynamicAllocation.executorIdleTimeout", "60s")
 
-  private val cachedExecutorTimeoutS = conf.getTimeAsSeconds(
-    "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${Long.MaxValue / 1000}s")
+  private val cachedExecutorIdleTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${2 * executorIdleTimeoutS}s")
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
@@ -152,8 +152,6 @@ private[spark] class ExecutorAllocationManager(
 
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
-
-  private val sparkEnv = SparkEnv.get
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -393,7 +391,6 @@ private[spark] class ExecutorAllocationManager(
       // however, we are no longer at the lower bound, and so we must mark executor X
       // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
       executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
-
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
     } else {
       logWarning(s"Duplicate executor $executorId has registered")
@@ -449,21 +446,21 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
-
-        val hasCachedBlocks = sparkEnv.blockManager.master.hasCachedBlocks(executorId)
-
+        // Note that it is not necessary to query the executors since all the cached
+        // blocks we are concerned with are reported to the driver. Note that this
+        // does not include broadcast blocks.
+        val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)
         val now = clock.getTimeMillis()
         val timeout = {
           if (hasCachedBlocks) {
-            now + cachedExecutorTimeoutS * 1000
+            // Use a different timeout if the executor has cached blocks.
+            now + cachedExecutorIdleTimeoutS * 1000
           } else {
             now + executorIdleTimeoutS * 1000
           }
         }
-
         val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
         removeTimes(executorId) = realTimeout
-
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
           s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
       }

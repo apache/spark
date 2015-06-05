@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
+import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.concurrent.{ExecutionContext, Future}
@@ -429,6 +430,7 @@ private[spark] class BlockManagerInfo(
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
+  // Cached blocks held by this BlockManager. This does not include broadcast blocks.
   private val _cachedBlocks = new mutable.HashSet[BlockId]
 
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
@@ -485,11 +487,14 @@ private[spark] class BlockManagerInfo(
         logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
       }
-      if (!blockId.isBroadcast && blockStatus.isCached) _cachedBlocks += blockId
+      if (!blockId.isBroadcast && blockStatus.isCached) {
+        _cachedBlocks += blockId
+      }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
+      cachedBlocks -= blockId
       if (blockStatus.storageLevel.useMemory) {
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
@@ -504,7 +509,6 @@ private[spark] class BlockManagerInfo(
           blockId, blockManagerId.hostPort,
           Utils.bytesToString(blockStatus.externalBlockStoreSize)))
       }
-      if (!blockId.isBroadcast && blockStatus.isCached) _cachedBlocks += blockId
     }
   }
 
@@ -522,7 +526,8 @@ private[spark] class BlockManagerInfo(
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
 
-  def cachedBlocks: mutable.HashSet[BlockId] = _cachedBlocks
+  // This does not include broadcast blocks.
+  def cachedBlocks: collection.Set[BlockId] = _cachedBlocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 

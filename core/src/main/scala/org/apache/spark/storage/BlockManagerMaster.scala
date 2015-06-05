@@ -203,8 +203,8 @@ class BlockManagerMaster(
   }
 
   /**
-   * Find out if the executor has cached blocks. This method checks only if the executor holds
-   * cached blocks, which are not broadcast blocks.
+   * Find out if the executor has cached blocks. This method does not consider broadcast blocks,
+   * since they are not reported the master.
    */
   def hasCachedBlocks(executorId: String): Boolean = {
     driverEndpoint.askWithRetry[Boolean](HasCachedBlocks(executorId))
