@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
 import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable.ArrayBuffer

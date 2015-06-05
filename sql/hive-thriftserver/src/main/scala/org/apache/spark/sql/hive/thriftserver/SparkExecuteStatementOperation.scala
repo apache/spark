@@ -17,32 +17,25 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{Date, Timestamp}
-import java.util.{Map => JMap, UUID}
-
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.RejectedExecutionException
-import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, UUID}
+import java.util.{Map => JMap, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.util.control.NonFatal
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hive.service.cli._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.SetCommand
