@@ -17,11 +17,51 @@
 
 package org.apache.spark.deploy
 
-import org.scalatest.Matchers
+import org.scalatest.{Matchers, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite, SecurityManager}
 
-class ClientSuite extends SparkFunSuite with Matchers {
+class ClientSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
+
+  val buildDriverDesc = PrivateMethod[DriverDescription]('buildDriverDescription)
+  val driverArgs = new ClientArguments(Array(
+    "launch",
+    "spark://someHost:8080",
+    "http://someHost:8000/foo.jar",
+    "org.SomeClass"))
+
+  test("Auth secret shouldn't appear in the command") {
+    val conf = new SparkConf
+    // set secret
+    conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, "This is the secret sauce")
+
+    // auth is not set
+    var driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    assert(driverDesc.appSecret === None)
+    assert(!driverDesc.command.javaOpts.exists(
+      _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_CONF)))
+    assert(!driverDesc.command.javaOpts.exists(
+      _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
+
+    // auth is set to false
+    conf.set(SecurityManager.CLUSTER_AUTH_CONF, "false")
+    driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    assert(driverDesc.appSecret === None)
+    assert(driverDesc.command.javaOpts.contains(
+      "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=false"))
+    assert(!driverDesc.command.javaOpts.exists(
+      _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
+
+    // auth is set to true
+    conf.set(SecurityManager.CLUSTER_AUTH_CONF, "true")
+    driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    assert(driverDesc.appSecret === Some("This is the secret sauce"))
+    assert(driverDesc.command.javaOpts.contains(
+      "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=true"))
+    assert(!driverDesc.command.javaOpts.exists(
+      _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
+  }
+
   test("correctly validates driver jar URL's") {
     ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
     ClientArguments.isValidJarUrl("https://someHost:8080/foo.jar") should be (true)
