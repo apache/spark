@@ -207,11 +207,7 @@ abstract class HiveComparisonTest
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(
-      testCaseName: String,
-      sql: String,
-      reset: Boolean = true,
-      tryWithoutResettingFirst: Boolean = false) {
+  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -242,6 +238,9 @@ abstract class HiveComparisonTest
     test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
+      // Clear old output for this testcase.
+      outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
+
       val sqlWithoutComment =
         sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
       val allQueries =
@@ -268,10 +267,7 @@ abstract class HiveComparisonTest
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
-      def doTest(reset: Boolean, isSpeculative: Boolean = false): Unit = {
-        // Clear old output for this testcase.
-        outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
-
+      try {
         if (reset) {
           TestHive.reset()
         }
@@ -394,36 +390,12 @@ abstract class HiveComparisonTest
                 """.stripMargin
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)
-              if (isSpeculative && !reset) {
-                // TODO: log this at a very low level that won't appear in the console appender
-                // then throw a custom exception
-                fail("Failed on first run; retrying")
-              } else {
-                fail(errorMessage)
-              }
+              fail(errorMessage)
             }
         }
 
         // Touch passed file.
         new FileOutputStream(new File(passedDirectory, testCaseName)).close()
-      }
-
-      try {
-        try {
-          if (tryWithoutResettingFirst) {
-            doTest(reset = false, isSpeculative = true)
-          } else {
-            doTest(reset)
-          }
-        } catch {
-          case tf: org.scalatest.exceptions.TestFailedException =>
-            if (tryWithoutResettingFirst) {
-              logWarning("Test failed without reset(); retrying with reset()")
-              doTest(reset = true)
-            } else {
-              throw tf
-            }
-        }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
