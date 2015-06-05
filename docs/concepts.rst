@@ -93,3 +93,24 @@ is the case, and when the **hooks** uses the ``get_connection`` method
 from ``BaseHook``, Airflow will choose one connection randomly, allowing
 for some basic load balancing and some fault tolerance when used in
 conjunction with retries.
+
+Queues
+''''''
+
+When using the CeleryExecutor, the celery queues that task are sent to
+can be specified. ``queue`` is an attribute of BaseOperator, so any
+task can be assigned to any queue. The default queue for the environment
+is defined in the ``airflow.cfg``'s ``celery -> default_queue``. This defines
+the queue that task get assigned to when not specified, as well as which
+queue Airflow workers listen to when started.
+
+Workers can listen to one or multiple queues of tasks. When a worker is
+started (using the command ``airflow worker``), a set of comma delimited 
+queue names can be specified (``airflow worker -q spark``). This worker
+will then only pick up tasks wired to the specified queue(s).
+
+This can be useful if you need specialized workers, either from a 
+ressource perpective (for say very lightweight tasks where one worker 
+could take thousands of task without a problem), or from an environment
+perpective (you want a worker running from whithin the Spark cluster 
+itself because it needs a very specific environment and secutiry rights).
