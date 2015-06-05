@@ -177,20 +177,18 @@ class DataFrame private[sql](
     val numCols = schema.fieldNames.length
     val primitive: Seq[Boolean] = schema.map(f => f.dataType.isPrimitive)
 
-    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
-    def widthCheck (x: String) : String = {
-      if (x.length>20) x.substring(0, 17) + "..." else x
-    }
-
     // For array values, replace ArrayBuffer, with square brackets
-    def sqrBrckts (x: String) : String = {
-      if (x.last==')') '[' + x.drop(x.indexOf('(') + 1).dropRight(1) + ']'
-      else x
-    }
-
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.map { cell =>
-        if (cell == null) "null" else cell.toString
+      row.toSeq.zipWithIndex.map { cell =>
+        val str = {
+          if (cell._1 == null) "null"
+          else if (primitive(cell._2) && cell._1.toString.last=='(') {
+            '[' + cell._1.toString.drop(cell._1.toString.indexOf('(') + 1).dropRight(1) + ']'
+          }
+          else cell._1.toString
+        }
+        if (str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
     }
 
@@ -198,13 +196,9 @@ class DataFrame private[sql](
     val colWidths = Array.fill(numCols)(3)
 
     // Compute the width of each column
-    for ((cell, i) <- rows.head.zipWithIndex) {
-      colWidths(i) = math.max(colWidths(i), cell.length)
-    }
-    for (row <- rows.tail) {
+    for (row <- rows) {
       for ((cell, i) <- row.zipWithIndex) {
-        if (primitive(i)) colWidths(i) = math.max(colWidths(i), widthCheck(cell).length)
-        else colWidths(i) = math.max(colWidths(i), widthCheck(sqrBrckts(cell)).length)
+        colWidths(i) = math.max(colWidths(i), cell.length)
       }
     }
 
@@ -220,17 +214,14 @@ class DataFrame private[sql](
 
     // data
     rows.tail.map {
-      _.zipWithIndex.map {
-        case (cell, i) => {
-          if (primitive(i)) StringUtils.leftPad(widthCheck(cell), colWidths(i))
-          else StringUtils.leftPad(widthCheck(sqrBrckts(cell)), colWidths(i))
-        }
+      _.zipWithIndex.map { case (cell, i) =>
+        StringUtils.leftPad(cell.toString, colWidths(i))
       }.addString(sb, "|", "|", "|\n")
     }
 
     sb.append(sep)
 
-    // For Data that has more than N(numRows) records.
+    // For Data that has more than N(numRows) records
     if (take(numRows + 1).length > numRows) {
       sb.append("only showing the top " + numRows.toString + " rows\n")
     }
