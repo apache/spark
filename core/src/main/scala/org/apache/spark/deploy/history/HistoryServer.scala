@@ -190,8 +190,7 @@ class HistoryServer(
       if (!loadedAppStatus.get(app_attemp_id).isDefined) {
         loadedAppStatus.put(app_attemp_id, provider.getAppStatus(app_attemp_id))
         appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
-      }
-      if (!loadedAppStatus.get(app_attemp_id).get) {
+      } else if (!loadedAppStatus.get(app_attemp_id).get) {
         loadedAppStatus.update(app_attemp_id, provider.getAppStatus(app_attemp_id))
         appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
       }

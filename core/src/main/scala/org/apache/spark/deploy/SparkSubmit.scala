@@ -446,7 +446,6 @@ object SparkSubmit {
       OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
 
       // Other options
-      OptionAssigner(args.executorCores, YARN, CLUSTER, sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
