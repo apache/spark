@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.compat.FilterCompat._
 import org.apache.parquet.filter2.predicate.FilterApi._
-import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Statistics} 
+import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Statistics}
 import org.apache.parquet.filter2.predicate.UserDefinedPredicate
 import org.apache.parquet.io.api.Binary
 
@@ -42,24 +42,17 @@ private[sql] object ParquetFilters {
       createFilter(filter)
     }.reduceOption(FilterApi.and).map(FilterCompat.get)
   }
-    
+
   case class SetInFilter[T <: Comparable[T]](
-    hSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
+    valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
 
     override def keep(value: T): Boolean = {
-      if (value == null) {
-        return false
-      }
-      return hSet.contains(value)
+      value != null && valueSet.contains(value)
     }
 
-    override def canDrop(statistics: Statistics[T]): Boolean = {
-      return false
-    }
+    override def canDrop(statistics: Statistics[T]): Boolean = false
 
-    override def inverseCanDrop(statistics: Statistics[T]): Boolean = {
-      return false
-    }
+    override def inverseCanDrop(statistics: Statistics[T]): Boolean = false
   }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -328,8 +321,8 @@ private[sql] object ParquetFilters {
       case Not(pred) =>
         createFilter(pred).map(FilterApi.not)
 
-      case InSet(NamedExpression(name, dataType), hSet) =>
-        makeInSet.lift(dataType).map(_(name, hSet))
+      case InSet(NamedExpression(name, dataType), valueSet) =>
+        makeInSet.lift(dataType).map(_(name, valueSet))
 
       case _ => None
     }
