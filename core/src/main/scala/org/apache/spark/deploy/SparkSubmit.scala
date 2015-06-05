@@ -471,6 +471,11 @@ object SparkSubmit {
       }
     }
 
+    // Let YARN know it's a pyspark app, so it distributes needed libraries.
+    if (clusterManager == YARN && args.isPython) {
+      sysProps.put("spark.yarn.isPython", "true")
+    }
+
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
