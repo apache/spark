@@ -129,7 +129,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
+      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
       sparkConf.getOption(Client.CONF_SPARK_USER_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's

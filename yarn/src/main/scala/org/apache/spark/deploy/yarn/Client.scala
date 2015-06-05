@@ -242,7 +242,9 @@ private[spark] class Client(
    * This is used for setting up a container launch context for our ApplicationMaster.
    * Exposed for testing.
    */
-  def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
+  def prepareLocalResources(
+      appStagingDir: String,
+      pySparkArchives: Seq[String]): HashMap[String, LocalResource] = {
     logInfo("Preparing resources for our AM container")
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
@@ -389,6 +391,8 @@ private[spark] class Client(
       distribute(args.primaryPyFile, appMasterOnly = true)
     }
 
+    pySparkArchives.foreach { f => distribute(f) }
+
     // The python files list needs to be treated especially. All files that are not an
     // archive need to be placed in a subdirectory that will be added to PYTHONPATH.
     args.pyFiles.foreach { f =>
@@ -491,7 +495,9 @@ private[spark] class Client(
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
-  private def setupLaunchEnv(stagingDir: String): HashMap[String, String] = {
+  private def setupLaunchEnv(
+      stagingDir: String,
+      pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
@@ -535,7 +541,7 @@ private[spark] class Client(
       pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
         LOCALIZED_PYTHON_DIR)
     }
-    pyArchives.foreach { path =>
+    (pySparkArchives ++ pyArchives).foreach { path =>
       val uri = new URI(path)
       if (uri.getScheme != LOCAL_SCHEME) {
         pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
@@ -600,8 +606,9 @@ private[spark] class Client(
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
-    val launchEnv = setupLaunchEnv(appStagingDir)
-    val localResources = prepareLocalResources(appStagingDir)
+    val pySparkArchives = findPySparkArchives()
+    val launchEnv = setupLaunchEnv(appStagingDir, pySparkArchives)
+    val localResources = prepareLocalResources(appStagingDir, pySparkArchives)
 
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(launchEnv)
@@ -892,6 +899,22 @@ private[spark] class Client(
       }
     }
   }
+
+  private def findPySparkArchives(): Seq[String] = {
+    sys.env.get("PYSPARK_ARCHIVES_PATH")
+      .map(_.split(",").toSeq)
+      .getOrElse {
+        val pyLibPath = Seq(sys.env("SPARK_HOME"), "python", "lib").mkString(File.separator)
+        val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
+        require(pyArchivesFile.exists(),
+          "pyspark.zip not found; cannot run pyspark application in YARN mode.")
+        val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+        require(py4jFile.exists(),
+          "py4j-0.8.2.1-src.zip not found; cannot run pyspark application in YARN mode.")
+        Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
+      }
+  }
+
 }
 
 object Client extends Logging {
