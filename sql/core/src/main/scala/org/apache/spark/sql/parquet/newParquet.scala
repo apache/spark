@@ -29,16 +29,17 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import parquet.filter2.predicate.FilterApi
-import parquet.hadoop._
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
@@ -83,7 +84,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
             case partFilePattern(id) => id.toInt
             case name if name.startsWith("_") => 0
             case name if name.startsWith(".") => 0
-            case name => sys.error(
+            case name => throw new AnalysisException(
               s"Trying to write Parquet files to directory $outputPath, " +
                 s"but found items with illegal name '$name'.")
           }.reduceOption(_ max _).getOrElse(0)
@@ -380,11 +381,12 @@ private[sql] class ParquetRelation2(
       // time-consuming.
       if (dataSchema == null) {
         dataSchema = {
-          val dataSchema0 =
-            maybeDataSchema
-              .orElse(readSchema())
-              .orElse(maybeMetastoreSchema)
-              .getOrElse(sys.error("Failed to get the schema."))
+          val dataSchema0 = maybeDataSchema
+            .orElse(readSchema())
+            .orElse(maybeMetastoreSchema)
+            .getOrElse(throw new AnalysisException(
+              s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
+                paths.mkString("\n\t")))
 
           // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
           // case insensitivity issue and possible schema mismatch (probably caused by schema

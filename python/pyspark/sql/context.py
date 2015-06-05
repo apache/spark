@@ -146,6 +146,8 @@ class SQLContext(object):
         >>> sqlContext.range(1, 7, 2).collect()
         [Row(id=1), Row(id=3), Row(id=5)]
 
+        If only one argument is specified, it will be used as the end value.
+
         >>> sqlContext.range(3).collect()
         [Row(id=0), Row(id=1), Row(id=2)]
         """

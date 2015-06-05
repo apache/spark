@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext.{sparkContext => sc}
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-
-
 class DataFrameImplicitsSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("RDD of tuples") {
     checkAnswer(
-      sc.parallelize(1 to 10).map(i => (i, i.toString)).toDF("intCol", "strCol"),
+      ctx.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("intCol", "strCol"),
       (1 to 10).map(i => Row(i, i.toString)))
   }
 
@@ -37,19 +36,19 @@ class DataFrameImplicitsSuite extends QueryTest {
 
   test("RDD[Int]") {
     checkAnswer(
-      sc.parallelize(1 to 10).toDF("intCol"),
+      ctx.sparkContext.parallelize(1 to 10).toDF("intCol"),
       (1 to 10).map(i => Row(i)))
   }
 
   test("RDD[Long]") {
     checkAnswer(
-      sc.parallelize(1L to 10L).toDF("longCol"),
+      ctx.sparkContext.parallelize(1L to 10L).toDF("longCol"),
       (1L to 10L).map(i => Row(i)))
   }
 
   test("RDD[String]") {
     checkAnswer(
-      sc.parallelize(1 to 10).map(_.toString).toDF("stringCol"),
+      ctx.sparkContext.parallelize(1 to 10).map(_.toString).toDF("stringCol"),
       (1 to 10).map(i => Row(i.toString)))
   }
 }

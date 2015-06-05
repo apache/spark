@@ -233,7 +233,7 @@ for a running application, at `http://localhost:4040/api/v1`.
     <td>Download the event logs for all attempts of the given application as a zip file</td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/[attempt-id/logs</code></td>
+    <td><code>/applications/[app-id]/[attempt-id]/logs</code></td>
     <td>Download the event logs for the specified attempt of the given application as a zip file</td>
   </tr>
 </table>

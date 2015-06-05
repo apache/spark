@@ -50,6 +50,8 @@ object MimaExcludes {
             // false positive, this is a @Private class
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.this")
+            // SQL execution is considered private.
+            excludePackage("org.apache.spark.sql.execution")
           )
         case v if v.startsWith("1.4") =>
           Seq(

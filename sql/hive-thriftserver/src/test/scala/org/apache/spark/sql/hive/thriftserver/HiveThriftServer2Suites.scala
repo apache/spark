@@ -40,7 +40,7 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
 object TestData {
@@ -111,7 +111,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) ===
+        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
     }
   }
 
@@ -365,7 +366,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) ===
+        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
     }
   }
 }

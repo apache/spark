@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim, MetastoreRelation}
+import org.apache.spark.sql.hive.{HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
@@ -330,35 +330,33 @@ class SQLQuerySuite extends QueryTest {
       "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
     )
 
-    if (HiveShim.version =="0.13.1") {
-      val origUseParquetDataSource = conf.parquetUseDataSourceApi
-      try {
-        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
-        sql(
-          """CREATE TABLE ctas5
-            | STORED AS parquet AS
-            |   SELECT key, value
-            |   FROM src
-            |   ORDER BY key, value""".stripMargin).collect()
+    val origUseParquetDataSource = conf.parquetUseDataSourceApi
+    try {
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect()
 
-        checkExistence(sql("DESC EXTENDED ctas5"), true,
-          "name:key", "type:string", "name:value", "ctas5",
-          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-          "MANAGED_TABLE"
-        )
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
 
-        val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
-        // use the Hive SerDe for parquet tables
-        sql("set spark.sql.hive.convertMetastoreParquet = false")
-        checkAnswer(
-          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-          sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-        sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
-      } finally {
-        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
-      }
+      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      // use the Hive SerDe for parquet tables
+      sql("set spark.sql.hive.convertMetastoreParquet = false")
+      checkAnswer(
+        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+    } finally {
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
     }
   }
 
