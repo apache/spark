@@ -20,6 +20,9 @@ TODO
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Raise errors when setting dependencies on task in foreign DAGs
 * Add an is_test flag to the run context
+* Add operator to task_instance table
+* Add owner to task_instance table
+* Add queued_dttm to task_instance table
 
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library

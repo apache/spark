@@ -1675,7 +1675,7 @@ admin.add_link(
     base.MenuLink(
         category='Docs',
         name='Github',
-        url='https://github.com/mistercrunch/Airflow'))
+        url='https://github.com/airbnb/airflow'))
 
 
 class KnowEventView(DataProfilingMixin, ModelView):
