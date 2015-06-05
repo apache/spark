@@ -504,6 +504,19 @@ test_that("read.df() from json file", {
   df <- read.df(sqlContext, jsonPath, "json")
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
+
+  # Check if we can apply a user defined schema
+  schema <- structType(structField("name", type = "string"),
+                       structField("age", type = "double"))
+
+  df1 <- read.df(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df1, "DataFrame"))
+  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+
+  # Run the same with loadDF
+  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df2, "DataFrame"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 })
 
 test_that("write.df() as parquet file", {

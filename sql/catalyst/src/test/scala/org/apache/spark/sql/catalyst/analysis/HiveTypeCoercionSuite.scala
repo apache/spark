@@ -28,11 +28,11 @@ class HiveTypeCoercionSuite extends PlanTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = HiveTypeCoercion.findTightestCommonType(t1, t2)
+      var found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
       // Test both directions to make sure the widening is symmetric.
-      found = HiveTypeCoercion.findTightestCommonType(t2, t1)
+      found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t2, t1)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
@@ -140,13 +140,10 @@ class HiveTypeCoercionSuite extends PlanTest {
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
-    // Will remove exception expectation in PR#6405
-    intercept[RuntimeException] {
-      ruleTest(cwc,
-        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
-        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
-      )
-    }
+    ruleTest(cwc,
+      CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
+      CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
+    )
   }
 
   test("type coercion simplification for equal to") {

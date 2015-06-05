@@ -93,6 +93,15 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
     ova.fit(datasetWithLabelMetadata)
   }
+
+  test("SPARK-8049: OneVsRest shouldn't output temp columns") {
+    val logReg = new LogisticRegression()
+      .setMaxIter(1)
+    val ovr = new OneVsRest()
+      .setClassifier(logReg)
+    val output = ovr.fit(dataset).transform(dataset)
+    assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+  }
 }
 
 private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {

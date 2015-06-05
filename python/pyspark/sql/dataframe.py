@@ -44,7 +44,7 @@ class DataFrame(object):
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
     and can be created using various functions in :class:`SQLContext`::
 
-        people = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -56,8 +56,8 @@ class DataFrame(object):
     A more concrete example::
 
         # To create DataFrame using SQLContext
-        people = sqlContext.parquetFile("...")
-        department = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
+        department = sqlContext.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -120,21 +120,12 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
     def saveAsParquetFile(self, path):
         """Saves the contents as a Parquet file, preserving the schema.
 
-        Files that are written out using this method can be read back in as
-        a :class:`DataFrame` using :func:`SQLContext.parquetFile`.
-
-        >>> import tempfile, shutil
-        >>> parquetFile = tempfile.mkdtemp()
-        >>> shutil.rmtree(parquetFile)
-        >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlContext.parquetFile(parquetFile)
-        >>> sorted(df2.collect()) == sorted(df.collect())
-        True
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.parquet` instead.
         """
+        warnings.warn("saveAsParquetFile is deprecated. Use write.parquet() instead.")
         self._jdf.saveAsParquetFile(path)
 
     @since(1.3)
@@ -151,69 +142,45 @@ class DataFrame(object):
         """
         self._jdf.registerTempTable(name)
 
-    @since(1.3)
     def registerAsTable(self, name):
-        """DEPRECATED: use :func:`registerTempTable` instead"""
-        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        """
+        .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.
+        """
+        warnings.warn("Use registerTempTable instead of registerAsTable.")
         self.registerTempTable(name)
 
-    @since(1.3)
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this :class:`DataFrame` into the specified table.
 
-        Optionally overwriting any existing data.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.insertInto` instead.
         """
+        warnings.warn("insertInto is deprecated. Use write.insertInto() instead.")
         self.write.insertInto(tableName, overwrite)
 
-    @since(1.3)
     def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of this :class:`DataFrame` to a data source as a table.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the saveAsTable operation when
-        table already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.saveAsTable` instead.
         """
+        warnings.warn("insertInto is deprecated. Use write.saveAsTable() instead.")
         self.write.saveAsTable(tableName, source, mode, **options)
 
     @since(1.3)
     def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.save` instead.
         """
+        warnings.warn("insertInto is deprecated. Use write.save() instead.")
         return self.write.save(path, source, mode, **options)
 
     @property
     @since(1.4)
     def write(self):
         """
-        Interface for saving the content of the :class:`DataFrame` out
-        into external storage.
+        Interface for saving the content of the :class:`DataFrame` out into external storage.
 
-        :return :class:`DataFrameWriter`
-
-        .. note:: Experimental
-
-        >>> df.write
-        <pyspark.sql.readwriter.DataFrameWriter object at ...>
+        :return: :class:`DataFrameWriter`
         """
         return DataFrameWriter(self)
 
@@ -636,6 +603,9 @@ class DataFrame(object):
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical columns.
 
+        .. note:: This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
         >>> df.describe().show()
         +-------+---+
         |summary|age|
@@ -646,16 +616,30 @@ class DataFrame(object):
         |    min|  2|
         |    max|  5|
         +-------+---+
+        >>> df.describe(['age', 'name']).show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |   mean|3.5| null|
+        | stddev|1.5| null|
+        |    min|  2|Alice|
+        |    max|  5|  Bob|
+        +-------+---+-----+
         """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
     @since(1.3)
     def head(self, n=None):
-        """
-        Returns the first ``n`` rows as a list of :class:`Row`,
-        or the first :class:`Row` if ``n`` is ``None.``
+        """Returns the first ``n`` rows.
+
+        :param n: int, default 1. Number of rows to return.
+        :return: If n is greater than 1, return a list of :class:`Row`.
+            If n is 1, return a single Row.
 
         >>> df.head()
         Row(age=2, name=u'Alice')
@@ -1170,8 +1154,8 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        This function is meant for exploratory data analysis, as we make no guarantee about the
-        backward compatibility of the schema of the resulting DataFrame.
+        .. note::  This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1217,15 +1201,30 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, colName):
+    def drop(self, col):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param colName: string, name of the column to drop.
+        :param col: a string name of the column to drop, or a
+            :class:`Column` to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.drop(df.age).collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
+        [Row(age=5, height=85, name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
+        [Row(age=5, name=u'Bob', height=85)]
         """
-        jdf = self._jdf.drop(colName)
+        if isinstance(col, basestring):
+            jdf = self._jdf.drop(col)
+        elif isinstance(col, Column):
+            jdf = self._jdf.drop(col._jc)
+        else:
+            raise TypeError("col should be a string or a Column")
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
