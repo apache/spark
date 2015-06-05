@@ -85,20 +85,11 @@ object HiveTypeCoercion {
     case _ => None
   }
 
-  /**
-   * Find the tightest common type of a set of types by continuously applying
-   * `findTightestCommonTypeOfTwo` on these types.
-   */
   private def findTightestCommonTypeAndTryPromoteToString(types: Seq[DataType]) = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case None => None
       case Some(d) =>
-        val dt = findTightestCommonTypeOfTwo(d, c)
-        if (dt == None) {
-          promoteToStringTypeOfTwo(d, c)
-        } else {
-          dt
-        }
+        findTightestCommonTypeOfTwo(d, c).orElse(promoteToStringTypeOfTwo(d, c))
     })
   }
 
