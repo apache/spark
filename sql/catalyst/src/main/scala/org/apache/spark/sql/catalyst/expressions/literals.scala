@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.codegen.{Code, CodeGenContext, EvaluatedExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Code, CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
@@ -81,7 +81,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
   override def eval(input: Row): Any = value
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     if (value == null) {
       s"""
           final boolean ${ev.nullTerm} = true;
@@ -94,8 +94,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           val arr = s"new byte[]{${v.getBytes.map(_.toString).mkString(", ")}}"
           s"""
             final boolean ${ev.nullTerm} = false;
-            org.apache.spark.sql.types.UTF8String ${ev.primitiveTerm} =
-              new org.apache.spark.sql.types.UTF8String().set(${arr});
+            ${ctx.stringType} ${ev.primitiveTerm} = new ${ctx.stringType}().set(${arr});
            """
         case FloatType =>
           s"""

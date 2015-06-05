@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 
@@ -43,7 +43,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def exprId: ExprId = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     s"""
         final boolean ${ev.nullTerm} = i.isNullAt($ordinal);
         final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ev.nullTerm} ?

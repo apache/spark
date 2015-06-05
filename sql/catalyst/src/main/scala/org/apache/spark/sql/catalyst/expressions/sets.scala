@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -61,7 +61,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
     new OpenHashSet[Any]()
   }
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     elementType match {
       case IntegerType | LongType =>
         s"""
@@ -104,7 +104,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
     elementType match {
       case IntegerType | LongType =>
@@ -157,7 +157,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
     elementType match {
       case IntegerType | LongType =>
@@ -191,7 +191,7 @@ case class CountSet(child: Expression) extends UnaryExpression {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     castOrNull(ctx, ev, c => s"$c.size().toLong()")
   }
 

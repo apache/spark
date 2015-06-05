@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -53,17 +53,17 @@ abstract class Expression extends TreeNode[Expression] {
   def eval(input: Row = null): Any
 
   /**
-   * Returns an [[EvaluatedExpression]], which contains Java source code that
+   * Returns an [[GeneratedExpressionCode]], which contains Java source code that
    * can be used to generate the result of evaluating the expression on an input row.
-   * 
+   *
    * @param ctx a [[CodeGenContext]]
-   * @return [[EvaluatedExpression]]
+   * @return [[GeneratedExpressionCode]]
    */
-  def gen(ctx: CodeGenContext): EvaluatedExpression = {
+  def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
     val nullTerm = ctx.freshName("nullTerm")
     val primitiveTerm = ctx.freshName("primitiveTerm")
     val objectTerm = ctx.freshName("objectTerm")
-    val ve = EvaluatedExpression("", nullTerm, primitiveTerm, objectTerm)
+    val ve = GeneratedExpressionCode("", nullTerm, primitiveTerm, objectTerm)
     ve.code = genCode(ctx, ve)
     ve
   }
@@ -72,10 +72,10 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns Java source code for this expression.
    *
    * @param ctx a [[CodeGenContext]]
-   * @param ev an [[EvaluatedExpression]] with unique terms.
+   * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
+  def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val e = this.asInstanceOf[Expression]
     ctx.references += e
     s"""
@@ -164,7 +164,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
    * @param f a function from two primitive term names to a tree that evaluates them.
    */
   def evaluate(ctx: CodeGenContext,
-               ev: EvaluatedExpression,
+               ev: GeneratedExpressionCode,
                f: (String, String) => String): String = {
     // TODO: Right now some timestamp tests fail if we enforce this...
     if (left.dataType != right.dataType) {
@@ -198,7 +198,7 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
   def castOrNull(ctx: CodeGenContext,
-                 ev: EvaluatedExpression,
+                 ev: GeneratedExpressionCode,
                  f: String => String): String = {
     val eval = child.gen(ctx)
     eval.code + s"""

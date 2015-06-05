@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
@@ -435,15 +435,15 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     if (evaluated == null) null else cast(evaluated)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = this match {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = this match {
 
     case Cast(child @ BinaryType(), StringType) =>
       castOrNull (ctx, ev, c =>
-        s"new org.apache.spark.sql.types.UTF8String().set($c)")
+        s"new ${ctx.stringType}().set($c)")
 
     case Cast(child @ DateType(), StringType) =>
       castOrNull(ctx, ev, c =>
-        s"""new org.apache.spark.sql.types.UTF8String().set(
+        s"""new ${ctx.stringType}().set(
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
 
     case Cast(child @ BooleanType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
@@ -462,7 +462,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     // does not match the expected output.
     case Cast(e, StringType) if e.dataType != TimestampType =>
       castOrNull(ctx, ev, c =>
-        s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))")
+        s"new ${ctx.stringType}().set(String.valueOf($c))")
 
     case other =>
       super.genCode(ctx, ev)

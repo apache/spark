@@ -41,10 +41,10 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  *                      valid if `nullTerm` is set to `true`.
  * @param objectTerm A possibly boxed version of the result of evaluating this expression.
  */
-case class EvaluatedExpression(var code: Code,
-                               nullTerm: Term,
-                               primitiveTerm: Term,
-                               objectTerm: Term)
+case class GeneratedExpressionCode(var code: Code,
+                                   nullTerm: Term,
+                                   primitiveTerm: Term,
+                                   objectTerm: Term)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -58,8 +58,8 @@ class CodeGenContext {
    */
   val references: Seq[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  protected val stringType = classOf[UTF8String].getName
-  protected val decimalType = classOf[Decimal].getName
+  val stringType = classOf[UTF8String].getName
+  val decimalType = classOf[Decimal].getName
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -75,7 +75,7 @@ class CodeGenContext {
 
   def getColumn(dataType: DataType, ordinal: Int): Code = {
     dataType match {
-      case StringType => s"(org.apache.spark.sql.types.UTF8String)i.apply($ordinal)"
+      case StringType => s"($stringType)i.apply($ordinal)"
       case dt: DataType if isNativeType(dt) => s"i.${accessorForType(dt)}($ordinal)"
       case _ => s"(${boxedType(dataType)})i.apply($ordinal)"
     }
