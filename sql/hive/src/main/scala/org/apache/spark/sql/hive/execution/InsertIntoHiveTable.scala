@@ -174,12 +174,14 @@ case class InsertIntoHiveTable(
 
     val jobConf = new JobConf(sc.hiveconf)
     val jobConfSer = new SerializableWritable(jobConf)
+    val broadcastedConf = sc.sparkContext.broadcast(new SerializableWritable[JobConf](jobConf))
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
-      new SparkHiveDynamicPartitionWriterContainer(jobConf, fileSinkConf, dynamicPartColNames)
+      new SparkHiveDynamicPartitionWriterContainer(
+        broadcastedConf, fileSinkConf, dynamicPartColNames)
     } else {
-      new SparkHiveWriterContainer(jobConf, fileSinkConf)
+      new SparkHiveWriterContainer(broadcastedConf, fileSinkConf)
     }
 
     saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer)
