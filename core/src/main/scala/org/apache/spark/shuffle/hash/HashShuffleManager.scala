@@ -17,8 +17,11 @@
 
 package org.apache.spark.shuffle.hash
 
+import java.io.File
+
 import org.apache.spark._
 import org.apache.spark.shuffle._
+import org.apache.spark.storage.ShuffleBlockId
 
 /**
  * A ShuffleManager using hashing, that creates one output file per reduce partition on each
@@ -66,6 +69,16 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleBlockResolver.removeShuffle(ShuffleIdAndAttempt(shuffleId, stageAttemptId))
     }
   }
+
+  private[shuffle] override def getShuffleFiles(
+      handle: ShuffleHandle,
+      mapId: Int,
+      reduceId: Int,
+      stageAttemptId: Int): Seq[File] = {
+    val blockId = ShuffleBlockId(handle.shuffleId, mapId, reduceId, stageAttemptId)
+    fileShuffleBlockResolver.getShuffleFiles(blockId)
+  }
+
 
   override def shuffleBlockResolver: FileShuffleBlockResolver = {
     fileShuffleBlockResolver

@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 
+import com.google.common.annotations.VisibleForTesting
+
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -205,6 +207,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     val cleaned = removeShuffleBlocks(shuffleId)
     shuffleStates.remove(shuffleId)
     cleaned
+  }
+  
+  @VisibleForTesting
+  private[shuffle] def getShuffleFiles(blockId: ShuffleBlockId): Seq[File] = {
+    Seq(blockManager.diskBlockManager.getFile(blockId))
   }
 
   /** Remove all the blocks / files related to a particular shuffle. */

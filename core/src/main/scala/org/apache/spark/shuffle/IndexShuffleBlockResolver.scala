@@ -19,15 +19,15 @@ package org.apache.spark.shuffle
 
 import java.io._
 
+import com.google.common.annotations.VisibleForTesting
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-
-import IndexShuffleBlockResolver.NOOP_REDUCE_ID
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -51,7 +51,8 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
       stageAttemptId))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int, stageAttemptId: Int): File = {
+  @VisibleForTesting
+  private[shuffle] def getIndexFile(shuffleId: Int, mapId: Int, stageAttemptId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID,
       stageAttemptId))
   }

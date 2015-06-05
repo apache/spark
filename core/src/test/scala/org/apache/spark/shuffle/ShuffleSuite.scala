@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
 import org.scalatest.Matchers
 
-import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
+import org.apache.sparktest.TestTags.ActiveTag
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -314,6 +318,66 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.recordsWritten === numRecords)
     assert(metrics.bytesWritten === metrics.byresRead)
     assert(metrics.bytesWritten > 0)
+  }
+
+  def multipleAttemptConfs: Seq[(String, SparkConf)] = Seq("basic" -> conf)
+
+  multipleAttemptConfs.foreach { case (name, multipleAttemptConf) =>
+    test("multiple attempts for one task: conf = " + name, ActiveTag) {
+      sc = new SparkContext("local", "test", multipleAttemptConf)
+      val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val manager = sc.env.shuffleManager
+      val taskMemoryManager = new TaskMemoryManager(sc.env.executorMemoryManager)
+      val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+
+      // first attempt -- its successful
+      val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0, 0,
+        new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, false, stageAttemptId = 0,
+          taskMetrics = new TaskMetrics))
+      val data = (1 to 10).map { x => x -> x}
+      writer1.write(data.iterator)
+      val mapOutput = writer1.stop(true)
+      mapOutput.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+      val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, false, taskMetrics = new TaskMetrics))
+      reader1.read().toIndexedSeq should be (data.toIndexedSeq)
+
+
+      // second attempt -- also successful.  We'll write out different data,
+      // just to simulate the fact that the records may get written differently
+      // depending on what gets spilled, what gets combined, etc.
+      val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, false, stageAttemptId = 1,
+          taskMetrics = new TaskMetrics))
+      val data2 = (11 to 20).map { x => x -> x}
+      writer2.write(data2.iterator)
+      val mapOutput2 = writer2.stop(true)
+      // registeringMapOutputs always blows away all previous outputs, so we won't ever find the
+      // previous output anymore
+      mapOutput2.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+
+      val reader2 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, false, taskMetrics = new TaskMetrics))
+      reader2.read().toIndexedSeq should be(data2.toIndexedSeq)
+
+
+      // make sure that when the shuffle gets unregistered, we cleanup from all attempts
+      val shuffleFiles1 = manager.getShuffleFiles(shuffleHandle, 0, 0, 0)
+      val shuffleFiles2 = manager.getShuffleFiles(shuffleHandle, 0, 0, 1)
+      // we are relying on getShuffleFiles to be accurate.  We can't be positive its correct, but
+      // at least this makes sure they are returning something which seems plausible
+      assert(shuffleFiles1.nonEmpty)
+      assert(shuffleFiles2.nonEmpty)
+      assert(shuffleFiles1.toSet.intersect(shuffleFiles2.toSet).isEmpty)
+      val shuffleFiles = shuffleFiles1 ++ shuffleFiles2
+      shuffleFiles.foreach { file => assert(file.exists()) }
+
+      // now unregister, and check all the files were deleted
+      manager.unregisterShuffle(0)
+      shuffleFiles.foreach { file => assert(!file.exists()) }
+    }
   }
 }
 

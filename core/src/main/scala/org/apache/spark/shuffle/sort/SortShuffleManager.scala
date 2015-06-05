@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkConf, TaskContext, ShuffleDependency}
@@ -89,5 +90,15 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
   }
-}
 
+  private[shuffle] override def getShuffleFiles(
+      handle: ShuffleHandle,
+      mapId: Int,
+      reduceId: Int,
+      stageAttemptId: Int): Seq[File] = {
+    Seq(
+      indexShuffleBlockResolver.getDataFile(handle.shuffleId, mapId, stageAttemptId),
+      indexShuffleBlockResolver.getIndexFile(handle.shuffleId, mapId, stageAttemptId)
+    )
+  }
+}

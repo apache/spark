@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -56,6 +57,14 @@ private[spark] trait ShuffleManager {
       startPartition: Int,
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C]
+
+
+  private[shuffle] def getShuffleFiles(
+      handle: ShuffleHandle,
+      mapId: Int,
+      reduceId: Int,
+      stageAttemptId: Int): Seq[File]
+
 
   /**
     * Remove a shuffle's metadata from the ShuffleManager.

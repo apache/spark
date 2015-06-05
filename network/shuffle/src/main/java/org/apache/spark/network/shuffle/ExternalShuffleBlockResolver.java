@@ -86,8 +86,8 @@ public class ExternalShuffleBlockResolver {
 
   /**
    * Obtains a FileSegmentManagedBuffer from a shuffle block id. We expect the blockId has the
-   * format "shuffle_ShuffleId_MapId_ReduceId" (from ShuffleBlockId), and additionally make
-   * assumptions about how the hash and sort based shuffles store their data.
+   * format "shuffle_ShuffleId_MapId_ReduceId_StageAttemptId" (from ShuffleBlockId), and
+   * additionally make assumptions about how the hash and sort based shuffles store their data.
    */
   public ManagedBuffer getBlockData(String appId, String execId, String blockId) {
     String[] blockIdParts = blockId.split("_");

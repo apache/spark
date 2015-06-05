@@ -26,6 +26,10 @@ import org.apache.spark._
 
 class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
+  // TODO we should run this with a matrix of configurations: different shufflers,
+  // external shuffle service, etc.  But that is really pushing the question of how to run
+  // such a long test ...
+
   ignore("no concurrent retries for stage attempts (SPARK-7308)") {
     // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.
     // note that this is somewhat convoluted for a test case, but isn't actually very unusual

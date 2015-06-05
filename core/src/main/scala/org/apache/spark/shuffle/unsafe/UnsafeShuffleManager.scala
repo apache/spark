@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.unsafe
 
+import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
@@ -198,6 +199,14 @@ private[spark] class UnsafeShuffleManager(conf: SparkConf) extends ShuffleManage
       }
       true
     }
+  }
+
+  private[shuffle] override def getShuffleFiles(
+      handle: ShuffleHandle,
+      mapId: Int,
+      reduceId: Int,
+      stageAttemptId: Int): Seq[File] = {
+    sortShuffleManager.getShuffleFiles(handle, mapId, reduceId, stageAttemptId)
   }
 
   override val shuffleBlockResolver: IndexShuffleBlockResolver = {

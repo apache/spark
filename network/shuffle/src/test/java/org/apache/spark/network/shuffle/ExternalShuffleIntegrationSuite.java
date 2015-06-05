@@ -72,26 +72,39 @@ public class ExternalShuffleIntegrationSuite {
     new byte[54321],
   };
 
+  static byte[][] exec0BlocksAttempt1 = new byte[][] {
+    new byte[789]
+  };
+
+  static byte[][] exec1BlocksAttempt1 = new byte[][] {
+    new byte[345],
+    new byte[678]
+  };
+
+
+
   @BeforeClass
   public static void beforeAll() throws IOException {
     Random rand = new Random();
 
-    for (byte[] block : exec0Blocks) {
-      rand.nextBytes(block);
-    }
-    for (byte[] block: exec1Blocks) {
-      rand.nextBytes(block);
+    byte[][][] allBlocks = new byte[][][]{
+      exec0Blocks, exec1Blocks, exec0BlocksAttempt1, exec1BlocksAttempt1};
+    for (byte[][] blockGroup: allBlocks) {
+      for (byte[] block : blockGroup) {
+        rand.nextBytes(block);
+      }
     }
 
     dataContext0 = new TestShuffleDataContext(2, 5);
     dataContext0.create();
     dataContext0.insertSortShuffleData(0, 0, 0, exec0Blocks);
+    dataContext0.insertSortShuffleData(0, 0, 1, exec0BlocksAttempt1);
 
     dataContext1 = new TestShuffleDataContext(6, 2);
     dataContext1.create();
     dataContext1.insertHashShuffleData(1, 0, 0, exec1Blocks);
+    dataContext1.insertHashShuffleData(1, 0, 1, exec1BlocksAttempt1);
 
-    // TODO tests w/ different stage attempts
 
     conf = new TransportConf(new SystemPropertyConfigProvider());
     handler = new ExternalShuffleBlockHandler(conf);
@@ -181,7 +194,13 @@ public class ExternalShuffleIntegrationSuite {
     assertBufferListsEqual(exec0Fetch.buffers, Lists.newArrayList(exec0Blocks[0]));
     exec0Fetch.releaseBuffers();
 
-    //TODO test fetch w/ non-zero stage attempt id
+
+    FetchResult exec0Fetch1 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0_1" });
+    assertEquals(Sets.newHashSet("shuffle_0_0_0_1"), exec0Fetch1.successBlocks);
+    assertTrue(exec0Fetch1.failedBlocks.isEmpty());
+    assertBufferListsEqual(exec0Fetch1.buffers, Lists.newArrayList(exec0BlocksAttempt1[0]));
+    exec0Fetch1.releaseBuffers();
+
   }
 
   @Test
@@ -205,6 +224,14 @@ public class ExternalShuffleIntegrationSuite {
     assertTrue(execFetch.failedBlocks.isEmpty());
     assertBufferListsEqual(execFetch.buffers, Lists.newArrayList(exec1Blocks));
     execFetch.releaseBuffers();
+
+
+    FetchResult exec1Fetch1 = fetchBlocks("exec-1",
+      new String[] { "shuffle_1_0_0_1", "shuffle_1_0_1_1" });
+    assertEquals(Sets.newHashSet("shuffle_1_0_0_1", "shuffle_1_0_1_1"), exec1Fetch1.successBlocks);
+    assertTrue(exec1Fetch1.failedBlocks.isEmpty());
+    assertBufferListsEqual(exec1Fetch1.buffers, Lists.newArrayList(exec1BlocksAttempt1));
+    exec1Fetch1.releaseBuffers();
   }
 
   @Test
