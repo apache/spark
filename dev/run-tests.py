@@ -27,10 +27,6 @@ from collections import namedtuple
 SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
 USER_HOME = os.environ.get("HOME")
 
-#SBT_MAVEN_PROFILE_ARGS_ENV = "SBT_MAVEN_PROFILES_ARGS"
-#AMPLAB_JENKINS_BUILD_TOOL = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-#AMPLAB_JENKINS = os.environ.get("AMPLAB_JENKINS")
-
 
 def get_error_codes(err_code_file):
     """Function to retrieve all block numbers from the `run-tests-codes.sh`
@@ -41,6 +37,9 @@ def get_error_codes(err_code_file):
         err_codes = [e.split()[1].strip().split('=')
                      for e in f if e.startswith("readonly")]
         return dict(err_codes)
+
+
+ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
 
 
 def exit_from_command_with_retcode(cmd, retcode):
@@ -135,7 +134,7 @@ def determine_java_version(java_exe):
 
 
 def set_title_and_block(title, err_block):
-    os.environ["CURRENT_BLOCK"] = error_codes[err_block]
+    os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
     line_str = '=' * 72
 
     print
@@ -400,9 +399,7 @@ def main():
     rm_r(os.path.join(USER_HOME, ".ivy2/local/org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2/cache/org.apache.spark"))
 
-    error_codes = get_error_codes("./dev/run-tests-codes.sh")
-
-    os.environ["CURRENT_BLOCK"] = error_codes["BLOCK_GENERAL"]
+    os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
 
     java_exe = determine_java_executable()
 
