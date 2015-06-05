@@ -29,20 +29,12 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-import org.apache.parquet.schema.{DecimalMetadata, MessageType, OriginalType}
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.types._
 
-
-/** A class representing Parquet info fields we care about, for passing back to Parquet */
-private[parquet] case class ParquetTypeInfo(
-  primitiveType: PrimitiveTypeName,
-  originalType: Option[OriginalType] = None,
-  decimalMetadata: Option[DecimalMetadata] = None,
-  length: Option[Int] = None)
 
 private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean = ctype match {

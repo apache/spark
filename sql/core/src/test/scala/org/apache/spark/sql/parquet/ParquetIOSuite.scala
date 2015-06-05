@@ -157,6 +157,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     checkParquetFile(data)
   }
 
+  test("array and double") {
+    val data = (1 to 4).map(i => (i.toDouble, Seq(i.toDouble, (i + 1).toDouble)))
+    checkParquetFile(data)
+  }
+
   test("struct") {
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
     withParquetDataFrame(data) { df =>
