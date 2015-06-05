@@ -256,9 +256,6 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   /** Identifier of the stream this receiver is associated with. */
   private var id: Int = -1
 
-  /** Location of the receiver for scheduling purposes. */
-  private[streaming] var host: Option[String] = None
-
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
   private[streaming] var executor_ : ReceiverSupervisor = null
 
