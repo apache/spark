@@ -1550,6 +1550,26 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>create-tmp-dir</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <mkdir dir="${project.build.directory}/tmp" />
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Enable surefire and scalatest in all children, in one place: -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
