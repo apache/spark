@@ -851,6 +851,10 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("Cast STRING to BIGINT") {
+    checkAnswer(sql("SELECT CAST('775983671874188101' as BIGINT)"), Row(775983671874188101L))
+  }
+
   // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest
   test("udf_java_method") {
     checkAnswer(sql(
