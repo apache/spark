@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 import scala.math.max
 
 import org.json4s.JsonDSL._
@@ -91,18 +92,50 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
  * @group dataType
  */
 @DeveloperApi
-case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
-
+class StructType(fieldsArr: Array[StructField]) extends DataType with Seq[StructField] {
   /** No-arg constructor for kryo. */
   protected def this() = this(null)
 
-  /** Returns all field names in an array. */
-  def fieldNames: Array[String] = fields.map(_.name)
+  def add(field: StructField): StructType = {
+    fieldMap.put(field.name, FieldIdx(field, fieldMap.size))
+    this
+  }
 
-  private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
-  private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+//  def add(name: String,
+//    dataType: String,
+//    nullable: Boolean = true,
+//    metadata: Metadata = Metadata.empty): StructType = {
+//    fieldMap.put(name, FieldIdx(StructField(name, dataType, nullable, metadata), fieldMap.size))
+//    this
+//  }
 
+  def add(name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    metadata: Metadata = Metadata.empty): StructType = {
+    fieldMap.put(name, FieldIdx(StructField(name, dataType, nullable, metadata), fieldMap.size))
+    this
+  }
+  
+  // Create a mapping of fields to guard against duplicates in the initial array
+  private val fieldMap: HashMap[String, FieldIdx] = {
+    val fieldMap = new HashMap[String, FieldIdx]
+    fieldsArr.foreach (f => fieldMap.getOrElseUpdate(f.name, FieldIdx(f, fieldMap.size)))
+    fieldMap
+  }
+  
+  def fieldNames: Array[String] = fieldMap.keySet.toArray
+  private lazy val fieldNamesSet: Set[String] = fieldMap.keySet.toSet
+  private lazy val nameToField: Map[String, StructField] = 
+    fieldMap.map(f => (f._1, f._2.field)).toMap
+  private lazy val nameToIndex: Map[String, Int] = fieldMap.map(f => (f._1, f._2.idx)).toMap
+  private lazy val indexToField: Map[Int, StructField] = 
+    fieldMap.map(f => (f._2.idx, f._2.field)).toMap
+  
+  def orderedFields(): Array[StructField] = {
+    fieldMap.map(f => f._2).toArray.sortBy(_.idx).map(_.field)
+  }
+  
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
@@ -123,7 +156,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         s"Field ${nonExistFields.mkString(",")} does not exist.")
     }
     // Preserve the original order of fields.
-    StructType(fields.filter(f => names.contains(f.name)))
+    StructType(orderedFields.filter(f => names.contains(f.name)))
   }
 
   /**
@@ -145,34 +178,34 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
-    fields.foreach(field => field.buildFormattedString(prefix, builder))
-
+    orderedFields.foreach(field => field.buildFormattedString(prefix, builder))
     builder.toString()
   }
 
   def printTreeString(): Unit = println(treeString)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    fields.foreach(field => field.buildFormattedString(prefix, builder))
+    orderedFields.foreach(field => field.buildFormattedString(prefix, builder))
   }
 
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
       ("fields" -> map(_.jsonValue))
 
-  override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
+  override def apply(fieldIndex: Int): StructField = indexToField.getOrElse(fieldIndex, null)
 
-  override def length: Int = fields.length
+  override def length: Int = fieldMap.size
 
-  override def iterator: Iterator[StructField] = fields.iterator
+  override def iterator: Iterator[StructField] = orderedFields.iterator
 
   /**
    * The default size of a value of the StructType is the total default sizes of all field types.
+   * Note: nameToField here is used here for readability
    */
-  override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
+  override def defaultSize: Int = nameToField.map(_._2.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    val fieldTypes = orderedFields.map(field => s"${field.name}:${field.dataType.simpleString}")
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
@@ -191,7 +224,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType.merge(this, that).asInstanceOf[StructType]
 
   private[spark] override def asNullable: StructType = {
-    val newFields = fields.map {
+    val newFields = orderedFields.map {
       case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
     }

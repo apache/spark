@@ -21,6 +21,16 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 /**
+ * An indexed StructField that can be used to track order within a schema.
+ * @param field A field inside a StructType
+ * @param idx The index within the schema          
+ */
+case class FieldIdx(field: StructField, idx: Int) {
+  /** No-arg constructor for kryo. */
+  protected def this() = this(null, null)
+}
+
+/**
  * A field inside a StructType.
  * @param name The name of this field.
  * @param dataType The data type of this field.
