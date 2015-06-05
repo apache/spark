@@ -32,7 +32,6 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
   private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
 
-  private[metrics] val configFile = conf.getOption("spark.metrics.conf")
   private[metrics] val properties = new Properties()
   private[metrics] var propertyCategories: mutable.HashMap[String, Properties] = null
 
@@ -47,8 +46,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
-    // If spark.metrics.conf is not set, try to get file in class path
-    loadPropertiesFromFile()
+    loadPropertiesFromFile(conf.getOption("spark.metrics.conf"))
 
     // Also look for the properties in provided Spark configuration
     val prefix = "spark.metrics.conf."
@@ -91,10 +89,14 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     }
   }
 
-  private[this] def loadPropertiesFromFile(): Unit = {
+  /**
+   * Loads configuration from a config file. If no config file is provided, try to get file
+   * in class path.
+   */
+  private[this] def loadPropertiesFromFile(path: Option[String]): Unit = {
     var is: InputStream = null
     try {
-      is = configFile match {
+      is = path match {
         case Some(f) => new FileInputStream(f)
         case None => Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME)
       }
@@ -103,9 +105,13 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
         properties.load(is)
       }
     } catch {
-      case e: Exception => logError("Error loading configure file", e)
+      case e: Exception =>
+        val file = path.getOrElse(DEFAULT_METRICS_CONF_FILENAME)
+        logError(s"Error loading configuration file $file", e)
     } finally {
-      if (is != null) is.close()
+      if (is != null) {
+        is.close()
+      }
     }
   }
 
