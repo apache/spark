@@ -46,7 +46,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8010: promote numeric to string") {
-    val df = Seq((1,1)).toDF("key","value")
+    val df = Seq((1, 1)).toDF("key", "value")
     df.registerTempTable("src")
     val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
     val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
