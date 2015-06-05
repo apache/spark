@@ -207,7 +207,9 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def toString: String = s"$child[$extraction]"
 }
 
-case class UnresolvedAlias(child: Expression) extends NamedExpression with trees.UnaryNode[Expression] {
+case class UnresolvedAlias(child: Expression) extends NamedExpression
+  with trees.UnaryNode[Expression] {
+
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
   override def qualifiers: Seq[String] = throw new UnresolvedException(this, "qualifiers")
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")

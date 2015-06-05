@@ -137,6 +137,7 @@ class Analyzer(
       exprs.map(_ transformDown {
         case u @ UnresolvedAlias(child) =>
           child match {
+            case _: UnresolvedAttribute => u
             case ne: NamedExpression => ne
             case ev: ExtractValueWithStruct => Alias(ev, ev.field.name)()
             case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
