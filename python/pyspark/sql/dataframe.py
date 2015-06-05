@@ -616,7 +616,19 @@ class DataFrame(object):
         |    min|  2|
         |    max|  5|
         +-------+---+
+        >>> df.describe(['age', 'name']).show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |   mean|3.5| null|
+        | stddev|1.5| null|
+        |    min|  2|Alice|
+        |    max|  5|  Bob|
+        +-------+---+-----+
         """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
