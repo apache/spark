@@ -23,10 +23,10 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructT
 
 class ListTablesSuite extends QueryTest with BeforeAndAfter {
 
-  lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
-  val df = Seq(1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
+  private lazy val df = (1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
 
   before {
     df.registerTempTable("ListTablesSuiteTable")
