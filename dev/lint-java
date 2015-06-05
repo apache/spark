@@ -17,13 +17,22 @@
 # limitations under the License.
 #
 
-readonly BLOCK_GENERAL=10
-readonly BLOCK_RAT=11
-readonly BLOCK_SCALA_STYLE=12
-readonly BLOCK_JAVA_ERROR_PRONE=13
-readonly BLOCK_PYTHON_STYLE=14
-readonly BLOCK_BUILD=15
-readonly BLOCK_MIMA=16
-readonly BLOCK_SPARK_UNIT_TESTS=17
-readonly BLOCK_PYSPARK_UNIT_TESTS=18
-readonly BLOCK_SPARKR_UNIT_TESTS=19
+# Currently, error prone can only be hooked into `compile` and `test-compile`
+# goals in Maven's lifecycle, therefore, we need to run at least `mvn test-compile`
+# to ensure it checks both src/main/java and src/test/java
+
+echo -e "q\n" | build/mvn -Pkinesis-asl -Pep-tests -DskipTests \
+ clean test-compile 1> /dev/null 2> errorprone.txt
+
+COMPILER_OUTPUT=$(cat errorprone.txt | sed '/^Note/ d')
+
+# Clean up
+rm errorprone.txt
+build/mvn clean > /dev/null 2>&1
+
+if [[ $COMPILER_OUTPUT =~ "error" ]]; then
+    echo -e "Error prone checks failed at following occurrences:\n$COMPILER_OUTPUT"
+    exit 1
+else
+    echo -e "Error prone checks passed."
+fi

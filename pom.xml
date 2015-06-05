@@ -1662,10 +1662,12 @@
             <configuration>
               <compilerId>javac-with-errorprone</compilerId>
               <forceJavacCompilerUse>true</forceJavacCompilerUse>
-              <showWarnings>true</showWarnings>
 
-              <!-- Change all the default on warning checks to error checks -->
               <compilerArgs>
+                <!-- Suppress warnings from sun.misc.Unsafe usage -->
+                <arg>-XDignore.symbol.file</arg>
+
+                <!-- Change all the default on warning checks to error checks -->
                 <arg>-Xep:ElementsCountedInLoop:ERROR</arg>
                 <arg>-Xep:Finally:ERROR</arg>
                 <arg>-Xep:IncompatibleModifiers:ERROR</arg>
