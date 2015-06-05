@@ -50,13 +50,15 @@ class StorageStatusListenerSuite extends SparkFunSuite {
 
     // Block manager remove
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(1L, bm1))
-    assert(listener.executorIdToStorageStatus.size === 1)
-    assert(!listener.executorIdToStorageStatus.get("big").isDefined)
-    assert(listener.executorIdToStorageStatus.get("fat").isDefined)
+    assert(listener.executorIdToStorageStatus.size === 2)
+    assert(listener.storageStatusList.count(!_.isRemoved) == 1)
+    assert(listener.executorIdToStorageStatus.get("big").get.isRemoved)
+    assert(!listener.executorIdToStorageStatus.get("fat").get.isRemoved)
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(1L, bm2))
-    assert(listener.executorIdToStorageStatus.size === 0)
-    assert(!listener.executorIdToStorageStatus.get("big").isDefined)
-    assert(!listener.executorIdToStorageStatus.get("fat").isDefined)
+    assert(listener.executorIdToStorageStatus.size === 2)
+    assert(listener.storageStatusList.count(!_.isRemoved) == 0)
+    assert(listener.executorIdToStorageStatus.get("big").get.isRemoved)
+    assert(listener.executorIdToStorageStatus.get("fat").get.isRemoved)
   }
 
   test("task end without updated blocks") {
