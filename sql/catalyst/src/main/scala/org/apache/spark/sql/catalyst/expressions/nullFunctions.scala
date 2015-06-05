@@ -83,10 +83,9 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval = child.gen(ctx)
-    eval.code + s"""
-      final boolean ${ev.nullTerm} = false;
-      final boolean ${ev.primitiveTerm} = ${eval.nullTerm};
-    """
+    ev.nullTerm = "false"
+    ev.primitiveTerm = eval.nullTerm
+    eval.code
   }
 
   override def toString: String = s"IS NULL $child"
@@ -103,10 +102,9 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.nullTerm} = false;
-      boolean ${ev.primitiveTerm} = !${eval.nullTerm};
-    """
+    ev.nullTerm = "false"
+    ev.primitiveTerm = s"(!(${eval.nullTerm}))"
+    eval.code
   }
 }
 

@@ -40,7 +40,7 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * @param primitiveTerm A term for a possible primitive value of the result of the evaluation. Not
  *                      valid if `nullTerm` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: Code, var nullTerm: Term, primitiveTerm: Term)
+case class GeneratedExpressionCode(var code: Code, var nullTerm: Term, var primitiveTerm: Term)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported

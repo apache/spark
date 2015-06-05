@@ -64,8 +64,8 @@ case class NewSet(elementType: DataType) extends LeafExpression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     elementType match {
       case IntegerType | LongType =>
+        ev.nullTerm = "false"
         s"""
-          boolean ${ev.nullTerm} = false;
           ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = new ${ctx.primitiveType(dataType)}();
         """
       case _ => super.genCode(ctx, ev)
@@ -111,11 +111,11 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
         val setEval = set.gen(ctx)
         val htype = ctx.primitiveType(dataType)
 
+        ev.nullTerm = "false"
         itemEval.code + setEval.code +  s"""
           if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
            (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
           }
-          boolean ${ev.nullTerm} = false;
           ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
          """
       case _ => super.genCode(ctx, ev)
@@ -164,8 +164,8 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
         val rightEval = right.gen(ctx)
         val htype = ctx.primitiveType(dataType)
 
+        ev.nullTerm = "false"
         leftEval.code + rightEval.code + s"""
-          boolean ${ev.nullTerm} = false;
           ${htype} ${ev.primitiveTerm} = (${htype})${leftEval.primitiveTerm};
           ${ev.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
         """

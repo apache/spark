@@ -118,12 +118,15 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    if (left.dataType.isInstanceOf[DecimalType]) {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = dataType match {
+    case dt: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
-    } else {
+    // byte and short are casted into int when add, minus, times or divide
+    case ByteType | ShortType =>
+      defineCodeGen(ctx, ev, (eval1, eval2) =>
+        s"(${ctx.primitiveType(dataType)})($eval1 $symbol $eval2)")
+    case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
-    }
   }
 
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =

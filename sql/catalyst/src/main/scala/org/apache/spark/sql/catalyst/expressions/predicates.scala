@@ -304,8 +304,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val equalCode = ctx.equalFunc(left.dataType)(eval1.primitiveTerm, eval2.primitiveTerm)
+    ev.nullTerm = "false"
     eval1.code + eval2.code + s"""
-        final boolean ${ev.nullTerm} = false;
         final boolean ${ev.primitiveTerm} = (${eval1.nullTerm} && ${eval2.nullTerm}) ||
            (!${eval1.nullTerm} && $equalCode);
       """

@@ -82,23 +82,25 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
   override def eval(input: Row): Any = value
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    // change the nullTerm and primitiveTerm to consts, to inline them
     if (value == null) {
-      s"""
-          final boolean ${ev.nullTerm} = true;
-          final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
-        """
+      ev.nullTerm = "true"
+      ev.primitiveTerm = ctx.defaultValue(dataType)
+      ""
     } else {
       dataType match {
+        case BooleanType =>
+          ev.nullTerm = "false"
+          ev.primitiveTerm = value.toString
+          ""
         case FloatType =>  // This must go before NumericType
-          s"""
-            final boolean ${ev.nullTerm} = false;
-            final float ${ev.primitiveTerm} = ${value}f;
-           """
+          ev.nullTerm = "false"
+          ev.primitiveTerm = s"${value}f"
+          ""
         case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
-          s"""
-            final boolean ${ev.nullTerm} = false;
-            final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = $value;
-           """
+          ev.nullTerm = "false"
+          ev.primitiveTerm = value.toString
+          ""
         // eval() version may be faster for non-primitive types
         case other =>
           super.genCode(ctx, ev)

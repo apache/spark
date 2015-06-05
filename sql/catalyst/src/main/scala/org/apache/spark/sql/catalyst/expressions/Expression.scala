@@ -184,7 +184,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
       if (!${ev.nullTerm}) {
         ${eval2.code}
         if(!${eval2.nullTerm}) {
-          ${ev.primitiveTerm} = (${ctx.primitiveType(dataType)})($resultCode);
+          ${ev.primitiveTerm} = $resultCode;
         } else {
           ${ev.nullTerm} = true;
         }
