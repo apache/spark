@@ -134,7 +134,7 @@ class StageData private[spark](
 
     val accumulatorUpdates: Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
-    val executorSummary:Option[Map[String,ExecutorStageSummary]])
+    val executorSummary: Option[Map[String, ExecutorStageSummary]])
 
 class TaskData private[spark](
     val taskId: Long,

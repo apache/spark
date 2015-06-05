@@ -106,7 +106,7 @@ private[r] object SQLUtils {
 
     dfCols.map { col =>
       colToRBytes(col)
-    } 
+    }
   }
 
   def convertRowsToColumns(localDF: Array[Row], numCols: Int): Array[Array[Any]] = {
@@ -121,7 +121,7 @@ private[r] object SQLUtils {
     val numRows = col.length
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
-    
+
     SerDe.writeInt(dos, numRows)
 
     col.map { item =>

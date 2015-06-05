@@ -62,7 +62,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
- 
+
       val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
@@ -95,7 +95,7 @@ case class ScriptTransformation(
             val raw = outputSerde.deserialize(writable)
             val dataList = outputSoi.getStructFieldsDataAsList(raw)
             val fieldList = outputSoi.getAllStructFieldRefs()
-            
+
             var i = 0
             dataList.foreach( element => {
               if (element == null) {
@@ -117,7 +117,7 @@ case class ScriptTransformation(
           if (!hasNext) {
             throw new NoSuchElementException
           }
- 
+
           if (outputSerde == null) {
             val prevLine = curLine
             curLine = reader.readLine()
@@ -192,7 +192,7 @@ case class HiveScriptIOSchema (
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
-  
+
   def initInputSerDe(input: Seq[Expression]): (AbstractSerDe, ObjectInspector) = {
     val (columns, columnTypes) = parseAttrs(input)
     val serde = initSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps)
@@ -206,22 +206,22 @@ case class HiveScriptIOSchema (
   }
 
   def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-                                                
+
     val columns = attrs.map {
       case aref: AttributeReference => aref.name
       case e: NamedExpression => e.name
       case _ => null
     }
- 
+
     val columnTypes = attrs.map {
       case aref: AttributeReference => aref.dataType
       case e: NamedExpression => e.dataType
-      case _ =>  null
+      case _ => null
     }
 
     (columns, columnTypes)
   }
- 
+
   def initSerDe(serdeClassName: String, columns: Seq[String],
     columnTypes: Seq[DataType], serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
@@ -240,7 +240,7 @@ case class HiveScriptIOSchema (
         (kv._1.split("'")(1), kv._2.split("'")(1))
       }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
       propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
-    
+
       val properties = new Properties()
       properties.putAll(propsMap)
       serde.initialize(null, properties)
@@ -261,7 +261,7 @@ case class HiveScriptIOSchema (
       null
     }
   }
- 
+
   def initOutputputSoi(outputSerde: AbstractSerDe): StructObjectInspector = {
     if (outputSerde != null) {
       outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]

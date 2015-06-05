@@ -160,6 +160,14 @@ writeList <- function(con, arr) {
   }
 }
 
+# Used to pass arrays where the elements can be of different types
+writeGenericList <- function(con, list) {
+  writeInt(con, length(list))
+  for (elem in list) {
+    writeObject(con, elem)
+  }
+}
+  
 # Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)
@@ -168,7 +176,7 @@ writeEnv <- function(con, env) {
   if (len > 0) {
     writeList(con, as.list(ls(env)))
     vals <- lapply(ls(env), function(x) { env[[x]] })
-    writeList(con, as.list(vals))
+    writeGenericList(con, as.list(vals))
   }
 }
 

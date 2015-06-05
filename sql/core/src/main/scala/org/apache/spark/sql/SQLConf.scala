@@ -43,6 +43,8 @@ private[spark] object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
   val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
+  val ORC_FILTER_PUSHDOWN_ENABLED = "spark.sql.orc.filterPushdown"
+
   val HIVE_VERIFY_PARTITIONPATH = "spark.sql.hive.verifyPartitionPath"
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
@@ -68,6 +70,10 @@ private[spark] object SQLConf {
 
   // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
+
+  // The output committer class used by FSBasedRelation. The specified class needs to be a
+  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
 
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
@@ -142,6 +148,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   /** When true uses Parquet implementation based on data source API */
   private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
+
+  private[spark] def orcFilterPushDown =
+    getConf(ORC_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
 
   /** When true uses verifyPartitionPath to prune the path which is not exists. */
   private[spark] def verifyPartitionPath =
@@ -254,7 +263,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def dataFrameRetainGroupColumns: Boolean =
     getConf(DATAFRAME_RETAIN_GROUP_COLUMNS, "true").toBoolean
-  
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

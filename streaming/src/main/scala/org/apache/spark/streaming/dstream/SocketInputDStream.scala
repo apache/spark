@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.dstream
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NextIterator
@@ -74,13 +76,17 @@ class SocketReceiver[T: ClassTag](
       while(!isStopped && iterator.hasNext) {
         store(iterator.next)
       }
-      logInfo("Stopped receiving")
-      restart("Retrying connecting to " + host + ":" + port)
+      if (!isStopped()) {
+        restart("Socket data stream had no more data")
+      } else {
+        logInfo("Stopped receiving")
+      }
     } catch {
       case e: java.net.ConnectException =>
         restart("Error connecting to " + host + ":" + port, e)
-      case t: Throwable =>
-        restart("Error receiving data", t)
+      case NonFatal(e) =>
+        logWarning("Error receiving data", e)
+        restart("Error receiving data", e)
     } finally {
       if (socket != null) {
         socket.close()

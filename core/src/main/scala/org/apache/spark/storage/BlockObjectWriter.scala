@@ -95,6 +95,7 @@ private[spark] class DiskBlockObjectWriter(
   private var objOut: SerializationStream = null
   private var initialized = false
   private var hasBeenClosed = false
+  private var commitAndCloseHasBeenCalled = false
 
   /**
    * Cursors used to represent positions in the file.
@@ -167,20 +168,22 @@ private[spark] class DiskBlockObjectWriter(
       objOut.flush()
       bs.flush()
       close()
+      finalPosition = file.length()
+      // In certain compression codecs, more bytes are written after close() is called
+      writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
+    } else {
+      finalPosition = file.length()
     }
-    finalPosition = file.length()
-    // In certain compression codecs, more bytes are written after close() is called
-    writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
+    commitAndCloseHasBeenCalled = true
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
-      writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-      writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
-
       if (initialized) {
+        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+        writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
         objOut.flush()
         bs.flush()
         close()
@@ -227,6 +230,10 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
+    if (!commitAndCloseHasBeenCalled) {
+      throw new IllegalStateException(
+        "fileSegment() is only valid after commitAndClose() has been called")
+    }
     new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 

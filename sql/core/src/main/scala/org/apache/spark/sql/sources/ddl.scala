@@ -130,7 +130,7 @@ private[sql] class DDLParser(
         }
     }
 
-  protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+  protected lazy val tableCols: Parser[Seq[StructField]] = "(" ~> repsep(column, ",") <~ ")"
 
   /*
    * describe [extended] table avroTable
@@ -138,7 +138,7 @@ private[sql] class DDLParser(
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
-      case e ~ db ~ tbl  =>
+      case e ~ db ~ tbl =>
         val tblIdentifier = db match {
           case Some(dbName) =>
             Seq(dbName, tbl)
@@ -171,7 +171,7 @@ private[sql] class DDLParser(
   }
 
   protected lazy val pair: Parser[(String, String)] =
-    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
+    optionName ~ stringLit ^^ { case k ~ v => (k, v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
@@ -188,18 +188,20 @@ private[sql] class DDLParser(
 private[sql] object ResolvedDataSource {
 
   private val builtinSources = Map(
-    "jdbc" -> classOf[org.apache.spark.sql.jdbc.DefaultSource],
-    "json" -> classOf[org.apache.spark.sql.json.DefaultSource],
-    "parquet" -> classOf[org.apache.spark.sql.parquet.DefaultSource]
+    "jdbc" -> "org.apache.spark.sql.jdbc.DefaultSource",
+    "json" -> "org.apache.spark.sql.json.DefaultSource",
+    "parquet" -> "org.apache.spark.sql.parquet.DefaultSource",
+    "orc" -> "org.apache.spark.sql.hive.orc.DefaultSource"
   )
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
+    val loader = Utils.getContextOrSparkClassLoader
+
     if (builtinSources.contains(provider)) {
-      return builtinSources(provider)
+      return loader.loadClass(builtinSources(provider))
     }
 
-    val loader = Utils.getContextOrSparkClassLoader
     try {
       loader.loadClass(provider)
     } catch {
@@ -208,7 +210,11 @@ private[sql] object ResolvedDataSource {
           loader.loadClass(provider + ".DefaultSource")
         } catch {
           case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
+            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              sys.error("The ORC data source must be used with Hive support enabled.")
+            } else {
+              sys.error(s"Failed to load class for data source: $provider")
+            }
         }
     }
   }
@@ -233,18 +239,19 @@ private[sql] object ResolvedDataSource {
             Some(partitionColumnsSchema(schema, partitionColumns))
           }
 
-          val caseInsensitiveOptions= new CaseInsensitiveMap(options)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
           }
 
-          val dataSchema = StructType(schema.filterNot(f => partitionColumns.contains(f.name)))
+          val dataSchema =
+            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
 
           dataSource.createRelation(
             sqlContext,
             paths,
-            Some(schema),
+            Some(dataSchema),
             maybePartitionsSchema,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
@@ -314,11 +321,14 @@ private[sql] object ResolvedDataSource {
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
+
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+        // will be adjusted within InsertIntoHadoopFsRelation.
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
             data.logicalPlan,
-            partitionColumns.toArray,
             mode)).toRdd
         r
       case _ =>

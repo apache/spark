@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.types.decimal
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
-import org.scalatest.{PrivateMethodTester, FunSuite}
+import org.scalatest.PrivateMethodTester
 
 import scala.language.postfixOps
 
-class DecimalSuite extends FunSuite with PrivateMethodTester {
+class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   test("creating decimals") {
     /** Check that a Decimal has the given string representation, precision and scale */
     def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {

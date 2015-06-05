@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.trees
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends NamedExpression with trees.LeafNode[Expression] {
 
-  type EvaluatedType = Any
-
   override def toString: String = s"input[$ordinal]"
 
   override def eval(input: Row): Any = input(ordinal)

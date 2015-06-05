@@ -111,7 +111,6 @@ case class Alias(child: Expression, name: String)(
     val explicitMetadata: Option[Metadata] = None)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
-  override type EvaluatedType = Any
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
 
@@ -181,6 +180,11 @@ case class AttributeReference(
     case _ => false
   }
 
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case ar: AttributeReference => sameRef(ar)
+    case _ => false
+  }
+
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
@@ -224,7 +228,7 @@ case class AttributeReference(
   }
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
-  override def eval(input: Row = null): EvaluatedType =
+  override def eval(input: Row = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
@@ -235,7 +239,6 @@ case class AttributeReference(
  * expression id or the unresolved indicator.
  */
 case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
-  type EvaluatedType = Any
 
   override def toString: String = name
 
@@ -247,7 +250,7 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def eval(input: Row): EvaluatedType = throw new UnsupportedOperationException
+  override def eval(input: Row): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
   override def dataType: DataType = NullType
 }

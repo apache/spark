@@ -227,7 +227,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getSizeAsBytes(key: String, defaultValue: String): Long = {
     Utils.byteStringAsBytes(get(key, defaultValue))
   }
-  
+
   /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
@@ -244,7 +244,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getSizeAsKb(key: String, defaultValue: String): Long = {
     Utils.byteStringAsKb(get(key, defaultValue))
   }
-  
+
   /**
    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Mebibytes are assumed.
@@ -261,7 +261,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getSizeAsMb(key: String, defaultValue: String): Long = {
     Utils.byteStringAsMb(get(key, defaultValue))
   }
-  
+
   /**
    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Gibibytes are assumed.
@@ -278,7 +278,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getSizeAsGb(key: String, defaultValue: String): Long = {
     Utils.byteStringAsGb(get(key, defaultValue))
   }
-  
+
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
@@ -480,8 +480,8 @@ private[spark] object SparkConf extends Logging {
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'.")
     )
-    
-    Map(configs.map { cfg => (cfg.key -> cfg) }:_*)
+
+    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
   }
 
   /**
@@ -508,7 +508,7 @@ private[spark] object SparkConf extends Logging {
     "spark.reducer.maxSizeInFlight" -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" ->
-        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4", 
+        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
           translation = s => s"${(s.toDouble * 1000).toInt}k")),
     "spark.kryoserializer.buffer.max" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),

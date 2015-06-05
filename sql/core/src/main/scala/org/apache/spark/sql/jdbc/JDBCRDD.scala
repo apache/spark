@@ -41,17 +41,22 @@ private[sql] object JDBCRDD extends Logging {
 
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
-   * the DriverQuirks class corresponding to your database driver returns null.
+   * the JdbcDialect class corresponding to your database driver returns null.
    *
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
    */
-  private def getCatalystType(sqlType: Int, precision: Int, scale: Int): DataType = {
+  private def getCatalystType(
+      sqlType: Int,
+      precision: Int,
+      scale: Int,
+      signed: Boolean): DataType = {
     val answer = sqlType match {
+      // scalastyle:off
       case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => LongType
+      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType.Unlimited }
       case java.sql.Types.BINARY        => BinaryType
-      case java.sql.Types.BIT           => BooleanType // Per JDBC; Quirks handles quirky drivers.
+      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType
       case java.sql.Types.BOOLEAN       => BooleanType
       case java.sql.Types.CHAR          => StringType
@@ -64,7 +69,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
-      case java.sql.Types.INTEGER       => IntegerType
+      case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
       case java.sql.Types.JAVA_OBJECT   => null
       case java.sql.Types.LONGNVARCHAR  => StringType
       case java.sql.Types.LONGVARBINARY => BinaryType
@@ -88,7 +93,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
-      case _ => null
+      case _                            => null
+      // scalastyle:on
     }
 
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
@@ -108,7 +114,7 @@ private[sql] object JDBCRDD extends Logging {
    * @throws SQLException if the table contains an unsupported type.
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
-    val quirks = DriverQuirks.get(url)
+    val dialect = JdbcDialects.get(url)
     val conn: Connection = DriverManager.getConnection(url, properties)
     try {
       val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
@@ -123,10 +129,12 @@ private[sql] object JDBCRDD extends Logging {
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
           val fieldScale = rsmd.getScale(i + 1)
+          val isSigned = rsmd.isSigned(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
-          var columnType = quirks.getCatalystType(dataType, typeName, fieldSize, metadata)
-          if (columnType == null) columnType = getCatalystType(dataType, fieldSize, fieldScale)
+          val columnType =
+            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
@@ -210,7 +218,8 @@ private[sql] object JDBCRDD extends Logging {
       fqTable,
       requiredColumns,
       filters,
-      parts)
+      parts,
+      properties)
   }
 }
 
@@ -226,7 +235,8 @@ private[sql] class JDBCRDD(
     fqTable: String,
     columns: Array[String],
     filters: Array[Filter],
-    partitions: Array[Partition])
+    partitions: Array[Partition],
+    properties: Properties)
   extends RDD[Row](sc, Nil) {
 
   /**
@@ -252,7 +262,7 @@ private[sql] class JDBCRDD(
   }
 
   private def escapeSql(value: String): String =
-    if (value == null) null else  StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -294,13 +304,13 @@ private[sql] class JDBCRDD(
 
   // Each JDBC-to-Catalyst conversion corresponds to a tag defined here so that
   // we don't have to potentially poke around in the Metadata once for every
-  // row.  
+  // row.
   // Is there a better way to do this?  I'd rather be using a type that
   // contains only the tags I define.
   abstract class JDBCConversion
   case object BooleanConversion extends JDBCConversion
   case object DateConversion extends JDBCConversion
-  case object DecimalConversion extends JDBCConversion
+  case class  DecimalConversion(precisionInfo: Option[(Int, Int)]) extends JDBCConversion
   case object DoubleConversion extends JDBCConversion
   case object FloatConversion extends JDBCConversion
   case object IntegerConversion extends JDBCConversion
@@ -315,19 +325,19 @@ private[sql] class JDBCRDD(
    */
   def getConversions(schema: StructType): Array[JDBCConversion] = {
     schema.fields.map(sf => sf.dataType match {
-      case BooleanType           => BooleanConversion
-      case DateType              => DateConversion
-      case DecimalType.Unlimited => DecimalConversion
-      case DecimalType.Fixed(d)  => DecimalConversion
-      case DoubleType            => DoubleConversion
-      case FloatType             => FloatConversion
-      case IntegerType           => IntegerConversion
-      case LongType              =>
+      case BooleanType => BooleanConversion
+      case DateType => DateConversion
+      case DecimalType.Unlimited => DecimalConversion(None)
+      case DecimalType.Fixed(d) => DecimalConversion(Some(d))
+      case DoubleType => DoubleConversion
+      case FloatType => FloatConversion
+      case IntegerType => IntegerConversion
+      case LongType =>
         if (sf.metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-      case StringType            => StringConversion
-      case TimestampType         => TimestampConversion
-      case BinaryType            => BinaryConversion
-      case _                     => throw new IllegalArgumentException(s"Unsupported field $sf")
+      case StringType => StringConversion
+      case TimestampType => TimestampConversion
+      case BinaryType => BinaryConversion
+      case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
     }).toArray
   }
 
@@ -355,6 +365,8 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
     val conversions = getConversions(schema)
@@ -366,8 +378,8 @@ private[sql] class JDBCRDD(
         while (i < conversions.length) {
           val pos = i + 1
           conversions(i) match {
-            case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            case DateConversion       =>
+            case BooleanConversion => mutableRow.setBoolean(i, rs.getBoolean(pos))
+            case DateConversion =>
               // DateUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
@@ -375,21 +387,36 @@ private[sql] class JDBCRDD(
               } else {
                 mutableRow.update(i, null)
               }
-            case DecimalConversion    =>
+            // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+            // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+            // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+            // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+            // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+            // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+            // retrieve it, you will get wrong result 199.99.
+            // So it is needed to set precision and scale for Decimal based on JDBC metadata.
+            case DecimalConversion(Some((p, s))) =>
+              val decimalVal = rs.getBigDecimal(pos)
+              if (decimalVal == null) {
+                mutableRow.update(i, null)
+              } else {
+                mutableRow.update(i, Decimal(decimalVal, p, s))
+              }
+            case DecimalConversion(None) =>
               val decimalVal = rs.getBigDecimal(pos)
               if (decimalVal == null) {
                 mutableRow.update(i, null)
               } else {
                 mutableRow.update(i, Decimal(decimalVal))
               }
-            case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
-            case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
-            case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
-            case LongConversion       => mutableRow.setLong(i, rs.getLong(pos))
+            case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
+            case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
+            case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
+            case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion     => mutableRow.setString(i, rs.getString(pos))
-            case TimestampConversion  => mutableRow.update(i, rs.getTimestamp(pos))
-            case BinaryConversion     => mutableRow.update(i, rs.getBytes(pos))
+            case StringConversion => mutableRow.setString(i, rs.getString(pos))
+            case TimestampConversion => mutableRow.update(i, rs.getTimestamp(pos))
+            case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
             case BinaryLongConversion => {
               val bytes = rs.getBytes(pos)
               var ans = 0L

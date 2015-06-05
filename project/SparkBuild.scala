@@ -23,7 +23,6 @@ import scala.collection.JavaConversions._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
-import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -118,7 +117,12 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
+  lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
+    libraryDependencies += compilerPlugin(
+      "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
+    scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
+
+  lazy val sharedSettings = graphSettings ++ sparkGenjavadocSettings ++ Seq (
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
@@ -126,7 +130,7 @@ object SparkBuild extends PomBuild {
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.8",
+    unidocGenjavadocVersion := "0.9-spark0",
 
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
@@ -173,9 +177,6 @@ object SparkBuild extends PomBuild {
 
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
-
-  /* Catalyst macro settings */
-  enable(Catalyst.settings)(catalyst)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -271,14 +272,6 @@ object OldDeps {
   )
 }
 
-object Catalyst {
-  lazy val settings = Seq(
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
-    // Quasiquotes break compiling scala doc...
-    // TODO: Investigate fixing this.
-    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
-}
-
 object SQL {
   lazy val settings = Seq(
     initialCommands in console :=
@@ -324,6 +317,7 @@ object Hive {
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
+        |import org.apache.spark.sql.hive.test.TestHive.implicits._
         |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce

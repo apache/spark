@@ -79,7 +79,7 @@ class HadoopTableReader(
     makeRDDForTable(
       hiveTable,
       Class.forName(
-        relation.tableDesc.getSerdeClassName, true, Utils.getSparkClassLoader)
+        relation.tableDesc.getSerdeClassName, true, Utils.getContextOrSparkClassLoader)
         .asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
