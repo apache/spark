@@ -87,6 +87,7 @@ case class Abs(child: Expression) extends UnaryArithmetic {
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
 
+  /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String = ""
 
   override def dataType: DataType = left.dataType
@@ -119,9 +120,9 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     if (left.dataType.isInstanceOf[DecimalType]) {
-      evaluate(ctx, ev, { case (eval1, eval2) => s"$eval1.$decimalMethod($eval2)" } )
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     } else {
-      evaluate(ctx, ev, { case (eval1, eval2) => s"$eval1 $symbol $eval2" } )
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
     }
   }
 
@@ -205,6 +206,9 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     }
   }
 
+  /**
+   * Special case handling due to division by 0 => null.
+   */
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
@@ -221,8 +225,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     eval1.code + eval2.code +
       s"""
       boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
-        ${ctx.defaultValue(left.dataType)};
+      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(left.dataType)};
       if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
         ${ev.nullTerm} = true;
       } else {
@@ -263,6 +266,9 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     }
   }
 
+  /**
+   * Special case handling for x % 0 ==> null.
+   */
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
@@ -279,8 +285,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     eval1.code + eval2.code +
       s"""
       boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
-        ${ctx.defaultValue(left.dataType)};
+      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(left.dataType)};
       if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
         ${ev.nullTerm} = true;
       } else {
@@ -337,7 +342,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 }
 
 /**
- * A function that calculates bitwise xor(^) of two numbers.
+ * A function that calculates bitwise xor of two numbers.
  */
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "^"

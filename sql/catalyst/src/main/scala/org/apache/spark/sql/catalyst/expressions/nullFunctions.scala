@@ -61,9 +61,9 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     children.map { e =>
       val eval = e.gen(ctx)
       s"""
-        if(${ev.nullTerm}) {
+        if (${ev.nullTerm}) {
           ${eval.code}
-          if(!${eval.nullTerm}) {
+          if (!${eval.nullTerm}) {
             ${ev.nullTerm} = false;
             ${ev.primitiveTerm} = ${eval.primitiveTerm};
           }
@@ -137,9 +137,9 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val code = children.map { e =>
       val eval = e.gen(ctx)
       s"""
-        if($nonnull < $n) {
+        if ($nonnull < $n) {
           ${eval.code}
-          if(!${eval.nullTerm}) {
+          if (!${eval.nullTerm}) {
             $nonnull += 1;
           }
         }

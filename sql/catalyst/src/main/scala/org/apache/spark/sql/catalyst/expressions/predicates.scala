@@ -85,7 +85,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    castOrNull(ctx, ev, c => s"!($c)")
+    defineCodeGen(ctx, ev, c => s"!($c)")
   }
 }
 
@@ -220,13 +220,13 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) => evaluate (ctx, ev, {
+      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
         (c1, c3) => s"$c1 $symbol $c3"
       })
       case TimestampType =>
         // java.sql.Timestamp does not have compare()
         super.genCode(ctx, ev)
-      case other => evaluate (ctx, ev, {
+      case other => defineCodeGen (ctx, ev, {
         (c1, c2) => s"$c1.compare($c2) $symbol 0"
       })
     }
@@ -277,7 +277,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    evaluate(ctx, ev, ctx.equalFunc(left.dataType))
+    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
 
@@ -392,7 +392,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       boolean ${ev.nullTerm} = false;
       ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
       ${condEval.code}
-      if(!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
+      if (!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
         ${trueEval.code}
         ${ev.nullTerm} = ${trueEval.nullTerm};
         ${ev.primitiveTerm} = ${trueEval.primitiveTerm};
