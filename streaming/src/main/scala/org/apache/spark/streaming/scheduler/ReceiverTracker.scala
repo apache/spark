@@ -313,18 +313,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       }
 
       // Right now, we only honor preferences if all receivers have them
-      var hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
+      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
 
-      // If no location preferences are specified, set preferredLocation for each receiver
+      // If no location preferences are specified, set host location for each receiver
       // so as to distribute them evenly over executors in a round-robin fashion
+      var roundRobin = false;
       if (!hasLocationPreferences && !ssc.sparkContext.isLocal) {
         val executors = getExecutors(ssc)
         if (!executors.isEmpty) {
           var i = 0;
           for (i <- 0 to (receivers.length - 1)) {
-            receivers(i).preferredLocation = Some(executors(i % executors.length))
+            receivers(i).host = Some(executors(i % executors.length))
           }
-          hasLocationPreferences = true
+          roundRobin = true
         }
       }
 
@@ -332,9 +333,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         if (hasLocationPreferences) {
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
+        } else if(roundRobin) {
+          val roundRobinReceivers = receivers.map(r => (r, Seq(r.host.get)))
+          ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
         } else {
           ssc.sc.makeRDD(receivers, receivers.size)
-        }      
+        }
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")

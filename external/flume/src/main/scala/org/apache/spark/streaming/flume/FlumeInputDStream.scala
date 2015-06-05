@@ -186,7 +186,7 @@ class FlumeReceiver(
     logInfo("Flume receiver stopped")
   }
 
-  preferredLocation = Some(host)
+  override def preferredLocation: Option[String] = Option(host)
 
   /** A Netty Pipeline factory that will decompress incoming data from
     * and the Netty client and compress data going back to the client.
