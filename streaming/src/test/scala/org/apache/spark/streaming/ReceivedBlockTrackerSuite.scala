@@ -225,7 +225,7 @@ class ReceivedBlockTrackerSuite
   /** Generate blocks infos using random ids */
   def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
     List.fill(5)(ReceivedBlockInfo(streamId, 0, None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)))))
+      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), 1)))
   }
 
   /** Get all the data written in the given write ahead log file. */
