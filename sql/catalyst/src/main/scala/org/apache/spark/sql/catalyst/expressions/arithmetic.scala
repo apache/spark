@@ -118,6 +118,10 @@ abstract class BinaryArithmetic extends BinaryExpression {
     sys.error(s"BinaryArithmetics must override either eval or evalInternal")
 }
 
+private[sql] object BinaryArithmetic {
+  def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "+"
 
