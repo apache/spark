@@ -88,6 +88,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
         """
     } else {
+      // TODO(cg): Add support for more data types.
       dataType match {
         case StringType =>
           val v = value.asInstanceOf[UTF8String]
@@ -96,12 +97,12 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             final boolean ${ev.nullTerm} = false;
             ${ctx.stringType} ${ev.primitiveTerm} = new ${ctx.stringType}().set(${arr});
            """
-        case FloatType =>
+        case FloatType =>  // This must go before NumericType
           s"""
             final boolean ${ev.nullTerm} = false;
             float ${ev.primitiveTerm} = ${value}f;
            """
-        case dt: DecimalType =>
+        case dt: DecimalType =>  // This must go before NumericType
           s"""
             final boolean ${ev.nullTerm} = false;
             ${ctx.primitiveType(dt)} ${ev.primitiveTerm} =

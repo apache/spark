@@ -435,37 +435,57 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     if (evaluated == null) null else cast(evaluated)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = this match {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    // TODO(cg): Add support for more data types.
+    (child.dataType, dataType) match {
 
-    case Cast(child @ BinaryType(), StringType) =>
-      castOrNull (ctx, ev, c =>
-        s"new ${ctx.stringType}().set($c)")
+      case (BinaryType, StringType) =>
+        defineCodeGen (ctx, ev, c =>
+          s"new ${ctx.stringType}().set($c)")
 
-    case Cast(child @ DateType(), StringType) =>
-      castOrNull(ctx, ev, c =>
-        s"""new ${ctx.stringType}().set(
+      case (DateType, StringType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"""new ${ctx.stringType}().set(
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
 
-    case Cast(child @ BooleanType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c?1:0)")
+      case (BooleanType, dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c ? 1 : 0)")
 
-    case Cast(child @ DecimalType(), IntegerType) =>
-      castOrNull(ctx, ev, c => s"($c).toInt()")
+      case (_: NumericType, dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c)")
 
-    case Cast(child @ DecimalType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+      case (_: DecimalType, ByteType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toByte()")
 
-    case Cast(child @ NumericType(), dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
-      castOrNull(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c)")
+      case (_: DecimalType, ShortType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toShort()")
 
-    // Special handling required for timestamps in hive test cases since the toString function
-    // does not match the expected output.
-    case Cast(e, StringType) if e.dataType != TimestampType =>
-      castOrNull(ctx, ev, c =>
-        s"new ${ctx.stringType}().set(String.valueOf($c))")
+      case (_: DecimalType, IntegerType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toInt()")
 
-    case other =>
-      super.genCode(ctx, ev)
+      case (_: DecimalType, LongType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toLong()")
+
+      case (_: DecimalType, FloatType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toFloat()")
+
+      case (_: DecimalType, DoubleType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toDouble()")
+
+      case (_: DecimalType, dt: NumericType) if !dt.isInstanceOf[DecimalType] =>
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+
+      // Special handling required for timestamps in hive test cases since the toString function
+      // does not match the expected output.
+      case (TimestampType, StringType) =>
+        super.genCode(ctx, ev)
+
+      case (_, StringType) =>
+        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().set(String.valueOf($c))")
+
+      case other =>
+        super.genCode(ctx, ev)
+    }
   }
 }
 
