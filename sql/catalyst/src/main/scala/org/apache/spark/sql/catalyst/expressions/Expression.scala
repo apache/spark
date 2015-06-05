@@ -55,7 +55,9 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns an [[EvaluatedExpression]], which contains Java source code that
    * can be used to generate the result of evaluating the expression on an input row.
+   * 
    * @param ctx a [[CodeGenContext]]
+   * @return [[EvaluatedExpression]]
    */
   def gen(ctx: CodeGenContext): EvaluatedExpression = {
     val nullTerm = ctx.freshName("nullTerm")
@@ -67,7 +69,11 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Returns Java source code for this expression
+   * Returns Java source code for this expression.
+   *
+   * @param ctx a [[CodeGenContext]]
+   * @param ev an [[EvaluatedExpression]] with unique terms.
+   * @return Java source code
    */
   def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val e = this.asInstanceOf[Expression]
