@@ -27,7 +27,7 @@ import org.apache.spark.deploy.DriverDescription
  */
 class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
 
-  test("Auth secret shouldn't appear on the command line") {
+  test("Auth secret shouldn't appear in the command") {
     val servlet = new StandaloneSubmitRequestServlet(null , "", null)
     val buildDriverDesc = PrivateMethod[DriverDescription]('buildDriverDescription)
     val request = new CreateSubmissionRequest
@@ -45,31 +45,31 @@ class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
 
     // auth is not set
     request.sparkProperties = conf.getAll.toMap
-    var driver = servlet invokePrivate buildDriverDesc(request)
-    assert(driver.appSecret === None)
-    assert(!driver.command.javaOpts.exists(
+    var driverDesc = servlet invokePrivate buildDriverDesc(request)
+    assert(driverDesc.appSecret === None)
+    assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_CONF)))
-    assert(!driver.command.javaOpts.exists(
+    assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
 
     // auth is set to false
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "false")
     request.sparkProperties = conf.getAll.toMap
-    driver = servlet invokePrivate buildDriverDesc(request)
-    assert(driver.appSecret === None)
-    assert(driver.command.javaOpts.contains(
+    driverDesc = servlet invokePrivate buildDriverDesc(request)
+    assert(driverDesc.appSecret === None)
+    assert(driverDesc.command.javaOpts.contains(
       "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=false"))
-    assert(!driver.command.javaOpts.exists(
+    assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
 
     // auth is set to true
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "true")
     request.sparkProperties = conf.getAll.toMap
-    driver = servlet invokePrivate buildDriverDesc(request)
-    assert(driver.appSecret === Some("This is the secret sauce"))
-    assert(driver.command.javaOpts.contains(
+    driverDesc = servlet invokePrivate buildDriverDesc(request)
+    assert(driverDesc.appSecret === Some("This is the secret sauce"))
+    assert(driverDesc.command.javaOpts.contains(
       "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=true"))
-    assert(!driver.command.javaOpts.exists(
+    assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
   }
 }

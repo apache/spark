@@ -33,6 +33,7 @@ private[spark] class SparkDeploySchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
   with Logging {
+  import SparkDeploySchedulerBackend._
 
   private var client: AppClient = null
   private var stopping = false
@@ -52,47 +53,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
       RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
-    val args = Seq(
-      "--driver-url", driverUrl,
-      "--executor-id", "{{EXECUTOR_ID}}",
-      "--hostname", "{{HOSTNAME}}",
-      "--cores", "{{CORES}}",
-      "--app-id", "{{APP_ID}}",
-      "--worker-url", "{{WORKER_URL}}")
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
-      .map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
-      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-    val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
-      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-
-    // When testing, expose the parent class path to the child. This is processed by
-    // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
-    // when the assembly is built with the "*-provided" profiles enabled.
-    val testingClassPath =
-      if (sys.props.contains("spark.testing")) {
-        sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
-      } else {
-        Nil
-      }
-
-    // Start executors with a few necessary configs for registering with the scheduler
-    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isStandaloneExecutorStartupConf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts
-    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
-    val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
-    val appDesc = new ApplicationDescription(
-      sc.appName,
-      maxCores,
-      sc.executorMemory,
-      command,
-      appUIAddress,
-      if (conf.authOn) conf.getClusterAuthSecret else None,
-      sc.eventLogDir,
-      sc.eventLogCodec,
-      coresPerExecutor)
+    val appDesc = buildAppDescription(driverUrl, maxCores, sc)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()
@@ -168,4 +129,53 @@ private[spark] class SparkDeploySchedulerBackend(
     registrationBarrier.release()
   }
 
+}
+
+private[spark] object SparkDeploySchedulerBackend {
+
+  // Exposed for testing
+  private def buildAppDescription(driverUrl: String, maxCores: Option[Int],
+                                  sc: SparkContext): ApplicationDescription = {
+    val args = Seq(
+      "--driver-url", driverUrl,
+      "--executor-id", "{{EXECUTOR_ID}}",
+      "--hostname", "{{HOSTNAME}}",
+      "--cores", "{{CORES}}",
+      "--app-id", "{{APP_ID}}",
+      "--worker-url", "{{WORKER_URL}}")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
+      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+    val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
+      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+
+    // When testing, expose the parent class path to the child. This is processed by
+    // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
+    // when the assembly is built with the "*-provided" profiles enabled.
+    val testingClassPath =
+      if (sys.props.contains("spark.testing")) {
+        sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
+      } else {
+        Nil
+      }
+
+    // Start executors with a few necessary configs for registering with the scheduler
+    val sparkJavaOpts = Utils.sparkJavaOpts(sc.conf, SparkConf.isStandaloneExecutorStartupConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
+    val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
+    val coresPerExecutor = sc.conf.getOption("spark.executor.cores").map(_.toInt)
+    new ApplicationDescription(
+      sc.appName,
+      maxCores,
+      sc.executorMemory,
+      command,
+      appUIAddress,
+      if (sc.conf.authOn) sc.conf.getClusterAuthSecret else None,
+      sc.eventLogDir,
+      sc.eventLogCodec,
+      coresPerExecutor)
+  }
 }
