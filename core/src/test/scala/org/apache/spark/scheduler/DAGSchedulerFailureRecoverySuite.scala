@@ -26,7 +26,7 @@ import org.apache.spark._
 
 class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
-  test("no concurrent retries for stage attempts (SPARK-7308)") {
+  ignore("no concurrent retries for stage attempts (SPARK-7308)") {
     // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.
     // note that this is somewhat convoluted for a test case, but isn't actually very unusual
     // under a real workload.  Note that we only fail the first attempt of stage 2, but that
