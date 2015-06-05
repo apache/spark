@@ -201,7 +201,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
 
-    runSpark(false, primaryPyFile.getAbsolutePath(),
+    runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFiles),
       appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
