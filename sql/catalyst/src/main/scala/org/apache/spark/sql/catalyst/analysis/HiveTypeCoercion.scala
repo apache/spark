@@ -68,19 +68,18 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Implicit promote the DataType to StringType if
+   * Implicit promote the AtomicType to StringType if
    * one of the data type in (dt1, dt2) is StringType, and the other is not either
    * BooleanType or BinaryType, the TightestCommonType should be StringType
    * eg: 1. CaseWhenLike  case when ... then dt1 else dt2 end
    *     2. Coalesce(null, dt1, dt2)
-
    */
   val promoteToStringTypeOfTwo: (DataType, DataType) => Option[DataType] = {
-    case (t1: StringType, t2: DataType) if (t2 != BinaryType && t2 != BooleanType) =>
-      Some(StringType)
+    case (t1: StringType, t2: AtomicType) if (t2 != BinaryType && t2 != BooleanType) =>
+        Some(StringType)
 
-    case (t1: DataType, t2: StringType) if (t1 != BinaryType && t1 != BooleanType) =>
-      Some(StringType)
+    case (t1: AtomicType, t2: StringType) if (t1 != BinaryType && t1 != BooleanType) =>
+        Some(StringType)
 
     case _ => None
   }
