@@ -56,7 +56,7 @@ class CodeGenContext {
   /**
    * Holding all the expressions those do not support codegen, will be evaluated directly.
    */
-  val references: Seq[Expression] = new mutable.ArrayBuffer[Expression]()
+  val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
   val stringType = classOf[UTF8String].getName
   val decimalType = classOf[Decimal].getName
