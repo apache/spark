@@ -40,10 +40,11 @@ class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
     request.sparkProperties = conf.getAll.toMap
     request.validate()
 
-    // optional fields
+    // set secret
     conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, "This is the secret sauce")
+
+    // auth is not set
     request.sparkProperties = conf.getAll.toMap
-    request.validate()
     var driver = servlet invokePrivate buildDriverDesc(request)
     assert(driver.appSecret === None)
     assert(!driver.command.javaOpts.exists(
@@ -51,10 +52,9 @@ class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
     assert(!driver.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
 
+    // auth is set to false
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "false")
-    conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, "This is the secret sauce")
     request.sparkProperties = conf.getAll.toMap
-    request.validate()
     driver = servlet invokePrivate buildDriverDesc(request)
     assert(driver.appSecret === None)
     assert(driver.command.javaOpts.contains(
@@ -62,10 +62,9 @@ class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
     assert(!driver.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
 
+    // auth is set to true
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "true")
-    conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, "This is the secret sauce")
     request.sparkProperties = conf.getAll.toMap
-    request.validate()
     driver = servlet invokePrivate buildDriverDesc(request)
     assert(driver.appSecret === Some("This is the secret sauce"))
     assert(driver.command.javaOpts.contains(
