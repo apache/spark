@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Code, EvaluatedExpression, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -117,7 +117,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     if (left.dataType.isInstanceOf[DecimalType]) {
       evaluate(ctx, ev, { case (eval1, eval2) => s"$eval1.$decimalMethod($eval2)" } )
     } else {
@@ -205,7 +205,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
@@ -263,7 +263,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
@@ -406,7 +406,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     if (ctx.isNativeType(left.dataType)) {
       val eval1 = left.gen(ctx)
       val eval2 = right.gen(ctx)
@@ -430,7 +430,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
         }
       """
     } else {
-      super.genSource(ctx, ev)
+      super.genCode(ctx, ev)
     }
   }
   override def toString: String = s"MaxOf($left, $right)"
@@ -460,7 +460,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     if (ctx.isNativeType(left.dataType)) {
 
       val eval1 = left.gen(ctx)
@@ -486,7 +486,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
         }
       """
     } else {
-      super.genSource(ctx, ev)
+      super.genCode(ctx, ev)
     }
   }
 

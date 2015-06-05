@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
@@ -435,7 +435,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     if (evaluated == null) null else cast(evaluated)
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = this match {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = this match {
 
     case Cast(child @ BinaryType(), StringType) =>
       castOrNull (ctx, ev, c =>
@@ -465,7 +465,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         s"new org.apache.spark.sql.types.UTF8String().set(String.valueOf($c))")
 
     case other =>
-      super.genSource(ctx, ev)
+      super.genCode(ctx, ev)
   }
 }
 

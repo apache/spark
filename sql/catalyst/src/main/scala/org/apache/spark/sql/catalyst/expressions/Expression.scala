@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -62,28 +62,14 @@ abstract class Expression extends TreeNode[Expression] {
     val primitiveTerm = ctx.freshName("primitiveTerm")
     val objectTerm = ctx.freshName("objectTerm")
     val ve = EvaluatedExpression("", nullTerm, primitiveTerm, objectTerm)
-    ve.code = genSource(ctx, ve)
-
-    // Only inject debugging code if debugging is turned on.
-    //    val debugCode =
-    //      if (debugLogging) {
-    //        val localLogger = log
-    //        val localLoggerTree = reify { localLogger }
-    //        s"""
-    //          $localLoggerTree.debug(
-    //            ${this.toString} + ": " + (if (${ev.nullTerm}) "null" else ${ev.primitiveTerm}.toString))
-    //        """
-    //      } else {
-    //        ""
-    //      }
-
+    ve.code = genCode(ctx, ve)
     ve
   }
 
   /**
    * Returns Java source code for this expression
    */
-  def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val e = this.asInstanceOf[Expression]
     ctx.references += e
     s"""

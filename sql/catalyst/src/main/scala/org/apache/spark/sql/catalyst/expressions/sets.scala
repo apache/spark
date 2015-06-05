@@ -61,7 +61,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
     new OpenHashSet[Any]()
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     elementType match {
       case IntegerType | LongType =>
         s"""
@@ -69,7 +69,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
           ${ctx.hashSetForType(elementType)} ${ev.primitiveTerm} =
             new ${ctx.hashSetForType(elementType)}();
         """
-      case _ => super.genSource(ctx, ev)
+      case _ => super.genCode(ctx, ev)
     }
   }
 
@@ -104,7 +104,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
     elementType match {
       case IntegerType | LongType =>
@@ -119,7 +119,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
            boolean ${ev.nullTerm} = false;
            ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
          """
-      case _ => super.genSource(ctx, ev)
+      case _ => super.genCode(ctx, ev)
     }
   }
 
@@ -157,7 +157,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
     elementType match {
       case IntegerType | LongType =>
@@ -170,7 +170,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
           ${htype} ${ev.primitiveTerm} = ${leftEval.primitiveTerm};
           ${ev.primitiveTerm}.union(${rightEval.primitiveTerm});
         """
-      case _ => super.genSource(ctx, ev)
+      case _ => super.genCode(ctx, ev)
     }
   }
 }
@@ -191,7 +191,7 @@ case class CountSet(child: Expression) extends UnaryExpression {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     castOrNull(ctx, ev, c => s"$c.size().toLong()")
   }
 

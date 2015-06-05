@@ -41,16 +41,22 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  *                      valid if `nullTerm` is set to `true`.
  * @param objectTerm A possibly boxed version of the result of evaluating this expression.
  */
-case class EvaluatedExpression(var code: String,
-                               nullTerm: String,
-                               primitiveTerm: String,
-                               objectTerm: String)
+case class EvaluatedExpression(var code: Code,
+                               nullTerm: Term,
+                               primitiveTerm: Term,
+                               objectTerm: Term)
 
 /**
- * A context for codegen
- * @param references the expressions that don't support codegen
+ * A context for codegen, which is used to bookkeeping the expressions those are not supported
+ * by codegen, then they are evaluated directly. The unsupported expression is appended at the
+ * end of `references`, the position of it is kept in the code, used to access and evaluate it.
  */
-case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
+class CodeGenContext {
+
+  /**
+   * Holding all the expressions those do not support codegen, will be evaluated directly.
+   */
+  val references: Seq[Expression] = new mutable.ArrayBuffer[Expression]()
 
   protected val stringType = classOf[UTF8String].getName
   protected val decimalType = classOf[Decimal].getName
@@ -63,11 +69,11 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(prefix: String): String = {
+  def freshName(prefix: String): Term = {
     s"$prefix${curId.getAndIncrement}"
   }
 
-  def getColumn(dataType: DataType, ordinal: Int): String = {
+  def getColumn(dataType: DataType, ordinal: Int): Code = {
     dataType match {
       case StringType => s"(org.apache.spark.sql.types.UTF8String)i.apply($ordinal)"
       case dt: DataType if isNativeType(dt) => s"i.${accessorForType(dt)}($ordinal)"
@@ -75,7 +81,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     }
   }
 
-  def setColumn(destinationRow: String, dataType: DataType, ordinal: Int, value: String): String = {
+  def setColumn(destinationRow: Term, dataType: DataType, ordinal: Int, value: Term): Code = {
     dataType match {
       case StringType => s"$destinationRow.update($ordinal, $value)"
       case dt: DataType if isNativeType(dt) =>
@@ -84,17 +90,17 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
     }
   }
 
-  def accessorForType(dt: DataType): String = dt match {
+  def accessorForType(dt: DataType): Term = dt match {
     case IntegerType => "getInt"
     case other => s"get${boxedType(dt)}"
   }
 
-  def mutatorForType(dt: DataType): String = dt match {
+  def mutatorForType(dt: DataType): Term = dt match {
     case IntegerType => "setInt"
     case other => s"set${boxedType(dt)}"
   }
 
-  def hashSetForType(dt: DataType): String = dt match {
+  def hashSetForType(dt: DataType): Term = dt match {
     case IntegerType => classOf[IntegerHashSet].getName
     case LongType => classOf[LongHashSet].getName
     case unsupportedType =>
@@ -104,7 +110,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
   /**
    * Return the primitive type for a DataType
    */
-  def primitiveType(dt: DataType): String = dt match {
+  def primitiveType(dt: DataType): Term = dt match {
     case IntegerType => "int"
     case LongType => "long"
     case ShortType => "short"
@@ -123,7 +129,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
   /**
    * Return the representation of default value for given DataType
    */
-  def defaultValue(dt: DataType): String = dt match {
+  def defaultValue(dt: DataType): Term = dt match {
     case BooleanType => "false"
     case FloatType => "-1.0f"
     case ShortType => "-1"
@@ -140,7 +146,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
   /**
    * Return the boxed type in Java
    */
-  def boxedType(dt: DataType): String = dt match {
+  def boxedType(dt: DataType): Term = dt match {
     case IntegerType => "Integer"
     case LongType => "Long"
     case ShortType => "Short"
@@ -159,7 +165,7 @@ case class CodeGenContext(references: mutable.ArrayBuffer[Expression]) {
   /**
    * Returns a function to generate equal expression in Java
    */
-  def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
+  def equalFunc(dataType: DataType): ((Term, Term) => Code) = dataType match {
     case BinaryType => { case (eval1, eval2) => s"java.util.Arrays.equals($eval1, $eval2)" }
     case dt if isNativeType(dt) => { case (eval1, eval2) => s"$eval1 == $eval2" }
     case other => { case (eval1, eval2) => s"$eval1.equals($eval2)" }
@@ -257,6 +263,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * expressions that don't support codegen
    */
   def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext(new mutable.ArrayBuffer[Expression]())
+    new CodeGenContext
   }
 }

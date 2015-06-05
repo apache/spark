@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{EvaluatedExpression, Code, CodeGenContext}
 import org.apache.spark.sql.types._
 
 /** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
@@ -37,7 +37,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval = child.gen(ctx)
     eval.code +s"""
       boolean ${ev.nullTerm} = ${eval.nullTerm};
@@ -63,7 +63,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
     }
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.nullTerm} = ${eval.nullTerm};

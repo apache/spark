@@ -53,7 +53,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     s"""
       boolean ${ev.nullTerm} = true;
       ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
@@ -81,7 +81,7 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
     child.eval(input) == null
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval = child.gen(ctx)
     eval.code + s"""
       final boolean ${ev.nullTerm} = false;
@@ -101,7 +101,7 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
     child.eval(input) != null
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.nullTerm} = false;
@@ -132,7 +132,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  override def genSource(ctx: CodeGenContext, ev: EvaluatedExpression): String = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
       val eval = e.gen(ctx)
