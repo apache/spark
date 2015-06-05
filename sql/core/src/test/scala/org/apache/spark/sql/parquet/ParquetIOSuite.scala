@@ -36,9 +36,6 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
@@ -66,9 +63,8 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
  * A test suite that tests basic Parquet I/O.
  */
 class ParquetIOSuiteBase extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
-
-  import sqlContext.implicits.localSeqToDataFrameHolder
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
+  import sqlContext.implicits._
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
@@ -104,7 +100,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   test("fixed-length decimals") {
 
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sparkContext
+      sqlContext.sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
         .toDF()
@@ -115,7 +111,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
-        checkAnswer(read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+        checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
       }
     }
 
@@ -123,7 +119,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType(19, 10)).write.parquet(dir.getCanonicalPath)
-        read.parquet(dir.getCanonicalPath).collect()
+        sqlContext.read.parquet(dir.getCanonicalPath).collect()
       }
     }
 
@@ -131,14 +127,14 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     intercept[Throwable] {
       withTempPath { dir =>
         makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
-        read.parquet(dir.getCanonicalPath).collect()
+        sqlContext.read.parquet(dir.getCanonicalPath).collect()
       }
     }
   }
 
   test("date type") {
     def makeDateRDD(): DataFrame =
-      sparkContext
+      sqlContext.sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(DateUtils.toJavaDate(i)))
         .toDF()
@@ -147,7 +143,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withTempPath { dir =>
       val data = makeDateRDD()
       data.write.parquet(dir.getCanonicalPath)
-      checkAnswer(read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
     }
   }
 
@@ -236,7 +232,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(conf.parquetCompressionCodec.toUpperCase) {
+          assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
             compressionCodecFor(path)
           }
         }
@@ -244,7 +240,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     }
 
     // Checks default compression codec
-    checkCompressionCodec(CompressionCodecName.fromConf(conf.parquetCompressionCodec))
+    checkCompressionCodec(CompressionCodecName.fromConf(sqlContext.conf.parquetCompressionCodec))
 
     checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
     checkCompressionCodec(CompressionCodecName.GZIP)
@@ -283,7 +279,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withTempDir { dir =>
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
-      checkAnswer(read.parquet(path.toString), (0 until 10).map { i =>
+      checkAnswer(sqlContext.read.parquet(path.toString), (0 until 10).map { i =>
         Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
       })
     }
@@ -312,7 +308,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Overwrite).save(file)
-      checkAnswer(read.parquet(file), newData.map(Row.fromTuple))
+      checkAnswer(sqlContext.read.parquet(file), newData.map(Row.fromTuple))
     }
   }
 
@@ -321,7 +317,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Ignore).save(file)
-      checkAnswer(read.parquet(file), data.map(Row.fromTuple))
+      checkAnswer(sqlContext.read.parquet(file), data.map(Row.fromTuple))
     }
   }
 
@@ -341,7 +337,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Append).save(file)
-      checkAnswer(read.parquet(file), (data ++ newData).map(Row.fromTuple))
+      checkAnswer(sqlContext.read.parquet(file), (data ++ newData).map(Row.fromTuple))
     }
   }
 
@@ -369,11 +365,11 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       val path = new Path(location.getCanonicalPath)
 
       ParquetFileWriter.writeMetadataFile(
-        sparkContext.hadoopConfiguration,
+        sqlContext.sparkContext.hadoopConfiguration,
         path,
         new Footer(path, new ParquetMetadata(fileMetadata, Nil)) :: Nil)
 
-      assertResult(read.parquet(path.toString).schema) {
+      assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
           StructField("a", BooleanType, nullable = false) ::
           StructField("b", IntegerType, nullable = false) ::
@@ -406,7 +402,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 }
 
 class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
@@ -430,7 +426,7 @@ class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterA
 }
 
 class ParquetDataSourceOffIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")

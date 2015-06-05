@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.sources.LogicalRelation
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, SQLConf}
 
@@ -42,7 +41,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, SQLConf}
  *    data type is nullable.
  */
 class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -312,7 +311,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
 }
 
 class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
@@ -341,7 +340,7 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
 }
 
 class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
