@@ -28,8 +28,11 @@ import org.apache.ivy.plugins.resolver.IBiblioResolver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.util.Utils
 
 class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
+
+  private var tempIvyPath: String = _
 
   private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
@@ -47,6 +50,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     super.beforeAll()
     // We don't want to write logs during testing
     SparkSubmitUtils.printStream = new BufferPrintStream
+    tempIvyPath = Utils.createTempDir(namePrefix = "ivy").getAbsolutePath()
   }
 
   test("incorrect maven coordinate throws error") {
@@ -90,20 +94,19 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("ivy path works correctly") {
-    val ivyPath = "dummy" + File.separator +  "ivy"
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")
-    var jPaths = SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(ivyPath))
+    var jPaths = SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(tempIvyPath))
     for (i <- 0 until 3) {
-      val index = jPaths.indexOf(ivyPath)
+      val index = jPaths.indexOf(tempIvyPath)
       assert(index >= 0)
-      jPaths = jPaths.substring(index + ivyPath.length)
+      jPaths = jPaths.substring(index + tempIvyPath.length)
     }
     val main = MavenCoordinate("my.awesome.lib", "mylib", "0.1")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       // end to end
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, Option(repo),
-        Option(ivyPath), isTest = true)
+        Option(tempIvyPath), isTest = true)
       assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
     }
   }
@@ -125,13 +128,12 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
     }
     // Local ivy repository with modified home
-    val dummyIvyPath = "dummy" + File.separator + "ivy"
-    val dummyIvyLocal = new File(dummyIvyPath, "local" + File.separator)
+    val dummyIvyLocal = new File(tempIvyPath, "local" + File.separator)
     IvyTestUtils.withRepository(main, None, Some(dummyIvyLocal), true) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None,
-        Some(dummyIvyPath), isTest = true)
+        Some(tempIvyPath), isTest = true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
-      assert(jarPath.indexOf(dummyIvyPath) >= 0, "should be in new ivy path")
+      assert(jarPath.indexOf(tempIvyPath) >= 0, "should be in new ivy path")
     }
   }
 

@@ -118,6 +118,10 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def toString: String = s"($left $symbol $right)"
 }
 
+private[sql] object BinaryExpression {
+  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
   self: Product =>
 }

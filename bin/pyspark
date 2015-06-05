@@ -17,24 +17,10 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
 export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
 source "$SPARK_HOME"/bin/load-spark-env.sh
-
-function usage() {
-  if [ -n "$1" ]; then
-    echo $1
-  fi
-  echo "Usage: ./bin/pyspark [options]" 1>&2
-  "$SPARK_HOME"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit $2
-}
-export -f usage
-
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage
-fi
+export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 
 # In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
 # executable, while the worker would still be launched using PYSPARK_PYTHON.

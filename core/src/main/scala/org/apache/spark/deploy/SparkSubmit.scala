@@ -82,13 +82,13 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
-  private[spark] var exitFn: () => Unit = () => System.exit(1)
+  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
   private[spark] var printStream: PrintStream = System.err
   private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
   private[spark] def printErrorAndExit(str: String): Unit = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn()
+    exitFn(1)
   }
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
@@ -99,7 +99,7 @@ object SparkSubmit {
       /_/
                         """.format(SPARK_VERSION))
     printStream.println("Type --help for more information.")
-    exitFn()
+    exitFn(0)
   }
 
   def main(args: Array[String]): Unit = {
@@ -160,7 +160,7 @@ object SparkSubmit {
             // detect exceptions with empty stack traces here, and treat them differently.
             if (e.getStackTrace().length == 0) {
               printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-              exitFn()
+              exitFn(1)
             } else {
               throw e
             }
@@ -700,7 +700,7 @@ object SparkSubmit {
   /**
    * Return whether the given main class represents a sql shell.
    */
-  private def isSqlShell(mainClass: String): Boolean = {
+  private[deploy] def isSqlShell(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 

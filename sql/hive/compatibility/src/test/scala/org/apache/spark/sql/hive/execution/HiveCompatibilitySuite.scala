@@ -23,7 +23,6 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -254,7 +253,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // the answer is sensitive for jdk version
     "udf_java_method"
-  ) ++ HiveShim.compatibilityBlackList
+  )
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
