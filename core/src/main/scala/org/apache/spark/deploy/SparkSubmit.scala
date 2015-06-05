@@ -908,6 +908,7 @@ private[spark] object SparkSubmitUtils {
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
+   * @param exclusions Exclusions to apply when resolving transitive dependencies
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
@@ -915,6 +916,7 @@ private[spark] object SparkSubmitUtils {
       coordinates: String,
       remoteRepos: Option[String],
       ivyPath: Option[String],
+      exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
@@ -971,6 +973,14 @@ private[spark] object SparkSubmitUtils {
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
+
+        exclusions.foreach { e =>
+          val coord = extractMavenCoordinates(e + ":*")(0)
+          val id = new ArtifactId(new ModuleId(coord.groupId, coord.artifactId), "*", "*", "*")
+          val rule = new DefaultExcludeRule(id, ivySettings.getMatcher("glob"), null)
+          rule.addConfiguration(ivyConfName)
+          md.addExcludeRule(rule)
+        }
 
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)

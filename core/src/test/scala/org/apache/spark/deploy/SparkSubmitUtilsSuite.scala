@@ -103,7 +103,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     IvyTestUtils.withRepository(main, None, None) { repo =>
       // end to end
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, Option(repo),
-        Option(ivyPath), true)
+        Option(ivyPath), isTest = true)
       assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
     }
   }
@@ -112,14 +112,16 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val main = new MavenCoordinate("my.awesome.lib", "mylib", "0.1")
     // Local M2 repository
     IvyTestUtils.withRepository(main, None, Some(SparkSubmitUtils.m2Path)) { repo =>
-      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, None, true)
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, None,
+        isTest = true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
     }
     // Local Ivy Repository
     val settings = new IvySettings
     val ivyLocal = new File(settings.getDefaultIvyUserDir, "local" + File.separator)
     IvyTestUtils.withRepository(main, None, Some(ivyLocal), true) { repo =>
-      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, None, true)
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None, None,
+        isTest = true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
     }
     // Local ivy repository with modified home
@@ -127,7 +129,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val dummyIvyLocal = new File(dummyIvyPath, "local" + File.separator)
     IvyTestUtils.withRepository(main, None, Some(dummyIvyLocal), true) { repo =>
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, None,
-        Some(dummyIvyPath), true)
+        Some(dummyIvyPath), isTest = true)
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
       assert(jarPath.indexOf(dummyIvyPath) >= 0, "should be in new ivy path")
     }
@@ -135,7 +137,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("dependency not found throws RuntimeException") {
     intercept[RuntimeException] {
-      SparkSubmitUtils.resolveMavenCoordinates("a:b:c", None, None, true)
+      SparkSubmitUtils.resolveMavenCoordinates("a:b:c", None, None, isTest = true)
     }
   }
 
@@ -147,12 +149,12 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",") +
       ",org.apache.spark:spark-core_fake:1.2.0"
 
-    val path = SparkSubmitUtils.resolveMavenCoordinates(coordinates, None, None, true)
+    val path = SparkSubmitUtils.resolveMavenCoordinates(coordinates, None, None, isTest = true)
     assert(path === "", "should return empty path")
     val main = MavenCoordinate("org.apache.spark", "spark-streaming-kafka-assembly_2.10", "1.2.0")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       val files = SparkSubmitUtils.resolveMavenCoordinates(coordinates + "," + main.toString,
-        Some(repo), None, true)
+        Some(repo), None, isTest = true)
       assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
     }
   }

@@ -64,7 +64,8 @@ private[hive] object IsolatedClientLoader {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         Some("http://www.datanucleus.org/downloads/maven2"),
-        None)
+        None,
+        exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
 

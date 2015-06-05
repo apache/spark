@@ -19,8 +19,10 @@ package org.apache.spark.sql.hive
 
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
-  private[client] abstract class HiveVersion(val fullVersion: String,
-    val extraDeps: Seq[String] = Nil)
+  private[client] abstract class HiveVersion(
+      val fullVersion: String,
+      val extraDeps: Seq[String] = Nil,
+      val exclusions: Seq[String] = Nil)
 
   // scalastyle:off
   private[client] object hive {
@@ -31,7 +33,8 @@ package object client {
     // maven central anymore, so override those with a version that exists.
     case object v14 extends HiveVersion("0.14.0",
       Seq("org.apache.calcite:calcite-core:1.3.0-incubating",
-        "org.apache.calcite:calcite-avatica:1.3.0-incubating"))
+        "org.apache.calcite:calcite-avatica:1.3.0-incubating"),
+      Seq("org.pentaho:pentaho-aggdesigner-algorithm"))
   }
   // scalastyle:on
 
