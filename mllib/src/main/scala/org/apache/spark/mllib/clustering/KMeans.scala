@@ -85,9 +85,7 @@ class KMeans private (
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    */
   def setInitializationMode(initializationMode: String): this.type = {
-    if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
-      throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
-    }
+    KMeans.validateInitializationMode(initializationMode)
     this.initializationMode = initializationMode
     this
   }
@@ -520,6 +518,13 @@ object KMeans {
       v1: VectorWithNorm,
       v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
+  }
+
+  private[spark] def validateInitializationMode(initializationMode: String): Boolean = {
+    if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
+      throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
+    }
+    true
   }
 }
 
