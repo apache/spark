@@ -317,7 +317,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
         } else if (roundRobin) {
-          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i => (receivers(i), locations(i)))
+          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i => 
+	    (receivers(i), locations(i)))
           ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
         } else {
           ssc.sc.makeRDD(receivers, receivers.size)
