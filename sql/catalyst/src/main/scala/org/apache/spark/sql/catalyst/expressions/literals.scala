@@ -105,7 +105,8 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
         case dt: DecimalType =>
           s"""
             final boolean ${ev.nullTerm} = false;
-            ${ctx.primitiveType(dt)} ${ev.primitiveTerm} = new ${ctx.primitiveType(dt)}().set($value);
+            ${ctx.primitiveType(dt)} ${ev.primitiveTerm} =
+              new ${ctx.primitiveType(dt)}().set($value);
            """
         case dt: NumericType =>
           s"""

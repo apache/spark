@@ -276,7 +276,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
-  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression) = {
+  override def genCode(ctx: CodeGenContext, ev: EvaluatedExpression): Code = {
     evaluate(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
