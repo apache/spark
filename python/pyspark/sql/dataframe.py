@@ -22,6 +22,7 @@ import random
 if sys.version >= '3':
     basestring = unicode = str
     long = int
+    from functools import reduce
 else:
     from itertools import imap as map
 
