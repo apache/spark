@@ -183,7 +183,7 @@ class DataFrame private[sql](
       row.toSeq.zipWithIndex.map { cell =>
         val str = {
           if (cell._1 == null) "null"
-          else if (primitive(cell._2) && cell._1.toString.last=='(') {
+          else if (primitive(cell._2) && cell._1.toString.last==')') {
             '[' + cell._1.toString.drop(cell._1.toString.indexOf('(') + 1).dropRight(1) + ']'
           }
           else cell._1.toString
