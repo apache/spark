@@ -94,7 +94,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             final boolean ${ev.nullTerm} = false;
             final float ${ev.primitiveTerm} = ${value}f;
            """
-        case dt: NumericType if !dt.isInstanceOf[DecimalType]=>
+        case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
           s"""
             final boolean ${ev.nullTerm} = false;
             final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = $value;
