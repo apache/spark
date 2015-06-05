@@ -19,6 +19,7 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
@@ -80,13 +81,16 @@ private[streaming] class BlockGenerator(
 
   private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
+  private val maxBlockSize = conf.getLong("spark.streaming.maxBlockSize", Long.MaxValue)
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  @volatile private var currentBuffer = new ArrayBuffer[Any]
+  private var currentBlock = new ArrayBuffer[Any]
+  private var blockQueue = new mutable.Queue[ArrayBuffer[Any]]
+
   @volatile private var stopped = false
 
   /** Start block generating and pushing threads. */
@@ -111,8 +115,7 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def addData (data: Any): Unit = synchronized {
-    waitToPush()
-    currentBuffer += data
+    addDataAndManageQueue(data)
   }
 
   /**
@@ -120,9 +123,8 @@ private[streaming] class BlockGenerator(
    * `BlockGeneratorListener.onAddData` callback will be called. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
-    waitToPush()
-    currentBuffer += data
+  def addDataWithCallback(data: Any, metadata: Any) = synchronized {
+    addDataAndManageQueue(data)
     listener.onAddData(data, metadata)
   }
 
@@ -134,23 +136,45 @@ private[streaming] class BlockGenerator(
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
     dataIterator.foreach { data =>
-      waitToPush()
-      currentBuffer += data
+      addDataAndManageQueue(data)
     }
     listener.onAddData(dataIterator, metadata)
+  }
+
+  private def addDataAndManageQueue(data: Any) = synchronized {
+    waitToPush()
+    if (currentBlock.size >= maxBlockSize) {
+      blockQueue += currentBlock
+      currentBlock = new ArrayBuffer[Any]()
+    }
+    currentBlock += data
+  }
+
+  private def readBlockAndManageQueue() = synchronized {
+    dequeueBlock() match {
+      case Some(buffer) => buffer
+      case None =>
+        val buffer = currentBlock
+        currentBlock = new ArrayBuffer[Any]
+        buffer
+    }
+  }
+
+  def dequeueBlock(): Option[ArrayBuffer[Any]] = synchronized {
+    if (blockQueue.isEmpty) None else Some(blockQueue.dequeue())
   }
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {
-      val newBlockBuffer = currentBuffer
-      currentBuffer = new ArrayBuffer[Any]
-      if (newBlockBuffer.size > 0) {
+      val blockBuffer = readBlockAndManageQueue()
+
+      if (blockBuffer.nonEmpty) {
         val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
-        val newBlock = new Block(blockId, newBlockBuffer)
+        val newBlock = new Block(blockId, blockBuffer)
         listener.onGenerateBlock(blockId)
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
-        logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
+        logDebug("Last element in " + blockId + " is " + blockBuffer.last)
       }
     } catch {
       case ie: InterruptedException =>
@@ -159,6 +183,8 @@ private[streaming] class BlockGenerator(
         reportError("Error in block updating thread", e)
     }
   }
+
+
 
   /** Keep pushing blocks to the BlockManager. */
   private def keepPushingBlocks() {

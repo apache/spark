@@ -24,8 +24,7 @@ import org.apache.spark.{Logging, SparkConf}
 /** Provides waitToPush() method to limit the rate at which receivers consume data.
   *
   * waitToPush method will block the thread if too many messages have been pushed too quickly,
-  * and only return when a new message has been pushed. It assumes that only one message is
-  * pushed at a time.
+  * and only return when a new message has been pushed.
   *
   * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
   * per second that each receiver will accept.
