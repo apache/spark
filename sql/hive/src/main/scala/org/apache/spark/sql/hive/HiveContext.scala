@@ -536,7 +536,7 @@ private[hive] object HiveContext {
       }
     }
     propMap.put("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$localMetastore;create=true")
+      s"jdbc:derby:memory:myDB;create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
     propMap.toMap
