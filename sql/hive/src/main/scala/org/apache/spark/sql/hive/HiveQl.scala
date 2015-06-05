@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
@@ -39,13 +37,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema, HiveRowFormat}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
@@ -57,7 +57,7 @@ private[hive] case object NativePlaceholder extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-case class CreateTableAsSelect(
+private[hive] case class CreateTableAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
@@ -665,7 +665,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 HiveColumn(field.getName, field.getType, field.getComment)
               })
           }
-        case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil)=>
+        case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil) =>
           val serdeParams = new java.util.HashMap[String, String]()
           child match {
             case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
@@ -775,7 +775,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     // Support "TRUNCATE TABLE table_name [PARTITION partition_spec]"
     case Token("TOK_TRUNCATETABLE",
-          Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
+          Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
         if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
@@ -890,13 +890,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
 
             def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String, String)], String, Seq[(String, String)]) = clause match {
+              : (Seq[HiveRowFormat], String, Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
                   case Token(name, Token(value, Nil) :: Nil) =>
-                    (name, BaseSemanticAnalyzer.unescapeSQLString(value), null)
+                    HiveRowFormat(name, BaseSemanticAnalyzer.unescapeSQLString(value), null)
                   case Token(name, Token(value1, Nil) :: Token(value2, Nil) :: Nil) =>
-                    (name, BaseSemanticAnalyzer.unescapeSQLString(value1),
+                    HiveRowFormat(name, BaseSemanticAnalyzer.unescapeSQLString(value1),
                       BaseSemanticAnalyzer.unescapeSQLString(value2))
                 }
                 (rowFormat, "", Nil)
@@ -1167,7 +1167,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case Seq(false, false) => Inner
       }.toBuffer
 
-      val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
+      val joinedTables = tables.reduceLeft(Join(_, _, Inner, None))
 
       // Must be transform down.
       val joinedResult = joinedTables transform {
@@ -1187,7 +1187,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      throw new UnsupportedOperationException
 
     case Token(allJoinTokens(joinToken),
            relation1 ::
@@ -1576,6 +1577,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
+  /* Case insensitive matches for Window Specification */
+  val PRECEDING = "(?i)preceding".r
+  val FOLLOWING = "(?i)following".r
+  val CURRENT = "(?i)current".r
   def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
@@ -1629,11 +1634,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         } else {
           val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
           def nodeToBoundary(node: Node): FrameBoundary = node match {
-            case Token("preceding", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedPreceding else ValuePreceding(count.toInt)
-            case Token("following", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedFollowing else ValueFollowing(count.toInt)
-            case Token("current", Nil) => CurrentRow
+            case Token(PRECEDING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedPreceding
+              } else {
+                ValuePreceding(count.toInt)
+              }
+            case Token(FOLLOWING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedFollowing
+              } else {
+                ValueFollowing(count.toInt)
+              }
+            case Token(CURRENT(), Nil) => CurrentRow
             case _ =>
               throw new NotImplementedError(
                 s"""No parse rules for the Window Frame Boundary based on Node ${node.getName}

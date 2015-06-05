@@ -28,7 +28,8 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
       expression: Expression,
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
-    lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
+    val ctx = GenerateProjection.newCodeGenContext()
+    lazy val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
 
     val plan = try {
       GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
@@ -37,7 +38,7 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
         fail(
           s"""
             |Code generation of $expression failed:
-            |${evaluated.code.mkString("\n")}
+            |${evaluated.code}
             |$e
           """.stripMargin)
     }
@@ -49,11 +50,11 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
         s"""
           |Mismatched hashCodes for values: $actual, $expectedRow
           |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
-          |${evaluated.code.mkString("\n")}
+          |${evaluated.code}
         """.stripMargin)
     }
     if (actual != expectedRow) {
-      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }

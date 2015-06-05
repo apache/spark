@@ -41,13 +41,14 @@ In addition, if you wish to access an HDFS cluster, you need to add a dependency
     artifactId = hadoop-client
     version = <your-hdfs-version>
 
-Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
+Finally, you need to import some Spark classes into your program. Add the following lines:
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 {% endhighlight %}
+
+(Before Spark 1.3.0, you need to explicitly `import org.apache.spark.SparkContext._` to enable essential implicit conversions.)
 
 </div>
 
@@ -97,9 +98,9 @@ to your version of HDFS. Some common HDFS version tags are listed on the
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
-Finally, you need to import some Spark classes into your program. Add the following lines:
+Finally, you need to import some Spark classes into your program. Add the following line:
 
-{% highlight scala %}
+{% highlight python %}
 from pyspark import SparkContext, SparkConf
 {% endhighlight %}
 
@@ -477,7 +478,6 @@ the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main
 for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat``` with custom converters.
 
 </div>
-
 </div>
 
 ## RDD Operations
@@ -821,11 +821,9 @@ by a key.
 
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
-(the built-in tuples in the language, created by simply writing `(a, b)`), as long as you
-import `org.apache.spark.SparkContext._` in your program to enable Spark's implicit
-conversions. The key-value pair operations are available in the
+(the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
-which automatically wraps around an RDD of tuples if you import the conversions.
+which automatically wraps around an RDD of tuples.
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
 many times each line of text occurs in a file:
@@ -916,7 +914,8 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD))
+ [Python](api/python/pyspark.html#pyspark.RDD),
+ [R](api/R/index.html))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1029,7 +1028,9 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/pyspark.html#pyspark.RDD))
+ [Python](api/python/pyspark.html#pyspark.RDD),
+ [R](api/R/index.html))
+ 
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1213,9 +1214,11 @@ storage levels is:
     Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
     to be smaller and to share a pool of memory, making it attractive in environments with
     large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory 
+    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
     in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory.
+    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
+    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
+    for the suggested version pairings.
   </td>
 </tr>
 </table>
@@ -1566,7 +1569,8 @@ You can see some [example Spark programs](http://spark.apache.org/examples.html)
 In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run Java and Scala examples by passing the class name to Spark's `bin/run-example` script; for instance:
 
     ./bin/run-example SparkPi
@@ -1575,6 +1579,10 @@ For Python examples, use `spark-submit` instead:
 
     ./bin/spark-submit examples/src/main/python/pi.py
 
+For R examples, use `spark-submit` instead:
+
+    ./bin/spark-submit examples/src/main/r/dataframe.R
+
 For help on optimizing your programs, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for
 making sure that your data is stored in memory in an efficient format.
@@ -1582,4 +1590,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/#org.apache.spark.package), [Java](api/java/) and [Python](api/python/).
+[Scala](api/scala/#org.apache.spark.package), [Java](api/java/), [Python](api/python/) and [R](api/R/).

@@ -113,7 +113,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
       r.flatMap { tm: TopicMetadata =>
         tm.partitionsMetadata.map { pm: PartitionMetadata =>
           TopicAndPartition(tm.topic, pm.partitionId)
-        }    
+        }
       }
     }
   }

@@ -18,6 +18,8 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.UUID
 
+import scala.util.control.NonFatal
+
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
@@ -31,7 +33,10 @@ import org.apache.spark.util.Utils
 
 private[kinesis]
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
-  extends BasicAWSCredentials(accessKeyId, secretKey) with Serializable
+  extends AWSCredentials {
+  override def getAWSAccessKeyId: String = accessKeyId
+  override def getAWSSecretKey: String = secretKey
+}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -39,12 +44,12 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * https://github.com/awslabs/amazon-kinesis-client
  * This is a custom receiver used with StreamingContext.receiverStream(Receiver) as described here:
  *   http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * Instances of this class will get shipped to the Spark Streaming Workers to run within a 
+ * Instances of this class will get shipped to the Spark Streaming Workers to run within a
  *   Spark Executor.
  *
  * @param appName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                 by the Kinesis Client Library.  If you change the App name or Stream name,
- *                 the KCL will throw errors.  This usually requires deleting the backing  
+ *                 the KCL will throw errors.  This usually requires deleting the backing
  *                 DynamoDB table with the same name this Kinesis application.
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
@@ -82,7 +87,7 @@ private[kinesis] class KinesisReceiver(
    */
 
   /**
-   * workerId is used by the KCL should be based on the ip address of the actual Spark Worker 
+   * workerId is used by the KCL should be based on the ip address of the actual Spark Worker
    * where this code runs (not the driver's IP address.)
    */
   private var workerId: String = null
@@ -94,6 +99,9 @@ private[kinesis] class KinesisReceiver(
    * processors.
    */
   private var worker: Worker = null
+
+  /** Thread running the worker */
+  private var workerThread: Thread = null
 
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
@@ -113,7 +121,7 @@ private[kinesis] class KinesisReceiver(
 
    /*
     *  RecordProcessorFactory creates impls of IRecordProcessor.
-    *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the 
+    *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the
     *  IRecordProcessor.processRecords() method.
     *  We're using our custom KinesisRecordProcessor in this case.
     */
@@ -123,8 +131,19 @@ private[kinesis] class KinesisReceiver(
     }
 
     worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
-    worker.run()
-
+    workerThread = new Thread() {
+      override def run(): Unit = {
+        try {
+          worker.run()
+        } catch {
+          case NonFatal(e) =>
+            restart("Error running the KCL worker in Receiver", e)
+        }
+      }
+    }
+    workerThread.setName(s"Kinesis Receiver ${streamId}")
+    workerThread.setDaemon(true)
+    workerThread.start()
     logInfo(s"Started receiver with workerId $workerId")
   }
 
@@ -134,10 +153,14 @@ private[kinesis] class KinesisReceiver(
    * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
    */
   override def onStop() {
-    if (worker != null) {
-      worker.shutdown()
+    if (workerThread != null) {
+      if (worker != null) {
+        worker.shutdown()
+        worker = null
+      }
+      workerThread.join()
+      workerThread = null
       logInfo(s"Stopped receiver for workerId $workerId")
-      worker = null
     }
     workerId = null
   }

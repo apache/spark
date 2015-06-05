@@ -164,13 +164,15 @@ case class ScriptTransformation(
   }
 }
 
+case class HiveRowFormat(name: String, firstValue: String, secondValue: String)
+
 /**
  * The wrapper class of Hive input and output schema properties
  */
 private[hive]
 case class HiveScriptIOSchema (
-    inputRowFormat: Seq[(String, String, String)],
-    outputRowFormat: Seq[(String, String, String)],
+    inputRowFormat: Seq[HiveRowFormat],
+    outputRowFormat: Seq[HiveRowFormat],
     inputSerdeClass: String,
     outputSerdeClass: String,
     inputSerdeProps: Seq[(String, String)],
@@ -195,7 +197,7 @@ case class HiveScriptIOSchema (
     val (columns, columnTypes) = parseAttrs(input)
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
     val inInfo: TableDesc =
-      if (inputSerdeClass != "") {
+      if (inputSerdeClass != "" || inputRowFormat != Nil) {
         getTableDescFromSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps,
           inputRowFormat)
       } else {
@@ -209,7 +211,7 @@ case class HiveScriptIOSchema (
     val (columns, columnTypes) = parseAttrs(output)
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
     val outInfo: TableDesc =
-      if (outputSerdeClass != "") {
+      if (outputSerdeClass != "" || outputRowFormat != Nil) {
         getTableDescFromSerDe(outputSerdeClass, columns, columnTypes, outputSerdeProps,
           outputRowFormat)
       } else {
@@ -236,7 +238,7 @@ case class HiveScriptIOSchema (
       columns: Seq[String],
       columnTypes: Seq[DataType],
       serdeProps: Seq[(String, String)],
-      rowFormat: Seq[(String, String, String)]): TableDesc = {
+      rowFormat: Seq[HiveRowFormat]): TableDesc = {
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
     if (serdeClassName != "") {
       val className = serdeClassName
@@ -256,29 +258,29 @@ case class HiveScriptIOSchema (
     } else if (rowFormat != Nil) {
       val tblDesc: TableDesc = PlanUtils.getDefaultTableDesc(Utilities.ctrlaCode.toString,
         columns.mkString(","), columnTypesNames, false)
-      rowFormat.foreach { (tuple) =>
-        tuple._1 match {
+      rowFormat.foreach { (format) =>
+        format.name match {
           case "TOK_TABLEROWFORMATFIELD" =>
-            val fieldDelim: String = tuple._2
+            val fieldDelim: String = format.firstValue
             tblDesc.getProperties().setProperty(serdeConstants.FIELD_DELIM, fieldDelim)
             tblDesc.getProperties().setProperty(serdeConstants.SERIALIZATION_FORMAT,
               fieldDelim)
-            if (tuple._3 != null)  {
-              val fieldEscape: String = tuple._3
+            if (format.secondValue != null)  {
+              val fieldEscape: String = format.secondValue
               tblDesc.getProperties().setProperty(serdeConstants.ESCAPE_CHAR, fieldEscape)
             }
           case "TOK_TABLEROWFORMATCOLLITEMS" =>
-            tblDesc.getProperties().setProperty(serdeConstants.COLLECTION_DELIM, tuple._2)
+            tblDesc.getProperties().setProperty(serdeConstants.COLLECTION_DELIM, format.firstValue)
           case "TOK_TABLEROWFORMATMAPKEYS" =>
-            tblDesc.getProperties().setProperty(serdeConstants.MAPKEY_DELIM, tuple._2)
+            tblDesc.getProperties().setProperty(serdeConstants.MAPKEY_DELIM, format.firstValue)
           case "TOK_TABLEROWFORMATLINES" =>
-            val lineDelim: String = tuple._2
+            val lineDelim: String = format.firstValue
             tblDesc.getProperties().setProperty(serdeConstants.LINE_DELIM, lineDelim)
             if (!lineDelim.equals("\n") && !lineDelim.equals("10")) {
               sys.error("Lines terminated by non newline.")
             }
           case "TOK_TABLEROWFORMATNULL" =>
-            val nullFormat: String = tuple._2
+            val nullFormat: String = format.firstValue
             tblDesc.getProperties().setProperty(serdeConstants.SERIALIZATION_NULL_FORMAT,
               nullFormat)
         }

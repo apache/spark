@@ -57,54 +57,56 @@ function run_test() {
 
 function run_core_tests() {
     echo "Run core tests ..."
-    run_test "pyspark/rdd.py"
-    run_test "pyspark/context.py"
-    run_test "pyspark/conf.py"
-    PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
-    PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
-    run_test "pyspark/serializers.py"
-    run_test "pyspark/profiler.py"
-    run_test "pyspark/shuffle.py"
-    run_test "pyspark/tests.py"
+    run_test "pyspark.rdd"
+    run_test "pyspark.context"
+    run_test "pyspark.conf"
+    run_test "pyspark.broadcast"
+    run_test "pyspark.accumulators"
+    run_test "pyspark.serializers"
+    run_test "pyspark.profiler"
+    run_test "pyspark.shuffle"
+    run_test "pyspark.tests"
 }
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql/_types.py"
-    run_test "pyspark/sql/context.py"
-    run_test "pyspark/sql/column.py"
-    run_test "pyspark/sql/dataframe.py"
-    run_test "pyspark/sql/group.py"
-    run_test "pyspark/sql/functions.py"
-    run_test "pyspark/sql/tests.py"
+    run_test "pyspark.sql.types"
+    run_test "pyspark.sql.context"
+    run_test "pyspark.sql.column"
+    run_test "pyspark.sql.dataframe"
+    run_test "pyspark.sql.group"
+    run_test "pyspark.sql.functions"
+    run_test "pyspark.sql.readwriter"
+    run_test "pyspark.sql.window"
+    run_test "pyspark.sql.tests"
 }
 
 function run_mllib_tests() {
     echo "Run mllib tests ..."
-    run_test "pyspark/mllib/classification.py"
-    run_test "pyspark/mllib/clustering.py"
-    run_test "pyspark/mllib/evaluation.py"
-    run_test "pyspark/mllib/feature.py"
-    run_test "pyspark/mllib/fpm.py"
-    run_test "pyspark/mllib/linalg.py"
-    run_test "pyspark/mllib/rand.py"
-    run_test "pyspark/mllib/recommendation.py"
-    run_test "pyspark/mllib/regression.py"
-    run_test "pyspark/mllib/stat/_statistics.py"
-    run_test "pyspark/mllib/tree.py"
-    run_test "pyspark/mllib/util.py"
-    run_test "pyspark/mllib/tests.py"
+    run_test "pyspark.mllib.classification"
+    run_test "pyspark.mllib.clustering"
+    run_test "pyspark.mllib.evaluation"
+    run_test "pyspark.mllib.feature"
+    run_test "pyspark.mllib.fpm"
+    run_test "pyspark.mllib.linalg"
+    run_test "pyspark.mllib.random"
+    run_test "pyspark.mllib.recommendation"
+    run_test "pyspark.mllib.regression"
+    run_test "pyspark.mllib.stat._statistics"
+    run_test "pyspark.mllib.tree"
+    run_test "pyspark.mllib.util"
+    run_test "pyspark.mllib.tests"
 }
 
 function run_ml_tests() {
     echo "Run ml tests ..."
-    run_test "pyspark/ml/feature.py"
-    run_test "pyspark/ml/classification.py"
-    run_test "pyspark/ml/recommendation.py"
-    run_test "pyspark/ml/regression.py"
-    run_test "pyspark/ml/tuning.py"
-    run_test "pyspark/ml/tests.py"
-    run_test "pyspark/ml/evaluation.py"
+    run_test "pyspark.ml.feature"
+    run_test "pyspark.ml.classification"
+    run_test "pyspark.ml.recommendation"
+    run_test "pyspark.ml.regression"
+    run_test "pyspark.ml.tuning"
+    run_test "pyspark.ml.tests"
+    run_test "pyspark.ml.evaluation"
 }
 
 function run_streaming_tests() {
@@ -124,8 +126,8 @@ function run_streaming_tests() {
     done
 
     export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
-    run_test "pyspark/streaming/util.py"
-    run_test "pyspark/streaming/tests.py"
+    run_test "pyspark.streaming.util"
+    run_test "pyspark.streaming.tests"
 }
 
 echo "Running PySpark tests. Output is in python/$LOG_FILE."

@@ -24,7 +24,7 @@ import java.util.{Calendar, TimeZone}
 import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
- * helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
+ * Helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
  */
 object DateUtils {
   private val MILLIS_PER_DAY = 86400000

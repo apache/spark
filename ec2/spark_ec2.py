@@ -19,8 +19,9 @@
 # limitations under the License.
 #
 
-from __future__ import with_statement, print_function
+from __future__ import division, print_function, with_statement
 
+import codecs
 import hashlib
 import itertools
 import logging
@@ -47,6 +48,8 @@ if sys.version < "3":
 else:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
+    raw_input = input
+    xrange = range
 
 SPARK_EC2_VERSION = "1.3.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -216,7 +219,8 @@ def parse_args():
              "(default: %default).")
     parser.add_option(
         "--hadoop-major-version", default="1",
-        help="Major version of Hadoop (default: %default)")
+        help="Major version of Hadoop. Valid options are 1 (Hadoop 1.0.4), 2 (CDH 4.2.0), yarn " +
+             "(Hadoop 2.4.0) (default: %default)")
     parser.add_option(
         "-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
         help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -268,7 +272,8 @@ def parse_args():
         help="Launch fresh slaves, but use an existing stopped master if possible")
     parser.add_option(
         "--worker-instances", type="int", default=1,
-        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: %default)")
+        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES. Not used if YARN " +
+             "is used as Hadoop major version (default: %default)")
     parser.add_option(
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
@@ -423,13 +428,14 @@ def get_spark_ami(opts):
         b=opts.spark_ec2_git_branch)
 
     ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
+    reader = codecs.getreader("ascii")
     try:
-        ami = urlopen(ami_path).read().strip()
-        print("Spark AMI: " + ami)
+        ami = reader(urlopen(ami_path)).read().strip()
     except:
         print("Could not resolve AMI at: " + ami_path, file=stderr)
         sys.exit(1)
 
+    print("Spark AMI: " + ami)
     return ami
 
 
@@ -487,6 +493,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('udp', 2049, 2049, authorized_address)
         master_group.authorize('tcp', 4242, 4242, authorized_address)
         master_group.authorize('udp', 4242, 4242, authorized_address)
+        # RM in YARN mode uses 8088
+        master_group.authorize('tcp', 8088, 8088, authorized_address)
         if opts.ganglia:
             master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
@@ -750,10 +758,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
                'mapreduce', 'spark-standalone', 'tachyon']
 
     if opts.hadoop_major_version == "1":
-        modules = filter(lambda x: x != "mapreduce", modules)
+        modules = list(filter(lambda x: x != "mapreduce", modules))
 
     if opts.ganglia:
         modules.append('ganglia')
+
+    # Clear SPARK_WORKER_INSTANCES if running on YARN
+    if opts.hadoop_major_version == "yarn":
+        opts.worker_instances = ""
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
@@ -864,7 +876,11 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
         for i in cluster_instances:
             i.update()
 
-        statuses = conn.get_all_instance_status(instance_ids=[i.id for i in cluster_instances])
+        max_batch = 100
+        statuses = []
+        for j in xrange(0, len(cluster_instances), max_batch):
+            batch = [i.id for i in cluster_instances[j:j + max_batch]]
+            statuses.extend(conn.get_all_instance_status(instance_ids=batch))
 
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \
@@ -988,6 +1004,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 
     master_addresses = [get_dns_name(i, opts.private_ips) for i in master_nodes]
     slave_addresses = [get_dns_name(i, opts.private_ips) for i in slave_nodes]
+    worker_instances_str = "%d" % opts.worker_instances if opts.worker_instances else ""
     template_vars = {
         "master_list": '\n'.join(master_addresses),
         "active_master": active_master,
@@ -1001,7 +1018,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_version": spark_v,
         "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
-        "spark_worker_instances": "%d" % opts.worker_instances,
+        "spark_worker_instances": worker_instances_str,
         "spark_master_opts": opts.master_opts
     }
 
@@ -1156,7 +1173,7 @@ def get_zones(conn, opts):
 
 # Gets the number of items in a partition
 def get_partition(total, num_partitions, current_partitions):
-    num_slaves_this_zone = total / num_partitions
+    num_slaves_this_zone = total // num_partitions
     if (total % num_partitions) - current_partitions > 0:
         num_slaves_this_zone += 1
     return num_slaves_this_zone

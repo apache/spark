@@ -23,7 +23,6 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -250,8 +249,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // The isolated classloader seemed to make some of our test reset mechanisms less robust.
     "combine1", // This test changes compression settings in a way that breaks all subsequent tests.
-    "load_dyn_part14.*" // These work alone but fail when run with other tests...
-  ) ++ HiveShim.compatibilityBlackList
+    "load_dyn_part14.*", // These work alone but fail when run with other tests...
+
+    // the answer is sensitive for jdk version
+    "udf_java_method"
+  )
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
@@ -877,7 +879,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
-    "udf_java_method",
     "udf_lcase",
     "udf_length",
     "udf_lessthan",

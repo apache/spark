@@ -60,7 +60,7 @@ private[streaming] object EventTransformer extends Logging {
     out.write(body)
     val numHeaders = headers.size()
     out.writeInt(numHeaders)
-    for ((k,v) <- headers) {
+    for ((k, v) <- headers) {
       val keyBuff = Utils.serialize(k.toString)
       out.writeInt(keyBuff.length)
       out.write(keyBuff)

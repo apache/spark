@@ -75,7 +75,7 @@ private[nio] class SecurityMessage extends Logging {
     for (i <- 1 to idLength) {
         idBuilder += buffer.getChar()
     }
-    connectionId  = idBuilder.toString()
+    connectionId = idBuilder.toString()
 
     val tokenLength = buffer.getInt()
     token = new Array[Byte](tokenLength)
