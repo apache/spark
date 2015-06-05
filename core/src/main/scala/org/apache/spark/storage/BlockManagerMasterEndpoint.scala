@@ -115,9 +115,12 @@ class BlockManagerMasterEndpoint(
     case HasCachedBlocks(executorId) =>
       blockManagerIdByExecutor.get(executorId) match {
         case Some(bm) =>
-          blockManagerInfo.get(bm).map {
-            info => context.reply(info.cachedBlocks.nonEmpty)
-          }.getOrElse(context.reply(false))
+          if (blockManagerInfo.contains(bm)) {
+            val bmInfo = blockManagerInfo(bm)
+            context.reply(bmInfo.cachedBlocks.nonEmpty)
+          } else {
+            context.reply(false)
+          }
         case None => context.reply(false)
       }
   }
