@@ -112,11 +112,11 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
         val htype = ctx.primitiveType(dataType)
 
         ev.nullTerm = "false"
+        ev.primitiveTerm = setEval.primitiveTerm
         itemEval.code + setEval.code +  s"""
           if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
            (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
           }
-          ${htype} ${ev.primitiveTerm} = ($htype)${setEval.primitiveTerm};
          """
       case _ => super.genCode(ctx, ev)
     }
@@ -147,10 +147,8 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
           val rightValue = iterator.next()
           leftEval.add(rightValue)
         }
-        leftEval
-      } else {
-        null
       }
+      leftEval
     } else {
       null
     }
@@ -164,10 +162,12 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
         val rightEval = right.gen(ctx)
         val htype = ctx.primitiveType(dataType)
 
-        ev.nullTerm = "false"
+        ev.nullTerm = leftEval.nullTerm
+        ev.primitiveTerm = leftEval.primitiveTerm
         leftEval.code + rightEval.code + s"""
-          ${htype} ${ev.primitiveTerm} = (${htype})${leftEval.primitiveTerm};
-          ${ev.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
+          if (!${leftEval.nullTerm} && !${rightEval.nullTerm}) {
+            ${leftEval.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
+          }
         """
       case _ => super.genCode(ctx, ev)
     }

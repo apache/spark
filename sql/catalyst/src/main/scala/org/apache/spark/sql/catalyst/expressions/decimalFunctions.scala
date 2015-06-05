@@ -38,11 +38,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.nullTerm} = ${eval.nullTerm};
-      long ${ev.primitiveTerm} = ${ev.nullTerm} ? -1 : ${eval.primitiveTerm}.toUnscaledLong();
-     """
+    defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
   }
 }
 

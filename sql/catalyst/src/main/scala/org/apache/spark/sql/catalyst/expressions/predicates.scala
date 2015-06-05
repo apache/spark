@@ -146,9 +146,12 @@ case class And(left: Expression, right: Expression)
       }
     }
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
+
+    // The result should be `false`, if any of them is `false` whenever the other is null or not.
     s"""
       ${eval1.code}
       boolean ${ev.nullTerm} = false;
@@ -192,20 +195,21 @@ case class Or(left: Expression, right: Expression)
       }
     }
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
+
+    // The result should be `true`, if any of them is `true` whenever the other is null or not.
     s"""
       ${eval1.code}
       boolean ${ev.nullTerm} = false;
-      boolean ${ev.primitiveTerm} = false;
+      boolean ${ev.primitiveTerm} = true;
 
       if (!${eval1.nullTerm} && ${eval1.primitiveTerm}) {
-        ${ev.primitiveTerm} = true;
       } else {
         ${eval2.code}
         if (!${eval2.nullTerm} && ${eval2.primitiveTerm}) {
-          ${ev.primitiveTerm} = true;
         } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
           ${ev.primitiveTerm} = false;
         } else {
@@ -218,19 +222,6 @@ case class Or(left: Expression, right: Expression)
 
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case TimestampType =>
-        // java.sql.Timestamp does not have compare()
-        super.genCode(ctx, ev)
-      case other => defineCodeGen (ctx, ev, {
-        (c1, c2) => s"$c1.compare($c2) $symbol 0"
-      })
-    }
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != right.dataType) {
@@ -255,6 +246,20 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
       } else {
         evalInternal(evalE1, evalE2)
       }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    left.dataType match {
+      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
+      })
+      case TimestampType =>
+        // java.sql.Timestamp does not have compare()
+        super.genCode(ctx, ev)
+      case other => defineCodeGen (ctx, ev, {
+        (c1, c2) => s"$c1.compare($c2) $symbol 0"
+      })
     }
   }
 
@@ -389,9 +394,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val falseEval = falseValue.gen(ctx)
 
     s"""
+      ${condEval.code}
       boolean ${ev.nullTerm} = false;
       ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
-      ${condEval.code}
       if (!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
         ${trueEval.code}
         ${ev.nullTerm} = ${trueEval.nullTerm};
