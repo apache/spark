@@ -28,7 +28,6 @@ import org.apache.spark.shuffle.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
-import org.apache.sparktest.TestTags.ActiveTag
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -323,7 +322,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   def multipleAttemptConfs: Seq[(String, SparkConf)] = Seq("basic" -> conf)
 
   multipleAttemptConfs.foreach { case (name, multipleAttemptConf) =>
-    test("multiple attempts for one task: conf = " + name, ActiveTag) {
+    test("multiple attempts for one task: conf = " + name) {
       sc = new SparkContext("local", "test", multipleAttemptConf)
       val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
       val manager = sc.env.shuffleManager

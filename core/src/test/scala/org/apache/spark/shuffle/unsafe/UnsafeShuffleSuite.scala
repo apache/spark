@@ -43,15 +43,20 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   override def multipleAttemptConfs: Seq[(String, SparkConf)] = {
+    // unsafe shuffle has a few different code paths, based on various configs.  We want to
+    // make sure we stress multiple attempts under all variants
     val kryoAndNoSpillMove = conf.clone()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.shuffle.unsafe.testing.allowSpillMove", "false")
-    val noCompression = kryoAndNoSpillMove.clone()
+    val noCompressionFileMerge = kryoAndNoSpillMove.clone()
       .set("spark.shuffle.compress", "false")
       .set("spark.file.transferTo", "false")
+    val noCompressionTransferTo = noCompressionFileMerge.clone()
+      .set("spark.file.transferTo", "true")
     Seq(
       "slow merge path" -> kryoAndNoSpillMove,
-      "filestream based fast merge" -> noCompression
+      "filestream based fast merge" -> noCompressionFileMerge,
+      "transferTo based fast merge" -> noCompressionTransferTo
     )
   }
 
