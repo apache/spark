@@ -606,7 +606,7 @@ private[spark] class Client(
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
-    val pySparkArchives = findPySparkArchives()
+    val pySparkArchives = if (args.primaryPyFile != null) findPySparkArchives() else Nil
     val launchEnv = setupLaunchEnv(appStagingDir, pySparkArchives)
     val localResources = prepareLocalResources(appStagingDir, pySparkArchives)
 
