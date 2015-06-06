@@ -200,7 +200,7 @@ def clear(args):
     dagbag = DagBag(args.subdir)
 
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be fouud')
+        raise Exception('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
 
     if args.start_date:
