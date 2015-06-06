@@ -55,17 +55,17 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     s"""
-      boolean ${ev.nullTerm} = true;
-      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
+      boolean ${ev.isNull} = true;
+      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
     """ +
     children.map { e =>
       val eval = e.gen(ctx)
       s"""
-        if (${ev.nullTerm}) {
+        if (${ev.isNull}) {
           ${eval.code}
-          if (!${eval.nullTerm}) {
-            ${ev.nullTerm} = false;
-            ${ev.primitiveTerm} = ${eval.primitiveTerm};
+          if (!${eval.isNull}) {
+            ${ev.isNull} = false;
+            ${ev.primitive} = ${eval.primitive};
           }
         }
       """
@@ -83,8 +83,8 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval = child.gen(ctx)
-    ev.nullTerm = "false"
-    ev.primitiveTerm = eval.nullTerm
+    ev.isNull = "false"
+    ev.primitive = eval.isNull
     eval.code
   }
 
@@ -102,8 +102,8 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval = child.gen(ctx)
-    ev.nullTerm = "false"
-    ev.primitiveTerm = s"(!(${eval.nullTerm}))"
+    ev.isNull = "false"
+    ev.primitive = s"(!(${eval.isNull}))"
     eval.code
   }
 }
@@ -137,7 +137,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       s"""
         if ($nonnull < $n) {
           ${eval.code}
-          if (!${eval.nullTerm}) {
+          if (!${eval.isNull}) {
             $nonnull += 1;
           }
         }
@@ -146,8 +146,8 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     s"""
       int $nonnull = 0;
       $code
-      boolean ${ev.nullTerm} = false;
-      boolean ${ev.primitiveTerm} = $nonnull >= $n;
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = $nonnull >= $n;
      """
   }
 }

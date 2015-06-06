@@ -64,9 +64,9 @@ case class NewSet(elementType: DataType) extends LeafExpression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     elementType match {
       case IntegerType | LongType =>
-        ev.nullTerm = "false"
+        ev.isNull = "false"
         s"""
-          ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = new ${ctx.primitiveType(dataType)}();
+          ${ctx.primitiveType(dataType)} ${ev.primitive} = new ${ctx.primitiveType(dataType)}();
         """
       case _ => super.genCode(ctx, ev)
     }
@@ -111,11 +111,11 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
         val setEval = set.gen(ctx)
         val htype = ctx.primitiveType(dataType)
 
-        ev.nullTerm = "false"
-        ev.primitiveTerm = setEval.primitiveTerm
+        ev.isNull = "false"
+        ev.primitive = setEval.primitive
         itemEval.code + setEval.code +  s"""
-          if (!${itemEval.nullTerm} && !${setEval.nullTerm}) {
-           (($htype)${setEval.primitiveTerm}).add(${itemEval.primitiveTerm});
+          if (!${itemEval.isNull} && !${setEval.isNull}) {
+           (($htype)${setEval.primitive}).add(${itemEval.primitive});
           }
          """
       case _ => super.genCode(ctx, ev)
@@ -162,11 +162,11 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
         val rightEval = right.gen(ctx)
         val htype = ctx.primitiveType(dataType)
 
-        ev.nullTerm = leftEval.nullTerm
-        ev.primitiveTerm = leftEval.primitiveTerm
+        ev.isNull = leftEval.isNull
+        ev.primitive = leftEval.primitive
         leftEval.code + rightEval.code + s"""
-          if (!${leftEval.nullTerm} && !${rightEval.nullTerm}) {
-            ${leftEval.primitiveTerm}.union((${htype})${rightEval.primitiveTerm});
+          if (!${leftEval.isNull} && !${rightEval.isNull}) {
+            ${leftEval.primitive}.union((${htype})${rightEval.primitive});
           }
         """
       case _ => super.genCode(ctx, ev)

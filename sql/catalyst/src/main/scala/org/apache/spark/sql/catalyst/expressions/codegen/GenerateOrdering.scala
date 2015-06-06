@@ -59,8 +59,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
         case BinaryType =>
           s"""
             {
-              byte[] x = ${if (asc) evalA.primitiveTerm else evalB.primitiveTerm};
-              byte[] y = ${if (!asc) evalB.primitiveTerm else evalA.primitiveTerm};
+              byte[] x = ${if (asc) evalA.primitive else evalB.primitive};
+              byte[] y = ${if (!asc) evalB.primitive else evalA.primitive};
               int j = 0;
               while (j < x.length && j < y.length) {
                 if (x[j] != y[j]) return x[j] - y[j];
@@ -73,8 +73,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
             }"""
         case _: NumericType =>
           s"""
-            if (${evalA.primitiveTerm} != ${evalB.primitiveTerm}) {
-              if (${evalA.primitiveTerm} > ${evalB.primitiveTerm}) {
+            if (${evalA.primitive} != ${evalB.primitive}) {
+              if (${evalA.primitive} > ${evalB.primitive}) {
                 return ${if (asc) "1" else "-1"};
               } else {
                 return ${if (asc) "-1" else "1"};
@@ -82,7 +82,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
             }"""
         case _ =>
           s"""
-            int comp = ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm});
+            int comp = ${evalA.primitive}.compare(${evalB.primitive});
             if (comp != 0) {
               return ${if (asc) "comp" else "-comp"};
             }"""
@@ -93,11 +93,11 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
           ${evalA.code}
           i = $b;
           ${evalB.code}
-          if (${evalA.nullTerm} && ${evalB.nullTerm}) {
+          if (${evalA.isNull} && ${evalB.isNull}) {
             // Nothing
-          } else if (${evalA.nullTerm}) {
+          } else if (${evalA.isNull}) {
             return ${if (order.direction == Ascending) "-1" else "1"};
-          } else if (${evalB.nullTerm}) {
+          } else if (${evalB.isNull}) {
             return ${if (order.direction == Ascending) "1" else "-1"};
           } else {
             $compare

@@ -50,6 +50,11 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = dataType match {
+    case dt: DecimalType => defineCodeGen(ctx, ev, c => s"c.unary_$$minus()")
+    case dt: NumericType => defineCodeGen(ctx, ev, c => s"-($c)")
+  }
+
   protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
 }
 
@@ -67,6 +72,21 @@ case class Sqrt(child: Expression) extends UnaryArithmetic {
     val value = numeric.toDouble(evalE)
     if (value < 0) null
     else math.sqrt(value)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        if (${eval.primitive} < 0.0) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = java.lang.Math.sqrt(${eval.primitive});
+        }
+      }
+    """
   }
 }
 
@@ -216,9 +236,9 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.primitiveTerm}.isZero()"
+      s"${eval2.primitive}.isZero()"
     } else {
-      s"${eval2.primitiveTerm} == 0"
+      s"${eval2.primitive} == 0"
     }
     val method = if (left.dataType.isInstanceOf[DecimalType]) {
       s".$decimalMethod"
@@ -227,12 +247,12 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     }
     eval1.code + eval2.code +
       s"""
-      boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
-        ${ev.nullTerm} = true;
+      boolean ${ev.isNull} = false;
+      ${ctx.primitiveType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
+      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+        ${ev.isNull} = true;
       } else {
-        ${ev.primitiveTerm} = ${eval1.primitiveTerm}$method(${eval2.primitiveTerm});
+        ${ev.primitive} = ${eval1.primitive}$method(${eval2.primitive});
       }
       """
   }
@@ -276,9 +296,9 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.primitiveTerm}.isZero()"
+      s"${eval2.primitive}.isZero()"
     } else {
-      s"${eval2.primitiveTerm} == 0"
+      s"${eval2.primitive} == 0"
     }
     val method = if (left.dataType.isInstanceOf[DecimalType]) {
       s".$decimalMethod"
@@ -287,12 +307,12 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     }
     eval1.code + eval2.code +
       s"""
-      boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.nullTerm} || ${eval2.nullTerm} || $test) {
-        ${ev.nullTerm} = true;
+      boolean ${ev.isNull} = false;
+      ${ctx.primitiveType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
+      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+        ${ev.isNull} = true;
       } else {
-        ${ev.primitiveTerm} = ${eval1.primitiveTerm}$method(${eval2.primitiveTerm});
+        ${ev.primitive} = ${eval1.primitive}$method(${eval2.primitive});
       }
       """
   }
@@ -387,6 +407,10 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
       ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dataType)})~($c)")
+  }
+
   protected override def evalInternal(evalE: Any) = not(evalE)
 }
 
@@ -419,21 +443,21 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
       val eval1 = left.gen(ctx)
       val eval2 = right.gen(ctx)
       eval1.code + eval2.code + s"""
-        boolean ${ev.nullTerm} = false;
-        ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+        boolean ${ev.isNull} = false;
+        ${ctx.primitiveType(left.dataType)} ${ev.primitive} =
           ${ctx.defaultValue(left.dataType)};
 
-        if (${eval1.nullTerm}) {
-          ${ev.nullTerm} = ${eval2.nullTerm};
-          ${ev.primitiveTerm} = ${eval2.primitiveTerm};
-        } else if (${eval2.nullTerm}) {
-          ${ev.nullTerm} = ${eval1.nullTerm};
-          ${ev.primitiveTerm} = ${eval1.primitiveTerm};
+        if (${eval1.isNull}) {
+          ${ev.isNull} = ${eval2.isNull};
+          ${ev.primitive} = ${eval2.primitive};
+        } else if (${eval2.isNull}) {
+          ${ev.isNull} = ${eval1.isNull};
+          ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitiveTerm} > ${eval2.primitiveTerm}) {
-            ${ev.primitiveTerm} = ${eval1.primitiveTerm};
+          if (${eval1.primitive} > ${eval2.primitive}) {
+            ${ev.primitive} = ${eval1.primitive};
           } else {
-            ${ev.primitiveTerm} = ${eval2.primitiveTerm};
+            ${ev.primitive} = ${eval2.primitive};
           }
         }
       """
@@ -475,21 +499,21 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
       val eval2 = right.gen(ctx)
 
       eval1.code + eval2.code + s"""
-        boolean ${ev.nullTerm} = false;
-        ${ctx.primitiveType(left.dataType)} ${ev.primitiveTerm} =
+        boolean ${ev.isNull} = false;
+        ${ctx.primitiveType(left.dataType)} ${ev.primitive} =
           ${ctx.defaultValue(left.dataType)};
 
-        if (${eval1.nullTerm}) {
-          ${ev.nullTerm} = ${eval2.nullTerm};
-          ${ev.primitiveTerm} = ${eval2.primitiveTerm};
-        } else if (${eval2.nullTerm}) {
-          ${ev.nullTerm} = ${eval1.nullTerm};
-          ${ev.primitiveTerm} = ${eval1.primitiveTerm};
+        if (${eval1.isNull}) {
+          ${ev.isNull} = ${eval2.isNull};
+          ${ev.primitive} = ${eval2.primitive};
+        } else if (${eval2.isNull}) {
+          ${ev.isNull} = ${eval1.isNull};
+          ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitiveTerm} < ${eval2.primitiveTerm}) {
-            ${ev.primitiveTerm} = ${eval1.primitiveTerm};
+          if (${eval1.primitive} < ${eval2.primitive}) {
+            ${ev.primitive} = ${eval1.primitive};
           } else {
-            ${ev.primitiveTerm} = ${eval2.primitiveTerm};
+            ${ev.primitive} = ${eval2.primitive};
           }
         }
       """

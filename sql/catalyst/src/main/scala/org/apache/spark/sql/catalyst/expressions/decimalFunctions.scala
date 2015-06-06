@@ -62,13 +62,13 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval = child.gen(ctx)
     eval.code + s"""
-      boolean ${ev.nullTerm} = ${eval.nullTerm};
-      ${ctx.decimalType} ${ev.primitiveTerm} = null;
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.decimalType} ${ev.primitive} = null;
 
-      if (!${ev.nullTerm}) {
-        ${ev.primitiveTerm} = (new ${ctx.decimalType}()).setOrNull(
-          ${eval.primitiveTerm}, $precision, $scale);
-        ${ev.nullTerm} = ${ev.primitiveTerm} == null;
+      if (!${ev.isNull}) {
+        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull(
+          ${eval.primitive}, $precision, $scale);
+        ${ev.isNull} = ${ev.primitive} == null;
       }
       """
   }

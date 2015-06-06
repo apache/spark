@@ -35,12 +35,12 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * Java source for evaluating an [[Expression]] given a [[Row]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
- * @param nullTerm A term that holds a boolean value representing whether the expression evaluated
+ * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
- * @param primitiveTerm A term for a possible primitive value of the result of the evaluation. Not
- *                      valid if `nullTerm` is set to `true`.
+ * @param primitive A term for a possible primitive value of the result of the evaluation. Not
+ *                      valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: Code, var nullTerm: Term, var primitiveTerm: Term)
+case class GeneratedExpressionCode(var code: Code, var isNull: Term, var primitive: Term)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -149,9 +149,9 @@ class CodeGenContext {
   def defaultValue(dt: DataType): Term = dt match {
     case BooleanType => "false"
     case FloatType => "-1.0f"
-    case ShortType => "-1"
-    case LongType => "-1"
-    case ByteType => "-1"
+    case ShortType => "(short)-1"
+    case LongType => "-1L"
+    case ByteType => "(byte)-1"
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"

@@ -55,7 +55,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
         @Override
         public boolean eval(Row i) {
           ${eval.code}
-          return !${eval.nullTerm} && ${eval.primitiveTerm};
+          return !${eval.isNull} && ${eval.primitive};
         }
       }"""
 

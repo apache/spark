@@ -154,17 +154,17 @@ case class And(left: Expression, right: Expression)
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
     s"""
       ${eval1.code}
-      boolean ${ev.nullTerm} = false;
-      boolean ${ev.primitiveTerm}  = false;
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive}  = false;
 
-      if (!${eval1.nullTerm} && !${eval1.primitiveTerm}) {
+      if (!${eval1.isNull} && !${eval1.primitive}) {
       } else {
         ${eval2.code}
-        if (!${eval2.nullTerm} && !${eval2.primitiveTerm}) {
-        } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
-          ${ev.primitiveTerm} = true;
+        if (!${eval2.isNull} && !${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = true;
         } else {
-          ${ev.nullTerm} = true;
+          ${ev.isNull} = true;
         }
       }
      """
@@ -203,17 +203,17 @@ case class Or(left: Expression, right: Expression)
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     s"""
       ${eval1.code}
-      boolean ${ev.nullTerm} = false;
-      boolean ${ev.primitiveTerm} = true;
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = true;
 
-      if (!${eval1.nullTerm} && ${eval1.primitiveTerm}) {
+      if (!${eval1.isNull} && ${eval1.primitive}) {
       } else {
         ${eval2.code}
-        if (!${eval2.nullTerm} && ${eval2.primitiveTerm}) {
-        } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
-          ${ev.primitiveTerm} = false;
+        if (!${eval2.isNull} && ${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = false;
         } else {
-          ${ev.nullTerm} = true;
+          ${ev.isNull} = true;
         }
       }
      """
@@ -308,11 +308,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitiveTerm, eval2.primitiveTerm)
-    ev.nullTerm = "false"
+    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    ev.isNull = "false"
     eval1.code + eval2.code + s"""
-        final boolean ${ev.primitiveTerm} = (${eval1.nullTerm} && ${eval2.nullTerm}) ||
-           (!${eval1.nullTerm} && $equalCode);
+        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+           (!${eval1.isNull} && $equalCode);
       """
   }
 }
@@ -388,6 +388,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       falseValue.eval(input)
     }
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     val condEval = predicate.gen(ctx)
     val trueEval = trueValue.gen(ctx)
@@ -395,16 +396,16 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
     s"""
       ${condEval.code}
-      boolean ${ev.nullTerm} = false;
-      ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ctx.defaultValue(dataType)};
-      if (!${condEval.nullTerm} && ${condEval.primitiveTerm}) {
+      boolean ${ev.isNull} = false;
+      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${condEval.isNull} && ${condEval.primitive}) {
         ${trueEval.code}
-        ${ev.nullTerm} = ${trueEval.nullTerm};
-        ${ev.primitiveTerm} = ${trueEval.primitiveTerm};
+        ${ev.isNull} = ${trueEval.isNull};
+        ${ev.primitive} = ${trueEval.primitive};
       } else {
         ${falseEval.code}
-        ${ev.nullTerm} = ${falseEval.nullTerm};
-        ${ev.primitiveTerm} = ${falseEval.primitiveTerm};
+        ${ev.isNull} = ${falseEval.isNull};
+        ${ev.primitive} = ${falseEval.primitive};
       }
     """
   }
@@ -493,6 +494,48 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     return res
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val len = branchesArr.length
+    val got = ctx.freshName("got")
+
+    val cases = (0 until len/2).map { i =>
+      val cond = branchesArr(i * 2).gen(ctx)
+      val res = branchesArr(i * 2 + 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${cond.code}
+          if (!${cond.isNull} && ${cond.primitive}) {
+            $got = true;
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.primitive} = ${res.primitive};
+          }
+        }
+      """
+    }.mkString("\n")
+
+    val other = if (len % 2 == 1) {
+      val res = branchesArr(len - 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.primitive} = ${res.primitive};
+        }
+      """
+    } else {
+      ""
+    }
+
+    s"""
+      boolean $got = false;
+      boolean ${ev.isNull} = true;
+      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      $cases
+      $other
+    """
+  }
+
   override def toString: String = {
     "CASE" + branches.sliding(2, 2).map {
       case Seq(cond, value) => s" WHEN $cond THEN $value"
@@ -542,6 +585,52 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       res = branchesArr(i).eval(input)
     }
     return res
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val keyEval = key.gen(ctx)
+    val len = branchesArr.length
+    val got = ctx.freshName("got")
+
+    val cases = (0 until len/2).map { i =>
+      val cond = branchesArr(i * 2).gen(ctx)
+      val res = branchesArr(i * 2 + 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${cond.code}
+          if (${keyEval.isNull} && ${cond.isNull} ||
+            !${keyEval.isNull} && !${cond.isNull}
+             && ${ctx.equalFunc(key.dataType)(keyEval.primitive, cond.primitive)}) {
+            $got = true;
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.primitive} = ${res.primitive};
+          }
+        }
+      """
+    }.mkString("\n")
+
+    val other = if (len % 2 == 1) {
+      val res = branchesArr(len - 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.primitive} = ${res.primitive};
+        }
+      """
+    } else {
+      ""
+    }
+
+    s"""
+      boolean $got = false;
+      boolean ${ev.isNull} = true;
+      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${keyEval.code}
+      $cases
+      $other
+    """
   }
 
   private def equalNullSafe(l: Any, r: Any) = {

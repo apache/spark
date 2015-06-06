@@ -55,9 +55,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         {
           // column$i
           ${eval.code}
-          nullBits[$i] = ${eval.nullTerm};
-          if(!${eval.nullTerm}) {
-            c$i = ${eval.primitiveTerm};
+          nullBits[$i] = ${eval.isNull};
+          if (!${eval.isNull}) {
+            c$i = ${eval.primitive};
           }
         }
         """
@@ -122,7 +122,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case LongType => s"$col ^ ($col >>> 32)"
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
-          s"Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32)"
+            s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
         case _ => s"$col.hashCode()"
       }
       s"isNullAt($i) ? 0 : ($nonNull)"

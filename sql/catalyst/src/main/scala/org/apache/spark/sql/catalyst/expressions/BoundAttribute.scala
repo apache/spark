@@ -45,8 +45,8 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
     s"""
-        final boolean ${ev.nullTerm} = i.isNullAt($ordinal);
-        final ${ctx.primitiveType(dataType)} ${ev.primitiveTerm} = ${ev.nullTerm} ?
+        boolean ${ev.isNull} = i.isNullAt($ordinal);
+        ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ev.isNull} ?
             ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
     """
   }
