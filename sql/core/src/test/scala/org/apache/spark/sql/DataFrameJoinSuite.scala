@@ -19,11 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-
 
 class DataFrameJoinSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("join - join using") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
@@ -49,7 +49,8 @@ class DataFrameJoinSuite extends QueryTest {
 
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
+      ctx.sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
+        .collect().toSeq)
   }
 
   test("join - using aliases after self join") {

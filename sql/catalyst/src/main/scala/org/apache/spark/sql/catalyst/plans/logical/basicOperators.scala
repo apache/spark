@@ -339,6 +339,9 @@ case class Sample(
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * Returns a new logical plan that dedups input rows.
+ */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }

@@ -22,14 +22,14 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLConf, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext._
 
 /**
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
+  import sqlContext.implicits._
+  import sqlContext.sql
 
   test("simple select queries") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
@@ -40,22 +40,22 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
+      checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    sqlContext.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      checkAnswer(table("t"), data.map(Row.fromTuple))
+      checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    sqlContext.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("self-join") {
@@ -118,7 +118,7 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
     val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
       StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
-      val df = sqlContext.createDataFrame(sparkContext.parallelize(data), schema)
+      val df = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(data), schema)
       df.write.parquet(file.getCanonicalPath)
       val df2 = sqlContext.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
@@ -127,7 +127,7 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
 }
 
 class ParquetDataSourceOnQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
@@ -139,7 +139,7 @@ class ParquetDataSourceOnQuerySuite extends ParquetQuerySuiteBase with BeforeAnd
 }
 
 class ParquetDataSourceOffQuerySuite extends ParquetQuerySuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  private lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")

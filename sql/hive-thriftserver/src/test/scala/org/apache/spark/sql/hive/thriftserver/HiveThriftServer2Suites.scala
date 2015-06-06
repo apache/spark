@@ -19,11 +19,13 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.URL
-import java.sql.{Date, DriverManager, Statement}
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.{Await, Promise, future}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
@@ -40,7 +42,7 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
 object TestData {
@@ -111,7 +113,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) ===
+        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
     }
   }
 
@@ -337,6 +340,42 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
     )
   }
+
+  test("test jdbc cancel") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
+
+      queries.foreach(statement.execute)
+
+      val largeJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(10)("join test_map").mkString(" ")
+      val f = future { Thread.sleep(100); statement.cancel(); }
+      val e = intercept[SQLException] {
+        statement.executeQuery(largeJoin)
+      }
+      assert(e.getMessage contains "cancelled")
+      Await.result(f, 3.minute)
+
+      // cancel is a noop
+      statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
+      val sf = future { Thread.sleep(100); statement.cancel(); }
+      val smallJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(4)("join test_map").mkString(" ")
+      val rs1 = statement.executeQuery(smallJoin)
+      Await.result(sf, 3.minute)
+      rs1.next()
+      assert(rs1.getInt(1) === math.pow(5, 5))
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SELECT COUNT(*) FROM test_map")
+      rs2.next()
+      assert(rs2.getInt(1) === 5)
+      rs2.close()
+    }
+  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
@@ -365,7 +404,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) ===
+        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
     }
   }
 }

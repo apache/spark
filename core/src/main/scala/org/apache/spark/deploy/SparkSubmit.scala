@@ -82,13 +82,13 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
-  private[spark] var exitFn: () => Unit = () => System.exit(1)
+  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
   private[spark] var printStream: PrintStream = System.err
   private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
   private[spark] def printErrorAndExit(str: String): Unit = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn()
+    exitFn(1)
   }
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
@@ -99,7 +99,7 @@ object SparkSubmit {
       /_/
                         """.format(SPARK_VERSION))
     printStream.println("Type --help for more information.")
-    exitFn()
+    exitFn(0)
   }
 
   def main(args: Array[String]): Unit = {
@@ -160,7 +160,7 @@ object SparkSubmit {
             // detect exceptions with empty stack traces here, and treat them differently.
             if (e.getStackTrace().length == 0) {
               printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-              exitFn()
+              exitFn(1)
             } else {
               throw e
             }
@@ -425,7 +425,6 @@ object SparkSubmit {
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
-      OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = "spark.executor.cores"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
@@ -446,7 +445,7 @@ object SparkSubmit {
       OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
 
       // Other options
-      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
@@ -700,7 +699,7 @@ object SparkSubmit {
   /**
    * Return whether the given main class represents a sql shell.
    */
-  private def isSqlShell(mainClass: String): Boolean = {
+  private[deploy] def isSqlShell(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 

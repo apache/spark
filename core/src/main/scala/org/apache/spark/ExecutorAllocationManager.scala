@@ -150,6 +150,13 @@ private[spark] class ExecutorAllocationManager(
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
 
+  // Whether we are still waiting for the initial set of executors to be allocated.
+  // While this is true, we will not cancel outstanding executor requests. This is
+  // set to false when:
+  //   (1) a stage is submitted, or
+  //   (2) an executor idle timeout has elapsed.
+  @volatile private var initializing: Boolean = true
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -240,6 +247,7 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
       if (expired) {
+        initializing = false
         removeExecutor(executorId)
       }
       !expired
@@ -261,7 +269,11 @@ private[spark] class ExecutorAllocationManager(
   private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
     val maxNeeded = maxNumExecutorsNeeded
 
-    if (maxNeeded < numExecutorsTarget) {
+    if (initializing) {
+      // Do not change our target while we are still initializing,
+      // Otherwise the first job may have to ramp up unnecessarily
+      0
+    } else if (maxNeeded < numExecutorsTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests
       val oldNumExecutorsTarget = numExecutorsTarget
@@ -271,7 +283,7 @@ private[spark] class ExecutorAllocationManager(
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
         client.requestTotalExecutors(numExecutorsTarget)
-        logInfo(s"Lowering target number of executors to $numExecutorsTarget (previously " +
+        logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
       }
       numExecutorsTarget - oldNumExecutorsTarget
@@ -481,6 +493,7 @@ private[spark] class ExecutorAllocationManager(
     private var numRunningTasks: Int = _
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+      initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {

@@ -282,7 +282,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        jobData.completedStageIndices.add(stage.stageId)
+        if (!stage.submissionTime.isEmpty) {
+          jobData.completedStageIndices.add(stage.stageId)
+        }
       } else {
         jobData.numFailedStages += 1
       }
@@ -315,6 +317,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages += 1
+
+      // If a stage retries again, it should be removed from completedStageIndices set
+      jobData.completedStageIndices.remove(stage.stageId)
     }
   }
 

@@ -561,30 +561,28 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
     }
   }
 
-  if (HiveShim.version == "0.13.1") {
-    test("scan a parquet table created through a CTAS statement") {
-      withSQLConf(
-        "spark.sql.hive.convertMetastoreParquet" -> "true",
-        SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+  test("scan a parquet table created through a CTAS statement") {
+    withSQLConf(
+      "spark.sql.hive.convertMetastoreParquet" -> "true",
+      SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
 
-        withTempTable("jt") {
-          (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
+      withTempTable("jt") {
+        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 
-          withTable("test_parquet_ctas") {
-            sql(
-              """CREATE TABLE test_parquet_ctas STORED AS PARQUET
-                |AS SELECT tmp.a FROM jt tmp WHERE tmp.a < 5
-              """.stripMargin)
+        withTable("test_parquet_ctas") {
+          sql(
+            """CREATE TABLE test_parquet_ctas STORED AS PARQUET
+              |AS SELECT tmp.a FROM jt tmp WHERE tmp.a < 5
+            """.stripMargin)
 
-            checkAnswer(
-              sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
-              Row(3) :: Row(4) :: Nil)
+          checkAnswer(
+            sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+            Row(3) :: Row(4) :: Nil)
 
-            table("test_parquet_ctas").queryExecution.optimizedPlan match {
-              case LogicalRelation(p: ParquetRelation2) => // OK
-              case _ =>
-                fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation2]}")
-            }
+          table("test_parquet_ctas").queryExecution.optimizedPlan match {
+            case LogicalRelation(p: ParquetRelation2) => // OK
+            case _ =>
+              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation2]}")
           }
         }
       }
