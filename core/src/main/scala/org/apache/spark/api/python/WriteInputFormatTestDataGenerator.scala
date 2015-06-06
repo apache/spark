@@ -151,12 +151,13 @@ object WriteInputFormatTestDataGenerator {
     val ndaConverter = new NestedDoubleArrayToWritableConverter
 
     sc.parallelize(nestedDoubleArrayData, numSlices = 2)
-      .map{ case (k, v) =>
+      .map { case (k, v) =>
       val nested = ndaConverter.convert(v)
-       (new IntWritable(k), nested)
-    }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]](
-        narrPath)
-
+      (new IntWritable(k), nested)
+      //}.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]](
+      //    narrPath)
+    }.saveAsNewAPIHadoopFile(narrPath, classOf[Int], classOf[IntWritable],
+      classOf[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]])
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
     val mapData = Seq(

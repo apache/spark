@@ -44,30 +44,77 @@ def convert_from_pandas():
         raise RuntimeError("Pandas is not available")
     pass
 
-# Convert Python array.array to np.array
-def convert_to_numpy(input):
+
+def convert_from_numpy_to_python(convertable):
     if not _have_numpy:
-        raise RuntimeError("NumPy is not available")
+        raise RuntimeError("Numpy is not available")
 
-    return [(elem[0], np.frombuffer(elem[1])) for elem in input]
+    if isinstance(convertable, list):
+        return [convert_from_numpy_to_python(elem) for elem in convertable]
+    elif isinstance(convertable, tuple):
+        return (convertable[0], convert_from_numpy_to_python(convertable[1]))
+    elif len(convertable) > 0 and isinstance(convertable[0], np.ndarray) and convertable[0].dtype.type == np.float64:
+        return [array.array('d', elem) for elem in convertable]
+    elif isinstance(convertable, np.ndarray):
+        return array.array('d', convertable)
+    elif isinstance(convertable, int) or isinstance(convertable, float):
+        return convertable
+    elif isinstance(convertable, str):
+        raise TypeError
+    else:
+        raise ValueError('Could not convert input')
 
 
-def convert_to_nested_numpy(input):
+def convert_to_numpy_from_python(convertable):
     if not _have_numpy:
-        raise RuntimeError("NumPy is not available")
+        raise RuntimeError("Numpy is not available")
 
-    return [(elem[0], np.array([np.array(nested_ar) for nested_ar in elem[1]])) for elem in input]
+    if isinstance(convertable, int) or isinstance(convertable, float) or isinstance(convertable, str):
+        return convertable
+    elif isinstance(convertable, list) or isinstance(convertable, tuple):
+        return [convert_to_numpy_from_python(elem) for elem in convertable]
+    elif isinstance(convertable, array.array):
+        return np.frombuffer(convertable)
+    elif isinstance(convertable[0], array.array):
+        return [np.frombuffer(elem) for elem in convertable]
+    else:
+        raise ValueError('Could not convert input')
 
 
-def convert_from_numpy(input):
+
+
+def convert_from_numpy_tuple_to_python(convertable):
     if not _have_numpy:
-        raise RuntimeError("NumPy is not available")
+        raise RuntimeError("Numpy not avaiable")
 
-    return [(elem[0], array.array('d', elem[1])) for elem in input]
+    if isinstance(convertable, tuple):
+        return [convertable[0], convert_from_numpy_to_python(convertable[1])]
 
 
-def convert_from_nested_numpy(input):
-    if not _have_numpy:
-        raise RuntimeError("NumPy is not available")
+def convert_from_pandas_to_python(convertable):
+    if not _have_pandas:
+        raise RuntimeError("Pandas is not available")
 
-    return [(elem[0], [nested_ar.tolist() for nested_ar in elem[1]]) for elem in input]
+    try:
+        if isinstance(convertable, pd.Series):
+            return convert_from_numpy_to_python(convertable.values)
+        elif isinstance(convertable, pd.DataFrame):
+            return convert_from_numpy_to_python(convertable.values)
+        else:
+            raise ValueError('Could not convert input')
+
+    except:
+        raise ValueError('Could not convert input')
+
+
+def convert_to_pandas_from_python(convertable):
+    if not _have_pandas:
+        raise RuntimeError("Pandas is not available")
+
+    try:
+        if isinstance(convertable[0], float):
+            return pd.Series(convertable)
+        elif isinstance(convertable[0], array.array):
+            return pd.DataFrame(convert_to_numpy_from_python(convertable))
+    except:
+        raise ValueError('Could not convert input')
