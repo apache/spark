@@ -381,7 +381,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("SPARK-6352 DirectParquetOutputCommitter") {
-    val clonedConf = configuration
+    val clonedConf = new Configuration(configuration)
 
     // Write to a parquet file and let it fail.
     // _temporary should be missing if direct output committer works.
@@ -406,7 +406,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overriden") {
     withTempPath { dir =>
-      val clonedConf = configuration
+      val clonedConf = new Configuration(configuration)
 
       configuration.set(
         SQLConf.OUTPUT_COMMITTER_CLASS, classOf[ParquetOutputCommitter].getCanonicalName)
