@@ -380,6 +380,10 @@ object DataType {
   def getSQLDataType(dataType: String): DataType = {
     dataType match {
       case "byte" => org.apache.spark.sql.types.ByteType
+      case "char" => org.apache.spark.sql.types.ByteType
+      case "long" => org.apache.spark.sql.types.LongType
+      case "float" => org.apache.spark.sql.types.FloatType
+      case "int" => org.apache.spark.sql.types.IntegerType
       case "integer" => org.apache.spark.sql.types.IntegerType
       case "double" => org.apache.spark.sql.types.DoubleType
       case "numeric" => org.apache.spark.sql.types.DoubleType

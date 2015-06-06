@@ -33,6 +33,37 @@ class DataTypeSuite extends SparkFunSuite {
     assert(MapType(StringType, IntegerType, true) === map)
   }
 
+  test("construct with add") {
+    val struct = (new StructType)
+      .add("a", IntegerType, true)
+      .add("b", LongType, true)
+      .add("c", StringType, true)
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with add from StructField") {
+    // Test creation from StructField type
+    val struct = (new StructType)
+      .add(StructField("a", IntegerType, true))
+      .add(StructField("b", LongType, false))
+      .add(StructField("c", StringType, true))
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with String DataType") {
+    // Test creation with DataType as String
+    val struct = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+
+    assert(StructField("a", IntegerType, false) === struct("b"))
+    assert(StructField("b", LongType, false) === struct("b"))
+    assert(StructField("c", StringType, false) === struct("b"))
+  }
+
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::

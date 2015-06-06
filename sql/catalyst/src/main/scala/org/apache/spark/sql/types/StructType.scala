@@ -94,7 +94,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
-  protected def this() = this(null)
+  def this() = this(null)
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -103,17 +103,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
+  /** Support construction of StructType with addition rather than providing a list. **/
   def add(field: StructField): StructType = {
     StructType(fields :+ field)
   }
 
+  /**
+   * Support construction of StructType with addition rather than providing a list.
+   */
   def add(name: String,
     dataType: DataType,
     nullable: Boolean = true,
     metadata: Metadata = Metadata.empty): StructType = {
     StructType(fields :+ new StructField(name, dataType, nullable, metadata))
   }
-  
+
+  /**
+   * Support construction of StructType with addition rather than providing a list.
+   */
   def add(name: String,
     dataType: String,
     nullable: Boolean = true,
@@ -121,7 +128,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(fields :+ new StructField(name, 
       DataType.getSQLDataType(dataType), nullable, metadata))
   }
-  
+
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
