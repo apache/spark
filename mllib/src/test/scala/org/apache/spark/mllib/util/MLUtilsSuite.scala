@@ -25,6 +25,7 @@ import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -62,7 +63,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       val fastSquaredDist3 =
         fastSquaredDistance(v2, norm2, v3, norm3, precision)
       assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
-      if (m > 10) { 
+      if (m > 10) {
         val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
           indices.map(i => a(i) + 0.5).slice(0, m - 10))
         val norm4 = Vectors.norm(v4, 2.0)
@@ -105,6 +106,40 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(multiclassPoints(1).label === 0.0)
     assert(multiclassPoints(2).label === 0.0)
 
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws IllegalArgumentException when indices is zero-based") {
+    val lines =
+      """
+        |0
+        |0 0:4.0 4:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, Charsets.US_ASCII)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      loadLibSVMFile(sc, path).collect()
+    }
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws IllegalArgumentException when indices is not in ascending order") {
+    val lines =
+      """
+        |0
+        |0 3:4.0 2:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, Charsets.US_ASCII)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      loadLibSVMFile(sc, path).collect()
+    }
     Utils.deleteRecursively(tempDir)
   }
 

@@ -23,9 +23,9 @@ import java.util.{TimeZone, Calendar}
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
 import jodd.datetime.JDateTime
-import parquet.column.Dictionary
-import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
-import parquet.schema.MessageType
+import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
@@ -243,8 +243,10 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   /**
    * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
    * a long (i.e. precision <= 18)
+   *
+   * Returned value is needed by CatalystConverter, which doesn't reuse the Decimal object.
    */
-  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Unit = {
+  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Decimal = {
     val precision = ctype.precisionInfo.get.precision
     val scale = ctype.precisionInfo.get.scale
     val bytes = value.getBytes

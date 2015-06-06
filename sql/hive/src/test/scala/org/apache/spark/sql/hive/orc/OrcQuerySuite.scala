@@ -52,9 +52,6 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
-  override val sqlContext = TestHive
-
-  import TestHive.read
 
   def getTempFilePath(prefix: String, suffix: String = ""): File = {
     val tempFile = File.createTempFile(prefix, suffix)
@@ -69,7 +66,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        sqlContext.read.format("orc").load(file),
         data.toDF().collect())
     }
   }
