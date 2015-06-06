@@ -332,9 +332,16 @@ private[spark] object Utils extends Logging {
       secret: Option[String],
       conf: SparkConf): Unit =
     for (value <- secret if conf.authOn) {
-      val out = new BufferedOutputStream(process.getOutputStream)
-      out.write(value.getBytes)
-      out.close
+      val out = new BufferedWriter(new OutputStreamWriter(process.getOutputStream, "UTF-8"))
+      try {
+        out.write(value)
+      } catch {
+        case e: IOException =>
+          throw new SparkException("Failed to write out authentication key to " +
+            "child process' stdin", e)
+      } finally {
+        out.close
+      }
     }
 
   /**
@@ -345,16 +352,23 @@ private[spark] object Utils extends Logging {
    */
   def setAndExportAppSecretIfNeeded(conf: SparkConf): Unit = {
     if (conf.authOn) {
-      val in = new BufferedReader(new InputStreamReader(System.in))
-      Option(in.readLine) match {
-        case Some(value) =>
-          conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
-          sys.props.update(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
+      val in = new BufferedReader(new InputStreamReader(System.in, "UTF-8"))
+      try {
+        Option(in.readLine) match {
+          case Some(value) =>
+            conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
+            sys.props.update(SecurityManager.CLUSTER_AUTH_SECRET_CONF, value)
 
-        case None => throw new Exception("Error: authentication is enabled but " +
-          "failed to obtain authentication key from stdin")
+          case None =>
+            throw new SparkException("Authentication is enabled but reading " +
+              "authentication key from stdin returned null")
+        }
+      } catch {
+        case e: IOException =>
+          throw new SparkException("Failed to obtain authentication key from stdin", e)
+      } finally {
+        in.close
       }
-      in.close
     }
   }
 

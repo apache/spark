@@ -367,8 +367,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     } else {
       // user must have set spark.authenticate.secret config
       sparkConf.getClusterAuthSecret match {
-        case Some(value) => value
-        case None => throw new Exception("Error: a secret key must be specified via the " +
+        case Some(value) if !value.isEmpty => value // empty string is not allowed
+        case _ => throw new Exception("Error: a secret key must be specified via the " +
           CLUSTER_AUTH_SECRET_CONF + " config")
       }
     }
