@@ -58,7 +58,8 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   def checkLoad(): Unit = {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    caseInsensitiveContext.conf.setConf(
+      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     checkAnswer(caseInsensitiveContext.read.load(path.toString), df.collect())
 
     // Test if we can pick up the data source name passed in load.
@@ -72,13 +73,15 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("save with path and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    caseInsensitiveContext.conf.setConf(
+      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     df.write.save(path.toString)
     checkLoad()
   }
 
   test("save with string mode and path, and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    caseInsensitiveContext.conf.setConf(
+      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     path.createNewFile()
     df.write.mode("overwrite").save(path.toString)
     checkLoad()
