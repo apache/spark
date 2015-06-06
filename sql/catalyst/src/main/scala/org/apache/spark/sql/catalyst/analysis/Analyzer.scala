@@ -135,22 +135,20 @@ class Analyzer(
    * Replaces [[UnresolvedAlias]]s with concrete aliases.
    */
   object ResolveAliases extends Rule[LogicalPlan] {
-    private def assignAliases(exprs: Seq[Expression]) = {
-      var i = -1
+    private def assignAliases(exprs: Seq[NamedExpression]) = {
       // The `UnresolvedAlias`s will appear only at root of a expression tree, we don't need
       // to transform down the whole tree.
-      exprs.map {
-        case u @ UnresolvedAlias(child) =>
+      exprs.zipWithIndex.map {
+        case (u @ UnresolvedAlias(child), i) =>
           child match {
             case _: UnresolvedAttribute => u
             case ne: NamedExpression => ne
             case ev: ExtractValueWithStruct => Alias(ev, ev.field.name)()
             case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
             case e if !e.resolved => u
-            case other =>
-              i += 1
-              Alias(other, s"c$i")()
+            case other => Alias(other, s"_c$i")()
           }
+        case (other, _) => other
       }
     }
 
@@ -611,7 +609,7 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},

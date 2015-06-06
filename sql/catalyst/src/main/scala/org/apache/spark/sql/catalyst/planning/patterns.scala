@@ -156,10 +156,9 @@ object PartialAggregation {
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
           case e: Expression =>
-            namedGroupingExpressions
-              .find { case (k, v) => k semanticEquals e }
-              .map(_._2.toAttribute)
-              .getOrElse(e)
+            namedGroupingExpressions.collectFirst {
+              case (expr, ne) if expr semanticEquals e => ne.toAttribute
+            }.getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
         val partialComputation = namedGroupingExpressions.map(_._2) ++

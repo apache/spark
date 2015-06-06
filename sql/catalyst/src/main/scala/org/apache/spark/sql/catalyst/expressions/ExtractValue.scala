@@ -98,7 +98,6 @@ abstract class ExtractValueWithStruct extends ExtractValue {
   self: Product =>
 
   def field: StructField
-  override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
 }
 
@@ -127,7 +126,6 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends ExtractValueWithStruct {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]
