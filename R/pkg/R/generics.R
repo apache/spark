@@ -396,6 +396,20 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
+#' @rdname nafunctions
+#' @export
+setGeneric("dropna",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
+             standardGeneric("dropna") 
+           })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("na.omit",
+           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) { 
+             standardGeneric("na.omit") 
+           })
+
 #' @rdname schema
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
@@ -407,6 +421,10 @@ setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 #' @rdname except
 #' @export
 setGeneric("except", function(x, y) { standardGeneric("except") })
+
+#' @rdname nafunctions
+#' @export
+setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna") })
 
 #' @rdname filter
 #' @export

@@ -54,7 +54,7 @@ private[sql] object JDBCRelation {
     if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions 
+    val stride: Long = (partitioning.upperBound / numPartitions
                       - partitioning.lowerBound / numPartitions)
     var i: Int = 0
     var currentValue: Long = partitioning.lowerBound
@@ -140,10 +140,10 @@ private[sql] case class JDBCRelation(
       filters,
       parts)
   }
-  
+
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
       .jdbc(url, table, properties)
-  }  
+  }
 }

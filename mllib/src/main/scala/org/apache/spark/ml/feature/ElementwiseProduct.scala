@@ -41,7 +41,7 @@ class ElementwiseProduct(override val uid: String)
     * the vector to multiply with input vectors
     * @group param
     */
-  val scalingVec: Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
+  val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)

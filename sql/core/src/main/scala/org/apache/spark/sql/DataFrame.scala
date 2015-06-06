@@ -57,14 +57,11 @@ private[sql] object DataFrame {
  * :: Experimental ::
  * A distributed collection of data organized into named columns.
  *
- * A [[DataFrame]] is equivalent to a relational table in Spark SQL. There are multiple ways
- * to create a [[DataFrame]]:
+ * A [[DataFrame]] is equivalent to a relational table in Spark SQL. The following example creates
+ * a [[DataFrame]] by pointing Spark SQL to a Parquet data set.
  * {{{
- *   // Create a DataFrame from Parquet files
- *   val people = sqlContext.parquetFile("...")
- *
- *   // Create a DataFrame from data sources
- *   val df = sqlContext.load("...", "json")
+ *   val people = sqlContext.read.parquet("...")  // in Scala
+ *   DataFrame people = sqlContext.read().parquet("...")  // in Java
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
@@ -86,8 +83,8 @@ private[sql] object DataFrame {
  * A more concrete example in Scala:
  * {{{
  *   // To create DataFrame using SQLContext
- *   val people = sqlContext.parquetFile("...")
- *   val department = sqlContext.parquetFile("...")
+ *   val people = sqlContext.read.parquet("...")
+ *   val department = sqlContext.read.parquet("...")
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
@@ -98,8 +95,8 @@ private[sql] object DataFrame {
  * and in Java:
  * {{{
  *   // To create DataFrame using SQLContext
- *   DataFrame people = sqlContext.parquetFile("...");
- *   DataFrame department = sqlContext.parquetFile("...");
+ *   DataFrame people = sqlContext.read().parquet("...");
+ *   DataFrame department = sqlContext.read().parquet("...");
  *
  *   people.filter("age".gt(30))
  *     .join(department, people.col("deptId").equalTo(department("id")))
@@ -1086,6 +1083,22 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This version of drop accepts a Column rather than a name.
+   * This is a no-op if the DataFrame doesn't have a column
+   * with an equivalent expression.
+   * @group dfops
+   * @since 1.4.1
+   */
+  def drop(col: Column): DataFrame = {
+    val attrs = this.logicalPlan.output
+    val colsAfterDrop = attrs.filter { attr =>
+      attr != col.expr
+    }.map(attr => Column(attr))
+    select(colsAfterDrop : _*)
+  }
+
+  /**
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
    * This is an alias for `distinct`.
    * @group dfops
@@ -1298,7 +1311,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  override def distinct: DataFrame = Distinct(logicalPlan)
+  override def distinct: DataFrame = dropDuplicates()
 
   /**
    * @group basic
@@ -1444,7 +1457,9 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
-  /** Left here for backward compatibility. */
+  /**
+   * @deprecated As of 1.3.0, replaced by `toDF()`.
+   */
   @deprecated("use toDF", "1.3.0")
   def toSchemaRDD: DataFrame = this
 
@@ -1455,6 +1470,7 @@ class DataFrame private[sql](
    * given name; if you pass `false`, it will throw if the table already
    * exists.
    * @group output
+   * @deprecated As of 1.340, replaced by `write().jdbc()`.
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
@@ -1473,6 +1489,7 @@ class DataFrame private[sql](
    * the RDD in order via the simple statement
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().jdbc()`.
    */
   @deprecated("Use write.jdbc()", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
@@ -1485,6 +1502,7 @@ class DataFrame private[sql](
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().parquet()`.
    */
   @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
@@ -1508,6 +1526,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
   @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String): Unit = {
@@ -1526,6 +1545,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
   @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
@@ -1545,6 +1565,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String): Unit = {
@@ -1564,6 +1585,7 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
   def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
@@ -1582,6 +1604,8 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
     "1.4.0")
@@ -1606,6 +1630,8 @@ class DataFrame private[sql](
    * Also note that while this function can persist the table metadata into Hive's metastore,
    * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
     "1.4.0")
@@ -1622,6 +1648,7 @@ class DataFrame private[sql](
    * using the default data source configured by spark.sql.sources.default and
    * [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().save(path)`.
    */
   @deprecated("Use write.save(path)", "1.4.0")
   def save(path: String): Unit = {
@@ -1632,6 +1659,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
    * using the default data source configured by spark.sql.sources.default.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().mode(mode).save(path)`.
    */
   @deprecated("Use write.mode(mode).save(path)", "1.4.0")
   def save(path: String, mode: SaveMode): Unit = {
@@ -1642,6 +1670,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path based on the given data source,
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).save(path)`.
    */
   @deprecated("Use write.format(source).save(path)", "1.4.0")
   def save(path: String, source: String): Unit = {
@@ -1652,6 +1681,7 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame to the given path based on the given data source and
    * [[SaveMode]] specified by mode.
    * @group output
+   * @deprecated As of 1.4.0, replaced by `write().format(source).mode(mode).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
   def save(path: String, source: String, mode: SaveMode): Unit = {
@@ -1662,6 +1692,8 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
@@ -1676,6 +1708,8 @@ class DataFrame private[sql](
    * Saves the contents of this DataFrame based on the given data source,
    * [[SaveMode]] specified by mode, and a set of options
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().format(source).mode(mode).options(options).save(path)`.
    */
   @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
   def save(
@@ -1689,6 +1723,8 @@ class DataFrame private[sql](
   /**
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)`.
    */
   @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String, overwrite: Boolean): Unit = {
@@ -1699,6 +1735,8 @@ class DataFrame private[sql](
    * Adds the rows from this RDD to the specified table.
    * Throws an exception if the table already exists.
    * @group output
+   * @deprecated As of 1.4.0, replaced by
+   *            `write().mode(SaveMode.Append).saveAsTable(tableName)`.
    */
   @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String): Unit = {

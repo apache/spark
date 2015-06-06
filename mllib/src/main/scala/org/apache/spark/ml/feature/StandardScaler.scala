@@ -35,13 +35,13 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /**
    * Centers the data with mean before scaling.
-   * It will build a dense output, so this does not work on sparse input 
+   * It will build a dense output, so this does not work on sparse input
    * and will raise an exception.
    * Default: false
    * @group param
    */
   val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
-  
+
   /**
    * Scales the data to unit standard deviation.
    * Default: true
@@ -68,13 +68,13 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-  
+
   /** @group setParam */
   def setWithMean(value: Boolean): this.type = set(withMean, value)
-  
+
   /** @group setParam */
   def setWithStd(value: Boolean): this.type = set(withStd, value)
-  
+
   override def fit(dataset: DataFrame): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -37,7 +37,15 @@ abstract class Expression extends TreeNode[Expression] {
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
+
+  /**
+   * Returns true when the current expression always return the same result for fixed input values.
+   */
+  // TODO: Need to define explicit input values vs implicit input values.
+  def deterministic: Boolean = true
+
   def nullable: Boolean
+
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
@@ -45,11 +53,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
-   * and `false` if it still contains any unresolved placeholders. Implementations of expressions
-   * should override this if the resolution of this type of expression involves more than just
-   * the resolution of its children.
+   * and input data types checking passed, and `false` if it still contains any unresolved
+   * placeholders or has data types mismatch.
+   * Implementations of expressions should override this if the resolution of this type of
+   * expression involves more than just the resolution of its children and type checking.
    */
-  lazy val resolved: Boolean = childrenResolved
+  lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is
@@ -86,12 +95,21 @@ abstract class Expression extends TreeNode[Expression] {
       case (i1, i2) => i1 == i2
     }
   }
+
+  /**
+   * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
+   * or returns a `TypeCheckResult` with an error message if invalid.
+   * Note: it's not valid to call this method until `childrenResolved == true`
+   * TODO: we should remove the default implementation and implement it for all
+   * expressions with proper error message.
+   */
+  def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
-  def symbol: String
+  def symbol: String = sys.error(s"BinaryExpressions must override either toString or symbol")
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -125,7 +143,13 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
  * so that the proper type conversions can be performed in the analyzer.
  */
 trait ExpectsInputTypes {
+  self: Expression =>
 
   def expectedChildTypes: Seq[DataType]
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
+    // so type mismatch error won't be reported here, but for underling `Cast`s.
+    TypeCheckResult.TypeCheckSuccess
+  }
 }

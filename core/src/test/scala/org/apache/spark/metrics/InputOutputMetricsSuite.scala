@@ -193,26 +193,6 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     assert(records == numRecords)
   }
 
-  test("shuffle records read metrics") {
-    val recordsRead = runAndReturnShuffleRecordsRead {
-      sc.textFile(tmpFilePath, 4)
-        .map(key => (key, 1))
-        .groupByKey()
-        .collect()
-    }
-    assert(recordsRead == numRecords)
-  }
-
-  test("shuffle records written metrics") {
-    val recordsWritten = runAndReturnShuffleRecordsWritten {
-      sc.textFile(tmpFilePath, 4)
-        .map(key => (key, 1))
-        .groupByKey()
-        .collect()
-    }
-    assert(recordsWritten == numRecords)
-  }
-
   /**
    * Tests the metrics from end to end.
    * 1) reading a hadoop file
@@ -299,14 +279,6 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
   private def runAndReturnRecordsWritten(job: => Unit): Long = {
     runAndReturnMetrics(job, _.taskMetrics.outputMetrics.map(_.recordsWritten))
-  }
-
-  private def runAndReturnShuffleRecordsRead(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.shuffleReadMetrics.map(_.recordsRead))
-  }
-
-  private def runAndReturnShuffleRecordsWritten(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.shuffleWriteMetrics.map(_.shuffleRecordsWritten))
   }
 
   private def runAndReturnMetrics(job: => Unit,

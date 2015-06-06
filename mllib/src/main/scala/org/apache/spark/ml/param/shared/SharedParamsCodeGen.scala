@@ -33,7 +33,7 @@ private[shared] object SharedParamsCodeGen {
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
-      ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
+      ParamDesc[Int]("maxIter", "maximum number of iterations (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
