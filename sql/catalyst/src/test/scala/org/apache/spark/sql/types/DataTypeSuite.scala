@@ -59,9 +59,9 @@ class DataTypeSuite extends SparkFunSuite {
       .add("b", "long", false)
       .add("c", "string", true)
 
-    assert(StructField("a", IntegerType, false) === struct("b"))
+    assert(StructField("a", IntegerType, true) === struct("a"))
     assert(StructField("b", LongType, false) === struct("b"))
-    assert(StructField("c", StringType, false) === struct("b"))
+    assert(StructField("c", StringType, true) === struct("c"))
   }
 
   test("extract fields from a StructType") {
