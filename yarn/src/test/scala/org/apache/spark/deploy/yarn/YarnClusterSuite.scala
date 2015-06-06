@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-import scala.io.Source
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
@@ -345,17 +344,17 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(info.logUrlMap.nonEmpty)
     }
 
-    // If we are running in yarn-cluster mode, verify that driver logs are downloadable.
+    // If we are running in yarn-cluster mode, verify that driver logs links and present and are
+    // in the expected format.
     if (conf.get("spark.master") == "yarn-cluster") {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)
       assert(driverLogs.containsKey("stderr"))
       assert(driverLogs.containsKey("stdout"))
-      // Ensure that this is a URL, else this will throw an exception
       val urlStr = driverLogs("stderr")
-      val url = new URL(urlStr)
-      assert(Utils.localHostName() === url.getHost)
+      // Ensure that this is a valid URL, else this will throw an exception
+      new URL(urlStr)
       val containerId = YarnSparkHadoopUtil.get.getContainerId
       val user = Utils.getCurrentUserName()
       assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=0"))
