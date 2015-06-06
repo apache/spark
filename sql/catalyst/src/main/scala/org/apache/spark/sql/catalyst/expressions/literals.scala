@@ -121,7 +121,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
         case ByteType | ShortType =>  // This must go before NumericType
           ev.isNull = "false"
-          ev.primitive = s"(${ctx.primitiveType(dataType)})$value"
+          ev.primitive = s"(${ctx.javaType(dataType)})$value"
           ""
         case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
           ev.isNull = "false"

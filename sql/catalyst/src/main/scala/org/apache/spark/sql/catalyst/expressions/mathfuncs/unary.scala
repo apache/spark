@@ -53,7 +53,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
         if (Double.valueOf(${ev.primitive}).isNaN()) {

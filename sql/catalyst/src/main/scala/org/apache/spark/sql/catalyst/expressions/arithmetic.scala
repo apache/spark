@@ -78,7 +78,7 @@ case class Sqrt(child: Expression) extends UnaryArithmetic {
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         if (${eval.primitive} < 0.0) {
           ${ev.isNull} = true;
@@ -144,7 +144,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev, (eval1, eval2) =>
-        s"(${ctx.primitiveType(dataType)})($eval1 $symbol $eval2)")
+        s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
@@ -248,7 +248,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
+      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
@@ -308,7 +308,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
-      ${ctx.primitiveType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
+      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
@@ -408,7 +408,7 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dataType)})~($c)")
+    defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)})~($c)")
   }
 
   protected override def evalInternal(evalE: Any) = not(evalE)
@@ -444,7 +444,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
       val eval2 = right.gen(ctx)
       eval1.code + eval2.code + s"""
         boolean ${ev.isNull} = false;
-        ${ctx.primitiveType(left.dataType)} ${ev.primitive} =
+        ${ctx.javaType(left.dataType)} ${ev.primitive} =
           ${ctx.defaultValue(left.dataType)};
 
         if (${eval1.isNull}) {
@@ -500,7 +500,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
       eval1.code + eval2.code + s"""
         boolean ${ev.isNull} = false;
-        ${ctx.primitiveType(left.dataType)} ${ev.primitive} =
+        ${ctx.javaType(left.dataType)} ${ev.primitive} =
           ${ctx.defaultValue(left.dataType)};
 
         if (${eval1.isNull}) {

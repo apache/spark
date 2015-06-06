@@ -45,7 +45,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val ctx = newCodeGenContext()
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
-        s"private ${ctx.primitiveType(e.dataType)} c$i = ${ctx.defaultValue(e.dataType)};\n"
+        s"private ${ctx.javaType(e.dataType)} c$i = ${ctx.defaultValue(e.dataType)};\n"
     }.mkString("\n      ")
 
     val initColumns = expressions.zipWithIndex.map {
@@ -80,7 +80,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public ${ctx.primitiveType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
+      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
         if (isNullAt(i)) {
           return ${ctx.defaultValue(dataType)};
         }
@@ -103,7 +103,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.primitiveType(dataType)} value) {
+      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
         nullBits[i] = false;
         switch (i) {
         $cases

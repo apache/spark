@@ -397,7 +397,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${condEval.isNull} && ${condEval.primitive}) {
         ${trueEval.code}
         ${ev.isNull} = ${trueEval.isNull};
@@ -530,7 +530,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       $cases
       $other
     """
@@ -626,7 +626,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       ${keyEval.code}
       $cases
       $other

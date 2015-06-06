@@ -77,14 +77,13 @@ abstract class Expression extends TreeNode[Expression] {
    * @return Java source code
    */
   protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    val e = this.asInstanceOf[Expression]
-    ctx.references += e
+    ctx.references += this
     val objectTerm = ctx.freshName("obj")
     s"""
       /* expression: ${this} */
       Object ${objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
       boolean ${ev.isNull} = ${objectTerm} == null;
-      ${ctx.primitiveType(e.dataType)} ${ev.primitive} = ${ctx.defaultValue(e.dataType)};
+      ${ctx.javaType(e.dataType)} ${ev.primitive} = ${ctx.defaultValue(e.dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = (${ctx.boxedType(e.dataType)})${objectTerm};
       }
@@ -180,7 +179,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${eval2.code}
         if(!${eval2.isNull}) {
@@ -219,7 +218,7 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
     // reuse the previous isNull
     ev.isNull = eval.isNull
     eval.code + s"""
-      ${ctx.primitiveType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = ${f(eval.primitive)};
       }

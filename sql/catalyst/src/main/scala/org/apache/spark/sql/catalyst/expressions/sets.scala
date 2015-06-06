@@ -66,7 +66,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
       case IntegerType | LongType =>
         ev.isNull = "false"
         s"""
-          ${ctx.primitiveType(dataType)} ${ev.primitive} = new ${ctx.primitiveType(dataType)}();
+          ${ctx.javaType(dataType)} ${ev.primitive} = new ${ctx.javaType(dataType)}();
         """
       case _ => super.genCode(ctx, ev)
     }
@@ -109,7 +109,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
       case IntegerType | LongType =>
         val itemEval = item.gen(ctx)
         val setEval = set.gen(ctx)
-        val htype = ctx.primitiveType(dataType)
+        val htype = ctx.javaType(dataType)
 
         ev.isNull = "false"
         ev.primitive = setEval.primitive
@@ -160,7 +160,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
       case IntegerType | LongType =>
         val leftEval = left.gen(ctx)
         val rightEval = right.gen(ctx)
-        val htype = ctx.primitiveType(dataType)
+        val htype = ctx.javaType(dataType)
 
         ev.isNull = leftEval.isNull
         ev.primitive = leftEval.primitive

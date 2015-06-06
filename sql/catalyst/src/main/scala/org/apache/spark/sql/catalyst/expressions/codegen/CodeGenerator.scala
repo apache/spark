@@ -54,8 +54,8 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val stringType = classOf[UTF8String].getName
-  val decimalType = classOf[Decimal].getName
+  val stringType: String = classOf[UTF8String].getName
+  val decimalType: String = classOf[Decimal].getName
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -108,9 +108,9 @@ class CodeGenContext {
   }
 
   /**
-   * Return the primitive type for a DataType
+   * Return the Java type for a DataType
    */
-  def primitiveType(dt: DataType): Term = dt match {
+  def javaType(dt: DataType): Term = dt match {
     case IntegerType => "int"
     case LongType => "long"
     case ShortType => "short"
@@ -140,7 +140,7 @@ class CodeGenContext {
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case DateType => "Integer"
-    case _ => primitiveType(dt)
+    case _ => javaType(dt)
   }
 
   /**
@@ -189,9 +189,9 @@ class CodeGenContext {
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val exprType = classOf[Expression].getName
-  protected val mutableRowType = classOf[MutableRow].getName
-  protected val genericMutableRowType = classOf[GenericMutableRow].getName
+  protected val exprType: String = classOf[Expression].getName
+  protected val mutableRowType: String = classOf[MutableRow].getName
+  protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
   /**
    * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.

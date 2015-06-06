@@ -458,7 +458,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         super.genCode(ctx, ev)
 
       case (BooleanType, dt: NumericType) =>
-        defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c ? 1 : 0)")
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
       case (dt: DecimalType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c.isZero()")
       case (dt: NumericType, BooleanType) =>
@@ -469,7 +469,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (_: DecimalType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
       case (_: NumericType, dt: NumericType) =>
-        defineCodeGen(ctx, ev, c => s"(${ctx.primitiveType(dt)})($c)")
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
 
       case other =>
         super.genCode(ctx, ev)
