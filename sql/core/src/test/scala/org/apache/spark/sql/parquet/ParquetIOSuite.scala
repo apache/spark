@@ -198,7 +198,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     withParquetDataFrame(allNulls :: Nil) { df =>
       val rows = df.collect()
-      assert(rows.size === 1)
+      assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(5)(null): _*))
     }
   }
@@ -211,7 +211,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     withParquetDataFrame(allNones :: Nil) { df =>
       val rows = df.collect()
-      assert(rows.size === 1)
+      assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
     }
   }
@@ -417,7 +417,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
       try {
         val message = intercept[SparkException] {
-          range(0, 1).write.parquet(dir.getCanonicalPath)
+          sqlContext.range(0, 1).write.parquet(dir.getCanonicalPath)
         }.getCause.getMessage
         assert(message === "Intentional exception for testing purposes")
       } finally {
