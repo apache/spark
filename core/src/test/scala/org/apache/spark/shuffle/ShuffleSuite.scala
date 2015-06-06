@@ -350,8 +350,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       // interleave writes of both attempts -- we want to test that both attempts can occur
       // simultaneously, and everything is still OK
       val interleaver = new InterleavingIterator(
-        data1, {iter: Iterator[(Int,Int)] => writer1.write(iter); writer1.stop(true)},
-        data2, {iter: Iterator[(Int,Int)] => writer2.write(iter); writer2.stop(true)})
+        data1, {iter: Iterator[(Int, Int)] => writer1.write(iter); writer1.stop(true)},
+        data2, {iter: Iterator[(Int, Int)] => writer2.write(iter); writer2.stop(true)})
       val (mapOutput1, mapOutput2) = interleaver.run()
 
 
@@ -416,13 +416,13 @@ class InterleavingIterator[T, R](
 
   val e: ExecutorService = Executors.newFixedThreadPool(2)
 
-  def run(): (R,R) = {
+  def run(): (R, R) = {
     val future1 = e.submit(c1)
     val future2 = e.submit(c2)
     val r1 = future1.get()
     val r2 = future2.get()
     e.shutdown()
-    (r1,r2)
+    (r1, r2)
   }
 }
 
