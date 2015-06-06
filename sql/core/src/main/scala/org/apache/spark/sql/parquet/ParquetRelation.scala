@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
+import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat, ParquetRecordReader}
 import org.apache.parquet.schema.MessageType
 import org.apache.parquet.{Log => ParquetLog}
 
@@ -116,11 +116,16 @@ private[sql] object ParquetRelation {
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
     parquetLogger.setUseParentHandlers(true)
 
-    // Disables WARN log message in ParquetOutputCommitter.  We first ensure that
+    // Disables a WARN log message in ParquetOutputCommitter.  We first ensure that
     // ParquetOutputCommitter is loaded and the static LOG field gets initialized.
     // See https://issues.apache.org/jira/browse/SPARK-5968 for details
     Class.forName(classOf[ParquetOutputCommitter].getName)
     JLogger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
+
+    // Similar as above, disables a unnecessary WARN log message in ParquetRecordReader.
+    // See https://issues.apache.org/jira/browse/PARQUET-220 for details
+    Class.forName(classOf[ParquetRecordReader[_]].getName)
+    JLogger.getLogger(classOf[ParquetRecordReader[_]].getName).setLevel(Level.OFF)
   }
 
   // The element type for the RDDs that this relation maps to.
