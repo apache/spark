@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.net.URL
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
@@ -351,11 +352,13 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(driverLogs.size === 2)
       assert(driverLogs.containsKey("stderr"))
       assert(driverLogs.containsKey("stdout"))
-      val stderr = driverLogs("stderr") // YARN puts everything in stderr.
-      val lines = Source.fromURL(stderr).getLines()
-      // Look for a line that contains YarnClusterSchedulerBackend, since that is guaranteed in
-      // cluster mode.
-      assert(lines.exists(_.contains("YarnClusterSchedulerBackend")))
+      // Ensure that this is a URL, else this will throw an exception
+      val urlStr = driverLogs("stderr")
+      val url = new URL(urlStr)
+      assert(Utils.localHostName() === url.getHost)
+      val containerId = YarnSparkHadoopUtil.get.getContainerId
+      val user = Utils.getCurrentUserName()
+      assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=0"))
     }
   }
 
