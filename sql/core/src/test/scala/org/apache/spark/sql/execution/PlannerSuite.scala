@@ -142,4 +142,35 @@ class PlannerSuite extends SparkFunSuite {
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
   }
+
+  test("unnecessary exchange operators test") {
+    val planned1 = testData
+      .join(testData2, testData("key") === testData2("a"), "outer")
+      .join(testData3, testData("key") === testData3("a"), "outer")
+      .queryExecution.executedPlan
+    val exchanges1 = planned1.collect { case n: Exchange => n }
+    assert(exchanges1.size === 3)
+
+    val planned2 = testData
+      .join(testData2, testData("key") === testData2("a"), "outer")
+      .join(testData3, testData2("a") === testData3("a"), "outer")
+      .queryExecution.executedPlan
+    val exchange2 = planned2.collect { case n: Exchange => n }
+    assert(exchange2.size === 3)
+
+    val planned3 = testData
+      .join(testData2, testData("key") === testData2("a"), "outer")
+      .join(testData3, testData("value") === testData3("a"), "outer")
+      .queryExecution.executedPlan
+    val exchages3 = planned3.collect { case n: Exchange => n }
+    assert(exchages3.size === 4)
+
+    val planned4 = testData
+      .join(testData2, testData("key") === testData2("a"), "outer")
+      .groupBy(testData2("a")).agg(count('key), count('value))
+      .queryExecution.executedPlan
+    val exchange4 = planned4.collect { case n: Exchange => n }
+    assert(exchange4.size === 3)
+  }
+
 }

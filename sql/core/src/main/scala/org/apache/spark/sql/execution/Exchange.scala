@@ -303,15 +303,23 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       def addOperatorsIfNecessary(
           partitioning: Partitioning,
           rowOrdering: Seq[SortOrder],
-          child: SparkPlan): SparkPlan = {
+          child: SparkPlan,
+          isUnaryNodeWithRequire: Boolean = false): SparkPlan = {
         val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
-        val needsShuffle = child.outputPartitioning != partitioning
+        val needsShuffle = if (isUnaryNodeWithRequire) {
+          child.outputOrdering != partitioning
+        } else {
+          !child.meetPartitions(partitioning)
+        }
         val canSortWithShuffle = Exchange.canSortWithShuffle(partitioning, rowOrdering)
 
         if (needSort && needsShuffle && canSortWithShuffle) {
           Exchange(partitioning, rowOrdering, child)
         } else {
           val withShuffle = if (needsShuffle) {
+            // set meetPartitions to outputPartitioning when need shuffle,
+            // because shuffle will break the TRANSITIVITY
+            operator.meetPartitions = Set(operator.outputPartitioning)
             Exchange(partitioning, Nil, child)
           } else {
             child
@@ -343,13 +351,29 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         val fixedChildren = requirements.zipped.map {
           case (AllTuples, rowOrdering, child) =>
             addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
+
           case (ClusteredDistribution(clustering), rowOrdering, child) =>
-            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
+            // we use outputOrdering to judge whether need shuffle,
+            // when the operator is unaryNode
+            if (operator.isInstanceOf[UnaryNode]) {
+              addOperatorsIfNecessary(
+                HashPartitioning(clustering, numPartitions),
+                rowOrdering,
+                child,
+                true)
+            } else {
+              addOperatorsIfNecessary(
+                HashPartitioning(clustering, numPartitions),
+                rowOrdering,
+                child)
+            }
+
           case (OrderedDistribution(ordering), rowOrdering, child) =>
             addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 
           case (UnspecifiedDistribution, Seq(), child) =>
             child
+
           case (UnspecifiedDistribution, rowOrdering, child) =>
             if (sqlContext.conf.externalSortEnabled) {
               ExternalSort(rowOrdering, global = false, child)
