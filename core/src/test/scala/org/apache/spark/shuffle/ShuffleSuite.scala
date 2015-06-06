@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import java.util.concurrent._
+
 import org.scalatest.Matchers
 
 import org.apache.spark._
@@ -335,14 +337,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0, 0,
         new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, false, stageAttemptId = 0,
           taskMetrics = new TaskMetrics))
-      val data = (1 to 10).map { x => x -> x}
-      writer1.write(data.iterator)
-      val mapOutput = writer1.stop(true)
-      mapOutput.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
-      val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, false, taskMetrics = new TaskMetrics))
-      reader1.read().toIndexedSeq should be (data.toIndexedSeq)
-
+      val data1 = (1 to 10).map { x => x -> x}
 
       // second attempt -- also successful.  We'll write out different data,
       // just to simulate the fact that the records may get written differently
@@ -351,10 +346,23 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, false, stageAttemptId = 1,
           taskMetrics = new TaskMetrics))
       val data2 = (11 to 20).map { x => x -> x}
-      writer2.write(data2.iterator)
-      val mapOutput2 = writer2.stop(true)
-      // registeringMapOutputs always blows away all previous outputs, so we won't ever find the
-      // previous output anymore
+
+      // interleave writes of both attempts -- we want to test that both attempts can occur
+      // simultaneously, and everything is still OK
+      val interleaver = new InterleavingIterator(
+        data1, {iter: Iterator[(Int,Int)] => writer1.write(iter); writer1.stop(true)},
+        data2, {iter: Iterator[(Int,Int)] => writer2.write(iter); writer2.stop(true)})
+      val (mapOutput1, mapOutput2) = interleaver.run()
+
+
+      // register the output from attempt 1, and try to read it
+      mapOutput1.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+      val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, false, taskMetrics = new TaskMetrics))
+      reader1.read().toIndexedSeq should be (data1.toIndexedSeq)
+
+      // now for attempt 2 (registeringMapOutputs always blows away all previous outputs, so we
+      // won't find the output for attempt 1)
       mapOutput2.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
 
       val reader2 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
@@ -378,7 +386,46 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       shuffleFiles.foreach { file => assert(!file.exists()) }
     }
   }
+
 }
+
+class InterleavingIterator[T, R](
+    data1: Seq[T],
+    f1: Iterator[T] => R,
+    data2: Seq[T],
+    f2: Iterator[T] => R) {
+
+  require(data1.size == data2.size)
+
+  val barrier = new CyclicBarrier(2)
+  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
+    def hasNext: Boolean = sub.hasNext
+
+    def next: E = {
+      barrier.await()
+      sub.next()
+    }
+  }
+
+  val c1 = new Callable[R] {
+    override def call(): R = f1(new BarrierIterator(1, data1.iterator))
+  }
+  val c2 = new Callable[R] {
+    override def call(): R = f2(new BarrierIterator(2, data2.iterator))
+  }
+
+  val e: ExecutorService = Executors.newFixedThreadPool(2)
+
+  def run(): (R,R) = {
+    val future1 = e.submit(c1)
+    val future2 = e.submit(c2)
+    val r1 = future1.get()
+    val r2 = future2.get()
+    e.shutdown()
+    (r1,r2)
+  }
+}
+
 
 object ShuffleSuite {
 
