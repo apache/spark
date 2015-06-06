@@ -61,7 +61,7 @@ class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
         var score = 0.0
         val nnz = data.values.filter(_ > 0.0).size
         data.indices.zip(data.values).map { case (id, value) =>
-          score += scoring(value, nnz, model(id), k1, b, avgDl) 
+          score += scoring(value, nnz, model(id), k1, b, avgDl)
         }
         score
     }
@@ -123,7 +123,7 @@ class BM25Suite extends SparkFunSuite with MLlibTestSparkContext {
 
     k1 = 2.0
     b = 0.5
- 
+
     val bm25Model = new BM25()
       .setInputCol("features")
       .setOutputCol("bm25Value")

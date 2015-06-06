@@ -39,14 +39,14 @@ private[ir] trait BM25Base extends Params with HasInputCol with HasOutputCol {
    */
   final val minDocFreq = new IntParam(
     this, "minDocFreq", "minimum of documents in which a term should appear for filtering")
- 
+
   /**
    * The k1 parameter.
    * @group param
    */
   final val k1 = new DoubleParam(
     this, "k1", "the k1 parameter used in BM25 model")
- 
+
   /**
    * The b parameter.
    * @group param
@@ -54,7 +54,7 @@ private[ir] trait BM25Base extends Params with HasInputCol with HasOutputCol {
   final val b = new DoubleParam(
     this, "b", "the b parameter used in BM25 model")
 
-  setDefault(minDocFreq -> 0) 
+  setDefault(minDocFreq -> 0)
   setDefault(k1 -> 1.2)
   setDefault(b -> 0.75)
 
@@ -63,19 +63,19 @@ private[ir] trait BM25Base extends Params with HasInputCol with HasOutputCol {
 
   /** @group setParam */
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
- 
+
   /** @group getParam */
   def getK1: Double = getOrDefault(k1)
- 
+
   /** @group getParam */
   def getB: Double = getOrDefault(b)
- 
+
   /** @group setParam */
   def setK1(value: Double): this.type = set(k1, value)
- 
+
   /** @group setParam */
   def setB(value: Double): this.type = set(b, value)
- 
+
   /**
    * Validate and transform the input schema.
    */
