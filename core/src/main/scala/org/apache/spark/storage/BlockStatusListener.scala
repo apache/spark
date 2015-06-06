@@ -47,7 +47,7 @@ private[spark] class BlockStatusListener extends SparkListener {
       blockManagers.get(blockManagerId) foreach { blocksInBlockManager =>
         if (storageLevel.isValid) {
           blocksInBlockManager.add(blockId)
-          val location = s"${blockManagerId.hostPort} / ${blockManagerId.executorId}"
+          val location = blockManagerId.hostPort
           val newLocations =
             blocks.get(blockId).map(_.locations).getOrElse(Set.empty) + location
           val newStorageLevel = StorageLevel(
@@ -93,7 +93,7 @@ private[spark] class BlockStatusListener extends SparkListener {
 
   private def removeBlockFromBlockManager(
       blockId: BlockId, blockManagerId: BlockManagerId): Unit = {
-    val location = s"${blockManagerId.hostPort} / ${blockManagerId.executorId}"
+    val location = blockManagerId.hostPort
     blocks.get(blockId) foreach { blockUIData =>
       val newLocations = blockUIData.locations - location
       if (newLocations.isEmpty) {

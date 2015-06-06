@@ -33,16 +33,14 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     val blocks = listener.allBlocks.sortBy(_.blockId.toString)
     val streamBlocks = blocks.filter(_.blockId.isInstanceOf[StreamBlockId])
     val broadcastBlocks = blocks.filter(_.blockId.isInstanceOf[BroadcastBlockId])
-    val content = rddTable ++
-      blockTable("Receiver Block", streamBlocks) ++
-      blockTable("Broadcast", broadcastBlocks)
+    val content = rddTable ++ blockTable("Receiver Block", streamBlocks)
     UIUtils.headerSparkPage("Storage", content, parent)
   }
 
   private def rddTable: Seq[Node] = {
     val rdds = listener.rddInfoList
     <div>
-      <h3>RDD</h3>
+      <h4>RDD</h4>
       {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
     </div>
   }
@@ -52,7 +50,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       Nil
     } else {
       <div>
-        <h3>{tableName}</h3>
+        <h4>{tableName}</h4>
         {UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("storage-by-block-table"))}
       </div>
     }
@@ -94,7 +92,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Size in Memory",
     "Size in ExternalBlockStore",
     "Size on Disk",
-    "Locations (Address / Executor ID)")
+    "Locations")
 
   private def blockRow(block: BlockUIData): Seq[Node] = {
     <tr>
