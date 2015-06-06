@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.parquet
 
 import java.io.File
@@ -28,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.sources.PartitioningUtils._
 import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext}
 
@@ -39,10 +39,10 @@ case class ParquetData(intField: Int, stringField: String)
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
-  override val sqlContext: SQLContext = TestSQLContext
 
-  import sqlContext._
+  override lazy val sqlContext: SQLContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.implicits._
+  import sqlContext.sql
 
   val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
@@ -190,8 +190,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
       new File(base.getCanonicalPath, "_temporary").mkdir()
 
-      println("load the partitioned table")
-      read.parquet(base.getCanonicalPath).registerTempTable("t")
+      sqlContext.read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -238,7 +237,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.parquet(base.getCanonicalPath).registerTempTable("t")
+      sqlContext.read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -286,7 +285,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
+      val parquetRelation = sqlContext.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -326,7 +325,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath)
+      val parquetRelation = sqlContext.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -358,7 +357,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath).registerTempTable("t")
+      sqlContext.read.format("parquet").load(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -371,7 +370,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   test("SPARK-7749 Non-partitioned table should have empty partition spec") {
     withTempPath { dir =>
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
-      val queryExecution = read.parquet(dir.getCanonicalPath).queryExecution
+      val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
         case LogicalRelation(relation: ParquetRelation2) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
@@ -385,7 +384,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
     withTempPath { dir =>
       val df = Seq("/", "[]", "?").zipWithIndex.map(_.swap).toDF("i", "s")
       df.write.format("parquet").partitionBy("s").save(dir.getCanonicalPath)
-      checkAnswer(read.parquet(dir.getCanonicalPath), df.collect())
+      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -425,12 +424,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
     }
 
     val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
-    val df = createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+    val df = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(row :: Nil), schema)
 
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(read.load(dir.toString).select(fields: _*), row)
+      checkAnswer(sqlContext.read.load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -446,7 +445,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
-      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df)
+      checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df)
     }
   }
 }

@@ -33,8 +33,6 @@ import org.apache.spark.sql.{DataFrame, SaveMode}
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
 private[sql] trait ParquetTest extends SQLTestUtils {
-  import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
-  import sqlContext.sparkContext
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
@@ -44,7 +42,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toDF().write.parquet(file.getCanonicalPath)
+      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -75,7 +73,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
+    sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](

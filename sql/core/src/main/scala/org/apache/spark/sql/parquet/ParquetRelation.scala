@@ -24,9 +24,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.spark.sql.types.{StructType, DataType}
-import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.schema.MessageType
+import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
@@ -107,7 +107,7 @@ private[sql] object ParquetRelation {
     //
     // Therefore we need to force the class to be loaded.
     // This should really be resolved by Parquet.
-    Class.forName(classOf[parquet.Log].getName)
+    Class.forName(classOf[org.apache.parquet.Log].getName)
 
     // Note: Logger.getLogger("parquet") has a default logger
     // that appends to Console which needs to be cleared.
@@ -127,7 +127,7 @@ private[sql] object ParquetRelation {
   type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
   // The compression type
-  type CompressionType = parquet.hadoop.metadata.CompressionCodecName
+  type CompressionType = org.apache.parquet.hadoop.metadata.CompressionCodecName
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
