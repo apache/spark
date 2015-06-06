@@ -103,6 +103,25 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
+  def add(field: StructField): StructType = {
+    StructType(fields :+ field)
+  }
+
+  def add(name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    metadata: Metadata = Metadata.empty): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, metadata))
+  }
+  
+  def add(name: String,
+    dataType: String,
+    nullable: Boolean = true,
+    metadata: Metadata = Metadata.empty): StructType = {
+    StructType(fields :+ new StructField(name, 
+      DataType.getSQLDataType(dataType), nullable, metadata))
+  }
+  
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.

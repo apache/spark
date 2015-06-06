@@ -376,4 +376,22 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  def getSQLDataType(dataType: String): DataType = {
+    dataType match {
+      case "byte" => org.apache.spark.sql.types.ByteType
+      case "integer" => org.apache.spark.sql.types.IntegerType
+      case "double" => org.apache.spark.sql.types.DoubleType
+      case "numeric" => org.apache.spark.sql.types.DoubleType
+      case "character" => org.apache.spark.sql.types.StringType
+      case "string" => org.apache.spark.sql.types.StringType
+      case "binary" => org.apache.spark.sql.types.BinaryType
+      case "raw" => org.apache.spark.sql.types.BinaryType
+      case "logical" => org.apache.spark.sql.types.BooleanType
+      case "boolean" => org.apache.spark.sql.types.BooleanType
+      case "timestamp" => org.apache.spark.sql.types.TimestampType
+      case "date" => org.apache.spark.sql.types.DateType
+      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+    }
+  }
 }
