@@ -77,7 +77,7 @@ Note, the master machine accesses each of the worker machines via ssh. By defaul
 If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
 
 
-Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
+Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
 - `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
