@@ -49,7 +49,6 @@ class ReceivedBlockHandlerSuite
 
   val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
   val hadoopConf = new Configuration()
-  val storageLevel = StorageLevel.MEMORY_ONLY_SER
   val streamId = 1
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -63,20 +62,18 @@ class ReceivedBlockHandlerSuite
   var blockManager: BlockManager = null
   var handler: ReceivedBlockHandler = null
   var tempDirectory: File = null
+  var storageLevel = StorageLevel.MEMORY_ONLY_SER
 
-  private def makeBlockManagerBasedBlockHandler(
-      manager: BlockManager,
-      storageLevel: StorageLevel): BlockManagerBasedBlockHandler = {
-    val handler = new BlockManagerBasedBlockHandler(manager, storageLevel)
-    handler
-  }
-
-  private def makeWriteAheadLogBasedBlockHandler(
-      manager: BlockManager,
-      storageLevel: StorageLevel): WriteAheadLogBasedBlockHandler = {
-    val handler = new WriteAheadLogBasedBlockHandler(manager, 1,
-      storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
-    handler
+  private def makeBlockManager(
+      maxMem: Long,
+      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
+    conf.set("spark.storage.unrollMemoryThreshold", "512")
+    conf.set("spark.storage.unrollFraction", "0.4")
+    val transfer = new NioBlockTransferService(conf, securityMgr)
+    val manager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, maxMem, conf,
+      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    manager.initialize("app-id")
+    manager
   }
 
   before {
@@ -127,78 +124,6 @@ class ReceivedBlockHandlerSuite
         )
       }
     }
-  }
-
-  test("BlockManagerBasedBlockHandler - count messages MEMORY_ONLY") {
-    handler = makeBlockManagerBasedBlockHandler(blockManager, StorageLevel.MEMORY_ONLY)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
-  }
-
-  test("BlockManagerBasedBlockHandler - count messages DISK_ONLY") {
-    handler = makeBlockManagerBasedBlockHandler(blockManager, StorageLevel.DISK_ONLY)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
-  }
-
-  test("BlockManagerBasedBlockHandler - count messages MEMORY_AND_DISK") {
-    handler = makeBlockManagerBasedBlockHandler(blockManager, StorageLevel.MEMORY_AND_DISK)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
-  }
-
-  test("WriteAheadLogBasedBlockHandler - count messages MEMORY_ONLY") {
-    handler = makeWriteAheadLogBasedBlockHandler(blockManager, StorageLevel.MEMORY_ONLY)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
-  }
-
-  test("WriteAheadLogBasedBlockHandler - count messages DISK_ONLY") {
-    handler = makeWriteAheadLogBasedBlockHandler(blockManager, StorageLevel.DISK_ONLY)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
-  }
-
-  test("WriteAheadLogBasedBlockHandler - count messages MEMORY_AND_DISK") {
-    handler = makeWriteAheadLogBasedBlockHandler(blockManager, StorageLevel.MEMORY_AND_DISK)
-    val block1 = List.fill(100)(new Array[Byte](100))
-    val blockId1 = generateBlockId()
-    val blockStoreResult1 = handler.storeBlock(blockId1, IteratorBlock(block1.iterator))
-    val block2 = collection.mutable.ArrayBuffer.fill(100)(0)
-    val blockId2 = generateBlockId()
-    val blockStoreResult2 = handler.storeBlock(blockId2, ArrayBufferBlock(block2))
-    assert(blockStoreResult1.numRecords === 100)
-    assert(blockStoreResult2.numRecords === 100)
   }
 
   test("BlockManagerBasedBlockHandler - handle errors in storing block") {
@@ -259,6 +184,169 @@ class ReceivedBlockHandlerSuite
       eventually(timeout(10000 millis), interval(10 millis)) {
         getWriteAheadLogFiles().size should be < preCleanupLogFiles.size
       }
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-MEMORY_ONLY-ByteBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    // Create a non-trivial (not all zeros) byte array
+    var counter = 0.toByte
+    def incr: Byte = {counter = (counter + 1).toByte; counter;}
+    val bytes = Array.fill[Byte](100)(incr)
+    val byteBufferBlock = ByteBuffer.wrap(bytes)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ByteBufferBlock(byteBufferBlock))
+      assert(blockStoreResult.numRecords === None)
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-MEMORY_ONLY-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-DISK_ONLY-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.DISK_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-MEMORY_AND_DISK-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_AND_DISK
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-MEMORY_ONLY-IteratorBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-DISK_ONLY-IteratorBlock - count messages") {
+    storageLevel = StorageLevel.DISK_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler-MEMORY_AND_DISK-IteratorBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_AND_DISK
+    val block = ArrayBuffer.fill(100)(0)
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-MEMORY_ONLY-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-DISK_ONLY-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.DISK_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-MEMORY_AND_DISK-ArrayBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_AND_DISK
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ArrayBufferBlock(block))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-MEMORY_ONLY-IteratorBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-DISK_ONLY-IteratorBlock - count messages ") {
+    storageLevel = StorageLevel.DISK_ONLY
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-MEMORY_AND_DISK-IteratorBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_AND_DISK
+    val block = ArrayBuffer.fill(100)(0)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(100))
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler - isFullyConsumed-MEMORY_ONLY") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    blockManager = makeBlockManager(12000)
+    val block = List.fill(70)(new Array[Byte](100))
+    // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
+    // this block With MEMORY_ONLY StorageLevel. BlockManager will not be able to unroll this block
+    // and hence it will not tryToPut this block , resulting the SparkException
+    withBlockManagerBasedBlockHandler { handler =>
+      val thrown = intercept[SparkException] {
+        val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      }
+      assert(thrown.getMessage ===
+        "Could not store input-1-1000 to block manager with storage level " + storageLevel)
+    }
+  }
+
+  test("BlockManagerBasedBlockHandler - isFullyConsumed-MEMORY_AND_DISK") {
+    storageLevel = StorageLevel.MEMORY_AND_DISK
+    blockManager = makeBlockManager(12000)
+    val block = List.fill(70)(new Array[Byte](100))
+    // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
+    // this block in MEMORY , But BlockManager will be able to sereliaze this block to DISK
+    // and hence count returns correct value.
+    withBlockManagerBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(70))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler - isFullyConsumed-MEMORY_ONLY") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    blockManager = makeBlockManager(12000)
+    val block = List.fill(70)(new Array[Byte](100))
+    // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
+    // this block in MEMORY , But BlockManager will be able to sereliaze this block to WAL
+    // and hence count returns correct value.
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+      assert(blockStoreResult.numRecords === Some(70))
     }
   }
 
@@ -339,9 +427,20 @@ class ReceivedBlockHandlerSuite
     (blockIds, storeResults)
   }
 
+  /** Store block using a handler */
+  private def storeBlock(
+      handler: ReceivedBlockHandler,
+      block: ReceivedBlock
+    ): ReceivedBlockStoreResult = {
+    val blockId = StreamBlockId(streamId, 1000L)
+    val blockStoreResult = handler.storeBlock(blockId, block)
+    logDebug("Done inserting")
+    blockStoreResult
+  }
   private def getWriteAheadLogFiles(): Seq[String] = {
     getLogFilesInDirectory(checkpointDirToLogDir(tempDirectory.toString, streamId))
   }
 
   private def generateBlockId(): StreamBlockId = StreamBlockId(streamId, scala.util.Random.nextLong)
 }
+
