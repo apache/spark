@@ -410,13 +410,13 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
-  test("Enclosing column names by jdbc dialect") {
+  test("quote column names by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
 
     val columns = Seq("abc", "key")
-    val MySQLColumns = columns.map(MySQL.columnEnclosing(_))
-    val PostgresColumns = columns.map(Postgres.columnEnclosing(_))
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
   }
