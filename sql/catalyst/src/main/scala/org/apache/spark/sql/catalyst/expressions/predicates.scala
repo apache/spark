@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types._
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -82,6 +83,10 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
       case b: Boolean => !b
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, c => s"!($c)")
+  }
 }
 
 /**
@@ -141,6 +146,29 @@ case class And(left: Expression, right: Expression)
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+
+    // The result should be `false`, if any of them is `false` whenever the other is null or not.
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive}  = false;
+
+      if (!${eval1.isNull} && !${eval1.primitive}) {
+      } else {
+        ${eval2.code}
+        if (!${eval2.isNull} && !${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = true;
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
 }
 
 case class Or(left: Expression, right: Expression)
@@ -166,6 +194,29 @@ case class Or(left: Expression, right: Expression)
         }
       }
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+
+    // The result should be `true`, if any of them is `true` whenever the other is null or not.
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = true;
+
+      if (!${eval1.isNull} && ${eval1.primitive}) {
+      } else {
+        ${eval2.code}
+        if (!${eval2.isNull} && ${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = false;
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
   }
 }
 
@@ -198,6 +249,20 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
     }
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    left.dataType match {
+      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
+      })
+      case TimestampType =>
+        // java.sql.Timestamp does not have compare()
+        super.genCode(ctx, ev)
+      case other => defineCodeGen (ctx, ev, {
+        (c1, c2) => s"$c1.compare($c2) $symbol 0"
+      })
+    }
+  }
+
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =
     sys.error(s"BinaryComparisons must override either eval or evalInternal")
 }
@@ -214,6 +279,9 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   protected override def evalInternal(l: Any, r: Any) = {
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
 
@@ -234,6 +302,17 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else {
       l == r
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    ev.isNull = "false"
+    eval1.code + eval2.code + s"""
+        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+           (!${eval1.isNull} && $equalCode);
+      """
   }
 }
 
@@ -307,6 +386,27 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     } else {
       falseValue.eval(input)
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val condEval = predicate.gen(ctx)
+    val trueEval = trueValue.gen(ctx)
+    val falseEval = falseValue.gen(ctx)
+
+    s"""
+      ${condEval.code}
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${condEval.isNull} && ${condEval.primitive}) {
+        ${trueEval.code}
+        ${ev.isNull} = ${trueEval.isNull};
+        ${ev.primitive} = ${trueEval.primitive};
+      } else {
+        ${falseEval.code}
+        ${ev.isNull} = ${falseEval.isNull};
+        ${ev.primitive} = ${falseEval.primitive};
+      }
+    """
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
@@ -393,6 +493,48 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     return res
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val len = branchesArr.length
+    val got = ctx.freshName("got")
+
+    val cases = (0 until len/2).map { i =>
+      val cond = branchesArr(i * 2).gen(ctx)
+      val res = branchesArr(i * 2 + 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${cond.code}
+          if (!${cond.isNull} && ${cond.primitive}) {
+            $got = true;
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.primitive} = ${res.primitive};
+          }
+        }
+      """
+    }.mkString("\n")
+
+    val other = if (len % 2 == 1) {
+      val res = branchesArr(len - 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.primitive} = ${res.primitive};
+        }
+      """
+    } else {
+      ""
+    }
+
+    s"""
+      boolean $got = false;
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      $cases
+      $other
+    """
+  }
+
   override def toString: String = {
     "CASE" + branches.sliding(2, 2).map {
       case Seq(cond, value) => s" WHEN $cond THEN $value"
@@ -442,6 +584,52 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       res = branchesArr(i).eval(input)
     }
     return res
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val keyEval = key.gen(ctx)
+    val len = branchesArr.length
+    val got = ctx.freshName("got")
+
+    val cases = (0 until len/2).map { i =>
+      val cond = branchesArr(i * 2).gen(ctx)
+      val res = branchesArr(i * 2 + 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${cond.code}
+          if (${keyEval.isNull} && ${cond.isNull} ||
+            !${keyEval.isNull} && !${cond.isNull}
+             && ${ctx.equalFunc(key.dataType)(keyEval.primitive, cond.primitive)}) {
+            $got = true;
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.primitive} = ${res.primitive};
+          }
+        }
+      """
+    }.mkString("\n")
+
+    val other = if (len % 2 == 1) {
+      val res = branchesArr(len - 1).gen(ctx)
+      s"""
+        if (!$got) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.primitive} = ${res.primitive};
+        }
+      """
+    } else {
+      ""
+    }
+
+    s"""
+      boolean $got = false;
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${keyEval.code}
+      $cases
+      $other
+    """
   }
 
   private def equalNullSafe(l: Any, r: Any) = {

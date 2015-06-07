@@ -27,6 +27,9 @@ import org.apache.spark.util.Utils
  */
 package object codegen {
 
+  type Term = String
+  type Code = String
+
   /** Canonicalizes an expression so those that differ only by names can reuse the same code. */
   object ExpressionCanonicalizer extends rules.RuleExecutor[Expression] {
     val batches =

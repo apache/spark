@@ -37,13 +37,13 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
     val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
-      val evaluationCode = expressionEvaluator(e, ctx)
+      val evaluationCode = e.gen(ctx)
       evaluationCode.code +
         s"""
-          if(${evaluationCode.nullTerm})
+          if(${evaluationCode.isNull})
             mutableRow.setNullAt($i);
           else
-            ${setColumn("mutableRow", e.dataType, i, evaluationCode.primitiveTerm)};
+            mutableRow.${ctx.setColumn(e.dataType, i, evaluationCode.primitive)};
         """
     }.mkString("\n")
     val code = s"""

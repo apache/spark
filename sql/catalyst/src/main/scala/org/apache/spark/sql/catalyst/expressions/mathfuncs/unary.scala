@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{Code, CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, Row, UnaryExpression}
 import org.apache.spark.sql.types._
 
@@ -43,6 +44,23 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
       val result = f(evalE.asInstanceOf[Double])
       if (result.isNaN) null else result
     }
+  }
+
+  // name of function in java.lang.Math
+  def funcName: String = name.toLowerCase
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
+        if (Double.valueOf(${ev.primitive}).isNaN()) {
+          ${ev.isNull} = true;
+        }
+      }
+    """
   }
 }
 
@@ -72,7 +90,9 @@ case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG
 
 case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
 
-case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND")
+case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
+  override def funcName: String = "rint"
+}
 
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
@@ -84,6 +104,10 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
-case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES")
+case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
+  override def funcName: String = "toDegrees"
+}
 
-case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS")
+case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
+  override def funcName: String = "toRadians"
+}
