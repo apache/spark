@@ -74,7 +74,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(123L, DecimalType(3, 1)), Decimal(123.0))
 
     // TODO: Fix the following bug and re-enable it.
-    //checkEvaluation(cast(123L, DecimalType(2, 0)), null)
+    // checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
   test("cast from boolean") {
@@ -153,7 +153,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         DecimalType.Unlimited), LongType), StringType), ShortType),
       0.toShort)
     checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType),ByteType),
+      cast(cast(cast(cast(cast(cast("5", TimestampType), ByteType),
         DecimalType.Unlimited), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.Unlimited),
