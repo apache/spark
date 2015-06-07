@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext, Term}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -50,6 +51,44 @@ abstract class Expression extends TreeNode[Expression] {
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: Row = null): Any
+
+  /**
+   * Returns an [[GeneratedExpressionCode]], which contains Java source code that
+   * can be used to generate the result of evaluating the expression on an input row.
+   *
+   * @param ctx a [[CodeGenContext]]
+   * @return [[GeneratedExpressionCode]]
+   */
+  def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
+    val isNull = ctx.freshName("isNull")
+    val primitive = ctx.freshName("primitive")
+    val ve = GeneratedExpressionCode("", isNull, primitive)
+    ve.code = genCode(ctx, ve)
+    ve
+  }
+
+  /**
+   * Returns Java source code that can be compiled to evaluate this expression.
+   * The default behavior is to call the eval method of the expression. Concrete expression
+   * implementations should override this to do actual code generation.
+   *
+   * @param ctx a [[CodeGenContext]]
+   * @param ev an [[GeneratedExpressionCode]] with unique terms.
+   * @return Java source code
+   */
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    ctx.references += this
+    val objectTerm = ctx.freshName("obj")
+    s"""
+      /* expression: ${this} */
+      Object ${objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
+      boolean ${ev.isNull} = ${objectTerm} == null;
+      ${ctx.javaType(e.dataType)} ${ev.primitive} = ${ctx.defaultValue(e.dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = (${ctx.boxedType(e.dataType)})${objectTerm};
+      }
+    """
+  }
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -116,6 +155,41 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def nullable: Boolean = left.nullable || right.nullable
 
   override def toString: String = s"($left $symbol $right)"
+
+  /**
+   * Short hand for generating binary evaluation code, which depends on two sub-evaluations of
+   * the same type.  If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f accepts two variable names and returns Java code to compute the output.
+   */
+  protected def defineCodeGen(
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (Term, Term) => Code): String = {
+    // TODO: Right now some timestamp tests fail if we enforce this...
+    if (left.dataType != right.dataType) {
+      // log.warn(s"${left.dataType} != ${right.dataType}")
+    }
+
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val resultCode = f(eval1.primitive, eval2.primitive)
+
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = ${eval1.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${eval2.code}
+        if(!${eval2.isNull}) {
+          ${ev.primitive} = $resultCode;
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+    """
+  }
 }
 
 private[sql] object BinaryExpression {
@@ -128,6 +202,32 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+
+  /**
+   * Called by unary expressions to generate a code block that returns null if its parent returns
+   * null, and if not not null, use `f` to generate the expression.
+   *
+   * As an example, the following does a boolean inversion (i.e. NOT).
+   * {{{
+   *   defineCodeGen(ctx, ev, c => s"!($c)")
+   * }}}
+   *
+   * @param f function that accepts a variable name and returns Java code to compute the output.
+   */
+  protected def defineCodeGen(
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: Term => Code): Code = {
+    val eval = child.gen(ctx)
+    // reuse the previous isNull
+    ev.isNull = eval.isNull
+    eval.code + s"""
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = ${f(eval.primitive)};
+      }
+    """
+  }
 }
 
 // TODO Semantically we probably not need GroupExpression
