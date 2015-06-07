@@ -80,6 +80,15 @@ abstract class JdbcDialect {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Enclose column name
+   * @param colName The coulmn name
+   * @return Enclosed column name
+   */
+  def columnEnclosing(colName: String): String = {
+    s""""$colName""""
+  }
 }
 
 /**
@@ -207,5 +216,9 @@ case object MySQLDialect extends JdbcDialect {
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
       Some(BooleanType)
     } else None
+  }
+
+  override def columnEnclosing(colName: String): String = {
+    s"`$colName`"
   }
 }
