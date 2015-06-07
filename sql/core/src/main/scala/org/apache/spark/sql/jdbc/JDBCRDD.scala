@@ -211,12 +211,14 @@ private[sql] object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition]): RDD[Row] = {
+    val dialect = JdbcDialects.get(url)
+    val enclosedColumns = requiredColumns.map(dialect.columnEnclosing(_))
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
-      requiredColumns,
+      enclosedColumns,
       filters,
       parts,
       properties)
