@@ -24,11 +24,14 @@ import org.scalatest.mock.MockitoSugar
 
 class MesosSchedulerUtilsSuite extends FlatSpec with Matchers with MockitoSugar {
 
+  // scalastyle:off structural.type
+  // this is the documented way of generating fixtures in scalatest
   def fixture: Object {val sc: SparkContext; val sparkConf: SparkConf} = new {
     val sparkConf = new SparkConf
     val sc = mock[SparkContext]
     when(sc.conf).thenReturn(sparkConf)
   }
+  // scalastyle:on structural.type
 
   "MesosSchedulerUtils" should "use at-least minimum overhead" in new MesosSchedulerUtils {
     val f = fixture
