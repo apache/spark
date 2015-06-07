@@ -83,9 +83,9 @@ abstract class Expression extends TreeNode[Expression] {
       /* expression: ${this} */
       Object ${objectTerm} = expressions[${ctx.references.size - 1}].eval(i);
       boolean ${ev.isNull} = ${objectTerm} == null;
-      ${ctx.javaType(e.dataType)} ${ev.primitive} = ${ctx.defaultValue(e.dataType)};
+      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
       if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(e.dataType)})${objectTerm};
+        ${ev.primitive} = (${ctx.boxedType(this.dataType)})${objectTerm};
       }
     """
   }
