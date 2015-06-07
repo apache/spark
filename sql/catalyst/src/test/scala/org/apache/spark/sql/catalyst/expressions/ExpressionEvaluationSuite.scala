@@ -1447,7 +1447,8 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
 // TODO: Make the tests work with codegen.
 class ExpressionEvaluationWithoutCodeGenSuite extends ExpressionEvaluationBaseSuite {
 
-  override def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow) = {
+  override def checkEvaluation(
+      expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
     checkEvaluationWithoutCodegen(expression, expected, inputRow)
   }
 
