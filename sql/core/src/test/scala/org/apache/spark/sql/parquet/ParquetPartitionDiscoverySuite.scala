@@ -53,7 +53,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
     check("10", Literal.create(10, IntegerType))
     check("1000000000000000", Literal.create(1000000000000000L, LongType))
-    check("1.5", Literal.create(1.5, FloatType))
+    check("1.5", Literal.create(1.5f, FloatType))
     check("hello", Literal.create("hello", StringType))
     check(defaultPartitionName, Literal.create(null, NullType))
   }
@@ -83,13 +83,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         ArrayBuffer(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
-          Literal.create(1.5, FloatType)))
+          Literal.create(1.5f, FloatType)))
     })
 
     check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
         ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5, FloatType)))
+        ArrayBuffer(Literal.create(1.5f, FloatType)))
     })
 
     check("file:///", None)
