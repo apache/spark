@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
@@ -432,6 +433,47 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   override def eval(input: Row): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    // TODO(cg): Add support for more data types.
+    (child.dataType, dataType) match {
+
+      case (BinaryType, StringType) =>
+        defineCodeGen (ctx, ev, c =>
+          s"new ${ctx.stringType}().set($c)")
+      case (DateType, StringType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"""new ${ctx.stringType}().set(
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
+      // Special handling required for timestamps in hive test cases since the toString function
+      // does not match the expected output.
+      case (TimestampType, StringType) =>
+        super.genCode(ctx, ev)
+      case (_, StringType) =>
+        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().set(String.valueOf($c))")
+
+      // fallback for DecimalType, this must be before other numeric types
+      case (_, dt: DecimalType) =>
+        super.genCode(ctx, ev)
+
+      case (BooleanType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
+      case (dt: DecimalType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"$c.isZero()")
+      case (dt: NumericType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"$c != 0")
+
+      case (_: DecimalType, IntegerType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toInt()")
+      case (_: DecimalType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+      case (_: NumericType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
+
+      case other =>
+        super.genCode(ctx, ev)
+    }
   }
 }
 

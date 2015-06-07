@@ -38,7 +38,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
 
   protected def create(predicate: Expression): ((Row) => Boolean) = {
     val ctx = newCodeGenContext()
-    val eval = expressionEvaluator(predicate, ctx)
+    val eval = predicate.gen(ctx)
     val code = s"""
       import org.apache.spark.sql.Row;
 
@@ -55,7 +55,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
         @Override
         public boolean eval(Row i) {
           ${eval.code}
-          return !${eval.nullTerm} && ${eval.primitiveTerm};
+          return !${eval.isNull} && ${eval.primitive};
         }
       }"""
 

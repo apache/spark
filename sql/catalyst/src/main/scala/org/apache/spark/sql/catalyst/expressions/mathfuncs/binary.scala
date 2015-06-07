@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.mathfuncs
 
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, BinaryExpression, Expression, Row}
 import org.apache.spark.sql.types._
 
@@ -49,6 +50,10 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
+  }
 }
 
 case class Atan2(left: Expression, right: Expression)
@@ -70,9 +75,26 @@ case class Atan2(left: Expression, right: Expression)
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+      """
+  }
 }
 
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
-case class Pow(left: Expression, right: Expression) extends BinaryMathExpression(math.pow, "POWER")
+case class Pow(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.pow, "POWER") {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+      """
+  }
+}
