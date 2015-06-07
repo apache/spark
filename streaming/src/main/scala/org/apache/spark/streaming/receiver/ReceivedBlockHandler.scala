@@ -32,8 +32,10 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /** Trait that represents the metadata related to storage of blocks */
 private[streaming] trait ReceivedBlockStoreResult {
-  def blockId: StreamBlockId  // Any implementation of this trait will store a block id
-  def numRecords: Long        // Any implementation of this trait will store the number of records
+  // Any implementation of this trait will store a block id
+  def blockId: StreamBlockId
+  // Any implementation of this trait will have to return the number of records
+  def numRecords: Option[Long]
 }
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
@@ -52,8 +54,8 @@ private[streaming] trait ReceivedBlockHandler {
  * that stores the metadata related to storage of blocks using
  * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
  */
-private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId ,
-      numRecords: Long)
+private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId,
+      numRecords: Option[Long])
   extends ReceivedBlockStoreResult
 
 
@@ -90,7 +92,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     if(countIterator != null) {
       numRecords = Some(countIterator.count)
     }
-    BlockManagerBasedStoreResult(blockId, numRecords.getOrElse(-1))
+    BlockManagerBasedStoreResult(blockId, numRecords)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -107,7 +109,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
-    numRecords: Long,
+    numRecords: Option[Long],
     walRecordHandle: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
@@ -202,7 +204,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     if(countIterator != null) {
       numRecords = Some(countIterator.count)
     }
-    WriteAheadLogBasedStoreResult(blockId, numRecords.getOrElse(-1), walRecordHandle)
+    WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -227,6 +229,7 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
 private class CountingIterator[T: Manifest](iterator: Iterator[T]) extends Iterator[T] {
    var count = 0
    def hasNext(): Boolean = iterator.hasNext
+   def isFullyConsumed: Boolean = !iterator.hasNext
    def next(): T = {
     count+=1
     iterator.next()
