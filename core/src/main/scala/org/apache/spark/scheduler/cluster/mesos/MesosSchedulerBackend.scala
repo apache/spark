@@ -59,8 +59,7 @@ private[spark] class MesosSchedulerBackend(
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
   // Offer constraints
-  private[mesos] val constraintsStr = sc.conf.get("spark.mesos.constraints", "")
-  private[mesos] val offerConstraints = parseConstraintString(constraintsStr)
+  val slaveOfferConstraints = parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   @volatile var appId: String = _
 
@@ -189,7 +188,7 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
-      val qualifyingOffers = filterOffersByConstraints(offers, offerConstraints)
+      val qualifyingOffers = filterOffersByConstraints(offers, slaveOfferConstraints)
       // Fail-fast on offers we know will be rejected
       val (usableOffers, unUsableOffers) = qualifyingOffers.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
