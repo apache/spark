@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Types
+
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
-
-import java.sql.Types
 
 /**
  * :: DeveloperApi ::
@@ -82,11 +82,10 @@ abstract class JdbcDialect {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
-   * Enclose column name
-   * @param colName The coulmn name
-   * @return Enclosed column name
+   * Quotes the identifier. This is used to put quotes around the identifier in case the column
+   * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
-  def columnEnclosing(colName: String): String = {
+  def quoteIdentifier(colName: String): String = {
     s""""$colName""""
   }
 }
@@ -150,18 +149,19 @@ object JdbcDialects {
 @DeveloperApi
 class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
 
-  require(!dialects.isEmpty)
+  require(dialects.nonEmpty)
 
-  def canHandle(url : String): Boolean =
+  override def canHandle(url : String): Boolean =
     dialects.map(_.canHandle(url)).reduce(_ && _)
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
-    dialects.map(_.getCatalystType(sqlType, typeName, size, md)).flatten.headOption
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
+  }
 
-  override def getJDBCType(dt: DataType): Option[JdbcType] =
-    dialects.map(_.getJDBCType(dt)).flatten.headOption
-
+  override def getJDBCType(dt: DataType): Option[JdbcType] = {
+    dialects.flatMap(_.getJDBCType(dt)).headOption
+  }
 }
 
 /**
@@ -170,7 +170,7 @@ class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
  */
 @DeveloperApi
 case object NoopDialect extends JdbcDialect {
-  def canHandle(url : String): Boolean = true
+  override def canHandle(url : String): Boolean = true
 }
 
 /**
@@ -179,7 +179,7 @@ case object NoopDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object PostgresDialect extends JdbcDialect {
-  def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
@@ -205,7 +205,7 @@ case object PostgresDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object MySQLDialect extends JdbcDialect {
-  def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
+  override def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
@@ -218,7 +218,7 @@ case object MySQLDialect extends JdbcDialect {
     } else None
   }
 
-  override def columnEnclosing(colName: String): String = {
+  override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
   }
 }
