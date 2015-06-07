@@ -191,6 +191,8 @@ class ConfigParserWithDefaults(ConfigParser):
 
     def getboolean(self, section, key):
         val = str(self.get(section, key)).lower().strip()
+        if '#' in val:
+            val = val.split('#')[0].strip()
         if val == "true":
             return True
         elif val == "false":
