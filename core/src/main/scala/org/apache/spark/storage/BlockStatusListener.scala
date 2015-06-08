@@ -35,8 +35,12 @@ private[spark] class BlockStatusListener extends SparkListener {
   private val blocks = new mutable.HashMap[BlockId, BlockUIData]
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
-    val blockManagerId = blockUpdated.updateBlockInfo.blockManagerId
     val blockId = blockUpdated.updateBlockInfo.blockId
+    if (!blockId.isInstanceOf[StreamBlockId]) {
+      // Now we only monitor StreamBlocks
+      return
+    }
+    val blockManagerId = blockUpdated.updateBlockInfo.blockManagerId
     val storageLevel = blockUpdated.updateBlockInfo.storageLevel
     val memSize = blockUpdated.updateBlockInfo.memSize
     val diskSize = blockUpdated.updateBlockInfo.diskSize
