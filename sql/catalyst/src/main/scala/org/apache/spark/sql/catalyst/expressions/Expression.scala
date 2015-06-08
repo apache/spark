@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext, Term}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
@@ -76,7 +76,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[GeneratedExpressionCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
     s"""
@@ -166,7 +166,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   protected def defineCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: (Term, Term) => Code): String = {
+      f: (String, String) => String): String = {
     // TODO: Right now some timestamp tests fail if we enforce this...
     if (left.dataType != right.dataType) {
       // log.warn(s"${left.dataType} != ${right.dataType}")
@@ -182,7 +182,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${eval2.code}
-        if(!${eval2.isNull}) {
+        if (!${eval2.isNull}) {
           ${ev.primitive} = $resultCode;
         } else {
           ${ev.isNull} = true;
@@ -217,7 +217,7 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
   protected def defineCodeGen(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
-      f: Term => Code): Code = {
+      f: String => String): String = {
     val eval = child.gen(ctx)
     // reuse the previous isNull
     ev.isNull = eval.isNull

@@ -40,7 +40,7 @@ class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
  * @param primitive A term for a possible primitive value of the result of the evaluation. Not
  *                      valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: Code, var isNull: Term, var primitive: Term)
+case class GeneratedExpressionCode(var code: String, var isNull: String, var primitive: String)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
@@ -65,14 +65,14 @@ class CodeGenContext {
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(prefix: String): Term = {
+  def freshName(prefix: String): String = {
     s"$prefix${curId.getAndIncrement}"
   }
 
   /**
    * Return the code to access a column for given DataType
    */
-  def getColumn(dataType: DataType, ordinal: Int): Code = {
+  def getColumn(dataType: DataType, ordinal: Int): String = {
     if (isNativeType(dataType)) {
       s"i.${accessorForType(dataType)}($ordinal)"
     } else {
@@ -83,7 +83,7 @@ class CodeGenContext {
   /**
    * Return the code to update a column in Row for given DataType
    */
-  def setColumn(dataType: DataType, ordinal: Int, value: Term): Code = {
+  def setColumn(dataType: DataType, ordinal: Int, value: String): String = {
     if (isNativeType(dataType)) {
       s"${mutatorForType(dataType)}($ordinal, $value)"
     } else {
@@ -94,7 +94,7 @@ class CodeGenContext {
   /**
    * Return the name of accessor in Row for a DataType
    */
-  def accessorForType(dt: DataType): Term = dt match {
+  def accessorForType(dt: DataType): String = dt match {
     case IntegerType => "getInt"
     case other => s"get${boxedType(dt)}"
   }
@@ -102,7 +102,7 @@ class CodeGenContext {
   /**
    * Return the name of mutator in Row for a DataType
    */
-  def mutatorForType(dt: DataType): Term = dt match {
+  def mutatorForType(dt: DataType): String = dt match {
     case IntegerType => "setInt"
     case other => s"set${boxedType(dt)}"
   }
@@ -110,7 +110,7 @@ class CodeGenContext {
   /**
    * Return the Java type for a DataType
    */
-  def javaType(dt: DataType): Term = dt match {
+  def javaType(dt: DataType): String = dt match {
     case IntegerType => "int"
     case LongType => "long"
     case ShortType => "short"
@@ -131,7 +131,7 @@ class CodeGenContext {
   /**
    * Return the boxed type in Java
    */
-  def boxedType(dt: DataType): Term = dt match {
+  def boxedType(dt: DataType): String = dt match {
     case IntegerType => "Integer"
     case LongType => "Long"
     case ShortType => "Short"
@@ -146,7 +146,7 @@ class CodeGenContext {
   /**
    * Return the representation of default value for given DataType
    */
-  def defaultValue(dt: DataType): Term = dt match {
+  def defaultValue(dt: DataType): String = dt match {
     case BooleanType => "false"
     case FloatType => "-1.0f"
     case ShortType => "(short)-1"
@@ -161,7 +161,7 @@ class CodeGenContext {
   /**
    * Returns a function to generate equal expression in Java
    */
-  def equalFunc(dataType: DataType): ((Term, Term) => Code) = dataType match {
+  def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
     case BinaryType => { case (eval1, eval2) =>
       s"java.util.Arrays.equals($eval1, $eval2)" }
     case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType =>

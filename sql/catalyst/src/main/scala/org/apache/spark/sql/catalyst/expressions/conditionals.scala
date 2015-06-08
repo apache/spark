@@ -50,7 +50,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val condEval = predicate.gen(ctx)
     val trueEval = trueValue.gen(ctx)
     val falseEval = falseValue.gen(ctx)
@@ -155,7 +155,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     return res
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val len = branchesArr.length
     val got = ctx.freshName("got")
 
@@ -248,7 +248,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     return res
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val keyEval = key.gen(ctx)
     val len = branchesArr.length
     val got = ctx.freshName("got")

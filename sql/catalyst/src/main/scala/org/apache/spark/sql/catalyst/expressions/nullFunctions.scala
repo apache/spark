@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types.DataType
@@ -53,7 +53,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
@@ -81,7 +81,7 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
     child.eval(input) == null
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     ev.isNull = "false"
     ev.primitive = eval.isNull
@@ -100,7 +100,7 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
     child.eval(input) != null
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     ev.isNull = "false"
     ev.primitive = s"(!(${eval.isNull}))"
@@ -130,7 +130,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
       val eval = e.gen(ctx)

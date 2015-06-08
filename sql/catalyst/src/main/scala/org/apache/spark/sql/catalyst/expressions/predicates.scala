@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, Code, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
 
@@ -84,7 +84,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
 }
@@ -147,7 +147,7 @@ case class And(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
 
@@ -155,7 +155,7 @@ case class And(left: Expression, right: Expression)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive}  = false;
+      boolean ${ev.primitive} = false;
 
       if (!${eval1.isNull} && !${eval1.primitive}) {
       } else {
@@ -196,7 +196,7 @@ case class Or(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
 
@@ -249,7 +249,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     left.dataType match {
       case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
         (c1, c3) => s"$c1 $symbol $c3"
@@ -280,7 +280,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
@@ -304,7 +304,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)

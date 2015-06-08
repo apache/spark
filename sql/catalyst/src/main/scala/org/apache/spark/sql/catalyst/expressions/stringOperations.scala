@@ -139,7 +139,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
 
   override def toString: String = s"Upper($child)"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
 }
@@ -153,7 +153,7 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 
   override def toString: String = s"Lower($child)"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
 }
@@ -190,7 +190,7 @@ trait StringComparison extends ExpectsInputTypes {
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
 }
@@ -201,7 +201,7 @@ case class Contains(left: Expression, right: Expression)
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
 }
@@ -212,7 +212,7 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
 }
