@@ -23,16 +23,18 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.scalatest.BeforeAndAfterAll
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{ParquetMetadata, FileMetaData, CompressionCodecName}
-import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter}
+import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.DateUtils
@@ -196,7 +198,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     withParquetDataFrame(allNulls :: Nil) { df =>
       val rows = df.collect()
-      assert(rows.size === 1)
+      assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(5)(null): _*))
     }
   }
@@ -209,7 +211,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     withParquetDataFrame(allNones :: Nil) { df =>
       val rows = df.collect()
-      assert(rows.size === 1)
+      assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
     }
   }
@@ -379,6 +381,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("SPARK-6352 DirectParquetOutputCommitter") {
+    val clonedConf = new Configuration(configuration)
+
     // Write to a parquet file and let it fail.
     // _temporary should be missing if direct output committer works.
     try {
@@ -393,11 +397,43 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
         val fs = path.getFileSystem(configuration)
         assert(!fs.exists(path))
       }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      configuration.clear()
+      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
     }
-    finally {
-      configuration.set("spark.sql.parquet.output.committer.class",
-        "org.apache.parquet.hadoop.ParquetOutputCommitter")
+  }
+
+  test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overriden") {
+    withTempPath { dir =>
+      val clonedConf = new Configuration(configuration)
+
+      configuration.set(
+        SQLConf.OUTPUT_COMMITTER_CLASS, classOf[ParquetOutputCommitter].getCanonicalName)
+
+      configuration.set(
+        "spark.sql.parquet.output.committer.class",
+        classOf[BogusParquetOutputCommitter].getCanonicalName)
+
+      try {
+        val message = intercept[SparkException] {
+          sqlContext.range(0, 1).write.parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(message === "Intentional exception for testing purposes")
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        configuration.clear()
+        clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      }
     }
+  }
+}
+
+class BogusParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+  extends ParquetOutputCommitter(outputPath, context) {
+
+  override def commitJob(jobContext: JobContext): Unit = {
+    sys.error("Intentional exception for testing purposes")
   }
 }
 
