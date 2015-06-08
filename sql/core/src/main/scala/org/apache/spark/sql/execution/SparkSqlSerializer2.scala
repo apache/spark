@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.serializer._
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, MutableRow, GenericMutableRow}
 import org.apache.spark.sql.types._
 
 /**
@@ -49,9 +49,9 @@ private[sql] class Serializer2SerializationStream(
     out: OutputStream)
   extends SerializationStream with Logging {
 
-  val rowOut = new DataOutputStream(out)
-  val writeKeyFunc = SparkSqlSerializer2.createSerializationFunction(keySchema, rowOut)
-  val writeValueFunc = SparkSqlSerializer2.createSerializationFunction(valueSchema, rowOut)
+  private val rowOut = new DataOutputStream(new BufferedOutputStream(out))
+  private val writeKeyFunc = SparkSqlSerializer2.createSerializationFunction(keySchema, rowOut)
+  private val writeValueFunc = SparkSqlSerializer2.createSerializationFunction(valueSchema, rowOut)
 
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
     val kv = t.asInstanceOf[Product2[Row, Row]]
@@ -86,31 +86,44 @@ private[sql] class Serializer2SerializationStream(
 private[sql] class Serializer2DeserializationStream(
     keySchema: Array[DataType],
     valueSchema: Array[DataType],
+    hasKeyOrdering: Boolean,
     in: InputStream)
   extends DeserializationStream with Logging  {
 
-  val rowIn = new DataInputStream(new BufferedInputStream(in))
+  private val rowIn = new DataInputStream(new BufferedInputStream(in))
 
-  val key = if (keySchema != null) new SpecificMutableRow(keySchema) else null
-  val value = if (valueSchema != null) new SpecificMutableRow(valueSchema) else null
-  val readKeyFunc = SparkSqlSerializer2.createDeserializationFunction(keySchema, rowIn, key)
-  val readValueFunc = SparkSqlSerializer2.createDeserializationFunction(valueSchema, rowIn, value)
+  private def rowGenerator(schema: Array[DataType]): () => (MutableRow) = {
+    if (schema == null) {
+      () => null
+    } else {
+      if (hasKeyOrdering) {
+        // We have key ordering specified in a ShuffledRDD, it is not safe to reuse a mutable row.
+        () => new GenericMutableRow(schema.length)
+      } else {
+        // It is safe to reuse the mutable row.
+        val mutableRow = new SpecificMutableRow(schema)
+        () => mutableRow
+      }
+    }
+  }
+
+  // Functions used to return rows for key and value.
+  private val getKey = rowGenerator(keySchema)
+  private val getValue = rowGenerator(valueSchema)
+  // Functions used to read a serialized row from the InputStream and deserialize it.
+  private val readKeyFunc = SparkSqlSerializer2.createDeserializationFunction(keySchema, rowIn)
+  private val readValueFunc = SparkSqlSerializer2.createDeserializationFunction(valueSchema, rowIn)
 
   override def readObject[T: ClassTag](): T = {
-    readKeyFunc()
-    readValueFunc()
-
-    (key, value).asInstanceOf[T]
+    (readKeyFunc(getKey()), readValueFunc(getValue())).asInstanceOf[T]
   }
 
   override def readKey[T: ClassTag](): T = {
-    readKeyFunc()
-    key.asInstanceOf[T]
+    readKeyFunc(getKey()).asInstanceOf[T]
   }
 
   override def readValue[T: ClassTag](): T = {
-    readValueFunc()
-    value.asInstanceOf[T]
+    readValueFunc(getValue()).asInstanceOf[T]
   }
 
   override def close(): Unit = {
@@ -118,9 +131,10 @@ private[sql] class Serializer2DeserializationStream(
   }
 }
 
-private[sql] class ShuffleSerializerInstance(
+private[sql] class SparkSqlSerializer2Instance(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType])
+    valueSchema: Array[DataType],
+    hasKeyOrdering: Boolean)
   extends SerializerInstance {
 
   def serialize[T: ClassTag](t: T): ByteBuffer =
@@ -137,7 +151,7 @@ private[sql] class ShuffleSerializerInstance(
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new Serializer2DeserializationStream(keySchema, valueSchema, s)
+    new Serializer2DeserializationStream(keySchema, valueSchema, hasKeyOrdering, s)
   }
 }
 
@@ -148,12 +162,21 @@ private[sql] class ShuffleSerializerInstance(
  * The schema of keys is represented by `keySchema` and that of values is represented by
  * `valueSchema`.
  */
-private[sql] class SparkSqlSerializer2(keySchema: Array[DataType], valueSchema: Array[DataType])
+private[sql] class SparkSqlSerializer2(
+    keySchema: Array[DataType],
+    valueSchema: Array[DataType],
+    hasKeyOrdering: Boolean)
   extends Serializer
   with Logging
   with Serializable{
 
-  def newInstance(): SerializerInstance = new ShuffleSerializerInstance(keySchema, valueSchema)
+  def newInstance(): SerializerInstance =
+    new SparkSqlSerializer2Instance(keySchema, valueSchema, hasKeyOrdering)
+
+  override def supportsRelocationOfSerializedObjects: Boolean = {
+    // SparkSqlSerializer2 is stateless and writes no stream headers
+    true
+  }
 }
 
 private[sql] object SparkSqlSerializer2 {
@@ -318,11 +341,11 @@ private[sql] object SparkSqlSerializer2 {
    */
   def createDeserializationFunction(
       schema: Array[DataType],
-      in: DataInputStream,
-      mutableRow: SpecificMutableRow): () => Unit = {
-    () => {
-      // If the schema is null, the returned function does nothing when it get called.
-      if (schema != null) {
+      in: DataInputStream): (MutableRow) => Row = {
+    if (schema == null) {
+      (mutableRow: MutableRow) => null
+    } else {
+      (mutableRow: MutableRow) => {
         var i = 0
         while (i < schema.length) {
           schema(i) match {
@@ -435,6 +458,8 @@ private[sql] object SparkSqlSerializer2 {
           }
           i += 1
         }
+
+        mutableRow
       }
     }
   }

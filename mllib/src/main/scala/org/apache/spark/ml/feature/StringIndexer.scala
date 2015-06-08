@@ -18,11 +18,12 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{NumericType, StringType, StructType}
@@ -51,14 +52,17 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A label indexer that maps a string column of labels to an ML column of label indices.
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
  */
-@AlphaComponent
-class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase {
+@Experimental
+class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
+  with StringIndexerBase {
+
+  def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -73,7 +77,7 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    copyValues(new StringIndexerModel(this, labels))
+    copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -82,12 +86,15 @@ class StringIndexer extends Estimator[StringIndexerModel] with StringIndexerBase
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[StringIndexer]].
+ * NOTE: During transformation, if the input column does not exist,
+ * [[StringIndexerModel.transform]] would return the input dataset unmodified.
+ * This is a temporary fix for the case when target labels do not exist during prediction.
  */
-@AlphaComponent
+@Experimental
 class StringIndexerModel private[ml] (
-    override val parent: StringIndexer,
+    override val uid: String,
     labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
   private val labelToIndex: OpenHashMap[String, Double] = {
@@ -108,6 +115,12 @@ class StringIndexerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    if (!dataset.schema.fieldNames.contains($(inputCol))) {
+      logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
+        "Skip StringIndexerModel.")
+      return dataset
+    }
+
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
@@ -124,6 +137,11 @@ class StringIndexerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    if (schema.fieldNames.contains($(inputCol))) {
+      validateAndTransformSchema(schema)
+    } else {
+      // If the input column does not exist during transformation, we skip StringIndexerModel.
+      schema
+    }
   }
 }

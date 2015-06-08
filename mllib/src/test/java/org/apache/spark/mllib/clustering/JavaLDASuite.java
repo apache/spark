@@ -107,6 +107,10 @@ public class JavaLDASuite implements Serializable {
     // Check: log probabilities
     assert(model.logLikelihood() < 0.0);
     assert(model.logPrior() < 0.0);
+
+    // Check: topic distributions
+    JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
+    assertEquals(topicDistributions.count(), corpus.count());
   }
 
   @Test
@@ -117,7 +121,7 @@ public class JavaLDASuite implements Serializable {
 
     // Train a model
     OnlineLDAOptimizer op = new OnlineLDAOptimizer()
-      .setTau_0(1024)
+      .setTau0(1024)
       .setKappa(0.51)
       .setGammaShape(1e40)
       .setMiniBatchFraction(0.5);

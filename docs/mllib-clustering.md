@@ -47,7 +47,7 @@ Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasin
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -62,6 +62,10 @@ val clusters = KMeans.train(parsedData, numClusters, numIterations)
 // Evaluate clustering by computing Within Set Sum of Squared Errors
 val WSSSE = clusters.computeCost(parsedData)
 println("Within Set Sum of Squared Errors = " + WSSSE)
+
+// Save and load model
+clusters.save(sc, "myModelPath")
+val sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -110,6 +114,10 @@ public class KMeansExample {
     // Evaluate clustering by computing Within Set Sum of Squared Errors
     double WSSSE = clusters.computeCost(parsedData.rdd());
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+
+    // Save and load model
+    clusters.save(sc.sc(), "myModelPath");
+    KMeansModel sameModel = KMeansModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -124,7 +132,7 @@ Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by in
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight python %}
-from pyspark.mllib.clustering import KMeans
+from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
 from math import sqrt
 
@@ -143,6 +151,10 @@ def error(point):
 
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
+
+# Save and load model
+clusters.save(sc, "myModelPath")
+sameModel = KMeansModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -237,11 +249,11 @@ public class GaussianMixtureExample {
     GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
 
     // Save and load GaussianMixtureModel
-    gmm.save(sc, "myGMMModel")
-    GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
+    gmm.save(sc.sc(), "myGMMModel");
+    GaussianMixtureModel sameModel = GaussianMixtureModel.load(sc.sc(), "myGMMModel");
     // Output the parameters of the mixture model
     for(int j=0; j<gmm.k(); j++) {
-        System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
+        System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
             gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
     }
   }
@@ -312,12 +324,12 @@ Calling `PowerIterationClustering.run` returns a
 which contains the computed clustering assignments.
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.PowerIterationClustering
+import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 val similarities: RDD[(Long, Long, Double)] = ...
 
-val pic = new PowerIteartionClustering()
+val pic = new PowerIterationClustering()
   .setK(3)
   .setMaxIterations(20)
 val model = pic.run(similarities)
@@ -325,6 +337,10 @@ val model = pic.run(similarities)
 model.assignments.foreach { a =>
   println(s"${a.id} -> ${a.cluster}")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 A full example that produces the experiment described in the PIC paper can be found under
@@ -360,6 +376,10 @@ PowerIterationClusteringModel model = pic.run(similarities);
 for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
   System.out.println(a.id() + " -> " + a.cluster());
 }
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
@@ -377,11 +397,11 @@ LDA can be thought of as a clustering algorithm as follows:
  on a statistical model of how text documents are generated.
 
 LDA takes in a collection of documents as vectors of word counts.
-It learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function. After fitting on the documents, LDA provides:
+It supports different inference algorithms via `setOptimizer` function. EMLDAOptimizer learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
 
 * Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics.
+* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics. (EM only)
 
 LDA takes the following parameters:
 

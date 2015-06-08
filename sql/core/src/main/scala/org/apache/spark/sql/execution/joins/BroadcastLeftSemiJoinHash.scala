@@ -38,8 +38,8 @@ case class BroadcastLeftSemiJoinHash(
 
   override def output: Seq[Attribute] = left.output
 
-  override def execute(): RDD[Row] = {
-    val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
+  protected override def doExecute(): RDD[Row] = {
+    val buildIter = buildPlan.execute().map(_.copy()).collect().toIterator
     val hashSet = new java.util.HashSet[Row]()
     var currentRow: Row = null
 

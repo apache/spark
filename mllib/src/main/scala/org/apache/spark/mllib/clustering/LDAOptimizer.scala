@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum, normalize, kr
 import breeze.numerics.{digamma, exp, abs}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
@@ -31,13 +31,13 @@ import org.apache.spark.mllib.linalg.{Matrices, SparseVector, DenseVector, Vecto
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * An LDAOptimizer specifies which optimization/learning/inference algorithm to use, and it can
  * hold optimizer-specific parameters for users to set.
  */
-@Experimental
-trait LDAOptimizer {
+@DeveloperApi
+sealed trait LDAOptimizer {
 
   /*
     DEVELOPERS NOTE:
@@ -59,7 +59,7 @@ trait LDAOptimizer {
 }
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * Optimizer for EM algorithm which stores data + parameter graph, plus algorithm parameters.
  *
@@ -75,8 +75,8 @@ trait LDAOptimizer {
  *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
  *
  */
-@Experimental
-class EMLDAOptimizer extends LDAOptimizer {
+@DeveloperApi
+final class EMLDAOptimizer extends LDAOptimizer {
 
   import LDA._
 
@@ -211,7 +211,7 @@ class EMLDAOptimizer extends LDAOptimizer {
 
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * An online optimizer for LDA. The Optimizer implements the Online variational Bayes LDA
  * algorithm, which processes a subset of the corpus on each iteration, and updates the term-topic
@@ -220,8 +220,8 @@ class EMLDAOptimizer extends LDAOptimizer {
  * Original Online LDA paper:
  *   Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
  */
-@Experimental
-class OnlineLDAOptimizer extends LDAOptimizer {
+@DeveloperApi
+final class OnlineLDAOptimizer extends LDAOptimizer {
 
   // LDA common parameters
   private var k: Int = 0
@@ -243,8 +243,8 @@ class OnlineLDAOptimizer extends LDAOptimizer {
   private var randomGenerator: java.util.Random = null
 
   // Online LDA specific parameters
-  // Learning rate is: (tau_0 + t)^{-kappa}
-  private var tau_0: Double = 1024
+  // Learning rate is: (tau0 + t)^{-kappa}
+  private var tau0: Double = 1024
   private var kappa: Double = 0.51
   private var miniBatchFraction: Double = 0.05
 
@@ -265,16 +265,16 @@ class OnlineLDAOptimizer extends LDAOptimizer {
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
    */
-  def getTau_0: Double = this.tau_0
+  def getTau0: Double = this.tau0
 
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
    * Default: 1024, following the original Online LDA paper.
    */
-  def setTau_0(tau_0: Double): this.type = {
-    require(tau_0 > 0,  s"LDA tau_0 must be positive, but was set to $tau_0")
-    this.tau_0 = tau_0
+  def setTau0(tau0: Double): this.type = {
+    require(tau0 > 0, s"LDA tau0 must be positive, but was set to $tau0")
+    this.tau0 = tau0
     this
   }
 
@@ -339,7 +339,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def initialize(
       docs: RDD[(Long, Vector)],
-      lda: LDA):  OnlineLDAOptimizer = {
+      lda: LDA): OnlineLDAOptimizer = {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
@@ -434,11 +434,8 @@ class OnlineLDAOptimizer extends LDAOptimizer {
    * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
   private[clustering] def update(stat: BDM[Double], iter: Int, batchSize: Int): Unit = {
-    val tau_0 = this.getTau_0
-    val kappa = this.getKappa
-
     // weight of the mini-batch.
-    val weight = math.pow(tau_0 + iter, -kappa)
+    val weight = math.pow(getTau0 + iter, -getKappa)
 
     // Update lambda based on documents.
     lambda = lambda * (1 - weight) +
@@ -461,7 +458,7 @@ class OnlineLDAOptimizer extends LDAOptimizer {
    * uses digamma which is accurate but expensive.
    */
   private def dirichletExpectation(alpha: BDM[Double]): BDM[Double] = {
-    val rowSum =  sum(alpha(breeze.linalg.*, ::))
+    val rowSum = sum(alpha(breeze.linalg.*, ::))
     val digAlpha = digamma(alpha)
     val digRowSum = digamma(rowSum)
     val result = digAlpha(::, breeze.linalg.*) - digRowSum

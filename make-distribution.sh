@@ -58,7 +58,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-1, hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -141,22 +141,6 @@ SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hi
     # because we use "set -o pipefail"
     echo -n)
 
-JAVA_CMD="$JAVA_HOME"/bin/java
-JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
-if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
-  echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
-  echo "            distribution may not work well with PySpark and will not run"
-  echo "            with Java 6 (See SPARK-1703 and SPARK-1911)."
-  echo "            This test can be disabled by adding --skip-java-test."
-  echo "Output from 'java -version' was:"
-  echo "$JAVA_VERSION"
-  read -p "Would you like to continue anyways? [y,n]: " -r
-  if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-    echo "Okay, exiting."
-    exit 1
-  fi
-fi
-
 if [ "$NAME" == "none" ]; then
   NAME=$SPARK_HADOOP_VERSION
 fi
@@ -231,6 +215,11 @@ cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 cp -r "$SPARK_HOME/ec2" "$DISTDIR"
+# Copy SparkR if it exists
+if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
+  mkdir -p "$DISTDIR"/R/lib
+  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
+fi
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then

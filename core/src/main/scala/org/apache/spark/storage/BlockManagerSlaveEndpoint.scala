@@ -40,7 +40,7 @@ class BlockManagerSlaveEndpoint(
   private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit]  = {
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RemoveBlock(blockId) =>
       doAsync[Boolean]("removing block " + blockId, context) {
         blockManager.removeBlock(blockId)

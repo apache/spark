@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.4.0-SNAPSHOT</version>
+    <version>1.5.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -92,6 +92,27 @@
           <skip>true</skip>
         </configuration>
       </plugin>
+        <!-- zip pyspark archives to run python application on yarn mode -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                  <goals>
+                    <goal>run</goal>
+                  </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <target>
+                <delete dir="${basedir}/../python/lib/pyspark.zip"/>
+                <zip destfile="${basedir}/../python/lib/pyspark.zip">
+                  <fileset dir="${basedir}/../python/" includes="pyspark/**/*"/>
+                </zip>
+              </target>
+            </configuration>
+        </plugin>
       <!-- Use the shade plugin to create a big JAR with all the dependencies -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

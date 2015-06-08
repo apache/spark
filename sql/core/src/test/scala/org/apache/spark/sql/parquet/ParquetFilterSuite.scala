@@ -18,14 +18,13 @@
 package org.apache.spark.sql.parquet
 
 import org.scalatest.BeforeAndAfterAll
-import parquet.filter2.predicate.Operators._
-import parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.Operators._
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.sources.LogicalRelation
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, SQLConf}
 
@@ -42,7 +41,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, SQLConf}
  *    data type is nullable.
  */
 class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -312,7 +311,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
 }
 
 class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
@@ -328,12 +327,12 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
 
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.parquetFile(path).filter("part = 1"),
+          sqlContext.read.parquet(path).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -341,7 +340,7 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
 }
 
 class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
     sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
@@ -350,14 +349,14 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
   override protected def afterAll(): Unit = {
     sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
-  
+
   test("SPARK-6742: don't push down predicates which reference partition columns") {
     import sqlContext.implicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").saveAsParquetFile(path)
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
 
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
@@ -365,7 +364,7 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
           path,
           Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext,
           Seq(AttributeReference("part", IntegerType, false)()) ))
-       
+
         checkAnswer(
           df.filter("a = 1 or part = 1"),
           (1 to 3).map(i => Row(1, i, i.toString)))

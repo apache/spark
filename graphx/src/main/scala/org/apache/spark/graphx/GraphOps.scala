@@ -124,18 +124,18 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
     val nbrs = edgeDirection match {
       case EdgeDirection.Either =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => {
             ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr)))
             ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr)))
           },
           (a, b) => a ++ b, TripletFields.All)
       case EdgeDirection.In =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr))),
           (a, b) => a ++ b, TripletFields.Src)
       case EdgeDirection.Out =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr))),
           (a, b) => a ++ b, TripletFields.Dst)
       case EdgeDirection.Both =>
@@ -253,7 +253,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
-      vpred: (VertexId, VD2) => Boolean = (v:VertexId, d:VD2) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD2) => Boolean = (v: VertexId, d: VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
   }
 
@@ -356,7 +356,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)

@@ -243,8 +243,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 case (predicate, None) => predicate
                 // Filter needs to be applied above when it contains partitioning
                 // columns
-                case (predicate, _) if(!predicate.references.map(_.name).toSet
-                  .intersect (partitionColNames).isEmpty) => predicate
+                case (predicate, _)
+                  if !predicate.references.map(_.name).toSet.intersect(partitionColNames).isEmpty =>
+                  predicate
               }
             }
           } else {
@@ -270,7 +271,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
+          InMemoryColumnarTableScan(_, filters, mem)) :: Nil
       case _ => Nil
     }
   }
@@ -283,8 +284,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
       case logical.Distinct(child) =>
-        execution.Distinct(partial = false,
-          execution.Distinct(partial = true, planLater(child))) :: Nil
+        throw new IllegalStateException(
+          "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
         execution.Repartition(numPartitions, shuffle, planLater(child)) :: Nil
       case logical.SortPartitions(sortExprs, child) =>
@@ -303,6 +304,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+      case logical.Window(projectList, windowExpressions, spec, child) =>
+        execution.Window(projectList, windowExpressions, spec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
@@ -341,17 +344,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
-        val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
+      case CreateTableUsingAsSelect(tableName, provider, true, partitionsCols, mode, opts, query)
+          if partitionsCols.nonEmpty =>
+        sys.error("Cannot create temporary partitioned table.")
+
+      case CreateTableUsingAsSelect(tableName, provider, true, _, mode, opts, query) =>
+        val cmd = CreateTempTableUsingAsSelect(
+          tableName, provider, Array.empty[String], mode, opts, query)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
-      case LogicalDescribeCommand(table, isExtended) =>
+      case describe @ LogicalDescribeCommand(table, isExtended) =>
         val resultPlan = self.sqlContext.executePlan(table).executedPlan
         ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+          RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
 
       case _ => Nil
     }

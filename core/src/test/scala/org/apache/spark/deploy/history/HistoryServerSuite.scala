@@ -16,16 +16,19 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileInputStream, FileWriter, IOException}
+import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
+import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import com.google.common.base.Charsets
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.ui.SparkUI
 
 /**
@@ -39,7 +42,7 @@ import org.apache.spark.ui.SparkUI
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
+class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
   with JsonTestUtils {
 
   private val logDir = new File("src/test/resources/spark-events")
@@ -82,7 +85,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "running app list json" -> "applications?status=running",
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
-    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -99,19 +102,22 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "one stage json" -> "applications/local-1422981780767/stages/1",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
 
-    "stage task summary" -> "applications/local-1427397477963/stages/20/0/taskSummary",
+    "stage task summary w shuffle write"
+      -> "applications/local-1430917381534/stages/0/0/taskSummary",
+    "stage task summary w shuffle read"
+      -> "applications/local-1430917381534/stages/1/0/taskSummary",
     "stage task summary w/ custom quantiles" ->
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=0.01,0.5,0.99",
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=0.01,0.5,0.99",
 
-    "stage task list" -> "applications/local-1427397477963/stages/20/0/taskList",
+    "stage task list" -> "applications/local-1430917381534/stages/0/0/taskList",
     "stage task list w/ offset & length" ->
-      "applications/local-1427397477963/stages/20/0/taskList?offset=10&length=50",
+      "applications/local-1430917381534/stages/0/0/taskList?offset=10&length=50",
     "stage task list w/ sortBy" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=DECREASING_RUNTIME",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=DECREASING_RUNTIME",
     "stage task list w/ sortBy short names: -runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=-runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
-      "applications/local-1427397477963/stages/20/0/taskList?sortBy=runtime",
+      "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
@@ -134,7 +140,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       errOpt should be (None)
       val json = jsonOpt.get
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, path + "/json_expectation")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
@@ -142,6 +148,70 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
     }
+  }
+
+  test("download all logs for app with multiple attempts") {
+    doDownloadTest("local-1430917381535", None)
+  }
+
+  test("download one log for app with multiple attempts") {
+    (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
+  }
+
+  test("download legacy logs - all attempts") {
+    doDownloadTest("local-1426533911241", None, legacy = true)
+  }
+
+  test("download legacy logs - single  attempts") {
+    (1 to 2). foreach {
+      attemptId => doDownloadTest("local-1426533911241", Some(attemptId), legacy = true)
+    }
+  }
+
+  // Test that the files are downloaded correctly, and validate them.
+  def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
+
+    val url = attemptId match {
+      case Some(id) =>
+        new URL(s"${generateURL(s"applications/$appId")}/$id/logs")
+      case None =>
+        new URL(s"${generateURL(s"applications/$appId")}/logs")
+    }
+
+    val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
+    code should be (HttpServletResponse.SC_OK)
+    inputStream should not be None
+    error should be (None)
+
+    val zipStream = new ZipInputStream(inputStream.get)
+    var entry = zipStream.getNextEntry
+    entry should not be null
+    val totalFiles = {
+      if (legacy) {
+        attemptId.map { x => 3 }.getOrElse(6)
+      } else {
+        attemptId.map { x => 1 }.getOrElse(2)
+      }
+    }
+    var filesCompared = 0
+    while (entry != null) {
+      if (!entry.isDirectory) {
+        val expectedFile = {
+          if (legacy) {
+            val splits = entry.getName.split("/")
+            new File(new File(logDir, splits(0)), splits(1))
+          } else {
+            new File(logDir, entry.getName)
+          }
+        }
+        val expected = Files.toString(expectedFile, Charsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
+        actual should be (expected)
+        filesCompared += 1
+      }
+      entry = zipStream.getNextEntry
+    }
+    filesCompared should be (totalFiles)
   }
 
   test("response codes on bad paths") {
@@ -162,7 +232,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     // will take some mucking w/ jersey to get a better error msg in this case
 
     val badQuantiles = getContentAndCode(
-      "applications/local-1427397477963/stages/20/0/taskSummary?quantiles=foo,0.1")
+      "applications/local-1430917381534/stages/0/0/taskSummary?quantiles=foo,0.1")
     badQuantiles._1 should be (HttpServletResponse.SC_BAD_REQUEST)
     badQuantiles._3 should be (Some("Bad value for parameter \"quantiles\".  Expected a double, " +
       "got \"foo\""))
@@ -195,18 +265,21 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
-    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getUrl(generateURL(path))
   }
 
-  def generateExpectation(path: String): Unit = {
+  def generateURL(path: String): URL = {
+    new URL(s"http://localhost:$port/api/v1/$path")
+  }
+
+  def generateExpectation(name: String, path: String): Unit = {
     val json = getUrl(path)
-    val dir = new File(expRoot, path)
-    dir.mkdirs()
-    val out = new FileWriter(new File(dir, "json_expectation"))
+    val file = new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
+    val out = new FileWriter(file)
     out.write(json)
     out.close()
   }
@@ -222,8 +295,8 @@ object HistoryServerSuite {
     suite.expRoot.mkdirs()
     try {
       suite.init()
-      suite.cases.foreach { case (_, path) =>
-        suite.generateExpectation(path)
+      suite.cases.foreach { case (name, path) =>
+        suite.generateExpectation(name, path)
       }
     } finally {
       suite.stop()
@@ -231,23 +304,34 @@ object HistoryServerSuite {
   }
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
+    val (code, in, errString) = connectAndGetInputStream(url)
+    val inString = in.map(IOUtils.toString)
+    (code, inString, errString)
+  }
+
+  def connectAndGetInputStream(url: URL): (Int, Option[InputStream], Option[String]) = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod("GET")
     connection.connect()
     val code = connection.getResponseCode()
-    val inString = try {
-      val in = Option(connection.getInputStream())
-      in.map{IOUtils.toString}
+    val inStream = try {
+      Option(connection.getInputStream())
     } catch {
       case io: IOException => None
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map{IOUtils.toString}
+      err.map(IOUtils.toString)
     } catch {
       case io: IOException => None
     }
-    (code, inString, errString)
+    (code, inStream, errString)
+  }
+
+
+  def sanitizePath(path: String): String = {
+    // this doesn't need to be perfect, just good enough to avoid collisions
+    path.replaceAll("\\W", "_")
   }
 
   def getUrl(path: URL): String = {

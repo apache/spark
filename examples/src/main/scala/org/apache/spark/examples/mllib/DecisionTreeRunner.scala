@@ -22,7 +22,6 @@ import scala.language.reflectiveCalls
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -126,7 +125,7 @@ object DecisionTreeRunner {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -354,7 +353,11 @@ object DecisionTreeRunner {
 
   /**
    * Calculates the mean squared error for regression.
+   *
+   * This is just for demo purpose. In general, don't copy this code because it is NOT efficient
+   * due to the use of structural types, which leads to one reflection call per record.
    */
+  // scalastyle:off structural.type
   private[mllib] def meanSquaredError(
       model: { def predict(features: Vector): Double },
       data: RDD[LabeledPoint]): Double = {
@@ -363,4 +366,5 @@ object DecisionTreeRunner {
       err * err
     }.mean()
   }
+  // scalastyle:on structural.type
 }

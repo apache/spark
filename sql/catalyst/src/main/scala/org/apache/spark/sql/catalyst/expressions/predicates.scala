@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, BinaryType, BooleanType, AtomicType}
+import org.apache.spark.sql.types._
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -35,8 +36,6 @@ trait Predicate extends Expression {
   self: Product =>
 
   override def dataType: DataType = BooleanType
-
-  type EvaluatedType = Any
 }
 
 trait PredicateHelper {
@@ -84,6 +83,10 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
       case b: Boolean => !b
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"!($c)")
+  }
 }
 
 /**
@@ -110,6 +113,7 @@ case class InSet(value: Expression, hset: Set[Any])
 
   override def children: Seq[Expression] = value :: Nil
 
+  override def foldable: Boolean = value.foldable
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
@@ -142,6 +146,29 @@ case class And(left: Expression, right: Expression)
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+
+    // The result should be `false`, if any of them is `false` whenever the other is null or not.
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = false;
+
+      if (!${eval1.isNull} && !${eval1.primitive}) {
+      } else {
+        ${eval2.code}
+        if (!${eval2.isNull} && !${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = true;
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
 }
 
 case class Or(left: Expression, right: Expression)
@@ -168,25 +195,93 @@ case class Or(left: Expression, right: Expression)
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+
+    // The result should be `true`, if any of them is `true` whenever the other is null or not.
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = true;
+
+      if (!${eval1.isNull} && ${eval1.primitive}) {
+      } else {
+        ${eval2.code}
+        if (!${eval2.isNull} && ${eval2.primitive}) {
+        } else if (!${eval1.isNull} && !${eval2.isNull}) {
+          ${ev.primitive} = false;
+        } else {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
 }
 
 abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"differing types in ${this.getClass.getSimpleName} " +
+        s"(${left.dataType} and ${right.dataType}).")
+    } else {
+      checkTypesInternal(dataType)
+    }
+  }
+
+  protected def checkTypesInternal(t: DataType): TypeCheckResult
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        evalInternal(evalE1, evalE2)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    left.dataType match {
+      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
+      })
+      case TimestampType =>
+        // java.sql.Timestamp does not have compare()
+        super.genCode(ctx, ev)
+      case other => defineCodeGen (ctx, ev, {
+        (c1, c2) => s"$c1.compare($c2) $symbol 0"
+      })
+    }
+  }
+
+  protected def evalInternal(evalE1: Any, evalE2: Any): Any =
+    sys.error(s"BinaryComparisons must override either eval or evalInternal")
+}
+
+private[sql] object BinaryComparison {
+  def unapply(e: BinaryComparison): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "="
 
-  override def eval(input: Row): Any = {
-    val l = left.eval(input)
-    if (l == null) {
-      null
-    } else {
-      val r = right.eval(input)
-      if (r == null) null
-      else if (left.dataType != BinaryType) l == r
-      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
-    }
+  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
+
+  protected override def evalInternal(l: Any, r: Any) = {
+    if (left.dataType != BinaryType) l == r
+    else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
   }
 }
 
@@ -194,6 +289,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
+
+  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -206,228 +303,59 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       l == r
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    ev.isNull = "false"
+    eval1.code + eval2.code + s"""
+        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+           (!${eval1.isNull} && $equalCode);
+      """
+  }
 }
 
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<"
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
+  override protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.lt(evalE1, evalE2)
-      }
-    }
-  }
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.lt(evalE1, evalE2)
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = "<="
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
+  override protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.lteq(evalE1, evalE2)
-      }
-    }
-  }
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.lteq(evalE1, evalE2)
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">"
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
+  override protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.gt(evalE1, evalE2)
-      }
-    }
-  }
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.gt(evalE1, evalE2)
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   override def symbol: String = ">="
 
-  lazy val ordering: Ordering[Any] = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,
-        s"Types do not match ${left.dataType} != ${right.dataType}")
-    }
-    left.dataType match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
-  }
+  override protected def checkTypesInternal(t: DataType) =
+    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
 
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if (evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        ordering.gteq(evalE1, evalE2)
-      }
-    }
-  }
-}
+  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
 
-case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends Expression {
-
-  override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
-  override def nullable: Boolean = trueValue.nullable || falseValue.nullable
-
-  override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(
-        this,
-        s"Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
-    }
-    trueValue.dataType
-  }
-
-  type EvaluatedType = Any
-
-  override def eval(input: Row): Any = {
-    if (true == predicate.eval(input)) {
-      trueValue.eval(input)
-    } else {
-      falseValue.eval(input)
-    }
-  }
-
-  override def toString: String = s"if ($predicate) $trueValue else $falseValue"
-}
-
-// scalastyle:off
-/**
- * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
- * Refer to this link for the corresponding semantics:
- * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
- *
- * The other form of case statements "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END" gets
- * translated to this form at parsing time.  Namely, such a statement gets translated to
- * "CASE WHEN a=b THEN c [WHEN a=d THEN e]* [ELSE f] END".
- *
- * Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
- * element is the value for the default catch-all case (if provided). Hence, `branches` consists of
- * at least two elements, and can have an odd or even length.
- */
-// scalastyle:on
-case class CaseWhen(branches: Seq[Expression]) extends Expression {
-  type EvaluatedType = Any
-
-  override def children: Seq[Expression] = branches
-
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
-    }
-    branches(1).dataType
-  }
-
-  @transient private[this] lazy val branchesArr = branches.toArray
-  @transient private[this] lazy val predicates =
-    branches.sliding(2, 2).collect { case Seq(cond, _) => cond }.toSeq
-  @transient private[this] lazy val values =
-    branches.sliding(2, 2).collect { case Seq(_, value) => value }.toSeq
-  @transient private[this] lazy val elseValue =
-    if (branches.length % 2 == 0) None else Option(branches.last)
-
-  override def nullable: Boolean = {
-    // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    values.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
-  }
-
-  override lazy val resolved: Boolean = {
-    if (!childrenResolved) {
-      false
-    } else {
-      val allCondBooleans = predicates.forall(_.dataType == BooleanType)
-      // both then and else val should be considered.
-      val dataTypesEqual = (values ++ elseValue).map(_.dataType).distinct.size <= 1
-      allCondBooleans && dataTypesEqual
-    }
-  }
-
-  /** Written in imperative fashion for performance considerations. */
-  override def eval(input: Row): Any = {
-    val len = branchesArr.length
-    var i = 0
-    // If all branches fail and an elseVal is not provided, the whole statement
-    // defaults to null, according to Hive's semantics.
-    var res: Any = null
-    while (i < len - 1) {
-      if (branchesArr(i).eval(input) == true) {
-        res = branchesArr(i + 1).eval(input)
-        return res
-      }
-      i += 2
-    }
-    if (i == len - 1) {
-      res = branchesArr(i).eval(input)
-    }
-    res
-  }
-
-  override def toString: String = {
-    "CASE" + branches.sliding(2, 2).map {
-      case Seq(cond, value) => s" WHEN $cond THEN $value"
-      case Seq(elseValue) => s" ELSE $elseValue"
-    }.mkString
-  }
+  protected override def evalInternal(evalE1: Any, evalE2: Any) = ordering.gteq(evalE1, evalE2)
 }

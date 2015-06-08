@@ -19,10 +19,18 @@ package org.apache.spark.sql.hive.client
 
 import scala.reflect._
 
+/** Unwraps reflection exceptions. */
+private[client] object ReflectionException {
+  def unapply(a: Throwable): Option[Throwable] = a match {
+    case ite: java.lang.reflect.InvocationTargetException => Option(ite.getCause)
+    case _ => None
+  }
+}
+
 /**
  * Provides implicit functions on any object for calling methods reflectively.
  */
-protected trait ReflectionMagic {
+private[client] trait ReflectionMagic {
     /** code for InstanceMagic
         println(
     (1 to 22).map { n =>

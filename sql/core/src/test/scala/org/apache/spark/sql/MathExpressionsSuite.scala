@@ -17,37 +17,29 @@
 
 package org.apache.spark.sql
 
-import java.lang.{Double => JavaDouble}
+import org.apache.spark.sql.functions._
 
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.mathfunctions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-private[this] object MathExpressionsTestData {
-
-  case class DoubleData(a: JavaDouble, b: JavaDouble)
-  val doubleData = TestSQLContext.sparkContext.parallelize(
-    (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1))).toDF()
-
-  val nnDoubleData = TestSQLContext.sparkContext.parallelize(
-    (1 to 10).map(i => DoubleData(i * 0.1, i * -0.1))).toDF()
-
-  case class NullDoubles(a: JavaDouble)
-  val nullDoubles =
-    TestSQLContext.sparkContext.parallelize(
-      NullDoubles(1.0) ::
-        NullDoubles(2.0) ::
-        NullDoubles(3.0) ::
-        NullDoubles(null) :: Nil
-    ).toDF()
+private object MathExpressionsTestData {
+  case class DoubleData(a: java.lang.Double, b: java.lang.Double)
+  case class NullDoubles(a: java.lang.Double)
 }
 
 class MathExpressionsSuite extends QueryTest {
 
   import MathExpressionsTestData._
 
-  def testOneToOneMathFunction[@specialized(Int, Long, Float, Double) T](
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+
+  private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()
+
+  private lazy val nnDoubleData = (1 to 10).map(i => DoubleData(i * 0.1, i * -0.1)).toDF()
+
+  private lazy val nullDoubles =
+    Seq(NullDoubles(1.0), NullDoubles(2.0), NullDoubles(3.0), NullDoubles(null)).toDF()
+
+  private def testOneToOneMathFunction[@specialized(Int, Long, Float, Double) T](
       c: Column => Column,
       f: T => T): Unit = {
     checkAnswer(
@@ -66,7 +58,8 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
-  def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit = {
+  private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit =
+  {
     checkAnswer(
       nnDoubleData.select(c('a)),
       (1 to 10).map(n => Row(f(n * 0.1)))
@@ -90,7 +83,7 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
-  def testTwoToOneMathFunction(
+  private def testTwoToOneMathFunction(
       c: (Column, Column) => Column,
       d: (Column, Double) => Column,
       f: (Double, Double) => Double): Unit = {
@@ -159,11 +152,11 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("toDeg") {
-    testOneToOneMathFunction(toDeg, math.toDegrees)
+    testOneToOneMathFunction(toDegrees, math.toDegrees)
   }
 
   test("toRad") {
-    testOneToOneMathFunction(toRad, math.toRadians)
+    testOneToOneMathFunction(toRadians, math.toRadians)
   }
 
   test("cbrt") {
@@ -207,7 +200,7 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("log") {
-    testOneToOneNonNegativeMathFunction(log, math.log)
+    testOneToOneNonNegativeMathFunction(org.apache.spark.sql.functions.log, math.log)
   }
 
   test("log10") {

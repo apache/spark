@@ -24,6 +24,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.InputInfo
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 /**
@@ -68,27 +69,42 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
         val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
 
-        // Are WAL record handles present with all the blocks
-        val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
+        // Register the input blocks information into InputInfoTracker
+        val inputInfo = InputInfo(id, blockInfos.flatMap(_.numRecords).sum)
+        ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
-        if (areWALRecordHandlesPresent) {
-          // If all the blocks have WAL record handle, then create a WALBackedBlockRDD
-          val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
-          val walRecordHandles = blockInfos.map { _.walRecordHandleOption.get }.toArray
-          new WriteAheadLogBackedBlockRDD[T](
-            ssc.sparkContext, blockIds, walRecordHandles, isBlockIdValid)
-        } else {
-          // Else, create a BlockRDD. However, if there are some blocks with WAL info but not others
-          // then that is unexpected and log a warning accordingly.
-          if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
-            if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
-              logError("Some blocks do not have Write Ahead Log information; " +
-                "this is unexpected and data may not be recoverable after driver failures")
-            } else {
-              logWarning("Some blocks have Write Ahead Log information; this is unexpected")
+        if (blockInfos.nonEmpty) {
+          // Are WAL record handles present with all the blocks
+          val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
+
+          if (areWALRecordHandlesPresent) {
+            // If all the blocks have WAL record handle, then create a WALBackedBlockRDD
+            val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
+            val walRecordHandles = blockInfos.map { _.walRecordHandleOption.get }.toArray
+            new WriteAheadLogBackedBlockRDD[T](
+              ssc.sparkContext, blockIds, walRecordHandles, isBlockIdValid)
+          } else {
+            // Else, create a BlockRDD. However, if there are some blocks with WAL info but not
+            // others then that is unexpected and log a warning accordingly.
+            if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
+              if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+                logError("Some blocks do not have Write Ahead Log information; " +
+                  "this is unexpected and data may not be recoverable after driver failures")
+              } else {
+                logWarning("Some blocks have Write Ahead Log information; this is unexpected")
+              }
             }
+            new BlockRDD[T](ssc.sc, blockIds)
           }
-          new BlockRDD[T](ssc.sc, blockIds)
+        } else {
+          // If no block is ready now, creating WriteAheadLogBackedBlockRDD or BlockRDD
+          // according to the configuration
+          if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+            new WriteAheadLogBackedBlockRDD[T](
+              ssc.sparkContext, Array.empty, Array.empty, Array.empty)
+          } else {
+            new BlockRDD[T](ssc.sc, Array.empty)
+          }
         }
       }
     }

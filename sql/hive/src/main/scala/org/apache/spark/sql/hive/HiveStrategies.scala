@@ -140,7 +140,7 @@ private[hive] trait HiveStrategies {
               PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
             } else {
               hiveContext
-                .parquetFile(partitionLocations: _*)
+                .read.parquet(partitionLocations: _*)
                 .addPartitioningAttributes(relation.partitionKeys)
                 .lowerCase
                 .where(unresolvedOtherPredicates)
@@ -152,7 +152,7 @@ private[hive] trait HiveStrategies {
 
           } else {
             hiveContext
-              .parquetFile(relation.hiveQlTable.getDataLocation.toString)
+              .read.parquet(relation.hiveQlTable.getDataLocation.toString)
               .lowerCase
               .where(unresolvedOtherPredicates)
               .select(unresolvedProjection: _*)
@@ -221,14 +221,14 @@ private[hive] trait HiveStrategies {
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case CreateTableUsing(
-      tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
+          tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         ExecutedCommand(
           CreateMetastoreDataSource(
             tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, mode, opts, query) =>
+      case CreateTableUsingAsSelect(tableName, provider, false, partitionCols, mode, opts, query) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, query)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, partitionCols, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil
