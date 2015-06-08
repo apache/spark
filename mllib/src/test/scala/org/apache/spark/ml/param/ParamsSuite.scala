@@ -209,12 +209,10 @@ object ParamsSuite extends SparkFunSuite {
    *   - params are ordered by names
    *   - param parent has the same UID as the object's UID
    *   - param name is the same as the param method name
-   *   - param setters must return the same type as the obj
    *   - obj.copy should return the same type as the obj
    */
   def checkParams(obj: Params): Unit = {
     val clazz = obj.getClass
-    val methods = clazz.getMethods
 
     val params = obj.params
     val paramNames = params.map(_.name)
@@ -222,10 +220,7 @@ object ParamsSuite extends SparkFunSuite {
     params.foreach { p =>
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
-      val setterName = "set" + p.name.head.toUpper + p.name.tail
-      methods.find(_.getName === setterName).foreach { m =>
-        require(m.getReturnType === clazz, s"${m.getName} must return ${clazz.getName}.")
-      }
+      // TODO: Check that setters return self, which needs special handling for generic types.
     }
 
     val copyMethod = clazz.getMethod("copy", classOf[ParamMap])

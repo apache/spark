@@ -45,9 +45,6 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
   /** @group getParam */
   def getMinDocFreq: Int = $(minDocFreq)
 
-  /** @group setParam */
-  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
-
   /**
    * Validate and transform the input schema.
    */
@@ -71,6 +68,9 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   override def fit(dataset: DataFrame): IDFModel = {
     transformSchema(dataset.schema, logging = true)
@@ -101,6 +101,9 @@ class IDFModel private[ml] (
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)

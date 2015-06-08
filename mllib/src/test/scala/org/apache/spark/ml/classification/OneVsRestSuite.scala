@@ -19,11 +19,12 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
-import org.apache.spark.ml.param.{ParamsSuite, ParamMap}
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -56,7 +57,8 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new OneVsRest)
-    val model = new OneVsRestModel("ovr", Metadata.empty, Array.empty)
+    val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
+    val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
   }
 
