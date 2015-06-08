@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partit
  */
 @DeveloperApi
 case class Expand(
-    projections: Seq[GroupExpression],
+    projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: SparkPlan)
   extends UnaryNode {
@@ -49,7 +49,7 @@ case class Expand(
       // workers via closure. However we can't assume the Projection
       // is serializable because of the code gen, so we have to
       // create the projections within each of the partition processing.
-      val groups = projections.map(ee => newProjection(ee.children, child.output)).toArray
+      val groups = projections.map(ee => newProjection(ee, child.output)).toArray
 
       new Iterator[Row] {
         private[this] var result: Row = _
