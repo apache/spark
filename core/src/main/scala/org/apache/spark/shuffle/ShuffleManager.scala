@@ -22,7 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{TaskContext, ShuffleDependency}
+import com.google.common.annotations.VisibleForTesting
+
+import org.apache.spark.{ShuffleDependency, TaskContext}
 
 /**
  * Pluggable interface for shuffle systems. A ShuffleManager is created in SparkEnv on the driver
@@ -59,6 +61,13 @@ private[spark] trait ShuffleManager {
       context: TaskContext): ShuffleReader[K, C]
 
 
+  /**
+   * Get all the files associated with the given shuffle.
+   *
+   * This method exists just so that general shuffle tests can make sure shuffle files are cleaned
+   * up correctly.
+   */
+  @VisibleForTesting
   private[shuffle] def getShuffleFiles(
       handle: ShuffleHandle,
       mapId: Int,
@@ -81,12 +90,25 @@ private[spark] trait ShuffleManager {
   def stop(): Unit
 
   private[this] val shuffleToAttempts = new ConcurrentHashMap[Int, ConcurrentHashMap[Int, Int]]()
+
+  /**
+   * Register a stage attempt for the given shuffle, so we can clean up all attempts when
+   * the shuffle is unregistered
+   */
   protected def addShuffleAttempt(shuffleId: Int, stageAttemptId: Int): Unit = {
     shuffleToAttempts.putIfAbsent(shuffleId, new ConcurrentHashMap[Int, Int]())
     shuffleToAttempts.get(shuffleId).putIfAbsent(stageAttemptId, stageAttemptId)
   }
-  protected def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
-    val attempts = shuffleToAttempts.get(shuffleId)
+
+  /**
+   * Get all stage attempts a shuffle, so they can all be cleaned up.
+   *
+   * Calling this also cleans up internal state which tracks attempts for each shuffle, so calling
+   * this again for the same shuffleId will always yield an empty Iterable.
+   */
+  @VisibleForTesting
+  private[shuffle] def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
+    val attempts = shuffleToAttempts.remove(shuffleId)
     if (attempts == null) {
       Iterable[Int]()
     } else {

@@ -44,7 +44,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Int, Long)]]
-    for ((MapServerAttemptSize(address, stageAttempt, size), index) <- statuses.zipWithIndex) {
+    for ((ServerAttemptSize(address, stageAttempt, size), index) <- statuses.zipWithIndex) {
       splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, stageAttempt, size))
     }
 

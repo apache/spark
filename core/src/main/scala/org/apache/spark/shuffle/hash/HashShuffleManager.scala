@@ -79,7 +79,6 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
     fileShuffleBlockResolver.getShuffleFiles(blockId)
   }
 
-
   override def shuffleBlockResolver: FileShuffleBlockResolver = {
     fileShuffleBlockResolver
   }

@@ -108,7 +108,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     // this should succeed since security off
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+           Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -154,7 +154,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     // this should succeed since security on and passwords match
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+           Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -233,7 +233,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     // this should succeed since security off
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+      Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
@@ -279,7 +279,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     slaveTracker.updateEpoch(masterTracker.getEpoch)
 
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-      Seq(MapServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
+      Seq(ServerAttemptSize(BlockManagerId("a", "hostA", 1000), 0, size1000)))
 
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()

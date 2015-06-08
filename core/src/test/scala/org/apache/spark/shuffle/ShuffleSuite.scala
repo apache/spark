@@ -384,6 +384,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       // now unregister, and check all the files were deleted
       manager.unregisterShuffle(0)
       shuffleFiles.foreach { file => assert(!file.exists()) }
+      // also make sure shuffleToAttempts gets cleanded up
+      manager.stageAttemptsForShuffle(0).size should be (0)
     }
   }
 
