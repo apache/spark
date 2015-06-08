@@ -837,7 +837,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
-    sqlContext.sql("""create database if not exists testdb""")
+    sqlContext.sql("""create database if not exists testdb8516""")
     sqlContext.sql("""use testdb8516""")
     df.write
       .format("parquet")
