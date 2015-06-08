@@ -63,8 +63,8 @@ private[master] class Master(
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
-  
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
+
   private val WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000
   private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
   private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
@@ -88,7 +88,7 @@ private[master] class Master(
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
   // Drivers currently spooled for scheduling
-  private val waitingDrivers = new ArrayBuffer[DriverInfo] 
+  private val waitingDrivers = new ArrayBuffer[DriverInfo]
   private var nextDriverNumber = 0
 
   Utils.checkHost(address.host, "Expected hostname")
@@ -782,24 +782,24 @@ private[master] class Master(
           app.desc.appUiUrl = notFoundBasePath
           return None
         }
-      
+
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
           eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
-      val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
+      val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
-      
+
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
       }
-      
+
       val (eventLogFile, status) = if (inProgressExists) {
         (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
       } else {
         (eventLogFilePrefix, " (completed)")
       }
-      
+
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
@@ -883,8 +883,8 @@ private[master] class Master(
   }
 
   private def removeDriver(
-      driverId: String, 
-      finalState: DriverState, 
+      driverId: String,
+      finalState: DriverState,
       exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>

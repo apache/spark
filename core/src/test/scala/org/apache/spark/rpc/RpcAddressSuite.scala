@@ -17,10 +17,9 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.SparkException
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
-class RpcAddressSuite extends FunSuite {
+class RpcAddressSuite extends SparkFunSuite {
 
   test("hostPort") {
     val address = RpcAddress("1.2.3.4", 1234)
