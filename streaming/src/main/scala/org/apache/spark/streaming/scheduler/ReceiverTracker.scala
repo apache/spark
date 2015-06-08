@@ -283,7 +283,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     /** Set host location(s) for each receiver so as to distribute them over
      * executors in a round-robin fashion taking into account preferredLocation if set
-     */ 
+     */
     private[streaming] def scheduleReceivers(receivers: Seq[Receiver[_]],
       executors: List[String]): Array[ArrayBuffer[String]] = {
       val locations = new Array[ArrayBuffer[String]](receivers.length)
@@ -348,7 +348,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val locations = scheduleReceivers(receivers, executors)
       val tempRDD =
         if (locations(0) != null) {
-          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i => (receivers(i), locations(i)))
+          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i =>
+            (receivers(i), locations(i)))
           ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
         } else {
           ssc.sc.makeRDD(receivers, receivers.size)
