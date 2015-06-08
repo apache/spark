@@ -354,7 +354,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
         val fixedChildren = requirements.zipped.map {
           case (AllTuples, rowOrdering, child) =>
-            addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
+            // we use outputOrdering to judge whether need shuffle,
+            // when the operator is unaryNode
+            if (operator.isInstanceOf[UnaryNode]) {
+              addOperatorsIfNecessary(SinglePartition, rowOrdering, child, true)
+            } else {
+              addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
+            }
 
           case (ClusteredDistribution(clustering), rowOrdering, child) =>
             // we use outputOrdering to judge whether need shuffle,
@@ -373,7 +379,20 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             }
 
           case (OrderedDistribution(ordering), rowOrdering, child) =>
-            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
+            // we use outputOrdering to judge whether need shuffle,
+            // when the operator is unaryNode
+            if (operator.isInstanceOf[UnaryNode]) {
+              addOperatorsIfNecessary(
+                RangePartitioning(ordering, numPartitions),
+                rowOrdering,
+                child,
+                true)
+            } else {
+              addOperatorsIfNecessary(
+                RangePartitioning(ordering, numPartitions),
+                rowOrdering,
+                child)
+            }
 
           case (UnspecifiedDistribution, Seq(), child) =>
             child
