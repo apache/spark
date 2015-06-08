@@ -104,15 +104,34 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
   /**
-   * Support construction of StructType with addition rather than providing a list.
+   * Creates a new [[StructType]] by adding a new field.
+   * {{{
+   * val struct = (new StructType)
+   *  .add(StructField("a", IntegerType, true))
+   *  .add(StructField("b", LongType, false))
+   *  .add(StructField("c", StringType, true))
+   *}}}
    */
   def add(field: StructField): StructType = {
     StructType(fields :+ field)
   }
 
   /**
-   * Support construction of StructType with addition rather than providing a list.
+   * Creates a new [[StructType]] by adding a new field.
+   *
+   * val struct = (new StructType)
+   *  .add(StructField("a", IntegerType, true))
+   *  .add(StructField("b", LongType, false))
+   *  .add(StructField("c", StringType, true))
    */
+  def add(name: String, dataType: DataType): StructType = {
+    StructType(fields :+ new StructField(name, dataType, true, Metadata.empty))
+  }
+
+  def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
+  }
+
   def add(name: String,
     dataType: DataType,
     nullable: Boolean = true,
@@ -121,14 +140,28 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Support construction of StructType with addition rather than providing a list.
+   * Creates a new [[StructType]] by adding a new field.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *  .add("a", "int", true)
+   *  .add("b", "long", false)
+   *  .add("c", "string", true)
+   * }}}
    */
+  def add(name: String, dataType: String): StructType = {
+    add(name, DataType.fromString(dataType), true, Metadata.empty)
+  }
+
+  def add(name: String, dataType: String, nullable: Boolean): StructType = {
+    add(name, DataType.fromString(dataType), nullable, Metadata.empty)
+  }
+
   def add(name: String,
     dataType: String,
-    nullable: Boolean = true,
-    metadata: Metadata = Metadata.empty): StructType = {
-    StructType(fields :+ new StructField(name,
-      DataType.getSQLDataType(dataType), nullable, metadata))
+    nullable: Boolean,
+    metadata: Metadata): StructType = {
+    add(name, DataType.fromString(dataType), nullable, metadata)
   }
 
   /**

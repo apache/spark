@@ -377,22 +377,16 @@ object DataType {
     }
   }
 
-  def getSQLDataType(dataType: String): DataType = {
+  def fromString(dataType: String): DataType = {
     dataType match {
       case "byte" => org.apache.spark.sql.types.ByteType
-      case "char" => org.apache.spark.sql.types.ByteType
       case "long" => org.apache.spark.sql.types.LongType
       case "float" => org.apache.spark.sql.types.FloatType
-      case "int" => org.apache.spark.sql.types.IntegerType
-      case "integer" => org.apache.spark.sql.types.IntegerType
-      case "double" => org.apache.spark.sql.types.DoubleType
-      case "numeric" => org.apache.spark.sql.types.DoubleType
-      case "character" => org.apache.spark.sql.types.StringType
-      case "string" => org.apache.spark.sql.types.StringType
-      case "binary" => org.apache.spark.sql.types.BinaryType
-      case "raw" => org.apache.spark.sql.types.BinaryType
-      case "logical" => org.apache.spark.sql.types.BooleanType
-      case "boolean" => org.apache.spark.sql.types.BooleanType
+      case "int" | "integer" => org.apache.spark.sql.types.IntegerType
+      case "double" | "numeric" => org.apache.spark.sql.types.DoubleType
+      case "string" | "character" => org.apache.spark.sql.types.StringType
+      case "raw" | "binary" => org.apache.spark.sql.types.BinaryType
+      case "boolean" | "logical" => org.apache.spark.sql.types.BooleanType
       case "timestamp" => org.apache.spark.sql.types.TimestampType
       case "date" => org.apache.spark.sql.types.DateType
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
