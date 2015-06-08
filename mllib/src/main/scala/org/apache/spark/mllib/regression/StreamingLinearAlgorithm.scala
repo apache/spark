@@ -87,9 +87,6 @@ abstract class StreamingLinearAlgorithm[
         model match {
           case Some(m) =>
             m.weights
-          case None =>
-            val numFeatures = rdd.first().features.size
-            Vectors.dense(numFeatures)
         }
       model = Some(algorithm.run(rdd, initialWeights))
       logInfo("Model updated at time %s".format(time.toString))

@@ -43,7 +43,8 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.stat.{
+  KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.loss.Losses
@@ -945,6 +946,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       r => (r.getSeq(0).toArray[Any], r.getSeq(1).toArray[Any])))
   }
 
+  /**
+   * Java stub for the estimate method of KernelDensity
+   */
+  def estimateKernelDensity(
+      sample: JavaRDD[Double],
+      bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
+    return new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
+      points.asScala.toArray)
+  }
 
 }
 

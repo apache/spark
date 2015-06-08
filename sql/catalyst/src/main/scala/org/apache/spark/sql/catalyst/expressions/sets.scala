@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -60,6 +61,17 @@ case class NewSet(elementType: DataType) extends LeafExpression {
     new OpenHashSet[Any]()
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    elementType match {
+      case IntegerType | LongType =>
+        ev.isNull = "false"
+        s"""
+          ${ctx.javaType(dataType)} ${ev.primitive} = new ${ctx.javaType(dataType)}();
+        """
+      case _ => super.genCode(ctx, ev)
+    }
+  }
+
   override def toString: String = s"new Set($dataType)"
 }
 
@@ -91,6 +103,25 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
     }
   }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val elementType = set.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    elementType match {
+      case IntegerType | LongType =>
+        val itemEval = item.gen(ctx)
+        val setEval = set.gen(ctx)
+        val htype = ctx.javaType(dataType)
+
+        ev.isNull = "false"
+        ev.primitive = setEval.primitive
+        itemEval.code + setEval.code +  s"""
+          if (!${itemEval.isNull} && !${setEval.isNull}) {
+           (($htype)${setEval.primitive}).add(${itemEval.primitive});
+          }
+         """
+      case _ => super.genCode(ctx, ev)
+    }
+  }
+
   override def toString: String = s"$set += $item"
 }
 
@@ -116,12 +147,29 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
           val rightValue = iterator.next()
           leftEval.add(rightValue)
         }
-        leftEval
-      } else {
-        null
       }
+      leftEval
     } else {
       null
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val elementType = left.dataType.asInstanceOf[OpenHashSetUDT].elementType
+    elementType match {
+      case IntegerType | LongType =>
+        val leftEval = left.gen(ctx)
+        val rightEval = right.gen(ctx)
+        val htype = ctx.javaType(dataType)
+
+        ev.isNull = leftEval.isNull
+        ev.primitive = leftEval.primitive
+        leftEval.code + rightEval.code + s"""
+          if (!${leftEval.isNull} && !${rightEval.isNull}) {
+            ${leftEval.primitive}.union((${htype})${rightEval.primitive});
+          }
+        """
+      case _ => super.genCode(ctx, ev)
     }
   }
 }

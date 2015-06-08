@@ -71,6 +71,9 @@ private[spark] object SQLConf {
   // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
 
+  // Whether to perform partition column type inference. Default to true.
+  val PARTITION_COLUMN_TYPE_INFERENCE = "spark.sql.sources.partitionColumnTypeInference.enabled"
+
   // The output committer class used by FSBasedRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
@@ -249,6 +252,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def partitionDiscoveryEnabled() =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
+  private[spark] def partitionColumnTypeInferenceEnabled() =
+    getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE, "true").toBoolean
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
