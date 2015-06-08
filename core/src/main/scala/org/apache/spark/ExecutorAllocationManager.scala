@@ -537,7 +537,7 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
 
-        stageSubmitted.stageInfo.taskToPreferredLocations.foreach { m =>
+        stageSubmitted.stageInfo.taskToPreferredLocalities.foreach { m =>
           stageIdToPreferredLocations.put(stageId, m)
         }
       }
