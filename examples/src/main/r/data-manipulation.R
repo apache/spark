@@ -19,7 +19,7 @@
 # Load SparkR library into your R session
 library(SparkR)
 
-## Initialize SparkContext on your local PC
+## Initialize SparkContext
 sc <- sparkR.init(master = "local", appName = "MyApp")
 
 ## Initialize SQLContext
@@ -31,19 +31,16 @@ sqlContext <- SparkRSQL.init(sc)
 # The data set is made up of 227,496 rows x 14 columns. 
 
 
-# Option 1: Create an R data frame and then convert it to a SparkR DataFrame -------
+# Option 1: Create a local R data frame and then convert it to a SparkR DataFrame -------
 
-## Create R dataframe
-install.packages("data.table") #We want to use the fread() function to read the dataset
-library(data.table)
-
-flights_df <- fread("flights.csv")
+## Create a local R dataframe
+flights_df <- read.csv("flights.csv")
 flights_df$date <- as.Date(flights_df$date)
 
 ## Convert the local data frame into a SparkR DataFrame
 flightsDF <- createDataFrame(sqlContext, flights_df)
 
-# Option 2: Alternatively, directly create a SparkR DataFrame from the source data
+# Option 2: Alternatively, directly create a SparkR DataFrame from the source data -------
 flightsDF <- read.df(sqlContext, "flights.csv", source = "csv", header = "true")
 
 # Print the schema of this Spark DataFrame
@@ -51,11 +48,6 @@ printSchema(flightsDF)
 
 # Cache the DataFrame
 cache(flightsDF)
-
-
-# Install the magrittr pipeline operator
-install.packages("magrittr")
-library(magrittr)
 
 # Print the first 6 rows of the DataFrame
 showDF(flightsDF, numRows = 6) ## Or
@@ -87,6 +79,9 @@ print(dest_df)
 # Filter flights whose destination is JFK
 jfkDF <- filter(flightsDF, "dest == JFK") ##OR
 jfkDF <- filter(flightsDF, flightsDF$dest == JFK)
+
+# Install the magrittr library
+library(magrittr)
 
 # Group the flights by date and then find the average daily delay
 # Write the result into a DataFrame
