@@ -22,7 +22,6 @@ import java.lang.reflect.Modifier
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
-import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
 import org.apache.spark.deploy.SparkHadoopUtil
