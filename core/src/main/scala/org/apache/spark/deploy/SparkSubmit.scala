@@ -964,7 +964,9 @@ private[spark] object SparkSubmitUtils {
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
 
-        exclusions.foreach { e => md.addExcludeRule(createExclusion(e, ivySettings, ivyConfName)) }
+        exclusions.foreach { e =>
+          md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
+        }
 
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
