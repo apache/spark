@@ -122,7 +122,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = {
     val fr = new SimpleFunctionRegistry(conf)
-    DefaultExpressions.expressions foreach { case (name, func) => fr.registerFunction(name, func) }
+    FunctionRegistry.expressions.foreach { case (name, func) => fr.registerFunction(name, func) }
     fr
   }
 

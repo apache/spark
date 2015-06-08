@@ -224,6 +224,8 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
 
+  def this(str: Expression, pos: Expression) = this(str, pos, Literal(Integer.MAX_VALUE))
+
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable

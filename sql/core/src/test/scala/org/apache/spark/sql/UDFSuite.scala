@@ -25,6 +25,17 @@ class UDFSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
+  test("built-in fixed arity expressions") {
+    val df = ctx.emptyDataFrame
+    df.selectExpr("rand()", "randn()", "rand(5)", "randn(50)")
+  }
+
+  test("built-in vararg expressions") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    df.selectExpr("array(a, b)")
+    df.selectExpr("struct(a, b)")
+  }
+
   test("Simple UDF") {
     ctx.udf.register("strLenScala", (_: String).length)
     assert(ctx.sql("SELECT strLenScala('test')").head().getInt(0) === 4)

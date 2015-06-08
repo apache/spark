@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.{DataType, DoubleType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -46,11 +47,27 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
-case class Rand(seed: Long = Utils.random.nextLong()) extends RDG(seed) {
+case class Rand(seed: Long) extends RDG(seed) {
+
+  def this(seed: Expression) = this(seed match {
+    case IntegerLiteral(s) => s
+    case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
+  })
+
+  def this() = this(Utils.random.nextLong())
+
   override def eval(input: Row): Double = rng.nextDouble()
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
-case class Randn(seed: Long = Utils.random.nextLong()) extends RDG(seed) {
+case class Randn(seed: Long) extends RDG(seed) {
+
+  def this(seed: Expression) = this(seed match {
+    case IntegerLiteral(s) => s
+    case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
+  })
+
+  def this() = this(Utils.random.nextLong())
+
   override def eval(input: Row): Double = rng.nextGaussian()
 }

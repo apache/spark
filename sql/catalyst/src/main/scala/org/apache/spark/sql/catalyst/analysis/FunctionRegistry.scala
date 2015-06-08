@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Constructor
+
+import scala.reflect.ClassTag
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.Expression
-import scala.collection.mutable
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
-  type FunctionBuilder = Seq[Expression] => Expression
 
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
@@ -32,9 +38,94 @@ trait FunctionRegistry {
   def conf: CatalystConf
 }
 
+
+object FunctionRegistry {
+
+  type FunctionBuilder = Seq[Expression] => Expression
+
+  val expressions: Map[String, FunctionBuilder] = Map(
+    // Non aggregate functions
+    expression[Abs]("abs"),
+    expression[CreateArray]("array"),
+    expression[Coalesce]("coalesce"),
+    expression[Explode]("explode"),
+    expression[Lower]("lower"),
+    expression[Substring]("substr"),
+    expression[Substring]("substring"),
+    expression[Rand]("rand"),
+    expression[Randn]("randn"),
+    expression[CreateStruct]("struct"),
+    expression[Sqrt]("sqrt"),
+    expression[Upper]("upper"),
+
+    // Math functions
+    expression[Acos]("acos"),
+    expression[Asin]("asin"),
+    expression[Atan]("atan"),
+    expression[Atan2]("atan2"),
+    expression[Cbrt]("cbrt"),
+    expression[Ceil]("ceil"),
+    expression[Cos]("cos"),
+    expression[Exp]("exp"),
+    expression[Expm1]("expm1"),
+    expression[Floor]("floor"),
+    expression[Hypot]("hypot"),
+    expression[Log]("log"),
+    expression[Log10]("log10"),
+    expression[Log1p]("log1p"),
+    expression[Pow]("pow"),
+    expression[Rint]("rint"),
+    expression[Signum]("signum"),
+    expression[Sin]("sin"),
+    expression[Sinh]("sinh"),
+    expression[Tan]("tan"),
+    expression[Tanh]("tanh"),
+    expression[ToDegrees]("todegrees"),
+    expression[ToRadians]("toradians"),
+
+    // aggregate functions
+    expression[Average]("avg"),
+    expression[Count]("count"),
+    expression[First]("first"),
+    expression[Last]("last"),
+    expression[Max]("max"),
+    expression[Min]("min"),
+    expression[Sum]("sum")
+  )
+
+  /** See usage above. */
+  private def expression[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
+    val constructors = tag.runtimeClass.getDeclaredConstructors.toSeq
+    val builder = (expressions: Seq[Expression]) => {
+      // First see if there is a constructor that accepts a Seq[Expression]
+      val varargCtor: Option[Constructor[_]] = constructors.find { ctor =>
+        val params = ctor.getParameterTypes
+        params.length == 1 && params(0) == classOf[Seq[_]]
+      }
+
+      if (varargCtor.isDefined) {
+        // If there is a constructor that accepts Seq[Expression], use that one.
+        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+      } else {
+        // Otherwise, find a constructor that matches the number of arguments, and use that.
+        val ctor = constructors.find { ctor =>
+          val params = ctor.getParameterTypes
+          val valid = params.forall(classOf[Expression].isAssignableFrom)
+          params.length == expressions.size && valid
+        }.getOrElse(throw new AnalysisException(s"Invalid number of arguments for function $name"))
+
+        ctor.newInstance(expressions : _*).asInstanceOf[Expression]
+      }
+    }
+    (name, builder)
+  }
+}
+
+
 trait OverrideFunctionRegistry extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
@@ -47,7 +138,7 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
 
 class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
@@ -73,27 +164,3 @@ object EmptyFunctionRegistry extends FunctionRegistry {
 
   override def conf: CatalystConf = throw new UnsupportedOperationException
 }
-
-/**
- * Build a map with String type of key, and it also supports either key case
- * sensitive or insensitive.
- * TODO move this into util folder?
- */
-object StringKeyHashMap {
-  def apply[T](caseSensitive: Boolean): StringKeyHashMap[T] = caseSensitive match {
-    case false => new StringKeyHashMap[T](_.toLowerCase)
-    case true => new StringKeyHashMap[T](identity)
-  }
-}
-
-class StringKeyHashMap[T](normalizer: (String) => String) {
-  private val base = new collection.mutable.HashMap[String, T]()
-
-  def apply(key: String): T = base(normalizer(key))
-
-  def get(key: String): Option[T] = base.get(normalizer(key))
-  def put(key: String, value: T): Option[T] = base.put(normalizer(key), value)
-  def remove(key: String): Option[T] = base.remove(normalizer(key))
-  def iterator: Iterator[(String, T)] = base.toIterator
-}
-
