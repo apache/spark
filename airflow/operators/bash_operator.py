@@ -13,15 +13,19 @@ class BashOperator(BaseOperator):
     :param bash_command: The command, set of commands or reference to a
         bash script (must be '.sh') to be executed.
     :type bash_command: string
+    :param env: If env is not None, it must be a mapping that defines the environment variables for the new process;
+        these are used instead of inheriting the current process environment, which is the default behavior.
+    :type env: dict
     '''
     template_fields = ('bash_command',)
     template_ext = ('.sh', '.bash',)
     ui_color = '#f0ede4'
 
     @apply_defaults
-    def __init__(self, bash_command, *args, **kwargs):
+    def __init__(self, bash_command, env=None, *args, **kwargs):
         super(BashOperator, self).__init__(*args, **kwargs)
         self.bash_command = bash_command
+        self.env = env
 
     def execute(self, context):
         '''
@@ -42,7 +46,7 @@ class BashOperator(BaseOperator):
                 sp = Popen(
                     ['bash', fname],
                     stdout=PIPE, stderr=STDOUT,
-                    cwd=tmp_dir)
+                    cwd=tmp_dir, env=self.env)
 
                 self.sp = sp
 
