@@ -48,7 +48,8 @@ case class HashOuterJoin(
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x => throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+    case x =>
+      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }
 
   override def requiredChildDistribution: Seq[ClusteredDistribution] =
