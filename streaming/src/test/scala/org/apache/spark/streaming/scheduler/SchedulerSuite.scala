@@ -35,31 +35,31 @@ class SchedulerSuite extends TestSuiteBase {
     val receivers = (1 to numReceivers).map(i => new DummyReceiver)
     val executors: List[String] = List("Host1", "Host2", "Host3", "Host4", "Host5")
     val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(0)(0) === "Host1") 
-    assert(locations(4)(0) === "Host5")  
-    assert(locations(5)(0) === "Host1") 
-    assert(locations(9)(0) === "Host5")  
-  } 
+    assert(locations(0)(0) === "Host1")
+    assert(locations(4)(0) === "Host5") 
+    assert(locations(5)(0) === "Host1")
+    assert(locations(9)(0) === "Host5")
+  }
 
   test("receiver scheduling - no preferredLocation, numExecutors > numReceivers") {
     val numReceivers = 3;
     val receivers = (1 to numReceivers).map(i => new DummyReceiver)
     val executors: List[String] = List("Host1", "Host2", "Host3", "Host4", "Host5")
     val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(0)(0) === "Host1") 
-    assert(locations(2)(0) === "Host3")  
-    assert(locations(0)(1) === "Host4") 
-    assert(locations(1)(1) === "Host5")  
-  } 
+    assert(locations(0)(0) === "Host1")
+    assert(locations(2)(0) === "Host3") 
+    assert(locations(0)(1) === "Host4")
+    assert(locations(1)(1) === "Host5") 
+  }
 
   test("receiver scheduling - all have preferredLocation") {
     val numReceivers = 5;
     val receivers = (1 to numReceivers).map(i => new DummyReceiver(host = Some("Host" + i)))
     val executors: List[String] = List("Host1", "Host5", "Host4", "Host3", "Host2")
     val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(1)(0) === "Host2") 
-    assert(locations(4)(0) === "Host5")  
-  } 
+    assert(locations(1)(0) === "Host2")
+    assert(locations(4)(0) === "Host5") 
+  }
 
   test("receiver scheduling - some have preferredLocation") {
     val numReceivers = 3;
@@ -69,11 +69,11 @@ class SchedulerSuite extends TestSuiteBase {
       new DummyReceiver)
     val executors: List[String] = List("Host1", "Host2", "Host3", "Host4", "Host5")
     val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(0)(0) === "Host2") 
-    assert(locations(1)(0) === "Host1") 
+    assert(locations(0)(0) === "Host2")
+    assert(locations(1)(0) === "Host1")
     assert(locations(2)(0) === "Host2")
     assert(locations(1)(1) === "Host3")
-  } 
+  }
 }
 
 /**
