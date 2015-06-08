@@ -213,10 +213,11 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     import actorSystem.dispatcher
-    defaultLookupTimeout.addMessageIfTimeout(
-      actorSystem.actorSelection(uri).resolveOne(_).
-        map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
-    )
+    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout.duration).
+      map(new AkkaRpcEndpointRef(defaultAddress, _, conf)).
+      // this is just in case there is a timeout from creating the future in resolveOne, we want the
+      // exception to indicate the conf that determines the timeout
+      recover(defaultLookupTimeout.addMessageIfTimeout)
   }
 
   override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String = {
@@ -297,20 +298,19 @@ private[akka] class AkkaRpcEndpointRef(
   }
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    timeout.addMessageIfTimeout(
-      actorRef.ask(AkkaMessage(message, true))(_).flatMap {
-          // The function will run in the calling thread, so it should be short and never block.
-          case msg @ AkkaMessage(message, reply) =>
-            if (reply) {
-              logError(s"Receive $msg but the sender cannot reply")
-              Future.failed(new SparkException(s"Receive $msg but the sender cannot reply"))
-            } else {
-              Future.successful(message)
-            }
-          case AkkaFailure(e) =>
-            Future.failed(e)
-        }(ThreadUtils.sameThread).mapTo[T]
-    )
+    actorRef.ask(AkkaMessage(message, true))(timeout.duration).flatMap {
+        // The function will run in the calling thread, so it should be short and never block.
+        case msg @ AkkaMessage(message, reply) =>
+          if (reply) {
+            logError(s"Receive $msg but the sender cannot reply")
+            Future.failed(new SparkException(s"Receive $msg but the sender cannot reply"))
+          } else {
+            Future.successful(message)
+          }
+        case AkkaFailure(e) =>
+          Future.failed(e)
+      }(ThreadUtils.sameThread).mapTo[T].
+    recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
