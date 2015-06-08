@@ -84,7 +84,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
     validateAndTransformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): StringIndexer = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
 }
 
 /**

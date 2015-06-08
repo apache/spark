@@ -25,7 +25,7 @@ class SharedParamsSuite extends SparkFunSuite {
   test("outputCol") {
 
     class Obj(override val uid: String) extends Params with HasOutputCol {
-      override def copy(extra: ParamMap): Obj = defaultCopyWithParams(extra)
+      override def copy(extra: ParamMap): Obj = defaultCopy(extra)
     }
 
     val obj = new Obj("obj")

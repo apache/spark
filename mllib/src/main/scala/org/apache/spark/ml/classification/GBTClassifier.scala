@@ -142,7 +142,7 @@ final class GBTClassifier(override val uid: String)
     GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
-  override def copy(extra: ParamMap): GBTClassifier = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
 
 @Experimental

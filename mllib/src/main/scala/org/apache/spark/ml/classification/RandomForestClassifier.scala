@@ -98,7 +98,7 @@ final class RandomForestClassifier(override val uid: String)
     RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
-  override def copy(extra: ParamMap): RandomForestClassifier = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
 
 @Experimental

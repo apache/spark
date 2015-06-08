@@ -97,7 +97,7 @@ object CrossValidatorSuite {
       throw new UnsupportedOperationException
     }
 
-    override def copy(extra: ParamMap): MyEstimator = defaultCopyWithParams(extra)
+    override def copy(extra: ParamMap): MyEstimator = defaultCopy(extra)
   }
 
   class MyEvaluator extends Evaluator {
@@ -108,6 +108,6 @@ object CrossValidatorSuite {
 
     override val uid: String = "eval"
 
-    override def copy(extra: ParamMap): MyEvaluator = defaultCopyWithParams(extra)
+    override def copy(extra: ParamMap): MyEvaluator = defaultCopy(extra)
   }
 }

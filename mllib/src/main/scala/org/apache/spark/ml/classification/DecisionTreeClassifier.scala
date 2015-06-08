@@ -87,7 +87,7 @@ final class DecisionTreeClassifier(override val uid: String)
       subsamplingRate = 1.0)
   }
 
-  override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
 @Experimental

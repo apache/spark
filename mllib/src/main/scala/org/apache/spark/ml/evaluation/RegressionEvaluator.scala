@@ -81,5 +81,5 @@ final class RegressionEvaluator(override val uid: String)
     metric
   }
 
-  override def copy(extra: ParamMap): RegressionEvaluator = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
 }

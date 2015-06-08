@@ -187,7 +187,7 @@ class LinearRegression(override val uid: String)
     copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
   }
 
-  override def copy(extra: ParamMap): LinearRegression = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
 /**

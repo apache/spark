@@ -336,7 +336,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
     validateAndTransformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): ALS = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 }
 
 /**

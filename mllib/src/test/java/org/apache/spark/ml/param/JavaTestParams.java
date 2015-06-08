@@ -86,6 +86,6 @@ public class JavaTestParams extends JavaParams {
 
   @Override
   public JavaTestParams copy(ParamMap extra) {
-    return defaultCopyWithParams(extra);
+    return defaultCopy(extra);
   }
 }

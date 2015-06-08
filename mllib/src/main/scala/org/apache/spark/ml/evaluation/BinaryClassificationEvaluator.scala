@@ -80,5 +80,5 @@ class BinaryClassificationEvaluator(override val uid: String)
     metric
   }
 
-  override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
 }

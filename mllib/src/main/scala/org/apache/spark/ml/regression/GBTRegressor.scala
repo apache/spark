@@ -132,7 +132,7 @@ final class GBTRegressor(override val uid: String)
     GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
 
-  override def copy(extra: ParamMap): GBTRegressor = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
 
 @Experimental

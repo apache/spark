@@ -151,7 +151,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
   }
 
   override def copy(extra: ParamMap): CrossValidator = {
-    val copied = defaultCopyWithParams(extra).asInstanceOf[CrossValidator]
+    val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
     if (copied.isDefined(estimator)) {
       copied.setEstimator(copied.getEstimator.copy(extra))
     }

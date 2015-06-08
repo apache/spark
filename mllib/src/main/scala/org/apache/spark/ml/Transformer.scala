@@ -119,5 +119,5 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
       callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
   }
 
-  override def copy(extra: ParamMap): T = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): T = defaultCopy(extra)
 }

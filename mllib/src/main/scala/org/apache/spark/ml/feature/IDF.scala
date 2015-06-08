@@ -83,7 +83,7 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
     validateAndTransformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): IDF = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): IDF = defaultCopy(extra)
 }
 
 /**

@@ -132,7 +132,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
     SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
 
-  override def copy(extra: ParamMap): VectorIndexer = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
 private object VectorIndexer {

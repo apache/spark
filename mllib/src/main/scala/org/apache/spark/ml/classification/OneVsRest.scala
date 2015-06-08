@@ -217,7 +217,7 @@ final class OneVsRest(override val uid: String)
   }
 
   override def copy(extra: ParamMap): OneVsRest = {
-    val copied = defaultCopyWithParams(extra).asInstanceOf[OneVsRest]
+    val copied = defaultCopy(extra).asInstanceOf[OneVsRest]
     if (isDefined(classifier)) {
       copied.setClassifier($(classifier).copy(extra))
     }

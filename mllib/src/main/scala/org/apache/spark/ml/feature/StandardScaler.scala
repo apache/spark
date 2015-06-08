@@ -93,7 +93,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     StructType(outputFields)
   }
 
-  override def copy(extra: ParamMap): StandardScaler = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
 /**

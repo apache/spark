@@ -133,7 +133,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
     validateAndTransformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): Word2Vec = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 
 /**

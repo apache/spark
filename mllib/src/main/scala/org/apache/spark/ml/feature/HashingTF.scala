@@ -75,5 +75,5 @@ class HashingTF(override val uid: String) extends Transformer with HasInputCol w
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
-  override def copy(extra: ParamMap): HashingTF = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 }

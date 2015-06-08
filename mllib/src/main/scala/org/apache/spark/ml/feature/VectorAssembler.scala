@@ -119,7 +119,7 @@ class VectorAssembler(override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, false))
   }
 
-  override def copy(extra: ParamMap): VectorAssembler = defaultCopyWithParams(extra)
+  override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 
 private object VectorAssembler {
