@@ -60,7 +60,6 @@ class ReceivedBlockHandlerSuite
   var rpcEnv: RpcEnv = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
-  var handler: ReceivedBlockHandler = null
   var tempDirectory: File = null
   var storageLevel = StorageLevel.MEMORY_ONLY_SER
 
@@ -190,9 +189,7 @@ class ReceivedBlockHandlerSuite
   test("BlockManagerBasedBlockHandler-MEMORY_ONLY-ByteBufferBlock - count messages") {
     storageLevel = StorageLevel.MEMORY_ONLY
     // Create a non-trivial (not all zeros) byte array
-    var counter = 0.toByte
-    def incr: Byte = {counter = (counter + 1).toByte; counter;}
-    val bytes = Array.fill[Byte](100)(incr)
+    val bytes = Array.tabulate(100)(i => i.toByte)
     val byteBufferBlock = ByteBuffer.wrap(bytes)
     withBlockManagerBasedBlockHandler { handler =>
       val blockStoreResult = storeBlock(handler, ByteBufferBlock(byteBufferBlock))
