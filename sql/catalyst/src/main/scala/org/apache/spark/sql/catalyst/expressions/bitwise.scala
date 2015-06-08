@@ -25,6 +25,8 @@ import org.apache.spark.sql.types._
 
 /**
  * A function that calculates bitwise and(&) of two numbers.
+ *
+ * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "&"
@@ -48,6 +50,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
 /**
  * A function that calculates bitwise or(|) of two numbers.
+ *
+ * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "|"
@@ -71,6 +75,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
 /**
  * A function that calculates bitwise xor of two numbers.
+ *
+ * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "^"
@@ -112,8 +118,8 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
       ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
-    defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)})~($c)")
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
   protected override def evalInternal(evalE: Any) = not(evalE)

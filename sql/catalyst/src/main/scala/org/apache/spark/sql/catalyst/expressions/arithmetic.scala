@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{Code, GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -50,7 +50,7 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = dataType match {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"c.unary_$$minus()")
     case dt: NumericType => defineCodeGen(ctx, ev, c => s"-($c)")
   }
@@ -74,7 +74,7 @@ case class Sqrt(child: Expression) extends UnaryArithmetic {
     else math.sqrt(value)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
@@ -138,7 +138,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = dataType match {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     // byte and short are casted into int when add, minus, times or divide
@@ -236,7 +236,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   /**
    * Special case handling due to division by 0 => null.
    */
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
@@ -296,7 +296,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   /**
    * Special case handling for x % 0 ==> null.
    */
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val test = if (left.dataType.isInstanceOf[DecimalType]) {
@@ -346,7 +346,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isNativeType(left.dataType)) {
       val eval1 = left.gen(ctx)
       val eval2 = right.gen(ctx)
@@ -400,7 +400,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isNativeType(left.dataType)) {
 
       val eval1 = left.gen(ctx)
