@@ -161,7 +161,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0)))
+      buildCast[Boolean](_, b => new Timestamp(if (b) 1 else 0))
     case LongType =>
       buildCast[Long](_, l => new Timestamp(l))
     case IntegerType =>

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
 /**
  * Additional tests for code generation.
  */
-class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
+class CodeGenerationSuite extends SparkFunSuite {
 
   test("multithreaded eval") {
     import scala.concurrent._
