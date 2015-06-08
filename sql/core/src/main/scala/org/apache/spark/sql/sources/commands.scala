@@ -335,6 +335,8 @@ private[sql] abstract class BaseWriterContainer(
       SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
+      logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
       // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
@@ -354,6 +356,7 @@ private[sql] abstract class BaseWriterContainer(
     }.getOrElse {
       // If output committer class is not set, we will use the one associated with the
       // file output format.
+      logInfo(s"Using output committer class ${outputFormatClass.getCanonicalName}")
       outputFormatClass.newInstance().getOutputCommitter(context)
     }
   }
