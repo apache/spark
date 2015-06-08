@@ -445,10 +445,10 @@ trait HiveTypeCoercion {
                                   e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           val resultType = DecimalType(max(p1, p2), max(s1, s2))
           b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
-        case b @ BinaryComparison(e1 @ DecimalType.Fixed(_, _), e2)
+        case b @ BinaryComparison(e1 @ DecimalType.Expression(_, _), e2)
           if e2.dataType == DecimalType.Unlimited =>
           b.makeCopy(Array(Cast(e1, DecimalType.Unlimited), e2))
-        case b @ BinaryComparison(e1, e2 @ DecimalType.Fixed(_, _))
+        case b @ BinaryComparison(e1, e2 @ DecimalType.Expression(_, _))
           if e1.dataType == DecimalType.Unlimited =>
           b.makeCopy(Array(e1, Cast(e2, DecimalType.Unlimited)))
 
