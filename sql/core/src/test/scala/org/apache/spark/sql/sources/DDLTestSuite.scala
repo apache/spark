@@ -63,19 +63,18 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 }
 
 class DDLTestSuite extends DataSourceTest {
-  import caseInsensitiveContext._
 
   before {
-      sql(
-          """
-          |CREATE TEMPORARY TABLE ddlPeople
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
-          """.stripMargin)
+    caseInsensitiveContext.sql(
+      """
+      |CREATE TEMPORARY TABLE ddlPeople
+      |USING org.apache.spark.sql.sources.DDLScanSource
+      |OPTIONS (
+      |  From '1',
+      |  To '10',
+      |  Table 'test1'
+      |)
+      """.stripMargin)
   }
 
   sqlTest(
@@ -100,7 +99,8 @@ class DDLTestSuite extends DataSourceTest {
       ))
 
   test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
-    val attributes = sql("describe ddlPeople").queryExecution.executedPlan.output
+    val attributes = caseInsensitiveContext.sql("describe ddlPeople")
+      .queryExecution.executedPlan.output
     assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
     assert(attributes.map(_.dataType).toSet === Set(StringType))
   }

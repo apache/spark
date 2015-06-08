@@ -616,7 +616,19 @@ class DataFrame(object):
         |    min|  2|
         |    max|  5|
         +-------+---+
+        >>> df.describe(['age', 'name']).show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |   mean|3.5| null|
+        | stddev|1.5| null|
+        |    min|  2|Alice|
+        |    max|  5|  Bob|
+        +-------+---+-----+
         """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -897,8 +909,7 @@ class DataFrame(object):
     @since("1.3.1")
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
-
-        This is an alias for ``na.drop()``.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
 
         :param how: 'any' or 'all'.
             If 'any', drop a row if it contains any nulls.
@@ -907,13 +918,6 @@ class DataFrame(object):
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
         :param subset: optional list of column names to consider.
-
-        >>> df4.dropna().show()
-        +---+------+-----+
-        |age|height| name|
-        +---+------+-----+
-        | 10|    80|Alice|
-        +---+------+-----+
 
         >>> df4.na.drop().show()
         +---+------+-----+
@@ -940,6 +944,7 @@ class DataFrame(object):
     @since("1.3.1")
     def fillna(self, value, subset=None):
         """Replace null values, alias for ``na.fill()``.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
         :param value: int, long, float, string, or dict.
             Value to replace null values with.
@@ -951,7 +956,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.fillna(50).show()
+        >>> df4.na.fill(50).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
@@ -960,16 +965,6 @@ class DataFrame(object):
         | 50|    50|  Tom|
         | 50|    50| null|
         +---+------+-----+
-
-        >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        +---+------+-------+
-        |age|height|   name|
-        +---+------+-------+
-        | 10|    80|  Alice|
-        |  5|  null|    Bob|
-        | 50|  null|    Tom|
-        | 50|  null|unknown|
-        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
@@ -1002,6 +997,8 @@ class DataFrame(object):
     @since(1.4)
     def replace(self, to_replace, value, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
+        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
+        aliases of each other.
 
         :param to_replace: int, long, float, string, or list.
             Value to be replaced.
@@ -1017,7 +1014,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.replace(10, 20).show()
+        >>> df4.na.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
@@ -1027,7 +1024,7 @@ class DataFrame(object):
         |null|  null| null|
         +----+------+-----+
 
-        >>> df4.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
+        >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
@@ -1078,9 +1075,9 @@ class DataFrame(object):
     @since(1.4)
     def corr(self, col1, col2, method=None):
         """
-        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
-        supports the Pearson Correlation Coefficient.
-        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
+        Calculates the correlation of two columns of a DataFrame as a double value.
+        Currently only supports the Pearson Correlation Coefficient.
+        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
         :param col1: The name of the first column
         :param col2: The name of the second column
@@ -1229,7 +1226,10 @@ class DataFrame(object):
         import pandas as pd
         return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
+    ##########################################################################################
     # Pandas compatibility
+    ##########################################################################################
+
     groupby = groupBy
     drop_duplicates = dropDuplicates
 
@@ -1249,6 +1249,8 @@ def _to_scala_map(sc, jm):
 
 class DataFrameNaFunctions(object):
     """Functionality for working with missing data in :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):
@@ -1264,9 +1266,16 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
+    def replace(self, to_replace, value, subset=None):
+        return self.df.replace(to_replace, value, subset)
+
+    replace.__doc__ = DataFrame.replace.__doc__
+
 
 class DataFrameStatFunctions(object):
     """Functionality for statistic functions with :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):

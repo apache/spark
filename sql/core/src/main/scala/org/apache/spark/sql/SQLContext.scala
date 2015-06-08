@@ -916,6 +916,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     tlSession.remove()
   }
 
+  protected[sql] def setSession(session: SQLSession): Unit = {
+    detachSession()
+    tlSession.set(session)
+  }
+
   protected[sql] class SQLSession {
     // Note that this is a lazy val so we can override the default value in subclasses.
     protected[sql] lazy val conf: SQLConf = new SQLConf

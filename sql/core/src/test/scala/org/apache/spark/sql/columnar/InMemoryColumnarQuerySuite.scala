@@ -21,8 +21,6 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
@@ -31,8 +29,12 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+  import ctx.{logicalPlanToSparkQuery, sql}
+
   test("simple columnar query") {
-    val plan = executePlan(testData.logicalPlan).executedPlan
+    val plan = ctx.executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -40,16 +42,16 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
-    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    ctx.sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
       .toDF().registerTempTable("sizeTst")
-    cacheTable("sizeTst")
+    ctx.cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
-        conf.autoBroadcastJoinThreshold)
+      ctx.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
+        ctx.conf.autoBroadcastJoinThreshold)
   }
 
   test("projection") {
-    val plan = executePlan(testData.select('value, 'key).logicalPlan).executedPlan
+    val plan = ctx.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
@@ -58,7 +60,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = executePlan(testData.logicalPlan).executedPlan
+    val plan = ctx.executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -70,7 +72,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM repeatedData"),
       repeatedData.collect().toSeq.map(Row.fromTuple))
 
-    cacheTable("repeatedData")
+    ctx.cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
@@ -82,7 +84,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
 
-    cacheTable("nullableRepeatedData")
+    ctx.cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
@@ -94,7 +96,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq.map(Row.fromTuple))
 
-    cacheTable("timestamps")
+    ctx.cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
@@ -106,7 +108,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
 
-    cacheTable("withEmptyParts")
+    ctx.cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
@@ -155,7 +157,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
     // Create a RDD for the schema
     val rdd =
-      sparkContext.parallelize((1 to 100), 10).map { i =>
+      ctx.sparkContext.parallelize((1 to 100), 10).map { i =>
         Row(
           s"str${i}: test cache.",
           s"binary${i}: test cache.".getBytes("UTF-8"),
@@ -175,18 +177,18 @@ class InMemoryColumnarQuerySuite extends QueryTest {
           (0 to i).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
           Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
-    createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
+    ctx.createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
     // Cache the table.
     sql("cache table InMemoryCache_different_data_types")
     // Make sure the table is indeed cached.
-    val tableScan = table("InMemoryCache_different_data_types").queryExecution.executedPlan
+    val tableScan = ctx.table("InMemoryCache_different_data_types").queryExecution.executedPlan
     assert(
-      isCached("InMemoryCache_different_data_types"),
+      ctx.isCached("InMemoryCache_different_data_types"),
       "InMemoryCache_different_data_types should be cached.")
     // Issue a query and check the results.
     checkAnswer(
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
-      table("InMemoryCache_different_data_types").collect())
-    dropTempTable("InMemoryCache_different_data_types")
+      ctx.table("InMemoryCache_different_data_types").collect())
+    ctx.dropTempTable("InMemoryCache_different_data_types")
   }
 }

@@ -79,7 +79,7 @@ class StreamingLinearRegressionWithSGD private[mllib] (
     this
   }
 
-  /** Set the initial weights. Default: [0.0, 0.0]. */
+  /** Set the initial weights. */
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this

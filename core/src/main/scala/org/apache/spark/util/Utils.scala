@@ -1295,8 +1295,7 @@ private[spark] object Utils extends Logging {
       } catch {
         case t: Throwable =>
           if (originalThrowable != null) {
-            // We could do originalThrowable.addSuppressed(t), but it's
-            // not available in JDK 1.6.
+            originalThrowable.addSuppressed(t)
             logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
             throw originalThrowable
           } else {

@@ -50,6 +50,9 @@ object MimaExcludes {
             // false positive, this is a @Private class
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.this"),
+            // Removing a testing method from a private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution")
           )
