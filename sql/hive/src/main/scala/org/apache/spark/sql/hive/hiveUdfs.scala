@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
 /* Implicit conversions */
@@ -77,6 +78,8 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
   extends Expression with HiveInspectors with Logging {
 
   type UDFType = UDF
+
+  override def deterministic: Boolean = isUDFDeterministic
 
   override def nullable: Boolean = true
 
@@ -139,6 +142,8 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
 private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
+
+  override def deterministic: Boolean = isUDFDeterministic
 
   override def nullable: Boolean = true
 
@@ -555,12 +560,12 @@ private[hive] case class HiveUdafFunction(
     } else {
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
-  
+
   private val inspectors = exprs.map(toInspector).toArray
-    
-  private val function = { 
+
+  private val function = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
-    resolver.getEvaluator(parameterInfo) 
+    resolver.getEvaluator(parameterInfo)
   }
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
@@ -575,7 +580,7 @@ private[hive] case class HiveUdafFunction(
 
   @transient
   protected lazy val cached = new Array[AnyRef](exprs.length)
-  
+
   def update(input: Row): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))

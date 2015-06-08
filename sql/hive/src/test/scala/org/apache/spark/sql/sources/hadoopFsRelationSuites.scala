@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.hadoop.fs.Path
-import org.scalatest.FunSuite
+import java.io.File
 
-import org.apache.spark.SparkException
+import com.google.common.io.Files
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -28,9 +30,9 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override val sqlContext: SQLContext = TestHive
+  override lazy val sqlContext: SQLContext = TestHive
 
-  import sqlContext._
+  import sqlContext.sql
   import sqlContext.implicits._
 
   val dataSourceName = classOf[SimpleTextSource].getCanonicalName
@@ -41,19 +43,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         StructField("a", IntegerType, nullable = false),
         StructField("b", StringType, nullable = false)))
 
-  val testDF = (1 to 3).map(i => (i, s"val_$i")).toDF("a", "b")
+  lazy val testDF = (1 to 3).map(i => (i, s"val_$i")).toDF("a", "b")
 
-  val partitionedTestDF1 = (for {
+  lazy val partitionedTestDF1 = (for {
     i <- 1 to 3
     p2 <- Seq("foo", "bar")
   } yield (i, s"val_$i", 1, p2)).toDF("a", "b", "p1", "p2")
 
-  val partitionedTestDF2 = (for {
+  lazy val partitionedTestDF2 = (for {
     i <- 1 to 3
     p2 <- Seq("foo", "bar")
   } yield (i, s"val_$i", 2, p2)).toDF("a", "b", "p1", "p2")
 
-  val partitionedTestDF = partitionedTestDF1.unionAll(partitionedTestDF2)
+  lazy val partitionedTestDF = partitionedTestDF1.unionAll(partitionedTestDF2)
 
   def checkQueries(df: DataFrame): Unit = {
     // Selects everything
@@ -101,7 +103,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
@@ -115,7 +117,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.unionAll(testDF).orderBy("a").collect())
@@ -149,7 +151,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .save(file.getCanonicalPath)
 
       checkQueries(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
@@ -170,7 +172,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -192,7 +194,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.unionAll(partitionedTestDF).collect())
@@ -214,7 +216,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -250,7 +252,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(table("t"), testDF.collect())
+      checkAnswer(sqlContext.table("t"), testDF.collect())
     }
   }
 
@@ -259,7 +261,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+      checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
     }
   }
 
@@ -278,7 +280,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
     withTempTable("t") {
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
-      assert(table("t").collect().isEmpty)
+      assert(sqlContext.table("t").collect().isEmpty)
     }
   }
 
@@ -289,7 +291,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       .saveAsTable("t")
 
     withTable("t") {
-      checkQueries(table("t"))
+      checkQueries(sqlContext.table("t"))
     }
   }
 
@@ -309,7 +311,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(table("t"), partitionedTestDF.collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -329,7 +331,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
     }
   }
 
@@ -349,7 +351,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(table("t"), partitionedTestDF.collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -398,7 +400,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .partitionBy("p1", "p2")
         .saveAsTable("t")
 
-      assert(table("t").collect().isEmpty)
+      assert(sqlContext.table("t").collect().isEmpty)
     }
   }
 
@@ -410,7 +412,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
-      val df = read
+      val df = sqlContext.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
@@ -450,8 +452,22 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         .saveAsTable("t")
 
       withTempTable("t") {
-        checkAnswer(table("t"), input.collect())
+        checkAnswer(sqlContext.table("t"), input.collect())
       }
+    }
+  }
+
+  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+
+    df.write
+      .format(dataSourceName)
+      .mode(SaveMode.Overwrite)
+      .partitionBy("c", "a")
+      .saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 }
@@ -485,7 +501,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 }
 
-class CommitFailureTestRelationSuite extends FunSuite with SQLTestUtils {
+class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
   import TestHive.implicits._
 
   override val sqlContext = TestHive
@@ -535,20 +551,6 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
   }
 
-  test("SPARK-7616: adjust column name order accordingly when saving partitioned table") {
-    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
-
-    df.write
-      .format("parquet")
-      .mode(SaveMode.Overwrite)
-      .partitionBy("c", "a")
-      .saveAsTable("t")
-
-    withTable("t") {
-      checkAnswer(table("t"), df.select('b, 'c, 'a).collect())
-    }
-  }
-
   test("SPARK-7868: _temporary directories should be ignored") {
     withTempPath { dir =>
       val df = Seq("a", "b", "c").zipWithIndex.toDF()
@@ -562,6 +564,49 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .save(s"${dir.getCanonicalPath}/_temporary")
 
       checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
+    }
+  }
+
+  test("SPARK-8014: Avoid scanning output directory when SaveMode isn't SaveMode.Append") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = Seq(1 -> "a").toDF()
+
+      // Creates an arbitrary file.  If this directory gets scanned, ParquetRelation2 will throw
+      // since it's not a valid Parquet file.
+      val emptyFile = new File(path, "empty")
+      Files.createParentDirs(emptyFile)
+      Files.touch(emptyFile)
+
+      // This shouldn't throw anything.
+      df.write.format("parquet").mode(SaveMode.Ignore).save(path)
+
+      // This should only complain that the destination directory already exists, rather than file
+      // "empty" is not a Parquet file.
+      assert {
+        intercept[RuntimeException] {
+          df.write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
+        }.getMessage.contains("already exists")
+      }
+
+      // This shouldn't throw anything.
+      df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+      checkAnswer(read.format("parquet").load(path), df)
+    }
+  }
+
+  test("SPARK-8079: Avoid NPE thrown from BaseWriterContainer.abortJob") {
+    withTempPath { dir =>
+      intercept[AnalysisException] {
+        // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
+        // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
+        // the bug.  Please refer to spark-8079 for more details.
+        range(1, 10)
+          .withColumnRenamed("id", "a b")
+          .write
+          .format("parquet")
+          .save(dir.getCanonicalPath)
+      }
     }
   }
 }

@@ -23,13 +23,12 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Try, Random}
 
-import org.scalatest.FunSuite
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
 import com.esotericsoftware.kryo.Kryo
 
-class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
     val conf = new SparkConf()
     // Simply exercise the API, we don't need a complete conversion test since that's handled in

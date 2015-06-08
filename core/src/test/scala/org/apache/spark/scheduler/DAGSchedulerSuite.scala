@@ -21,7 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -68,7 +68,7 @@ class MyRDD(
 class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite
-  extends FunSuiteLike with BeforeAndAfter with LocalSparkContext with Timeouts {
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -254,7 +254,7 @@ class DAGSchedulerSuite
   test("[SPARK-3353] parent stage should have lower stage id") {
     sparkListener.stageByOrderOfExecution.clear()
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.stageByOrderOfExecution.length === 2)
     assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
   }
@@ -389,7 +389,7 @@ class DAGSchedulerSuite
     submit(unserializableRdd, Array(0))
     assert(failure.getMessage.startsWith(
       "Job aborted due to stage failure: Task not serializable:"))
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty()
@@ -399,7 +399,7 @@ class DAGSchedulerSuite
     submit(new MyRDD(sc, 1, Nil), Array(0))
     failed(taskSets(0), "some failure")
     assert(failure.getMessage === "Job aborted due to stage failure: some failure")
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty()
@@ -410,7 +410,7 @@ class DAGSchedulerSuite
     val jobId = submit(rdd, Array(0))
     cancel(jobId)
     assert(failure.getMessage === s"Job $jobId cancelled ")
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty()
@@ -462,7 +462,7 @@ class DAGSchedulerSuite
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.isEmpty)
     assert(sparkListener.successfulStages.contains(0))
   }
@@ -531,7 +531,7 @@ class DAGSchedulerSuite
       Map[Long, Any](),
       createFakeTaskInfo(),
       null))
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(1))
 
     // The second ResultTask fails, with a fetch failure for the output from the second mapper.
@@ -543,7 +543,7 @@ class DAGSchedulerSuite
       createFakeTaskInfo(),
       null))
     // The SparkListener should not receive redundant failure events.
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.size == 1)
   }
 
@@ -592,7 +592,7 @@ class DAGSchedulerSuite
 
     // Listener bus should get told about the map stage failing, but not the reduce stage
     // (since the reduce stage hasn't been started yet).
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.toSet === Set(0))
 
     assertDataStructuresEmpty()
@@ -643,7 +643,7 @@ class DAGSchedulerSuite
     assert(cancelledStages.toSet === Set(0, 2))
 
     // Make sure the listeners got told about both failed stages.
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.successfulStages.isEmpty)
     assert(sparkListener.failedStages.toSet === Set(0, 2))
 

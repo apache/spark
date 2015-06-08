@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
-import org.apache.spark.SparkException
-
-class NumericParserSuite extends FunSuite {
+class NumericParserSuite extends SparkFunSuite {
 
   test("parser") {
     val s = "((1.0,2e3),-4,[5e-6,7.0E8],+9)"

@@ -137,7 +137,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    */
   def sample(withReplacement: Boolean, fraction: JDouble): JavaDoubleRDD =
     sample(withReplacement, fraction, Utils.random.nextLong)
-    
+
   /**
    * Return a sampled subset of this RDD.
    */

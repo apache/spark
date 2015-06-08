@@ -190,7 +190,7 @@ private[sql] object PartitioningUtils {
       Seq.empty
     } else {
       assert(distinctPartitionsColNames.size == 1, {
-        val list = distinctPartitionsColNames.mkString("\t", "\n", "")
+        val list = distinctPartitionsColNames.mkString("\t", "\n\t", "")
         s"Conflicting partition column names detected:\n$list"
       })
 

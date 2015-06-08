@@ -399,7 +399,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
       val gaussians = Array.tabulate(weight.length){
         i => new MultivariateGaussian(mean(i), sigma(i))
-      }      
+      }
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data).map(Vectors.dense)
   }
@@ -494,7 +494,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
     new Normalizer(p).transform(rdd)
   }
-  
+
   /**
    * Java stub for StandardScaler.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.

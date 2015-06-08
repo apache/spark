@@ -19,15 +19,14 @@ package org.apache.spark.mllib.classification
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
 
-class StreamingLogisticRegressionSuite extends FunSuite with TestSuiteBase {
+class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 30000

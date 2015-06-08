@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.api.python
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Vectors, SparseMatrix}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.recommendation.Rating
 
-class PythonMLLibAPISuite extends FunSuite {
+class PythonMLLibAPISuite extends SparkFunSuite {
 
   SerDe.initialize()
 

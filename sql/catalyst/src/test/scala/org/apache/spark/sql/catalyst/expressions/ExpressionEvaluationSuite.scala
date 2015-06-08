@@ -22,9 +22,9 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 
-class ExpressionEvaluationBaseSuite extends FunSuite {
+class ExpressionEvaluationBaseSuite extends SparkFunSuite {
 
   def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
     expression.eval(inputRow)
@@ -344,7 +344,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation("abdef" cast TimestampType, null)
     checkEvaluation("12.65" cast DecimalType.Unlimited, Decimal(12.65))
 
-    checkEvaluation(Literal(1) cast LongType, 1)
+    checkEvaluation(Literal(1) cast LongType, 1.toLong)
     checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
     checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
@@ -363,15 +363,20 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
+      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType),
+      5.toLong)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType), 0)
+      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType),
+      0.toShort)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
       TimestampType, ByteType), DecimalType.Unlimited), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
-      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0)
+      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType),
+      0.toShort)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
+    checkEvaluation(Literal(true) cast StringType, "true")
+    checkEvaluation(Literal(false) cast StringType, "false")
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
     checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
     checkEvaluation("23" cast DoubleType, 23d)
@@ -507,9 +512,9 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
     val tss = new Timestamp(seconds)
-    checkEvaluation(Cast(ts, ShortType), 15)
+    checkEvaluation(Cast(ts, ShortType), 15.toShort)
     checkEvaluation(Cast(ts, IntegerType), 15)
-    checkEvaluation(Cast(ts, LongType), 15)
+    checkEvaluation(Cast(ts, LongType), 15.toLong)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
     checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)
@@ -860,7 +865,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     val c5 = 'a.string.at(4)
     val c6 = 'a.string.at(5)
 
-    val literalNull = Literal.create(null, BooleanType)
+    val literalNull = Literal.create(null, IntegerType)
     val literalInt = Literal(1)
     val literalString = Literal("a")
 
@@ -869,12 +874,12 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
     checkEvaluation(CaseKeyWhen(c2, Seq(literalInt, c4, c5)), "a", row)
     checkEvaluation(CaseKeyWhen(c2, Seq(c1, c4, c5)), "b", row)
     checkEvaluation(CaseKeyWhen(c4, Seq(literalString, c2, c3)), 1, row)
-    checkEvaluation(CaseKeyWhen(c4, Seq(c1, c3, c5, c2, Literal(3))), 3, row)
+    checkEvaluation(CaseKeyWhen(c4, Seq(c6, c3, c5, c2, Literal(3))), 3, row)
 
     checkEvaluation(CaseKeyWhen(literalInt, Seq(c2, c4, c5)), "a", row)
     checkEvaluation(CaseKeyWhen(literalString, Seq(c5, c2, c4, c3)), 2, row)
-    checkEvaluation(CaseKeyWhen(literalInt, Seq(c5, c2, c4, c3)), null, row)
-    checkEvaluation(CaseKeyWhen(literalNull, Seq(c5, c2, c1, c3)), 2, row)
+    checkEvaluation(CaseKeyWhen(c6, Seq(c5, c2, c4, c3)), null, row)
+    checkEvaluation(CaseKeyWhen(literalNull, Seq(c2, c5, c1, c6)), "c", row)
   }
 
   test("complex type") {
@@ -1207,7 +1212,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   }
 
   /**
-   * Used for testing math functions for DataFrames. 
+   * Used for testing math functions for DataFrames.
    * @param c The DataFrame function
    * @param f The functions in scala.math
    * @param domain The set of values to run the function with
@@ -1215,7 +1220,7 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
    * @tparam T Generic type for primitives
    */
   def unaryMathFunctionEvaluation[@specialized(Int, Double, Float, Long) T](
-      c: Expression => Expression, 
+      c: Expression => Expression,
       f: T => T,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
       expectNull: Boolean = false): Unit = {

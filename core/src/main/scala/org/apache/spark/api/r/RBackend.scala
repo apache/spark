@@ -44,11 +44,11 @@ private[spark] class RBackend {
     bossGroup = new NioEventLoopGroup(2)
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
-  
+
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
-  
+
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
       def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline()

@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.hive.client
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.util.Utils
-import org.scalatest.FunSuite
 
 /**
- * A simple set of tests that call the methods of a hive ClientInterface, loading different version 
- * of hive from maven central.  These tests are simple in that they are mostly just testing to make 
- * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionallity 
+ * A simple set of tests that call the methods of a hive ClientInterface, loading different version
+ * of hive from maven central.  These tests are simple in that they are mostly just testing to make
+ * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
  */
-class VersionsSuite extends FunSuite with Logging {
+class VersionsSuite extends SparkFunSuite with Logging {
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()

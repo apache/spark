@@ -93,7 +93,7 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("column pruning for Project(ne, Limit)") {
     val originalQuery =
       testRelation
@@ -109,7 +109,7 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   // After this line is unimplemented.
   test("simple push down") {
     val originalQuery =

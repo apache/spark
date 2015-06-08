@@ -98,6 +98,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
       numExecutors = initialNumExecutors
     }
+    principal = Option(principal)
+      .orElse(sparkConf.getOption("spark.yarn.principal"))
+      .orNull
+    keytab = Option(keytab)
+      .orElse(sparkConf.getOption("spark.yarn.keytab"))
+      .orNull
   }
 
   /**
