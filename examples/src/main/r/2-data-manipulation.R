@@ -15,7 +15,42 @@
 # limitations under the License.
 #
 
-source("1-data.R")
+
+# Load SparkR library into your R session
+library(SparkR)
+
+## Initialize SparkContext on your local PC
+sc <- sparkR.init(master = "local", appName = "MyApp")
+
+## Initialize SQLContext
+sqlContext <- SparkRSQL.init(sc)
+
+# For this example, we shall use the "flights" dataset
+# The data can be downloaded from: https://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv 
+# The dataset consists of every flight departing Houston in 2011.
+# The data set is made up of 227,496 rows x 14 columns. 
+
+
+# Option 1: Create an R data frame and then convert it to a SparkR DataFrame -------
+
+## Create R dataframe
+install.packages("data.table") #We want to use the fread() function to read the dataset
+library(data.table)
+
+flights_df <- fread("flights.csv")
+flights_df$date <- as.Date(flights_df$date)
+
+## Convert the local data frame into a SparkR DataFrame
+flightsDF <- createDataFrame(sqlContext, flights_df)
+
+# Option 2: Alternatively, directly create a SparkR DataFrame from the source data
+flightsDF <- read.df(sqlContext, "flights.csv", source = "csv", header = "true")
+
+# Print the schema of this Spark DataFrame
+printSchema(flightsDF)
+
+# Cache the DataFrame
+cache(flightsDF)
 
 
 # Install the magrittr pipeline operator
