@@ -22,7 +22,7 @@
 
 source("0-getting-started.R")
 
-# Create an R data frame and then convert it to a SparkR DataFrame -------
+# Option 1: Create an R data frame and then convert it to a SparkR DataFrame -------
 
 ## Create R dataframe
 install.packages("data.table") #We want to use the fread() function to read the dataset
@@ -32,10 +32,13 @@ flights_df <- fread("flights.csv")
 flights_df$date <- as.Date(flights_df$date)
 
 ## Convert the local data frame into a SparkR DataFrame
-flightsDF <- createDataFrame(sqlCtx, flights_df)
+flightsDF <- createDataFrame(sqlContext, flights_df)
 
-## Print the schema of this Spark DataFrame
+# Option 2: Alternatively, directly create a SparkR DataFrame from the source data
+flightsDF <- read.df(sqlContext, "flights.csv", source = "csv", header = "true")
+
+# Print the schema of this Spark DataFrame
 printSchema(flightsDF)
 
-## Cache the DataFrame
+# Cache the DataFrame
 cache(flightsDF)
