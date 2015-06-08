@@ -559,8 +559,8 @@ private[spark] class ApplicationMaster(
         Option(allocator) match {
           case Some(a) =>
             allocatorLock.synchronized {
-              if (a.requestTotalExecutors(requestedTotal, localityAwarePendingTasks,
-                preferredLocalityToCount)) {
+              if (a.requestTotalExecutorsWithPreferredLocalities(requestedTotal,
+                localityAwarePendingTasks, preferredLocalityToCount)) {
                 allocatorLock.notifyAll()
               }
             }

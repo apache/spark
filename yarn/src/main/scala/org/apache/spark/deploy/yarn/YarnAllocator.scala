@@ -158,7 +158,10 @@ private[yarn] class YarnAllocator(
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]): Unit = synchronized {
+      preferredLocalityToCount: Map[String, Int]): Boolean = synchronized {
+    this.localityAwarePendingTaskNum = localityAwarePendingTasks
+    this.preferredLocalityToCounts = preferredLocalityToCounts
+
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
@@ -166,9 +169,6 @@ private[yarn] class YarnAllocator(
     } else {
       false
     }
-
-    this.localityAwarePendingTaskNum = localityAwarePendingTasks
-    this.preferredLocalityToCounts = preferredLocalityToCounts
   }
 
   /**
