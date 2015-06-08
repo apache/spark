@@ -143,7 +143,7 @@ class PlannerSuite extends SparkFunSuite {
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
   }
 
-  test("unnecessary exchange operators test") {
+  test("unnecessary exchange operators") {
     val planned1 = testData
       .join(testData2, testData("key") === testData2("a"), "outer")
       .join(testData3, testData("key") === testData3("a"), "outer")

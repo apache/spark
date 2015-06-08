@@ -60,6 +60,9 @@ case class Exchange(
 
   override def output: Seq[Attribute] = child.output
 
+  // reset meetPartitions when add `Exchange`
+  meetPartitions = Set(newPartitioning)
+
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
    * Several of Spark's shuffle components will buffer deserialized Java objects in memory. The
@@ -317,9 +320,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           Exchange(partitioning, rowOrdering, child)
         } else {
           val withShuffle = if (needsShuffle) {
-            // set meetPartitions to outputPartitioning when need shuffle,
-            // because shuffle will break the TRANSITIVITY
-            operator.meetPartitions = Set(operator.outputPartitioning)
             Exchange(partitioning, Nil, child)
           } else {
             child
@@ -340,6 +340,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       }
 
       if (meetsRequirements && compatible && !needsAnySort) {
+        val childrenPartition = operator.children.map(_.outputPartitioning).toSet
+        operator.meetPartitions = operator.children.foldLeft(childrenPartition) {
+          (m, c) => m ++ c.meetPartitions
+        }
         operator
       } else {
         // At least one child does not satisfies its required data distribution or
@@ -385,7 +389,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             sys.error(s"Don't know how to ensure $dist with ordering $ordering")
         }
 
-        operator.withNewChildren(fixedChildren)
+        // set the meetPartitions with fixedChildren
+        val childrenPartition = fixedChildren.map(_.outputPartitioning).toSet
+        val o = operator.withNewChildren(fixedChildren)
+        o.meetPartitions = fixedChildren.foldLeft(childrenPartition) {
+          (m, c) => m ++ c.meetPartitions
+        }
+        o
       }
   }
 }

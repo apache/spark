@@ -197,19 +197,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
 private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
   self: Product =>
-  meetPartitions = Set(outputPartitioning)
 }
 
 private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
   self: Product =>
   override def outputPartitioning: Partitioning = child.outputPartitioning
-  meetPartitions = child.meetPartitions ++ Set(outputPartitioning)
 }
 
 private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
   self: Product =>
-  meetPartitions =
-    left.meetPartitions ++
-    right.meetPartitions ++
-    Set(left.outputPartitioning, right.outputPartitioning)
 }
