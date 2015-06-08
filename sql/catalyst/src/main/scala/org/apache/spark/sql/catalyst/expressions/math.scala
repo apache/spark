@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.mathfuncs
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{Code, CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, Row, UnaryExpression}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.types.{DataType, DoubleType}
 
 /**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
@@ -63,6 +62,47 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
     """
   }
 }
+
+/**
+ * A binary expression specifically for math functions that take two `Double`s as input and returns
+ * a `Double`.
+ * @param f The math function.
+ * @param name The short name of the function
+ */
+abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
+  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+
+  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+
+  override def toString: String = s"$name($left, $right)"
+
+  override def dataType: DataType = DoubleType
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        val result = f(evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
+        if (result.isNaN) null else result
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Unary math functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
@@ -110,4 +150,55 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
 
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Binary math functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+case class Atan2(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.atan2, "ATAN2") {
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
+        val result = math.atan2(evalE1.asInstanceOf[Double] + 0.0,
+          evalE2.asInstanceOf[Double] + 0.0)
+        if (result.isNaN) null else result
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+      """
+  }
+}
+
+case class Hypot(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.hypot, "HYPOT")
+
+case class Pow(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.pow, "POWER") {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): Code = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+      """
+  }
 }
