@@ -212,6 +212,13 @@ private[sql] class ParquetRelation2(
         classOf[ParquetOutputCommitter],
         classOf[ParquetOutputCommitter])
 
+    if (conf.get("spark.sql.parquet.output.committer.class") == null) {
+      logInfo("Using default output committer for Parquet: " +
+        classOf[ParquetOutputCommitter].getCanonicalName)
+    } else {
+      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+    }
+
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS,
       committerClass,

@@ -73,6 +73,7 @@ private[spark] object SQLConf {
 
   // The output committer class used by FSBasedRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  // NOTE: This property should be set in Hadoop `Configuration` rather than Spark `SQLConf`
   val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
 
   // Whether to perform eager analysis when constructing a dataframe.

@@ -297,12 +297,16 @@ private[sql] abstract class BaseWriterContainer(
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
     setupConf()
-    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
 
-    // This preparation must happen before initializing output format and output committer, since
-    // their initialization involves the job configuration, which can be potentially decorated in
-    // `relation.prepareJobForWrite`.
+    // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
+    // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
+    // configurations made in prepareJobForWrite(job) are not populated into the TaskAttemptContext.
+    //
+    // Also, the `prepareJobForWrite` call must happen before initializing output format and output
+    // committer, since their initialization involve the job configuration, which can be potentially
+    // decorated in `prepareJobForWrite`.
     outputWriterFactory = relation.prepareJobForWrite(job)
+    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
 
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
@@ -331,6 +335,8 @@ private[sql] abstract class BaseWriterContainer(
       SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
+      logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
       // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
@@ -350,7 +356,9 @@ private[sql] abstract class BaseWriterContainer(
     }.getOrElse {
       // If output committer class is not set, we will use the one associated with the
       // file output format.
-      outputFormatClass.newInstance().getOutputCommitter(context)
+      val outputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
+      logInfo(s"Using output committer class ${outputCommitter.getClass.getCanonicalName}")
+      outputCommitter
     }
   }
 
