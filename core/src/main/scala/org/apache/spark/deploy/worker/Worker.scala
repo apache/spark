@@ -324,9 +324,6 @@ private[worker] class Worker(
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
 
-    case Heartbeat =>
-      logInfo(s"Received heartbeat from driver ${sender.path}")
-
     case RegisterWorkerFailed(message) =>
       if (!registered) {
         logError("Worker registration failed: " + message)
@@ -557,7 +554,7 @@ private[deploy] object Worker extends Logging {
       conf = conf, securityManager = securityMgr)
     val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterAkkaUrls, systemName, actorName, workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 

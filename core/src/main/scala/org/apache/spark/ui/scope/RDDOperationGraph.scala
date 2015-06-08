@@ -52,9 +52,12 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[ui] class RDDOperationCluster(val id: String, val name: String) {
+private[ui] class RDDOperationCluster(val id: String, private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
+
+  def name: String = _name
+  def setName(n: String): Unit = { _name = n }
 
   def childNodes: Seq[RDDOperationNode] = _childNodes.iterator.toSeq
   def childClusters: Seq[RDDOperationCluster] = _childClusters.iterator.toSeq
@@ -70,6 +73,8 @@ private[ui] class RDDOperationCluster(val id: String, val name: String) {
 }
 
 private[ui] object RDDOperationGraph extends Logging {
+
+  val STAGE_CLUSTER_PREFIX = "stage_"
 
   /**
    * Construct a RDDOperationGraph for a given stage.
@@ -88,7 +93,8 @@ private[ui] object RDDOperationGraph extends Logging {
     val clusters = new mutable.HashMap[String, RDDOperationCluster] // indexed by cluster ID
 
     // Root cluster is the stage cluster
-    val stageClusterId = s"stage_${stage.stageId}"
+    // Use a special prefix here to differentiate this cluster from other operation clusters
+    val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
       { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
@@ -101,7 +107,7 @@ private[ui] object RDDOperationGraph extends Logging {
       val node = nodes.getOrElseUpdate(
         rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
 
-      if (rdd.scope == null) {
+      if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
         rootCluster.attachChildNode(node)
@@ -110,8 +116,8 @@ private[ui] object RDDOperationGraph extends Logging {
         // which may be nested inside of other clusters
         val rddScopes = rdd.scope.map { scope => scope.getAllScopes }.getOrElse(Seq.empty)
         val rddClusters = rddScopes.map { scope =>
-          val clusterId = scope.name + "_" + scope.id
-          val clusterName = scope.name
+          val clusterId = scope.id
+          val clusterName = scope.name.replaceAll("\\n", "\\\\n")
           clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
         }
         // Build the cluster hierarchy for this RDD
@@ -158,54 +164,32 @@ private[ui] object RDDOperationGraph extends Logging {
    *
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: RDDOperationGraph, forJob: Boolean): String = {
+  def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, forJob, indent = "  "))
-    graph.edges.foreach { edge =>
-      dotFile.append(s"""  ${edge.fromId}->${edge.toId} [lineInterpolate="basis"];\n""")
-    }
+    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+    graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
     logDebug(result)
     result
   }
 
-  /**
-   * Return the dot representation of a node in an RDDOperationGraph.
-   *
-   * On the job page, is displayed as a small circle without labels.
-   * On the stage page, it is displayed as a box with an embedded label.
-   */
-  private def makeDotNode(node: RDDOperationNode, forJob: Boolean): String = {
-    val label = s"${node.name} (${node.id})"
-    if (forJob) {
-      s"""${node.id} [label="$label" shape="circle" padding="5" labelStyle="font-size: 0"]"""
-    } else {
-      s"""${node.id} [label="$label" padding="5" labelStyle="font-size: 10"]"""
-    }
+  /** Return the dot representation of a node in an RDDOperationGraph. */
+  private def makeDotNode(node: RDDOperationNode): String = {
+    s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
-  private def makeDotSubgraph(
-      cluster: RDDOperationCluster,
-      forJob: Boolean,
-      indent: String): String = {
+  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: String): String = {
     val subgraph = new StringBuilder
-    // TODO: move specific graph properties like these to spark-dag-viz.js
-    val paddingTop = if (forJob) 10 else 20
     subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent + s"""  label="${cluster.name}";\n""")
-    // If there are nested clusters, add some padding
-    // Do this for the stage page because we use bigger fonts there
-    if (cluster.childClusters.nonEmpty) {
-      subgraph.append(indent + s"""  paddingTop="$paddingTop";\n""")
-    }
     cluster.childNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node, forJob)};\n")
+      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, forJob, indent + "  "))
+      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
     }
     subgraph.append(indent + "}\n")
     subgraph.toString()

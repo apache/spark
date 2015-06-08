@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -44,7 +44,7 @@ import org.apache.spark.storage.ShuffleIndexBlockId
  * config options, in particular, a different shuffle manager class
  */
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[HashShuffleManager])
-  extends FunSuite with BeforeAndAfter with LocalSparkContext
+  extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
   implicit val defaultTimeout = timeout(10000 millis)
   val conf = new SparkConf()
@@ -158,13 +158,14 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd.count()
 
     // Test that GC does not cause RDD cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, rddIds = Seq(rdd.id))
+    val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
     }
 
     // Test that GC causes RDD cleanup after dereferencing the RDD
+    // Note rdd is used after previous GC to avoid early collection by the JVM
     val postGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     rdd = null // Make RDD out of scope
     runGC()
@@ -181,6 +182,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
     }
+    rdd.count()  // Defeat early collection by the JVM
 
     // Test that GC causes shuffle cleanup after dereferencing the RDD
     val postGCTester = new CleanerTester(sc, shuffleIds = Seq(0))
@@ -193,13 +195,14 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     var broadcast = newBroadcast()
 
     // Test that GC does not cause broadcast cleanup due to a strong reference
-    val preGCTester =  new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
+    val preGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
     }
 
     // Test that GC causes broadcast cleanup after dereferencing the broadcast variable
+    // Note broadcast is used after previous GC to avoid early collection by the JVM
     val postGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     broadcast = null  // Make broadcast variable out of scope
     runGC()
@@ -225,7 +228,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
 
     // the checkpoint is not cleaned by default (without the configuration set)
     var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Nil)
-    rdd = null // Make RDD out of scope
+    rdd = null // Make RDD out of scope, ok if collected earlier
     runGC()
     postGCTester.assertCleanup()
     assert(fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
@@ -244,6 +247,9 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     // Confirm the checkpoint directory exists
     assert(fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
 
+    // Reference rdd to defeat any early collection by the JVM
+    rdd.count()
+
     // Test that GC causes checkpoint data cleanup after dereferencing the RDD
     postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
     rdd = null // Make RDD out of scope
@@ -261,7 +267,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
 
-    val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -351,6 +357,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
     }
+    rdd.count()  // Defeat early collection by the JVM
 
     // Test that GC causes shuffle cleanup after dereferencing the RDD
     val postGCTester = new CleanerTester(sc, shuffleIds = Seq(0))

@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.rdd
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.rdd.RDDFunctions._
 
-class RDDFunctionsSuite extends FunSuite with MLlibTestSparkContext {
+class RDDFunctionsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("sliding") {
     val data = 0 until 6

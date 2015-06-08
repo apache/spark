@@ -44,7 +44,7 @@ import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
   implicit val formats = DefaultFormats
@@ -511,11 +511,11 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       val jobsJson = getJson(sc.ui.get, "jobs")
       jobsJson.children.size should be (expJobInfo.size)
       for {
-        (job @ JObject(_),idx) <- jobsJson.children.zipWithIndex
+        (job @ JObject(_), idx) <- jobsJson.children.zipWithIndex
         id = (job \ "jobId").extract[String]
         name = (job \ "name").extract[String]
       } {
-        withClue(s"idx = $idx; id = $id; name = ${name.substring(0,20)}") {
+        withClue(s"idx = $idx; id = $id; name = ${name.substring(0, 20)}") {
           id should be (expJobInfo(idx)._1)
           name should include (expJobInfo(idx)._2)
         }
@@ -525,7 +525,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       goToUi(sc, "/jobs/job/?id=7")
       find("no-info").get.text should be ("No information to display for job 7")
 
-      val badJob = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get, "jobs/7"))
+      val badJob = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "jobs/7"))
       badJob._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badJob._2 should be (None)
       badJob._3 should be (Some("unknown job: 7"))
@@ -568,18 +568,18 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
       goToUi(sc, "/stages/stage/?id=12&attempt=0")
       find("no-info").get.text should be ("No information to display for Stage 12 (Attempt 0)")
-      val badStage = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/12/0"))
+      val badStage = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/12/0"))
       badStage._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStage._2 should be (None)
       badStage._3 should be (Some("unknown stage: 12"))
 
-      val badAttempt = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/19/15"))
+      val badAttempt = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/19/15"))
       badAttempt._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badAttempt._2 should be (None)
       badAttempt._3 should be (Some("unknown attempt for stage 19.  Found attempts: [0]"))
 
       val badStageAttemptList = HistoryServerSuite.getContentAndCode(
-        jsonUrl(sc.ui.get, "stages/12"))
+        apiUrl(sc.ui.get, "stages/12"))
       badStageAttemptList._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStageAttemptList._2 should be (None)
       badStageAttemptList._3 should be (Some("unknown stage: 12"))
@@ -589,7 +589,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
       val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.appUIAddress + "/json/v1/applications"))
+        sc.ui.get.appUIAddress + "/api/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst \ "attempts").children
@@ -615,10 +615,10 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   }
 
   def getJson(ui: SparkUI, path: String): JValue = {
-    JsonMethods.parse(HistoryServerSuite.getUrl(jsonUrl(ui, path)))
+    JsonMethods.parse(HistoryServerSuite.getUrl(apiUrl(ui, path)))
   }
 
-  def jsonUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/json/v1/applications/test/" + path)
+  def apiUrl(ui: SparkUI, path: String): URL = {
+    new URL(ui.appUIAddress + "/api/v1/applications/test/" + path)
   }
 }

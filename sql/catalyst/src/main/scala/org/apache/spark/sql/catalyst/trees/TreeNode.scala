@@ -254,7 +254,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -311,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -385,6 +385,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil

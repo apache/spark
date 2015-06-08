@@ -188,7 +188,7 @@ Here we assume the extracted file is `text8` and in same directory as you run th
 import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.{Word2Vec, Word2VecModel}
 
 val input = sc.textFile("text8").map(line => line.split(" ").toSeq)
 
@@ -201,6 +201,10 @@ val synonyms = model.findSynonyms("china", 40)
 for((synonym, cosineSimilarity) <- synonyms) {
   println(s"$synonym $cosineSimilarity")
 }
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = Word2VecModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 <div data-lang="python">
@@ -410,6 +414,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.feature.ChiSqSelector
 
 // Load some data in libsvm format
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
@@ -505,8 +510,7 @@ v_N
 
 ### Example
 
-This example below demonstrates how to load a simple vectors file, extract a set of vectors, then transform those vectors using a transforming vector value.
-
+This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -515,19 +519,101 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
 
-// Load and parse the data:
-val data = sc.textFile("data/mllib/kmeans_data.txt")
-val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
+// Create some vector data; also works for sparse vectors
+val data = sc.parallelize(Array(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)))
 
 val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
 val transformer = new ElementwiseProduct(transformingVector)
 
 // Batch transform and per-row transform give the same results:
-val transformedData = transformer.transform(parsedData)
-val transformedData2 = parsedData.map(x => transformer.transform(x))
+val transformedData = transformer.transform(data)
+val transformedData2 = data.map(x => transformer.transform(x))
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import java.util.Arrays;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.feature.ElementwiseProduct;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+
+// Create some vector data; also works for sparse vectors
+JavaRDD<Vector> data = sc.parallelize(Arrays.asList(
+  Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)));
+Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
+ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
+
+// Batch transform and per-row transform give the same results:
+JavaRDD<Vector> transformedData = transformer.transform(data);
+JavaRDD<Vector> transformedData2 = data.map(
+  new Function<Vector, Vector>() {
+    @Override
+    public Vector call(Vector v) {
+      return transformer.transform(v);
+    }
+  }
+);
 
 {% endhighlight %}
 </div>
 </div>
 
 
+## PCA
+
+A feature transformer that projects vectors to a low-dimensional space using PCA.
+Details you can read at [dimensionality reduction](mllib-dimensionality-reduction.html).
+
+### Example
+
+The following code demonstrates how to compute principal components on a `Vector`
+and use them to project the vectors into a low-dimensional space while keeping associated labels
+for calculation a [Linear Regression]((mllib-linear-methods.html))
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.feature.PCA
+
+val data = sc.textFile("data/mllib/ridge-data/lpsa.data").map { line =>
+  val parts = line.split(',')
+  LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
+}.cache()
+
+val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+val training = splits(0).cache()
+val test = splits(1)
+
+val pca = new PCA(training.first().features.size/2).fit(data.map(_.features))
+val training_pca = training.map(p => p.copy(features = pca.transform(p.features)))
+val test_pca = test.map(p => p.copy(features = pca.transform(p.features)))
+
+val numIterations = 100
+val model = LinearRegressionWithSGD.train(training, numIterations)
+val model_pca = LinearRegressionWithSGD.train(training_pca, numIterations)
+
+val valuesAndPreds = test.map { point =>
+  val score = model.predict(point.features)
+  (score, point.label)
+}
+
+val valuesAndPreds_pca = test_pca.map { point =>
+  val score = model_pca.predict(point.features)
+  (score, point.label)
+}
+
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
+val MSE_pca = valuesAndPreds_pca.map{case(v, p) => math.pow((v - p), 2)}.mean()
+
+println("Mean Squared Error = " + MSE)
+println("PCA Mean Squared Error = " + MSE_pca)
+{% endhighlight %}
+</div>
+</div>

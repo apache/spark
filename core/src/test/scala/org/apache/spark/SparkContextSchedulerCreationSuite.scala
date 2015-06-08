@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 
 class SparkContextSchedulerCreationSuite
-  extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging {
+  extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
 
   def createTaskScheduler(master: String): TaskSchedulerImpl =
     createTaskScheduler(master, new SparkConf())
@@ -159,7 +159,7 @@ class SparkContextSchedulerCreationSuite
       assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
-        assert(e.getMessage.contains("no mesos in"))
+        assert(e.getMessage.contains("mesos"))
         logWarning("Mesos not available, could not test actual Mesos scheduler creation")
       case e: Throwable => fail(e)
     }

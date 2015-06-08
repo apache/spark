@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * A general, named code block representing an operation that instantiates RDDs.
@@ -43,9 +43,8 @@ import org.apache.spark.SparkContext
 @JsonPropertyOrder(Array("id", "name", "parent"))
 private[spark] class RDDOperationScope(
     val name: String,
-    val parent: Option[RDDOperationScope] = None) {
-
-  val id: Int = RDDOperationScope.nextScopeId()
+    val parent: Option[RDDOperationScope] = None,
+    val id: String = RDDOperationScope.nextScopeId().toString) {
 
   def toJson: String = {
     RDDOperationScope.jsonMapper.writeValueAsString(this)
@@ -75,7 +74,7 @@ private[spark] class RDDOperationScope(
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
  * An RDD scope tracks the series of operations that created a given RDD.
  */
-private[spark] object RDDOperationScope {
+private[spark] object RDDOperationScope extends Logging {
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   private val scopeCounter = new AtomicInteger(0)
 
@@ -88,30 +87,46 @@ private[spark] object RDDOperationScope {
 
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
-   * The name of the scope will be the name of the method that immediately encloses this one.
+   * The name of the scope will be the first method name in the stack trace that is not the
+   * same as this method's.
    *
    * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
-    val callerMethodName = Thread.currentThread.getStackTrace()(3).getMethodName
-    withScope[T](sc, callerMethodName, allowNesting)(body)
+    val stackTrace = Thread.currentThread.getStackTrace().tail // ignore "Thread#getStackTrace"
+    val ourMethodName = stackTrace(1).getMethodName // i.e. withScope
+    // Climb upwards to find the first method that's called something different
+    val callerMethodName = stackTrace
+      .find(_.getMethodName != ourMethodName)
+      .map(_.getMethodName)
+      .getOrElse {
+        // Log a warning just in case, but this should almost certainly never happen
+        logWarning("No valid method name for this RDD operation scope!")
+        "N/A"
+      }
+    withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 
   /**
    * Execute the given body such that all RDDs created in this body will have the same scope.
    *
-   * If nesting is allowed, this concatenates the previous scope with the new one in a way that
-   * signifies the hierarchy. Otherwise, if nesting is not allowed, then any children calls to
-   * this method executed in the body will have no effect.
+   * If nesting is allowed, any subsequent calls to this method in the given body will instantiate
+   * child scopes that are nested within our scope. Otherwise, these calls will take no effect.
+   *
+   * Additionally, the caller of this method may optionally ignore the configurations and scopes
+   * set by the higher level caller. In this case, this method will ignore the parent caller's
+   * intention to disallow nesting, and the new scope instantiated will not have a parent. This
+   * is useful for scoping physical operations in Spark SQL, for instance.
    *
    * Note: Return statements are NOT allowed in body.
    */
   private[spark] def withScope[T](
       sc: SparkContext,
       name: String,
-      allowNesting: Boolean)(body: => T): T = {
+      allowNesting: Boolean,
+      ignoreParent: Boolean)(body: => T): T = {
     // Save the old scope to restore it later
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
@@ -119,8 +134,11 @@ private[spark] object RDDOperationScope {
     val oldScope = Option(oldScopeJson).map(RDDOperationScope.fromJson)
     val oldNoOverride = sc.getLocalProperty(noOverrideKey)
     try {
-      // Set the scope only if the higher level caller allows us to do so
-      if (sc.getLocalProperty(noOverrideKey) == null) {
+      if (ignoreParent) {
+        // Ignore all parent settings and scopes and start afresh with our own root scope
+        sc.setLocalProperty(scopeKey, new RDDOperationScope(name).toJson)
+      } else if (sc.getLocalProperty(noOverrideKey) == null) {
+        // Otherwise, set the scope only if the higher level caller allows us to do so
         sc.setLocalProperty(scopeKey, new RDDOperationScope(name, oldScope).toJson)
       }
       // Optionally disallow the child body to override our scope

@@ -52,10 +52,9 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
 }
 
 class PrunedScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
 
   before {
-    sql(
+    caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
@@ -115,7 +114,7 @@ class PrunedScanSuite extends DataSourceTest {
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
+      val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {

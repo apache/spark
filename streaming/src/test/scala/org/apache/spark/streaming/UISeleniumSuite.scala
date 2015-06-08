@@ -30,14 +30,11 @@ import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
 
-
-
-
 /**
  * Selenium tests for the Spark Streaming Web UI.
  */
 class UISeleniumSuite
-  extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 
@@ -144,12 +141,12 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
             "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
-            "Total Delay")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Total Delay (?)")
         }
 
         val batchLinks =
@@ -225,4 +222,3 @@ class UISeleniumSuite
     }
   }
 }
-  

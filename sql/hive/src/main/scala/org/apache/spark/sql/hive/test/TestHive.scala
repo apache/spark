@@ -26,15 +26,16 @@ import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContaine
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
-import org.apache.spark.sql.SQLConf
+
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -47,7 +48,14 @@ import scala.collection.JavaConversions._
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
+    new SparkContext(
+      "local[2]",
+      "TestSQLContext",
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set(
+          "spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -74,9 +82,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
+  private lazy val temporaryConfig = newTemporaryConfiguration()
+
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
@@ -103,10 +113,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
-
       // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
+      override def caseSensitiveAnalysis: Boolean =
+        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
     }
   }
 
@@ -178,7 +189,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }
   }
 
-  case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -242,8 +253,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
       runSqlHive(

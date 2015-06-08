@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.ql.plan.CreateTableDesc
-
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
@@ -29,13 +27,10 @@ import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation, HiveMetastoreT
 
 /**
  * Create table and insert the query result into it.
- * @param database the database name of the new relation
- * @param tableName the table name of the new relation
+ * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param allowExisting allow continue working if it's already exists, otherwise
  *                      raise exception
- * @param desc the CreateTableDesc, which may contains serde, storage handler etc.
-
  */
 private[hive]
 case class CreateTableAsSelect(
@@ -80,8 +75,7 @@ case class CreateTableAsSelect(
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
-        throw
-          new org.apache.hadoop.hive.metastore.api.AlreadyExistsException(s"$database.$tableName")
+        throw new AnalysisException(s"$database.$tableName already exists.")
       }
     } else {
       hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd

@@ -59,6 +59,9 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
+  /** The set of all attributes produced by this node. */
+  def generatedSet: AttributeSet = AttributeSet(generatorOutput)
+
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
@@ -90,7 +93,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved: Boolean =
     childrenResolved &&
-    left.output.zip(right.output).forall { case (l,r) => l.dataType == r.dataType }
+    left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
@@ -336,6 +339,9 @@ case class Sample(
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * Returns a new logical plan that dedups input rows.
+ */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }

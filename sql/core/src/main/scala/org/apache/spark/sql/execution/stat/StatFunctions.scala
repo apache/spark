@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Row, Column, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions extends Logging {
-  
+
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)
@@ -38,7 +38,7 @@ private[sql] object StatFunctions extends Logging {
     var yAvg = 0.0 // the mean of all examples seen so far in col2
     var Ck = 0.0 // the co-moment after k examples
     var MkX = 0.0 // sum of squares of differences from the (current) mean for col1
-    var MkY = 0.0 // sum of squares of differences from the (current) mean for col1
+    var MkY = 0.0 // sum of squares of differences from the (current) mean for col2
     var count = 0L // count of observed examples
     // add an example to the calculation
     def add(x: Double, y: Double): this.type = {
@@ -55,15 +55,17 @@ private[sql] object StatFunctions extends Logging {
     // merge counters from other partitions. Formula can be found at:
     // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
     def merge(other: CovarianceCounter): this.type = {
-      val totalCount = count + other.count
-      val deltaX = xAvg - other.xAvg
-      val deltaY = yAvg - other.yAvg
-      Ck += other.Ck + deltaX * deltaY * count / totalCount * other.count
-      xAvg = (xAvg * count + other.xAvg * other.count) / totalCount
-      yAvg = (yAvg * count + other.yAvg * other.count) / totalCount
-      MkX += other.MkX + deltaX * deltaX * count / totalCount * other.count
-      MkY += other.MkY + deltaY * deltaY * count / totalCount * other.count
-      count = totalCount
+      if (other.count > 0) {
+        val totalCount = count + other.count
+        val deltaX = xAvg - other.xAvg
+        val deltaY = yAvg - other.yAvg
+        Ck += other.Ck + deltaX * deltaY * count / totalCount * other.count
+        xAvg = (xAvg * count + other.xAvg * other.count) / totalCount
+        yAvg = (yAvg * count + other.yAvg * other.count) / totalCount
+        MkX += other.MkX + deltaX * deltaX * count / totalCount * other.count
+        MkY += other.MkY + deltaY * deltaY * count / totalCount * other.count
+        count = totalCount
+      }
       this
     }
     // return the sample covariance for the observed examples
@@ -102,7 +104,7 @@ private[sql] object StatFunctions extends Logging {
   /** Generate a table of frequencies for the elements of two columns. */
   private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
-    val counts = df.groupBy(col1, col2).agg(col(col1), col(col2), count("*")).take(1e6.toInt)
+    val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
       logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
         "the pairs. Please try reducing the amount of distinct items in your columns.")
@@ -114,7 +116,10 @@ private[sql] object StatFunctions extends Logging {
       s"exceed 1e4. Currently $columnSize")
     val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
       val countsRow = new GenericMutableRow(columnSize + 1)
-      rows.foreach { row =>
+      rows.foreach { (row: Row) =>
+        // row.get(0) is column 1
+        // row.get(1) is column 2
+        // row.get(3) is the frequency
         countsRow.setLong(distinctCol2.get(row.get(1)).get + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
@@ -124,6 +129,6 @@ private[sql] object StatFunctions extends Logging {
     val headerNames = distinctCol2.map(r => StructField(r._1.toString, LongType)).toSeq
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table))
+    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

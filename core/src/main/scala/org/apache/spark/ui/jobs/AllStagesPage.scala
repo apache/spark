@@ -74,19 +74,6 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         <div>
           <ul class="unstyled">
             {
-              if (sc.isDefined) {
-                // Total duration is not meaningful unless the UI is live
-                <li>
-                  <strong>Total Duration: </strong>
-                  {UIUtils.formatDuration(now - sc.get.startTime)}
-                </li>
-              }
-            }
-            <li>
-              <strong>Scheduling Mode: </strong>
-              {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
-            </li>
-            {
               if (shouldShowActiveStages) {
                 <li>
                   <a href="#active"><strong>Active Stages:</strong></a>
@@ -145,7 +132,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         content ++= <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
         failedStagesTable.toNodeSeq
       }
-      UIUtils.headerSparkPage("Spark Stages (for all jobs)", content, parent)
+      UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
     }
   }
 }

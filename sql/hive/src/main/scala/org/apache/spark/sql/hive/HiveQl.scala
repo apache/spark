@@ -19,17 +19,16 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.lib.Node
-import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
-import org.apache.spark.sql.AnalysisException
+import org.apache.hadoop.hive.ql.session.SessionState
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -38,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
@@ -45,6 +45,7 @@ import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
@@ -56,13 +57,19 @@ private[hive] case object NativePlaceholder extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-case class CreateTableAsSelect(
+private[hive] case class CreateTableAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean = tableDesc.specifiedDatabase.isDefined && childrenResolved
+  override lazy val resolved: Boolean =
+    tableDesc.specifiedDatabase.isDefined &&
+    tableDesc.schema.size > 0 &&
+    tableDesc.serde.isDefined &&
+    tableDesc.inputFormat.isDefined &&
+    tableDesc.outputFormat.isDefined &&
+    childrenResolved
 }
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
@@ -240,12 +247,23 @@ private[hive] object HiveQl {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(new HiveConf())
+    val hContext = new Context(hiveConf)
     val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
     hContext.clear()
     node
   }
 
+  /**
+   * Returns the HiveConf
+   */
+  private[this] def hiveConf(): HiveConf = {
+    val ss = SessionState.get() // SessionState is lazy initializaion, it can be null here
+    if (ss == null) {
+      new HiveConf()
+    } else {
+      ss.getConf
+    }
+  }
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hqlParser.parse(sql)
@@ -476,8 +494,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       DropTable(tableName, ifExists.nonEmpty)
     // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
     case Token("TOK_ANALYZE",
-            Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
-            isNoscan) =>
+           Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
+           isNoscan) =>
       // Reference:
       // https://cwiki.apache.org/confluence/display/Hive/StatsDev#StatsDev-ExistingTables
       if (partitionSpec.nonEmpty) {
@@ -547,6 +565,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val (
           Some(tableNameParts) ::
           _ /* likeTable */ ::
+          externalTable ::
           Some(query) ::
           allowExisting +:
           ignores) =
@@ -554,6 +573,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           Seq(
             "TOK_TABNAME",
             "TOK_LIKETABLE",
+            "EXTERNAL",
             "TOK_QUERY",
             "TOK_IFNOTEXISTS",
             "TOK_TABLECOMMENT",
@@ -576,43 +596,153 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           children)
       val (db, tableName) = extractDbNameTableName(tableNameParts)
 
-      var tableDesc =
-        HiveTable(
-          specifiedDatabase = db,
-          name = tableName,
-          schema = Seq.empty,
-          partitionColumns = Seq.empty,
-          properties = Map.empty,
-          serdeProperties = Map.empty,
-          tableType = ManagedTable,
-          location = None,
-          inputFormat = None,
-          outputFormat = None,
-          serde = None)
+      // TODO add bucket support
+      var tableDesc: HiveTable = HiveTable(
+        specifiedDatabase = db,
+        name = tableName,
+        schema = Seq.empty[HiveColumn],
+        partitionColumns = Seq.empty[HiveColumn],
+        properties = Map[String, String](),
+        serdeProperties = Map[String, String](),
+        tableType = if (externalTable.isDefined) ExternalTable else ManagedTable,
+        location = None,
+        inputFormat = None,
+        outputFormat = None,
+        serde = None,
+        viewText = None)
 
-      // TODO: Handle all the cases here...
-      children.foreach {
-        case Token("TOK_TBLRCFILE", Nil) =>
-          import org.apache.hadoop.hive.ql.io.{RCFileInputFormat, RCFileOutputFormat}
+      // default storage type abbriviation (e.g. RCFile, ORC, PARQUET etc.)
+      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
+      // handle the default format for the storage type abbriviation
+      tableDesc = if ("SequenceFile".equalsIgnoreCase(defaultStorageType)) {
+          tableDesc.copy(
+            inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+            outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
+        } else if ("RCFile".equalsIgnoreCase(defaultStorageType)) {
+          tableDesc.copy(
+            inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
+            outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
+            serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE)))
+        } else if ("ORC".equalsIgnoreCase(defaultStorageType)) {
+          tableDesc.copy(
+            inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
+            outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
+            serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+        } else if ("PARQUET".equalsIgnoreCase(defaultStorageType)) {
+          tableDesc.copy(
+            inputFormat =
+              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+            outputFormat =
+              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
+            serde =
+              Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+        } else {
+          tableDesc.copy(
+            inputFormat =
+              Option("org.apache.hadoop.mapred.TextInputFormat"),
+            outputFormat =
+              Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+        }
+
+      children.collect {
+        case list @ Token("TOK_TABCOLLIST", _) =>
+          val cols = BaseSemanticAnalyzer.getColumns(list, true)
+          if (cols != null) {
+            tableDesc = tableDesc.copy(
+              schema = cols.map { field =>
+                HiveColumn(field.getName, field.getType, field.getComment)
+              })
+          }
+        case Token("TOK_TABLECOMMENT", child :: Nil) =>
+          val comment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+          // TODO support the sql text
+          tableDesc = tableDesc.copy(viewText = Option(comment))
+        case Token("TOK_TABLEPARTCOLS", list @ Token("TOK_TABCOLLIST", _) :: Nil) =>
+          val cols = BaseSemanticAnalyzer.getColumns(list(0), false)
+          if (cols != null) {
+            tableDesc = tableDesc.copy(
+              partitionColumns = cols.map { field =>
+                HiveColumn(field.getName, field.getType, field.getComment)
+              })
+          }
+        case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil) =>
+          val serdeParams = new java.util.HashMap[String, String]()
+          child match {
+            case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
+              val fieldDelim = BaseSemanticAnalyzer.unescapeSQLString (rowChild1.getText())
+              serdeParams.put(serdeConstants.FIELD_DELIM, fieldDelim)
+              serdeParams.put(serdeConstants.SERIALIZATION_FORMAT, fieldDelim)
+              if (rowChild2.length > 1) {
+                val fieldEscape = BaseSemanticAnalyzer.unescapeSQLString (rowChild2(0).getText)
+                serdeParams.put(serdeConstants.ESCAPE_CHAR, fieldEscape)
+              }
+            case Token("TOK_TABLEROWFORMATCOLLITEMS", rowChild :: Nil) =>
+              val collItemDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              serdeParams.put(serdeConstants.COLLECTION_DELIM, collItemDelim)
+            case Token("TOK_TABLEROWFORMATMAPKEYS", rowChild :: Nil) =>
+              val mapKeyDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              serdeParams.put(serdeConstants.MAPKEY_DELIM, mapKeyDelim)
+            case Token("TOK_TABLEROWFORMATLINES", rowChild :: Nil) =>
+              val lineDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              if (!(lineDelim == "\n") && !(lineDelim == "10")) {
+                throw new AnalysisException(
+                  SemanticAnalyzer.generateErrorMessage(
+                    rowChild,
+                    ErrorMsg.LINES_TERMINATED_BY_NON_NEWLINE.getMsg))
+              }
+              serdeParams.put(serdeConstants.LINE_DELIM, lineDelim)
+            case Token("TOK_TABLEROWFORMATNULL", rowChild :: Nil) =>
+              val nullFormat = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              // TODO support the nullFormat
+            case _ => assert(false)
+          }
           tableDesc = tableDesc.copy(
-            outputFormat = Option(classOf[RCFileOutputFormat].getName),
-            inputFormat = Option(classOf[RCFileInputFormat[_, _]].getName))
+            serdeProperties = tableDesc.serdeProperties ++ serdeParams)
+        case Token("TOK_TABLELOCATION", child :: Nil) =>
+          var location = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+          location = EximUtil.relativeToAbsolutePath(hiveConf, location)
+          tableDesc = tableDesc.copy(location = Option(location))
+        case Token("TOK_TABLESERIALIZER", child :: Nil) =>
+          tableDesc = tableDesc.copy(
+            serde = Option(BaseSemanticAnalyzer.unescapeSQLString(child.getChild(0).getText)))
+          if (child.getChildCount == 2) {
+            val serdeParams = new java.util.HashMap[String, String]()
+            BaseSemanticAnalyzer.readProps(
+              (child.getChild(1).getChild(0)).asInstanceOf[ASTNode], serdeParams)
+            tableDesc = tableDesc.copy(serdeProperties = tableDesc.serdeProperties ++ serdeParams)
+          }
+        case Token("TOK_FILEFORMAT_GENERIC", child :: Nil) =>
+          throw new SemanticException(
+            "Unrecognized file format in STORED AS clause:${child.getText}")
 
+        case Token("TOK_TBLRCFILE", Nil) =>
+          tableDesc = tableDesc.copy(
+            inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
+            outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
           if (tableDesc.serde.isEmpty) {
             tableDesc = tableDesc.copy(
               serde = Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
           }
+
         case Token("TOK_TBLORCFILE", Nil) =>
           tableDesc = tableDesc.copy(
             inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
-            serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+            outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+          if (tableDesc.serde.isEmpty) {
+            tableDesc = tableDesc.copy(
+              serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+          }
 
         case Token("TOK_TBLPARQUETFILE", Nil) =>
           tableDesc = tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-            serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+            inputFormat =
+              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+            outputFormat =
+              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+          if (tableDesc.serde.isEmpty) {
+            tableDesc = tableDesc.copy(
+              serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+          }
 
         case Token("TOK_TABLESERIALIZER",
                Token("TOK_SERDENAME", Token(serdeName, Nil) :: otherProps) :: Nil) =>
@@ -627,18 +757,25 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
           tableDesc = tableDesc.copy(properties = tableDesc.properties ++ getProperties(list))
-
-        case _ =>
+        case list @ Token("TOK_TABLEFILEFORMAT", _) =>
+          tableDesc = tableDesc.copy(
+            inputFormat =
+              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
+            outputFormat =
+              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(1).getText)))
+        case Token("TOK_STORAGEHANDLER", _) =>
+          throw new AnalysisException(ErrorMsg.CREATE_NON_NATIVE_AS.getMsg())
+        case _ => // Unsupport features
       }
 
       CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting != None)
 
-    // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
+    // If its not a "CTAS" like above then take it as a native command
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
 
     // Support "TRUNCATE TABLE table_name [PARTITION partition_spec]"
     case Token("TOK_TRUNCATETABLE",
-          Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
+          Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
         if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
@@ -1014,7 +1151,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case Seq(false, false) => Inner
       }.toBuffer
 
-      val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
+      val joinedTables = tables.reduceLeft(Join(_, _, Inner, None))
 
       // Must be transform down.
       val joinedResult = joinedTables transform {
@@ -1034,7 +1171,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      throw new UnsupportedOperationException
 
     case Token(allJoinTokens(joinToken),
            relation1 ::
@@ -1204,7 +1342,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName :+ cleanIdentifier(attr))
-        case other => UnresolvedGetField(other, attr)
+        case other => UnresolvedExtractValue(other, Literal(attr))
       }
 
     /* Stars (*) */
@@ -1329,7 +1467,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
-      GetItem(nodeToExpr(child), nodeToExpr(ordinal))
+      UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
@@ -1423,6 +1561,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
+  /* Case insensitive matches for Window Specification */
+  val PRECEDING = "(?i)preceding".r
+  val FOLLOWING = "(?i)following".r
+  val CURRENT = "(?i)current".r
   def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
@@ -1476,11 +1618,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         } else {
           val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
           def nodeToBoundary(node: Node): FrameBoundary = node match {
-            case Token("preceding", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedPreceding else ValuePreceding(count.toInt)
-            case Token("following", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedFollowing else ValueFollowing(count.toInt)
-            case Token("current", Nil) => CurrentRow
+            case Token(PRECEDING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedPreceding
+              } else {
+                ValuePreceding(count.toInt)
+              }
+            case Token(FOLLOWING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedFollowing
+              } else {
+                ValueFollowing(count.toInt)
+              }
+            case Token(CURRENT(), Nil) => CurrentRow
             case _ =>
               throw new NotImplementedError(
                 s"""No parse rules for the Window Frame Boundary based on Node ${node.getName}
