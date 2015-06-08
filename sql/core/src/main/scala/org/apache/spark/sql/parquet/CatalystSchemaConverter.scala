@@ -210,13 +210,14 @@ private[parquet] class CatalystSchemaConverter(
         val keyValueType = field.getType(0).asGroupType()
         CatalystSchemaConverter.analysisRequire(
           keyValueType.isRepetition(REPEATED) &&
-            keyValueType.getOriginalType != MAP_KEY_VALUE &&
+            keyValueType.getOriginalType == MAP_KEY_VALUE &&
             keyValueType.getFieldCount == 2,
           s"Invalid map type $field")
 
         val keyType = keyValueType.getType(0)
         CatalystSchemaConverter.analysisRequire(
-          keyType.isPrimitive, s"Map key type must be some primitive type.")
+          keyType.isPrimitive,
+          s"Map key type is expected to be a primitive type, but found $keyType")
 
         val valueType = keyValueType.getType(1)
         val valueOptional = valueType.isRepetition(OPTIONAL)
