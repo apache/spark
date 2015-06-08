@@ -19,6 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedMap}
 import scala.language.existentials
+import scala.math.max
 import org.apache.spark.rdd._
 
 import org.apache.spark.streaming.util.WriteAheadLogUtils
@@ -280,51 +281,33 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       executors.diff(List(driver))
     }
 
-    /* Schedule receivers using preferredLocation if specified
-     * and round-robin otherwise
-     */
-    private def scheduleReceivers(receivers: Seq[Receiver[_]]): RDD[Receiver[_]] = {
-      // Location preferences are honored if all receivers have them
-      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
-
-      // If no location preferences are specified, set host location for each receiver
-      // so as to distribute them evenly over executors in a round-robin fashion
-      // If num_receivers > num_executors, distribute receivers among executors
-      // If num_executors > num_receivers, distribute executors among receivers
+    /** Set host location(s) for each receiver so as to distribute them over
+     * executors in a round-robin fashion taking into account preferredLocation if set
+     */ 
+    private[streaming] def scheduleReceivers(receivers: Seq[Receiver[_]],
+      executors: List[String]): Array[ArrayBuffer[String]] = {
       val locations = new Array[ArrayBuffer[String]](receivers.length)
-      var roundRobin = false
-      if (!hasLocationPreferences && !ssc.sparkContext.isLocal) {
-        val executors = getExecutors(ssc)
+      if (!executors.isEmpty) {
         var i = 0
-        if (!executors.isEmpty) {
-          for (i <- 0 to (receivers.length - 1)) {
-            locations(i) = new ArrayBuffer[String]()
+        for (i <- 0 to (receivers.length - 1)) {
+          locations(i) = new ArrayBuffer[String]()
+          if (receivers(i).preferredLocation.isDefined) {
+            locations(i) += receivers(i).preferredLocation.get
           }
-          if (receivers.length >= executors.length) {
-            for (i <- 0 to (receivers.length - 1)) {
-              locations(i) += executors(i % executors.length)
-            }
-          } else {
-            for (i <- 0 to (executors.length - 1)) {
-              locations(i % receivers.length) += executors(i)
+        }
+
+        var count = 0;
+        for (i <- 0 to (max(receivers.length, executors.length) - 1)) {
+          if (!receivers(i % receivers.length).preferredLocation.isDefined) {
+            locations(i % receivers.length) += executors(count)
+            count += 1;
+            if (count == executors.length) {
+              count = 0;
             }
           }
-          roundRobin = true
         }
       }
-
-      val tempRDD =
-        if (hasLocationPreferences) {
-          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
-          ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        } else if (roundRobin) {
-          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i =>
-            (receivers(i), locations(i)))
-          ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
-        } else {
-          ssc.sc.makeRDD(receivers, receivers.size)
-        }
-      tempRDD
+      locations
     }
 
     /**
@@ -360,7 +343,16 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
       }
 
-      val tempRDD = scheduleReceivers(receivers)
+      // Get the list of executors and schedule receivers
+      val executors = getExecutors(ssc)
+      val locations = scheduleReceivers(receivers, executors)
+      val tempRDD =
+        if (locations(0) != null) {
+          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i => (receivers(i), locations(i)))
+          ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
+        } else {
+          ssc.sc.makeRDD(receivers, receivers.size)
+        }
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
