@@ -41,6 +41,31 @@ import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
 
+private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
+
+  private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+
+  private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
+
+  override def warning(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.warning(e)
+    }
+  }
+
+  override def fatalError(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.fatalError(e)
+    }
+  }
+
+  override def error(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.error(e)
+    }
+  }
+}
+
 /**
  * Selenium tests for the Spark Web UI.
  */
@@ -52,31 +77,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   override def beforeAll(): Unit = {
     webDriver = new HtmlUnitDriver {
-
-      getWebClient.setCssErrorHandler(new DefaultCssErrorHandler {
-
-        private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
-
-        private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
-
-        override def warning(e: CSSParseException): Unit = {
-          if (!isInWhileList(e.getURI)) {
-            super.warning(e)
-          }
-        }
-
-        override def fatalError(e: CSSParseException): Unit = {
-          if (!isInWhileList(e.getURI)) {
-            super.fatalError(e)
-          }
-        }
-
-        override def error(e: CSSParseException): Unit = {
-          if (!isInWhileList(e.getURI)) {
-            super.error(e)
-          }
-        }
-      })
+      getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
     }
   }
 
