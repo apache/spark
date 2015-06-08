@@ -193,7 +193,7 @@ done
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
-    fail_message="**[Test build ${BUILD_DISPLAY_NAME} timed out](${BUILD_URL}consoleFull)** \
+    fail_message="**[Test build ${BUILD_DISPLAY_NAME} timed out](${BUILD_URL}console)** \
     for PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL}) \
     after a configured wait of \`${TESTS_TIMEOUT}\`."
 
@@ -233,7 +233,7 @@ done
 # post end message
 {
   result_message="\
-  [Test build ${BUILD_DISPLAY_NAME} has finished](${BUILD_URL}consoleFull) for \
+  [Test build ${BUILD_DISPLAY_NAME} has finished](${BUILD_URL}console) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"

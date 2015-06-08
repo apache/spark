@@ -16,17 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -e
 
 # Figure out where Spark is installed
 export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$SPARK_HOME"/bin/load-spark-env.sh
-
-if [ -z "$1" ]; then
-  echo "Usage: spark-class <class> [<args>]" 1>&2
-  exit 1
-fi
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
@@ -98,9 +92,4 @@ CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
 done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
-
-if [ "${CMD[0]}" = "usage" ]; then
-  "${CMD[@]}"
-else
-  exec "${CMD[@]}"
-fi
+exec "${CMD[@]}"
