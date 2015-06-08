@@ -833,4 +833,21 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
         (70 to 79).map(i => Row(i, s"str$i")))
     }
   }
+
+  test("SPARK-8516:create table to specific database by 'use dbname' ") {
+
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+    sqlContext.sql("""create database if not exists testdb""")
+    sqlContext.sql("""use testdb""")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("ttt3")
+
+    checkAnswer(
+      sqlContext.sql("show TABLES in testdb"),
+      Row("ttt3", false))
+
+    sqlContext.sql("""drop database if exists testdb CASCADE""")
+  }
 }
