@@ -28,8 +28,7 @@ class RDDInfo(
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
-    val scope: Option[RDDOperationScope] = None,
-    val preferredNodeLocations: Seq[String] = Nil)
+    val scope: Option[RDDOperationScope] = None)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0

@@ -22,8 +22,7 @@ import java.util.concurrent._
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, WeakHashMap}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
@@ -138,7 +137,7 @@ private[yarn] class YarnAllocator(
   private var localityAwarePendingTaskNum: Int = 0
 
   // A weak reference to store the host and rack name mapping.
-  val hostToRackNameCache = new mutable.WeakHashMap[String, String]
+  private val hostToRackNameCache = new WeakHashMap[String, String]
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 

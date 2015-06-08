@@ -44,7 +44,7 @@ class StageInfo(
   /** Terminal values of accumulables updated during this stage. */
   val accumulables = HashMap[Long, AccumulableInfo]()
   /** All the tasks and related preferred localities. */
-  private[spark] var taskToPreferredLocations: Option[Seq[Seq[TaskLocation]]] = None
+  private[spark] var taskToPreferredLocalities: Option[Seq[Seq[TaskLocation]]] = None
 
   def stageFailed(reason: String) {
     failureReason = Some(reason)
