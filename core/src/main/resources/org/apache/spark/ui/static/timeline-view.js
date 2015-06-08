@@ -46,7 +46,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
       };
 
       $(this).click(function() {
-        var jobPagePath = $(getSelectorForJobEntry(this)).find("a").attr("href")
+        var jobPagePath = $(getSelectorForJobEntry(this)).find("a.name-link").attr("href")
           window.location.href = jobPagePath
       });
 
@@ -105,7 +105,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
       };
 
       $(this).click(function() {
-        var stagePagePath = $(getSelectorForStageEntry(this)).find("a").attr("href")
+        var stagePagePath = $(getSelectorForStageEntry(this)).find("a.name-link").attr("href")
         window.location.href = stagePagePath
       });
 

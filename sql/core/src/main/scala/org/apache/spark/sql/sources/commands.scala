@@ -24,18 +24,19 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-import org.apache.hadoop.util.Shell
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.{SQLConf, DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -94,10 +95,19 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
       // We create a DataFrame by applying the schema of relation to the data to make sure.
       // We are writing data based on the expected schema,
-      val df = sqlContext.createDataFrame(
-        DataFrame(sqlContext, query).queryExecution.toRdd,
-        relation.schema,
-        needsConversion = false)
+      val df = {
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column). We
+        // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
+        // safely apply the schema of r.schema to the data.
+        val project = Project(
+          relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
+
+        sqlContext.createDataFrame(
+          DataFrame(sqlContext, project).queryExecution.toRdd,
+          relation.schema,
+          needsConversion = false)
+      }
 
       val partitionColumns = relation.partitionColumns.fieldNames
       if (partitionColumns.isEmpty) {
@@ -117,8 +127,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val needsConversion = relation.needConversion
     val dataSchema = relation.dataSchema
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
       df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
       writerContainer.commitJob()
       relation.refresh()
@@ -129,9 +142,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
-
+      // If anything below fails, we should abort the task.
       try {
+        writerContainer.executorSideSetup(taskContext)
+
         if (needsConversion) {
           val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
           while (iterator.hasNext) {
@@ -144,6 +158,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             writerContainer.outputWriterForRow(row).write(row)
           }
         }
+
         writerContainer.commitTask()
       } catch { case cause: Throwable =>
         logError("Aborting task.", cause)
@@ -181,8 +196,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val (partitionOutput, dataOutput) = output.partition(a => partitionColumns.contains(a.name))
     val codegenEnabled = df.sqlContext.conf.codegenEnabled
 
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    writerContainer.driverSideSetup()
+
     try {
-      writerContainer.driverSideSetup()
       df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
       writerContainer.commitJob()
       relation.refresh()
@@ -193,30 +211,39 @@ private[sql] case class InsertIntoHadoopFsRelation(
     }
 
     def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
-      writerContainer.executorSideSetup(taskContext)
+      // If anything below fails, we should abort the task.
+      try {
+        writerContainer.executorSideSetup(taskContext)
 
-      val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
-      val dataProj = newProjection(codegenEnabled, dataOutput, output)
+        val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
+        val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-      if (needsConversion) {
-        val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = partitionProj(row)
-          val dataPart = dataProj(row)
-          val convertedDataPart = converter(dataPart).asInstanceOf[Row]
-          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+        if (needsConversion) {
+          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            val partitionPart = partitionProj(row)
+            val dataPart = dataProj(row)
+            val convertedDataPart = converter(dataPart).asInstanceOf[Row]
+            writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+          }
+        } else {
+          val partitionSchema = StructType.fromAttributes(partitionOutput)
+          val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
+          while (iterator.hasNext) {
+            val row = iterator.next()
+            val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
+            val dataPart = dataProj(row)
+            writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+          }
         }
-      } else {
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          val partitionPart = partitionProj(row)
-          val dataPart = dataProj(row)
-          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
-        }
+
+        writerContainer.commitTask()
+      } catch { case cause: Throwable =>
+        logError("Aborting task.", cause)
+        writerContainer.abortTask()
+        throw new SparkException("Task failed while writing rows.", cause)
       }
-
-      writerContainer.commitTask()
     }
   }
 
@@ -270,8 +297,17 @@ private[sql] abstract class BaseWriterContainer(
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
     setupConf()
-    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
+
+    // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
+    // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
+    // configurations made in prepareJobForWrite(job) are not populated into the TaskAttemptContext.
+    //
+    // Also, the `prepareJobForWrite` call must happen before initializing output format and output
+    // committer, since their initialization involve the job configuration, which can be potentially
+    // decorated in `prepareJobForWrite`.
     outputWriterFactory = relation.prepareJobForWrite(job)
+    taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
+
     outputFormatClass = job.getOutputFormatClass
     outputCommitter = newOutputCommitter(taskAttemptContext)
     outputCommitter.setupJob(jobContext)
@@ -299,6 +335,8 @@ private[sql] abstract class BaseWriterContainer(
       SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
+      logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
       // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
@@ -318,7 +356,9 @@ private[sql] abstract class BaseWriterContainer(
     }.getOrElse {
       // If output committer class is not set, we will use the one associated with the
       // file output format.
-      outputFormatClass.newInstance().getOutputCommitter(context)
+      val outputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
+      logInfo(s"Using output committer class ${outputCommitter.getClass.getCanonicalName}")
+      outputCommitter
     }
   }
 
@@ -347,7 +387,9 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortTask(): Unit = {
-    outputCommitter.abortTask(taskAttemptContext)
+    if (outputCommitter != null) {
+      outputCommitter.abortTask(taskAttemptContext)
+    }
     logError(s"Task attempt $taskAttemptId aborted.")
   }
 
@@ -357,7 +399,9 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def abortJob(): Unit = {
-    outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    if (outputCommitter != null) {
+      outputCommitter.abortJob(jobContext, JobStatus.State.FAILED)
+    }
     logError(s"Job $jobId aborted.")
   }
 }
@@ -377,13 +421,25 @@ private[sql] class DefaultWriterContainer(
   override def outputWriterForRow(row: Row): OutputWriter = writer
 
   override def commitTask(): Unit = {
-    writer.close()
-    super.commitTask()
+    try {
+      assert(writer != null, "OutputWriter instance should have been initialized")
+      writer.close()
+      super.commitTask()
+    } catch {
+      case cause: Throwable =>
+        super.abortTask()
+        throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    writer.close()
-    super.abortTask()
+    try {
+      if (writer != null) {
+        writer.close()
+      }
+    } finally {
+      super.abortTask()
+    }
   }
 }
 
@@ -407,7 +463,7 @@ private[sql] class DynamicPartitionWriterContainer(
       val valueString = if (string == null || string.isEmpty) {
         defaultPartitionName
       } else {
-        DynamicPartitionWriterContainer.escapePathName(string)
+        PartitioningUtils.escapePathName(string)
       }
       s"/$col=$valueString"
     }.mkString.stripPrefix(Path.SEPARATOR)
@@ -422,59 +478,22 @@ private[sql] class DynamicPartitionWriterContainer(
   }
 
   override def commitTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.commitTask()
+    try {
+      outputWriters.values.foreach(_.close())
+      outputWriters.clear()
+      super.commitTask()
+    } catch { case cause: Throwable =>
+      super.abortTask()
+      throw new RuntimeException("Failed to commit task", cause)
+    }
   }
 
   override def abortTask(): Unit = {
-    outputWriters.values.foreach(_.close())
-    super.abortTask()
-  }
-}
-
-private[sql] object DynamicPartitionWriterContainer {
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  val charToEscape = {
-    val bitSet = new java.util.BitSet(128)
-
-    /**
-     * ASCII 01-1F are HTTP control characters that need to be escaped.
-     * \u000A and \u000D are \n and \r, respectively.
-     */
-    val clist = Array(
-      '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009',
-      '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013',
-      '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C',
-      '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=', '?', '\\', '\u007F',
-      '{', '[', ']', '^')
-
-    clist.foreach(bitSet.set(_))
-
-    if (Shell.WINDOWS) {
-      Array(' ', '<', '>', '|').foreach(bitSet.set(_))
+    try {
+      outputWriters.values.foreach(_.close())
+      outputWriters.clear()
+    } finally {
+      super.abortTask()
     }
-
-    bitSet
-  }
-
-  def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
-  }
-
-  def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (DynamicPartitionWriterContainer.needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
-      } else {
-        builder.append(c)
-      }
-    }
-
-    builder.toString()
   }
 }

@@ -193,11 +193,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * have the intercept as part of weights to have consistent design.
      */
     if (numOfLinearPredictor == 1) {
-      Vectors.dense(new Array[Double](numFeatures))
+      Vectors.zeros(numFeatures)
     } else if (addIntercept) {
-      Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+      Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
     } else {
-      Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
+      Vectors.zeros(numFeatures * numOfLinearPredictor)
     }
   }
 

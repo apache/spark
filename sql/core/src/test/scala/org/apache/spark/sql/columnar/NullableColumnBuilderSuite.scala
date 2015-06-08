@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
 
@@ -35,7 +34,7 @@ object TestNullableColumnBuilder {
   }
 }
 
-class NullableColumnBuilderSuite extends FunSuite {
+class NullableColumnBuilderSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(

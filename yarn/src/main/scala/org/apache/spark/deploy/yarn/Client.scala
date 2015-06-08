@@ -121,21 +121,28 @@ private[spark] class Client(
     } catch {
       case e: Throwable =>
         if (appId != null) {
-          val appStagingDir = getAppStagingDir(appId)
-          try {
-            val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-            val stagingDirPath = new Path(appStagingDir)
-            val fs = FileSystem.get(hadoopConf)
-            if (!preserveFiles && fs.exists(stagingDirPath)) {
-              logInfo("Deleting staging directory " + stagingDirPath)
-              fs.delete(stagingDirPath, true)
-            }
-          } catch {
-            case ioe: IOException =>
-              logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
-          }
+          cleanupStagingDir(appId)
         }
         throw e
+    }
+  }
+
+  /**
+   * Cleanup application staging directory.
+   */
+  private def cleanupStagingDir(appId: ApplicationId): Unit = {
+    val appStagingDir = getAppStagingDir(appId)
+    try {
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      val stagingDirPath = new Path(appStagingDir)
+      val fs = FileSystem.get(hadoopConf)
+      if (!preserveFiles && fs.exists(stagingDirPath)) {
+        logInfo("Deleting staging directory " + stagingDirPath)
+        fs.delete(stagingDirPath, true)
+      }
+    } catch {
+      case ioe: IOException =>
+        logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
     }
   }
 
@@ -782,6 +789,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
+        cleanupStagingDir(appId)
         return (state, report.getFinalApplicationStatus)
       }
 
@@ -1142,9 +1150,9 @@ object Client extends Logging {
           logDebug("HiveMetaStore configured in localmode")
         }
       } catch {
-        case e:java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
-        case e:java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
-        case e:Exception => { logError("Unexpected Exception " + e)
+        case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
+        case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
+        case e: Exception => { logError("Unexpected Exception " + e)
           throw new RuntimeException("Unexpected exception", e)
         }
       }

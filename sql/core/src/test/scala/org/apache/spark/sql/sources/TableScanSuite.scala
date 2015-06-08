@@ -88,9 +88,9 @@ case class AllDataTypesScan(
 }
 
 class TableScanSuite extends DataSourceTest {
-  import caseInsensitiveContext._
+  import caseInsensitiveContext.sql
 
-  var tableWithSchemaExpected = (1 to 10).map { i =>
+  private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
       s"str_$i",
       s"str_$i",
@@ -215,7 +215,7 @@ class TableScanSuite extends DataSourceTest {
       Nil
     )
 
-    assert(expectedSchema == table("tableWithSchema").schema)
+    assert(expectedSchema == caseInsensitiveContext.table("tableWithSchema").schema)
 
     checkAnswer(
       sql(
@@ -270,7 +270,7 @@ class TableScanSuite extends DataSourceTest {
 
   test("Caching")  {
     // Cached Query Execution
-    cacheTable("oneToTen")
+    caseInsensitiveContext.cacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"))
     checkAnswer(
       sql("SELECT * FROM oneToTen"),
@@ -297,7 +297,7 @@ class TableScanSuite extends DataSourceTest {
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching
-    uncacheTable("oneToTen")
+    caseInsensitiveContext.uncacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"), 0)
   }
 

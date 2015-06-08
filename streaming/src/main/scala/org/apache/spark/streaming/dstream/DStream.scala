@@ -603,6 +603,8 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
@@ -612,6 +614,8 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
@@ -659,7 +663,7 @@ abstract class DStream[T: ClassTag] (
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
-    val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
+    val realTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
       assert(rdds.length == 1)
       cleanedF(rdds.head.asInstanceOf[RDD[T]], time)
     }
