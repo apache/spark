@@ -22,6 +22,7 @@ import java.util.concurrent._
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -127,11 +128,17 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // Number of CPUS per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
+  // A map to store preferred locality and its required count
   private var preferredLocalityToCounts: Map[String, Int] = Map.empty
 
+  // Locality required pending task number
   private var localityAwarePendingTaskNum: Int = 0
+
+  // A weak reference to store the host and rack name mapping.
+  val hostToRackNameCache = new mutable.WeakHashMap[String, String]
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
@@ -259,12 +266,12 @@ private[yarn] class YarnAllocator(
         requiredLocalityFreeContainerNum = missing
       } else {
         if (expectedLocalityAwareContainerNum - existedMatchedContainerNum >= missing) {
-          // If current allocated executor cannot fully satisfy all the locality preferred tasks,
+          // If newly requested containers cannot satisfy the locality preferred tasks,
           // allocate all the new container with locality preference
           requiredLocalityAwareContainerNum = missing
         } else {
-          // Allocate partial of the containers with locality preference,
-          // and partial without locality preference
+          // If part of newly requested can satisfy the locality preferred tasks, allocate part of
+          // the containers with locality preference, and another part with no locality preference
           requiredLocalityAwareContainerNum =
             expectedLocalityAwareContainerNum - existedMatchedContainerNum
           requiredLocalityFreeContainerNum = missing -
@@ -296,7 +303,7 @@ private[yarn] class YarnAllocator(
 
         for (i <- 0 until requiredLocalityAwareContainerNum) {
           val hosts = preferredLocalityToCounts.filter(_._2 > 0).keys.toArray
-          val racks = hosts.map(h => RackResolver.resolve(conf, h).getNetworkLocation).toSet
+          val racks = hosts.map(h => rackLookUp(h, conf)).toSet
           val request = createContainerRequest(resource, hosts, racks.toArray)
           amClient.addContainerRequest(request)
           val nodes = request.getNodes
@@ -352,7 +359,7 @@ private[yarn] class YarnAllocator(
     // Match remaining by rack
     val remainingAfterRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterHostMatches) {
-      val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
+      val rack = rackLookUp(allocatedContainer.getNodeId.getHost, conf)
       matchContainerToRequest(allocatedContainer, rack, containersToUse,
         remainingAfterRackMatches)
     }
@@ -511,6 +518,16 @@ private[yarn] class YarnAllocator(
   private def internalReleaseContainer(container: Container): Unit = {
     releasedContainers.add(container.getId())
     amClient.releaseAssignedContainer(container.getId())
+  }
+
+  private def rackLookUp(host: String, conf: Configuration): String = {
+    hostToRackNameCache.get(host) match {
+      case Some(s) => s
+      case None =>
+        val rack = RackResolver.resolve(conf, host).getNetworkLocation
+        hostToRackNameCache.put(host, rack)
+        rack
+    }
   }
 }
 

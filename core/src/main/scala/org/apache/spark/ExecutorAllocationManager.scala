@@ -525,7 +525,8 @@ private[spark] class ExecutorAllocationManager(
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
 
-    // stageId to preferredLocation map, maintain the preferred node location of each stage
+    // stageId to preferred localities map, maintain the preferred node location of each task in
+    // each stage
     private val stageIdToPreferredLocations = new mutable.HashMap[Int, Seq[Seq[TaskLocation]]]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {

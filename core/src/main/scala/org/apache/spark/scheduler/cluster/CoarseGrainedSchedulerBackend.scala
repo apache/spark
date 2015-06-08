@@ -66,8 +66,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  // Maintain a map to record the preferred node location and count
+  // A map to store preferred locality with its required count
   protected var preferredLocalityToCount: Map[String, Int] = Map.empty
+
+  // The number of pending tasks which is locality required
   protected var localityAwarePendingTasks: Int = 0
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
