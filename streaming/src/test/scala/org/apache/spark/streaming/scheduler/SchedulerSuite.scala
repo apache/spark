@@ -23,7 +23,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
 
-/** Testsuite for testing scheduling of streaming receivers */
+/** Testsuite for receiver scheduling */
 class SchedulerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
   val ssc = new StreamingContext(sparkConf, Milliseconds(100))
@@ -77,7 +77,7 @@ class SchedulerSuite extends TestSuiteBase {
 }
 
 /**
- * Dummy receiver implementation for testing scheduling
+ * Dummy receiver implementation
  */
 class DummyReceiver(host: Option[String] = None) extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
