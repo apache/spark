@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate2
 
-import java.util.{HashSet=>JHashSet, Set=>JSet}
+import java.util.{HashSet => JHashSet, Set => JSet}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD

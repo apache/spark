@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.{Set=>JSet}
+import java.util.{Set => JSet}
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
