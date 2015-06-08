@@ -834,7 +834,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
     }
   }
 
-  test("SPARK-8156:create table to specific database by 'use dbname' ") {
+  test("SPARK-8157:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
     sqlContext.sql("""create database if not exists testdb""")
@@ -845,7 +845,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
       .saveAsTable("ttt3")
 
     checkAnswer(
-      sqlContext.sql("show TABLES in testdb"),
+      sqlContext.sql("show TABLES in testdb").filter("tableName = 'ttt3'"),
       Row("ttt3", false))
     sqlContext.sql("""use default""")
     sqlContext.sql("""drop database if exists testdb CASCADE""")
