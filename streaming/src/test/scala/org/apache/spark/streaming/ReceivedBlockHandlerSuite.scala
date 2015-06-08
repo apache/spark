@@ -312,6 +312,7 @@ class ReceivedBlockHandlerSuite
     storageLevel = StorageLevel.MEMORY_ONLY
     blockManager = makeBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
+    // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
     // this block With MEMORY_ONLY StorageLevel. BlockManager will not be able to unroll this block
     // and hence it will not tryToPut this block , resulting the SparkException
@@ -328,6 +329,7 @@ class ReceivedBlockHandlerSuite
     storageLevel = StorageLevel.MEMORY_AND_DISK
     blockManager = makeBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
+    // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
     // this block in MEMORY , But BlockManager will be able to sereliaze this block to DISK
     // and hence count returns correct value.
@@ -341,6 +343,7 @@ class ReceivedBlockHandlerSuite
     storageLevel = StorageLevel.MEMORY_ONLY
     blockManager = makeBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
+    // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
     // this block in MEMORY , But BlockManager will be able to sereliaze this block to WAL
     // and hence count returns correct value.
