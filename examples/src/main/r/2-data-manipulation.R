@@ -41,7 +41,7 @@ destDF <- select(flightsDF, "dest", "cancelled")
 # Using SQL to select columns of data
 # First, register the flights DataFrame as a table
 registerTempTable(flightsDF, "flightsTable")
-destDF <- sql(sqlCtx, "SELECT dest, cancelled FROM flightsTable")
+destDF <- sql(sqlContext, "SELECT dest, cancelled FROM flightsTable")
 
 # Use collect to create a local R data frame
 dest_df <- collect(destDF)
