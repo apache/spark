@@ -68,7 +68,7 @@ columns(flightsDF)
 count(flightsDF)
 
 # Show summary statistics for numeric colums
-Describe(flightsDF)
+describe(flightsDF)
 
 # Select specific columns
 destDF <- select(flightsDF, "dest", "cancelled")
