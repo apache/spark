@@ -32,6 +32,10 @@ class BitSet(numBits: Int) extends Serializable {
    */
   def capacity: Int = numWords * 64
 
+  def clear(): Unit = {
+    java.util.Arrays.fill(words, 0L)
+  }
+
   /**
    * Set all the bits up to a given index
    */

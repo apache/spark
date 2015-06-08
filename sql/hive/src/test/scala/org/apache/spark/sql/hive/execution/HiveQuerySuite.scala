@@ -1087,6 +1087,37 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(getConf(testKey, "0") == "")
   }
 
+  test("SPARK-8153: Add configuration for disabling partial aggregation in runtime") {
+    val testData = sparkContext.parallelize(
+        TestData(1, "100") ::
+        TestData(1, "200") ::
+        TestData(1, "300") ::
+        TestData(2, "100") ::
+        TestData(2, "200") ::
+        TestData(3, "100") ::
+        TestData(3, "200") ::
+        TestData(3, "300") :: Nil)
+    testData.toDF().registerTempTable("test8153")
+
+    val query: String = "select A, count(B) as c from test8153 group by A having c > 2 order by A"
+
+    sql("set spark.sql.codegen=false")
+    sql("set spark.sql.unsafe.enabled=false")
+    sql("set spark.sql.partial.aggregation.checkInterval=1000000")
+
+    val gold = sql(query).collect()
+
+    // force discarding hash aggr (always 1.0)
+    sql("set spark.sql.partial.aggregation.checkInterval=1")
+    assertResult(gold){sql(query).collect()}
+
+    sql("set spark.sql.codegen=true")
+    assertResult(gold){sql(query).collect()}
+
+    sql("set spark.sql.unsafe.enabled=true")
+    assertResult(gold){sql(query).collect()}
+  }
+
   test("SET commands semantics for a HiveContext") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"

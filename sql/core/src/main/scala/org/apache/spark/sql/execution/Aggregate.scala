@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.HashMap
+import java.util
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -43,6 +43,8 @@ case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
+    checkInterval: Int,
+    minReduction: Float,
     child: SparkPlan)
   extends UnaryNode {
 
@@ -155,16 +157,22 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
+        val hashTable = new util.HashMap[InternalRow, Array[AggregateFunction1]]
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
+        var numInput: Int = 0
+        var numOutput: Int = 0
+
+        var disabled: Boolean = false
         var currentRow: InternalRow = null
-        while (iter.hasNext) {
+        while (!disabled && iter.hasNext) {
+          numInput += 1
           currentRow = iter.next()
           numInputRows += 1
           val currentGroup = groupingProjection(currentRow)
           var currentBuffer = hashTable.get(currentGroup)
           if (currentBuffer == null) {
+            numOutput += 1
             currentBuffer = newAggregateBuffer()
             hashTable.put(currentGroup.copy(), currentBuffer)
           }
@@ -174,15 +182,22 @@ case class Aggregate(
             currentBuffer(i).update(currentRow)
             i += 1
           }
+          if (partial && minReduction > 0 &&
+            (numInput % checkInterval) == 0 && (numOutput / numInput > minReduction)) {
+            log.info("Hash aggregation is disabled by insufficient reduction ratio " +
+              (numOutput / numInput) + " which is expected to be less than " + minReduction)
+            disabled = true
+          }
         }
 
-        new Iterator[InternalRow] {
-          private[this] val hashTableIter = hashTable.entrySet().iterator()
-          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
-          private[this] val resultProjection =
+        val joinedRow = new JoinedRow
+        val aggregateResults = new GenericMutableRow(computedAggregates.length)
+        val resultProjection =
             new InterpretedMutableProjection(
               resultExpressions, computedSchema ++ namedGroups.map(_._2))
-          private[this] val joinedRow = new JoinedRow
+
+        val result = new Iterator[InternalRow] {
+          private[this] val hashTableIter = hashTable.entrySet().iterator()
 
           override final def hasNext: Boolean = hashTableIter.hasNext
 
@@ -200,6 +215,27 @@ case class Aggregate(
               i += 1
             }
             resultProjection(joinedRow(aggregateResults, currentGroup))
+          }
+        }
+        if (!iter.hasNext) {
+          result
+        } else {
+          val currentBuffer = newAggregateBuffer()
+          result ++ new Iterator[InternalRow] {
+            override final def hasNext: Boolean = iter.hasNext
+
+            override final def next(): InternalRow = {
+              currentRow = iter.next()
+              val currentGroup = groupingProjection(currentRow)
+
+              var i = 0
+              while (i < currentBuffer.length) {
+                currentBuffer(i).reset().update(currentRow)
+                aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+                i += 1
+              }
+              resultProjection(joinedRow(aggregateResults, currentGroup))
+            }
           }
         }
       }

@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -165,10 +164,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           partial = false,
           namedGroupingAttributes,
           rewrittenAggregateExpressions,
+          -1, -1,
           execution.Aggregate(
             partial = true,
             groupingExpressions,
             partialComputation,
+            sqlContext.conf.partialAggregationCheckInterval,
+            sqlContext.conf.partialAggregationMinReduction,
             planLater(child))) :: Nil
 
       case _ => Nil
@@ -360,7 +362,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Nil
         } else {
           Utils.checkInvalidAggregateFunction2(a)
-          execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+          execution.Aggregate(partial = false, group, agg, -1, -1, planLater(child)) :: Nil
         }
       }
       case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>

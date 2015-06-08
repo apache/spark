@@ -114,6 +114,20 @@ private[spark] object SQLConf {
         }
       }, _.toString, doc, isPublic)
 
+    def floatConf(
+        key: String,
+        defaultValue: Option[Float] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Float] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+          v.toFloat
+        } catch {
+          case _: NumberFormatException =>
+            throw new IllegalArgumentException(s"$key should be float, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
     def doubleConf(
         key: String,
         defaultValue: Option[Double] = None,
@@ -420,6 +434,17 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val PARTIAL_AGGREGATION_CHECK_INTERVAL = intConf(
+    "spark.sql.partial.aggregation.checkInterval",
+    defaultValue = Some(1000000),
+    doc = "Number of input rows for checking aggregation status of hash")
+
+  val PARTIAL_AGGREGATION_MIN_REDUCTION = floatConf(
+    "spark.sql.partial.aggregation.minReduction",
+    defaultValue = Some(0.5f),
+    doc = "Partial aggregation will be turned off when reduction ratio by hash is not " +
+      "enough to this threshold")
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -526,6 +551,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def partialAggregationCheckInterval: Int =
+    getConf(PARTIAL_AGGREGATION_CHECK_INTERVAL)
+
+  private[spark] def partialAggregationMinReduction: Float =
+    getConf(PARTIAL_AGGREGATION_MIN_REDUCTION)
 
   /** ********************** SQLConf functionality methods ************ */
 
