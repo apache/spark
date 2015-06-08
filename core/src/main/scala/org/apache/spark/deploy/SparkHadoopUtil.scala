@@ -175,8 +175,13 @@ class SparkHadoopUtil extends Logging {
   private def getFileSystemThreadStatistics(path: Path, conf: Configuration): Seq[AnyRef] = {
     val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
     val scheme = qualifiedPath.toUri().getScheme()
-    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
-    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    if (scheme == null) {
+      Seq.empty
+    } else {
+      FileSystem.getAllStatistics
+        .filter { stats => scheme.equals(stats.getScheme()) }
+        .map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    }
   }
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
