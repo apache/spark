@@ -71,7 +71,7 @@ private[spark] object SQLConf {
   // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
 
-  // Whether to perform partition column type inference. Default to false.
+  // Whether to perform partition column type inference. Default to true.
   val PARTITION_COLUMN_TYPE_INFERENCE = "spark.sql.sources.partitionColumnTypeInference.enabled"
 
   // The output committer class used by FSBasedRelation. The specified class needs to be a
