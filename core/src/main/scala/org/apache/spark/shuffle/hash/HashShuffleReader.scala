@@ -38,7 +38,7 @@ private[spark] class HashShuffleReader[K, C](
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
     val blockStreams = BlockStoreShuffleFetcher.fetchBlockStreams(
-                       handle.shuffleId, startPartition, context)
+                         handle.shuffleId, startPartition, context)
 
     // Wrap the streams for compression based on configuration
     val wrappedStreams = blockStreams.map { case (blockId, inputStream) =>

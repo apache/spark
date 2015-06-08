@@ -21,7 +21,7 @@ import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.{Failure, Try}
 
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -78,7 +78,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val localBlocks = new ArrayBuffer[BlockId]()
 
   /** Remote blocks to fetch, excluding zero-sized blocks. */
-  private[this] val remoteBlocks = new mutable.HashSet[BlockId]()
+  private[this] val remoteBlocks = new HashSet[BlockId]()
 
   /**
    * A queue to hold our results. This turns the asynchronous model provided by
