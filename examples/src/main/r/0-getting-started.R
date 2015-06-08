@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-# Load SparkR onto your PC
+# Load SparkR library into your R session
 library(SparkR)
 
 ## Initialize SparkContext on your local PC
 sc <- sparkR.init(master = "local", appName = "MyApp")
 
 ## Initialize SQLContext
-sqlCtx <- SparkRSQL.init(sc)
+sqlContext <- SparkRSQL.init(sc)
