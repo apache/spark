@@ -68,12 +68,10 @@ class VectorsSuite extends FunSuite {
     assert(vec.argmax === -1)
 
     val vec2 = Vectors.dense(arr).asInstanceOf[DenseVector]
-    val max = vec2.argmax
-    assert(max === 3)
+    assert(vec2.argmax === 3)
 
     val vec3 = Vectors.dense(Array(-1.0, 0.0, -2.0, 1.0)).asInstanceOf[DenseVector]
-    val max2 = vec3.argmax
-    assert(max === 3)
+    assert(vec3.argmax === 3)
   }
 
   test("sparse to array") {
@@ -83,37 +81,29 @@ class VectorsSuite extends FunSuite {
 
   test("sparse argmax") {
     val vec = Vectors.sparse(0,Array.empty[Int],Array.empty[Double]).asInstanceOf[SparseVector]
-    val noMax = vec.argmax
-    assert(noMax === -1)
+    assert(vec.argmax === -1)
 
     val vec2 = Vectors.sparse(n,indices,values).asInstanceOf[SparseVector]
-    val max = vec2.argmax
-    assert(max === 3)
+    assert(vec2.argmax === 3)
 
     val vec3 = Vectors.sparse(5,Array(2, 3, 4),Array(1.0, 0.0, -.7))
-    val max2 = vec3.argmax
-    assert(max2 === 2)
+    assert(vec3.argmax === 2)
 
     // check for case that sparse vector is created with only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
     val vec4 = Vectors.sparse(5,Array(2, 3),Array(-1.0, -.7))
-    val max3 = vec4.argmax
-    assert(max3 === 0)
+    assert(vec4.argmax === 0)
 
     val vec5 = Vectors.sparse(11,Array(0, 3, 10),Array(-1.0, -.7, 0.0))
-    val max4 = vec5.argmax
-    assert(max4 === 1)
+    assert(vec5.argmax === 1)
 
     val vec6 = Vectors.sparse(11,Array(0, 1, 2),Array(-1.0, -.7, 0.0))
-    val max5 = vec6.argmax
-    assert(max5 === 2)
+    assert(vec6.argmax === 2)
 
     val vec7 = Vectors.sparse(5,Array(0, 1, 3),Array(-1.0, 0.0, -.7))
-    val max6 = vec7.argmax
-    assert(max6 === 1)
+    assert(vec7.argmax === 1)
 
     var vec8 = Vectors.sparse(5,Array(1, 2),Array(0.0, -1.0))
-    val max7 = vec8.argmax
-    assert(max7 === 0)
+    assert(vec8.argmax === 0)
   }
 
   test("vector equals") {
