@@ -17,23 +17,34 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Long => JLong}
+
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{DataType, DoubleType}
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType, UTF8String}
 
 /**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
  * input format, therefore these functions extend `ExpectsInputTypes`.
  * @param name The short name of the function
  */
-abstract class UnaryMathExpression(f: Double => Double, name: String)
+abstract class AbstractUnaryMathExpression[T, U](name: String)
   extends UnaryExpression with Serializable with ExpectsInputTypes {
+  self: Product =>
+
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = true
+  override def toString: String = s"$name($child)"
+
+  // name of function in java.lang.Math
+  def funcName: String = name.toLowerCase
+}
+
+abstract class UnaryMathExpression(f: Double => Double, name: String)
+  extends AbstractUnaryMathExpression[Double, Double](name) {
   self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
@@ -44,9 +55,6 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
       if (result.isNaN) null else result
     }
   }
-
-  // name of function in java.lang.Math
-  def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
@@ -152,6 +160,26 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   override def funcName: String = "toRadians"
 }
 
+case class Bin(child: Expression)
+  extends AbstractUnaryMathExpression[Long, String]("BIN") {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+  override def dataType: DataType = StringType
+
+  override def eval(input: Row): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      UTF8String(JLong.toBinaryString(evalE.asInstanceOf[Long]))
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c) =>
+      s"org.apache.spark.sql.types.UTF8String.apply(java.lang.Long.toBinaryString($c))")
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////

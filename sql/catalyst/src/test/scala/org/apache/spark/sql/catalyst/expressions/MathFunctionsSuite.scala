@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -31,11 +31,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @param expectNull Whether the given values should return null or not
    * @tparam T Generic type for primitives
    */
-  private def testUnary[T](
+  private def testUnary[T, U](
       c: Expression => Expression,
-      f: T => T,
+      f: T => U,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false,
+      evalType: DataType = DoubleType): Unit = {
     if (expectNull) {
       domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
@@ -45,7 +46,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(c(Literal(value)), f(value), EmptyRow)
       }
     }
-    checkEvaluation(c(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(c(Literal.create(null, evalType)), null, create_row(null))
   }
 
   /**
@@ -145,7 +146,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("signum") {
-    testUnary[Double](Signum, math.signum)
+    testUnary[Double, Double](Signum, math.signum)
   }
 
   test("log") {
@@ -161,6 +162,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("log1p") {
     testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
     testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
+  }
+
+  test("bin") {
+    testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
   }
 
   test("pow") {

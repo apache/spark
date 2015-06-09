@@ -136,6 +136,7 @@ _functions_1_4 = {
                  'measured in radians.',
 
     'bitwiseNOT': 'Computes bitwise not.',
+    'bin': 'Computes the binary format of the given value.',
 }
 
 # math functions that take two arguments as input

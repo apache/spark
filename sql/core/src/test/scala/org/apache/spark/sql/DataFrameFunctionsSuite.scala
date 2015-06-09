@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.lang.{Long => JLong}
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -89,5 +91,11 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(
       testData2.select(bitwiseNOT($"a")),
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
+  }
+
+  test("bin") {
+    checkAnswer(
+      testData2.select(bin($"a")),
+      testData2.collect().toSeq.map(r => Row(JLong.toBinaryString(r.getInt(0).toLong))))
   }
 }

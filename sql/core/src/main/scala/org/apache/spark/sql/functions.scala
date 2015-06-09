@@ -1299,6 +1299,21 @@ object functions {
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
 
+  /**
+   * Computes the binary format of the given value.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def bin(e: Column): Column = Bin(e.expr)
+
+  /**
+   * Computes the binary format of the given value.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
