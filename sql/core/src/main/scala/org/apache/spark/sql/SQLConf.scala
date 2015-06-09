@@ -92,8 +92,6 @@ private[spark] object SQLConf {
 
   val USE_SQL_SERIALIZER2 = "spark.sql.useSerializer2"
 
-  val USE_JACKSON_STREAMING_API = "spark.sql.json.useJacksonStreamingAPI"
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -195,12 +193,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, "false").toBoolean
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2, "true").toBoolean
-
-  /**
-   * Selects between the new (true) and old (false) JSON handlers, to be removed in Spark 1.5.0
-   */
-  private[spark] def useJacksonStreamingAPI: Boolean =
-    getConf(USE_JACKSON_STREAMING_API, "true").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to

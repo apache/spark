@@ -236,17 +236,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
-    if (sqlContext.conf.useJacksonStreamingAPI) {
-      sqlContext.baseRelationToDataFrame(
-        new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
-    } else {
-      val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
-      val appliedSchema = userSpecifiedSchema.getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(jsonRDD, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(jsonRDD, appliedSchema, columnNameOfCorruptJsonRecord)
-      sqlContext.createDataFrame(rowRDD, appliedSchema, needsConversion = false)
-    }
+    sqlContext.baseRelationToDataFrame(
+      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
   }
 
   /**
