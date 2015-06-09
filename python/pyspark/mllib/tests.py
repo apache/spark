@@ -48,8 +48,8 @@ from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
-from pyspark.mllib.feature import StandardScaler
-from pyspark.mllib.feature import ElementwiseProduct
+from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
+from pyspark.mllib.util import LinearDataGenerator
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
 from pyspark.sql import SQLContext
@@ -1009,6 +1009,22 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 6.0, 0.01)
         self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+
+
+class LinearDataGeneratorTests(MLlibTestCase):
+    def test_dim(self):
+        points = LinearDataGenerator.generateLinearInput(
+            0.0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0],
+            [0.33, 0.33, 0.33], 4, 0, 0.1)
+        self.assertEqual(len(points), 4)
+        for point in points:
+            self.assertEqual(len(point.features), 3)
+
+        rdd = LinearDataGenerator.generateLinearRDD(
+            sc, 6, 2, 0.1, 2, 0.0).collect()
+        self.assertEqual(len(rdd), 6)
+        for point in rdd:
+            self.assertEqual(len(point.features), 2)
 
 
 if __name__ == "__main__":
