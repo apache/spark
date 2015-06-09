@@ -233,11 +233,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
 
-  // For each shuffleId we also maintain a Map from reducerId -> (locations with largest outputs)
-  // Lazily populated whenever the statuses are requested from DAGScheduler
-  private val shuffleIdToReduceLocations =
-    new TimeStampedHashMap[Int, HashMap[Int, Array[BlockManagerId]]]()
-
   // For cleaning up TimeStampedHashMaps
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
@@ -283,7 +278,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   override def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
     cachedSerializedStatuses.remove(shuffleId)
-    shuffleIdToReduceLocations.remove(shuffleId)
   }
 
   /** Check if the given shuffle is being tracked */
@@ -386,7 +380,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
-    shuffleIdToReduceLocations.clearOldValues(cleanupTime)
   }
 }
 
