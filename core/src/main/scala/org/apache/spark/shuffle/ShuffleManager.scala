@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{CopyOnWriteArraySet, ConcurrentHashMap}
 
 import scala.collection.JavaConverters._
 
@@ -89,15 +89,15 @@ private[spark] trait ShuffleManager {
   /** Shut down this ShuffleManager. */
   def stop(): Unit
 
-  private[this] val shuffleToAttempts = new ConcurrentHashMap[Int, ConcurrentHashMap[Int, Int]]()
+  private[this] val shuffleToAttempts = new ConcurrentHashMap[Int, CopyOnWriteArraySet[Int]]()
 
   /**
    * Register a stage attempt for the given shuffle, so we can clean up all attempts when
    * the shuffle is unregistered
    */
   protected def addShuffleAttempt(shuffleId: Int, stageAttemptId: Int): Unit = {
-    shuffleToAttempts.putIfAbsent(shuffleId, new ConcurrentHashMap[Int, Int]())
-    shuffleToAttempts.get(shuffleId).putIfAbsent(stageAttemptId, stageAttemptId)
+    shuffleToAttempts.putIfAbsent(shuffleId, new CopyOnWriteArraySet[Int]())
+    shuffleToAttempts.get(shuffleId).add(stageAttemptId)
   }
 
   /**
@@ -112,7 +112,7 @@ private[spark] trait ShuffleManager {
     if (attempts == null) {
       Iterable[Int]()
     } else {
-      attempts.values().asScala
+      attempts.asScala
     }
   }
 }
