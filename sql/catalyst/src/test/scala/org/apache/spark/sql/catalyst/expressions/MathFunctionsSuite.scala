@@ -176,4 +176,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Atan2, math.atan2)
   }
 
+  test("binary log") {
+    testBinary(Logarithm, (c1, c2) => math.log(c2) / math.log(c1),
+      (1 to 20).map(v => (v * 0.1, v * 0.2)))
+  }
 }

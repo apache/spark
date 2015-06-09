@@ -143,7 +143,8 @@ _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
     'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
-    'pow': 'Returns the value of the first argument raised to the power of the second argument.'
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.',
+    'logarithm': 'Returns the first argument-based logarithm of the second argument',
 }
 
 _window_functions = {

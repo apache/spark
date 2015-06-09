@@ -122,6 +122,7 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("todegrees"),
     expression[ToRadians]("toradians"),
+    expression[Logarithm]("logarithm"),
 
     // aggregate functions
     expression[Average]("avg"),
