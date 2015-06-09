@@ -304,8 +304,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
         }
       )
 
-  //protected lazy val functionName: Parser[String] = ident | COUNT
-
   protected lazy val cast: Parser[Expression] =
     CAST ~ "(" ~> expression ~ (AS ~> dataType) <~ ")" ^^ {
       case exp ~ t => Cast(exp, t)
