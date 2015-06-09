@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate2.AggregateExpression2
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -113,6 +114,44 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.HashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
+      case _ => Nil
+    }
+  }
+
+  class HashAggregation2(aggrSubsitution: AggregateExpressionSubsitution) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case aggr @ logical.Aggregate(groupingExpressions, aggregateExpressions, child)
+        if sqlContext.conf.aggregate2 =>
+
+        val subusitutedAggrExpression = aggregateExpressions.map(_.transformUp {
+          case a: AggregateExpression => aggrSubsitution.subsitute(a)
+        }.asInstanceOf[NamedExpression])
+
+        aggr.copy(aggregateExpressions = subusitutedAggrExpression) match {
+          // Aggregations that can be performed in two phases, before and after the shuffle.
+          case PartialAggregation2(
+            namedGroupingExpressions,
+            aggregates,
+            rewrittenProjection,
+            originalProjection,
+            child) =>
+              if (aggregates.exists(_.distinct)) {
+                aggregate2.DistinctAggregate(
+                  namedGroupingExpressions,
+                  originalProjection,
+                  rewrittenProjection,
+                  planLater(child)) :: Nil
+              } else {
+                aggregate2.AggregatePostShuffle(
+                  namedGroupingExpressions.map(_.toAttribute),
+                  rewrittenProjection,
+                  aggregate2.AggregatePreShuffle(
+                    namedGroupingExpressions,
+                    aggregates,
+                    planLater(child))) :: Nil
+              }
+          case _ => Nil
+        }
       case _ => Nil
     }
   }

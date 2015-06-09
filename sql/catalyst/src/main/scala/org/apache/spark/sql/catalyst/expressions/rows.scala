@@ -57,6 +57,7 @@ object EmptyRow extends Row {
   override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
   override def copy(): Row = this
+  override def makeMutable(): MutableRow = throw new UnsupportedOperationException
 }
 
 /**
@@ -174,6 +175,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def copy(): Row = this
+  override def makeMutable(): MutableRow = new GenericMutableRow(values.clone())
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)

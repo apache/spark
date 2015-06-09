@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import org.apache.spark.sql.catalyst.expressions.aggregate2.AggregateExpression2
+
 import scala.annotation.tailrec
 
 import org.apache.spark.Logging
@@ -107,6 +109,103 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
+ *
+ * TODO: This is a temporal solution to substitute the expression tree from
+ * AggregateExpression with aggregate2.AggregateExpression2, and will be
+ * removed once the aggregate2.AggregateExpression2 is stable enough.
+ */
+class AggregateExpressionSubsitution {
+  def subsitute(aggr: AggregateExpression): AggregateExpression2 = aggr match {
+    case Min(child) => aggregate2.Min(child)
+    case Max(child) => aggregate2.Max(child)
+    case Count(child) => aggregate2.Count(child)
+    case CountDistinct(children) => aggregate2.CountDistinct(children)
+      // TODO: we don't support approximate in aggregate2 yet.
+    case ApproxCountDistinct(child, sd) => aggregate2.CountDistinct(child :: Nil)
+    case Average(child) => aggregate2.Average(child)
+    case Sum(child) => aggregate2.Sum(child)
+    case SumDistinct(child) => aggregate2.Sum(child, true)
+    case First(child) => aggregate2.First(child)
+    case Last(child) => aggregate2.Last(child)
+  }
+}
+
+// TODO: Will be removed once aggregate2.AggregateExpression2 is stable enough
+object AggregateExpressionSubsitution extends AggregateExpressionSubsitution
+
+/**
+ * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
+ * operates on the data in each partition performing partial aggregation for each group.  The second
+ * occurs after the shuffle and completes the aggregation.
+ *
+ * This pattern will only match if all aggregate expressions can be computed partially and will
+ * return the rewritten aggregation expressions for both phases.
+ *
+ * The returned values for this match are as follows:
+ *  - Grouping expression (transformed to NamedExpression) list .
+ *  - Aggregate Expressions extract from the projection.
+ *  - Rewritten Projection for post shuffled.
+ *  - Original Projection.
+ *  - Child logical plan.
+ */
+object PartialAggregation2 {
+  type ReturnType =
+    (Seq[NamedExpression],
+     Seq[aggregate2.AggregateExpression2],
+     Seq[NamedExpression],
+     Seq[NamedExpression],
+     LogicalPlan)
+
+  def unapply(plan: LogicalPlan)
+  : Option[ReturnType] = plan match {
+    case logical.Aggregate(groupingExpressions, projection, child) =>
+      // Collect all aggregate expressions that can be computed partially.
+      val allAggregates = projection.flatMap(_ collect {
+        case a: aggregate2.AggregateExpression2 => a
+      })
+
+      // We need to pass all grouping expressions though so the grouping can happen a second
+      // time. However some of them might be unnamed so we alias them allowing them to be
+      // referenced in the second aggregation.
+      val namedGroupingExpressions = groupingExpressions.map {
+        case n: NamedExpression => (n, n)
+        case other => (other, Alias(other, "PartialGroup")())
+      }
+      val substitutions = namedGroupingExpressions.toMap
+
+      // Replace aggregations with a new expression that computes the result from the already
+      // computed partial evaluations and grouping values.
+      val rewrittenProjection = projection.map(_.transformUp {
+        case e: Expression if substitutions.contains(e) =>
+          substitutions(e).toAttribute
+        case e: AggregateExpression2 => e.transformChildrenDown {
+          // replace the child expression of the aggregate expression, with
+          // Literal, as in PostShuffle, we don't need children expression any
+          // more(Only aggregate buffer required), otherwise, it will
+          // cause the attribute not binding exceptions.
+          case expr => MutableLiteral(null, expr.dataType, expr.nullable)
+        }
+        case e: Expression =>
+          // Should trim aliases around `GetField`s. These aliases are introduced while
+          // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+          // (Should we just turn `GetField` into a `NamedExpression`?)
+          substitutions
+            .get(e.transform { case Alias(g: ExtractValue, _) => g })
+            .map(_.toAttribute)
+            .getOrElse(e)
+      }).asInstanceOf[Seq[NamedExpression]]
+
+      Some(
+        (namedGroupingExpressions.map(_._2),
+         allAggregates,
+         rewrittenProjection,
+         projection,
+         child))
+    case _ => None
+  }
+}
+
+/**
  * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
  * operates on the data in each partition performing partial aggregation for each group.  The second
  * occurs after the shuffle and completes the aggregation.
@@ -126,7 +225,10 @@ object PartialAggregation {
     (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+    case logical.Aggregate(groupingExpressions, aggregateExpressions, child)
+      if (aggregateExpressions.flatMap(_.collect {
+        case a: aggregate2.AggregateExpression2 => a
+      })).length == 0 =>
       // Collect all aggregate expressions.
       val allAggregates =
         aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})

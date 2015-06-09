@@ -21,6 +21,8 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.sql.catalyst.planning.AggregateExpressionSubsitution
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -825,6 +827,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def strategies: Seq[Strategy] =
       experimental.extraStrategies ++ (
+      new HashAggregation2(AggregateExpressionSubsitution) ::
       DataSourceStrategy ::
       DDLStrategy ::
       TakeOrdered ::

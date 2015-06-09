@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{SQLConf, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
@@ -47,6 +47,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   override def beforeAll() {
+    TestHive.reset()
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -1134,3 +1135,94 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
 // for SPARK-2180 test
 case class HavingRow(key: Int, value: String, attr: Int)
+
+// TODO ideally we should make this class inherit from HiveQuerySuite.
+// However the tables/configuration cannot be reset, which causes
+// exceptions like the table already existed etc.
+class HiveNewUDAFQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+  private val originalTimeZone = TimeZone.getDefault
+  private val originalLocale = Locale.getDefault
+
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+  override def beforeAll() {
+    TestHive.reset()
+    TestHive.cacheTables = true
+    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    // Add Locale setting
+    Locale.setDefault(Locale.US)
+    TestHive.setConf(SQLConf.AGGREGATE_2, "true")
+  }
+
+  override def afterAll() {
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+    TestHive.setConf(SQLConf.AGGREGATE_2, "false")
+  }
+
+  def isExplanation(result: DataFrame): Boolean = {
+    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    explanation.contains("== Physical Plan ==")
+  }
+
+  createQueryTest("having no references",
+    "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
+
+  createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
+    "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
+
+  test("SPARK-1704: Explain commands as a DataFrame") {
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+
+    val df = sql("explain select key, count(value) from src group by key")
+    assert(isExplanation(df))
+
+    TestHive.reset()
+  }
+
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
+    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+    TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
+    val results =
+      sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+        .collect()
+        .map(x => Pair(x.getString(0), x.getInt(1)))
+
+    assert(results === Array(Pair("foo", 4)))
+    TestHive.reset()
+  }
+
+  test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
+    sql("select key, count(*) c from src group by key having c").collect()
+  }
+
+  test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
+    assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("Query Hive native command execution result") {
+    val databaseName = "test_native_commands"
+
+    assertResult(0) {
+      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
+    }
+
+    assertResult(0) {
+      sql(s"CREATE DATABASE $databaseName").count()
+    }
+
+    assert(
+      sql("SHOW DATABASES")
+        .select('result)
+        .collect()
+        .map(_.getString(0))
+        .contains(databaseName))
+
+    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
+
+    TestHive.reset()
+  }
+}

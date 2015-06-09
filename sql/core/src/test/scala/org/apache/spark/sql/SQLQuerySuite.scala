@@ -174,7 +174,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
         case _ =>
       }
-      if (!hasGeneratedAgg) {
+      if (!hasGeneratedAgg && sqlContext.getConf(SQLConf.AGGREGATE_2) == false) {
         fail(
           s"""
              |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
@@ -1363,5 +1363,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
       checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
     }
+  }
+}
+
+class SQLNewUDAFQuerySuite extends SQLQuerySuite {
+  override def beforeAll() {
+    super.beforeAll()
+    sqlContext.setConf(SQLConf.AGGREGATE_2, "true")
+  }
+
+  override def afterAll() {
+    sqlContext.setConf(SQLConf.AGGREGATE_2, "false")
+    super.afterAll()
   }
 }
