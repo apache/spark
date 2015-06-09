@@ -65,8 +65,7 @@ class VectorsSuite extends FunSuite {
 
   test("dense argmax"){
     val vec = Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector]
-    val noMax = vec.argmax
-    assert(noMax === -1)
+    assert(vec.argmax === -1)
 
     val vec2 = Vectors.dense(arr).asInstanceOf[DenseVector]
     val max = vec2.argmax
