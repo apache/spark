@@ -272,7 +272,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
-      { case udfName ~ exprs => UnresolvedFunction(lexical.normalizeKeyword(udfName), exprs) }
+      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
     | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)

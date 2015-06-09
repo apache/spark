@@ -54,7 +54,7 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
 
 class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
 
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
