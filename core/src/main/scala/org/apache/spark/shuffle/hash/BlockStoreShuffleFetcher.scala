@@ -25,7 +25,6 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
-import org.apache.spark.util.CompletionIterator
 
 private[shuffle] object BlockStoreShuffleFetcher extends Logging {
   def fetchBlockStreams(
@@ -80,10 +79,6 @@ private[shuffle] object BlockStoreShuffleFetcher extends Logging {
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
 
-    val itr = blockFetcherItr.map(unpackBlock)
-
-    CompletionIterator[(BlockId, InputStream), Iterator[(BlockId, InputStream)]](itr, {
-      context.taskMetrics().updateShuffleReadMetrics()
-    })
+    blockFetcherItr.map(unpackBlock)
   }
 }

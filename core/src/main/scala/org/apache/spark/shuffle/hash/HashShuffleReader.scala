@@ -17,11 +17,11 @@
 
 package org.apache.spark.shuffle.hash
 
+import org.apache.spark.{SparkEnv, TaskContext, InterruptibleIterator}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
+import org.apache.spark.shuffle.{ShuffleReader, BaseShuffleHandle}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.{InterruptibleIterator, SparkEnv, TaskContext}
 
 private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -51,23 +51,21 @@ private[spark] class HashShuffleReader[K, C](
 
     // Create a key/value iterator for each stream
     val recordIterator = wrappedStreams.flatMap { wrappedStream =>
-      val kvIter = serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
-      CompletionIterator[(Any, Any), Iterator[(Any, Any)]](kvIter, {
-        // Close the stream once all the records have been read from it to free underlying
-        // ManagedBuffer as soon as possible. Note that in case of task failure, the task's
-        // TaskCompletionListener will make sure this is released.
-        wrappedStream.close()
-      })
+      serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
     }
 
+    val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
     // Update read metrics for each record materialized
-    val iter = new InterruptibleIterator[(Any, Any)](context, recordIterator) {
-     val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
-     override def next(): (Any, Any) = {
-       readMetrics.incRecordsRead(1)
-       delegate.next()
-     }
+    val metricIter = new InterruptibleIterator[(Any, Any)](context, recordIterator) {
+      override def next(): (Any, Any) = {
+        readMetrics.incRecordsRead(1)
+        delegate.next()
+      }
     }
+
+    val iter = CompletionIterator[(Any, Any), Iterator[(Any, Any)]](metricIter, {
+      context.taskMetrics().updateShuffleReadMetrics()
+    })
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {

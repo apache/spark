@@ -23,10 +23,10 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.{Failure, Try}
 
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, TaskContext}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -306,7 +306,7 @@ final class ShuffleBlockFetcherIterator(
         // not exist, SPARK-4085). In that case, we should propagate the right exception so
         // the scheduler gets a FetchFailedException.
         Try(buf.createInputStream()).map { inputStream =>
-          new WrappedInputStream(inputStream, this)
+          new BufferReleasingInputStream(inputStream, this)
         }
     }
 
@@ -314,8 +314,10 @@ final class ShuffleBlockFetcherIterator(
   }
 }
 
-// Helper class that ensures a ManagerBuffer is released upon InputStream.close()
-private class WrappedInputStream(delegate: InputStream, iterator: ShuffleBlockFetcherIterator)
+/** Helper class that ensures a ManagerBuffer is released upon InputStream.close() */
+private class BufferReleasingInputStream(
+    delegate: InputStream,
+    iterator: ShuffleBlockFetcherIterator)
   extends InputStream {
   private var closed = false
 
