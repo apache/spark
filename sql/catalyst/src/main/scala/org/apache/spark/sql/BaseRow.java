@@ -149,6 +149,24 @@ public abstract class BaseRow implements Row {
   }
 
   @Override
+  public boolean equals(Object other) {
+    if (other instanceof Row) {
+      Row row = (Row) other;
+      int n = size();
+      if (n != row.size()) {
+        return false;
+      }
+      for (int i = 0; i < n; i ++) {
+        if (isNullAt(i) != row.isNullAt(i) || !isNullAt(i) && !get(i).equals(row.get(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  @Override
   public Row copy() {
     final int n = size();
     Object[] arr = new Object[n];

@@ -100,6 +100,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           ev.isNull = "false"
           ev.primitive = value.toString
           ""
+
         case FloatType =>  // This must go before NumericType
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
@@ -109,6 +110,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             ev.primitive = s"${value}f"
             ""
           }
+
         case DoubleType =>  // This must go before NumericType
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
@@ -123,10 +125,17 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           ev.isNull = "false"
           ev.primitive = s"(${ctx.javaType(dataType)})$value"
           ""
+
+        case LongType =>
+          ev.isNull = "false"
+          ev.primitive = s"${value}L"
+          ""
+
         case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
           ev.isNull = "false"
           ev.primitive = value.toString
           ""
+
         // eval() version may be faster for non-primitive types
         case other =>
           super.genCode(ctx, ev)

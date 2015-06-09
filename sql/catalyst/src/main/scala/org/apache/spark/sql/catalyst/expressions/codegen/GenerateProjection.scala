@@ -71,43 +71,46 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
     }.mkString("\n        ")
 
-    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificAccessorFunctions = ctx.nativeTypes.map { dt =>
       val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
+        case (e, i) if e.dataType == dt || dt == IntegerType && e.dataType == DateType =>
           s"case $i: return c$i;"
         case _ => ""
       }.mkString("\n        ")
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
+      public ${ctx.javaType(dt)} ${ctx.accessorForType(dt)}(int i) {
         if (isNullAt(i)) {
-          return ${ctx.defaultValue(dataType)};
+          return ${ctx.defaultValue(dt)};
         }
         switch (i) {
         $cases
         }
-        return ${ctx.defaultValue(dataType)};
+        throw new IllegalArgumentException("Invalid index: " + i
+          + " in ${ctx.accessorForType(dt)}");
       }"""
       } else {
         ""
       }
     }.mkString("\n")
 
-    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificMutatorFunctions = ctx.nativeTypes.map { dt =>
       val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
+        case (e, i) if e.dataType == dt || dt == IntegerType && e.dataType == DateType =>
           s"case $i: { c$i = value; return; }"
         case _ => ""
-      }.mkString("\n")
+      }.mkString("\n        ")
       if (cases.count(_ != '\n') > 0) {
         s"""
       @Override
-      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
+      public void ${ctx.mutatorForType(dt)}(int i, ${ctx.javaType(dt)} value) {
         nullBits[i] = false;
         switch (i) {
         $cases
         }
+        throw new IllegalArgumentException("Invalid index: " + i +
+          " in ${ctx.accessorForType(dt)}");
       }"""
       } else {
         ""
@@ -134,12 +137,16 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     ).mkString("\n")
 
     val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
-      s"""
-          if (isNullAt($i) != row.isNullAt($i) || !isNullAt($i) && !get($i).equals(row.get($i))) {
+      if (ctx.isNativeType(e.dataType)) {
+        s"""if (nullBits[$i] != row.nullBits[$i] || !nullBits[$i] && c$i != row.c$i) {
             return false;
-          }
-      """
-    }.mkString("\n")
+          }"""
+      } else {
+        s"""if (nullBits[$i] != row.nullBits[$i] || !nullBits[$i] && !get($i).equals(row.get($i))) {
+            return false;
+          }"""
+      }
+    }.mkString("\n          ")
 
     val code = s"""
     import org.apache.spark.sql.Row;
@@ -170,7 +177,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       public int size() { return ${expressions.length};}
-      private boolean[] nullBits = new boolean[${expressions.length}];
+      protected boolean[] nullBits = new boolean[${expressions.length}];
       public void setNullAt(int i) { nullBits[i] = true; }
       public boolean isNullAt(int i) { return nullBits[i]; }
 
@@ -203,9 +210,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public boolean equals(Object other) {
-        if (other instanceof Row) {
-          Row row = (Row) other;
-          if (row.length() != size()) return false;
+        if (other instanceof SpecificRow) {
+          SpecificRow row = (SpecificRow) other;
+          int sz = size();
+          if (row.length() != sz) return false;
           $columnChecks
           return true;
         }

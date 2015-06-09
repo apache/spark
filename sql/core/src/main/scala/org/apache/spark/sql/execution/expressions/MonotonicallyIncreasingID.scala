@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.expressions
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{Row, LeafExpression}
-import org.apache.spark.sql.types.{LongType, DataType}
+import org.apache.spark.sql.catalyst.expressions.{LeafExpression, Row}
+import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
  * Returns monotonically increasing 64-bit integers.
@@ -47,5 +47,13 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
     val currentCount = count
     count += 1
     (TaskContext.get().partitionId().toLong << 33) + currentCount
+  }
+
+  /**
+   * This expression is stateful and not thread safe, it can not be reused. Change equals() to
+   * always return `false`, make the generated expressions to not be cached.
+   */
+  override def equals(other: Any): Boolean = {
+    false
   }
 }

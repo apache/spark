@@ -243,7 +243,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * weak keys/values and thus does not respond to memory pressure.
    */
   protected val cache = CacheBuilder.newBuilder()
-    .maximumSize(1000)
+    .maximumSize(100)
     .build(
       new CacheLoader[InType, OutType]() {
         override def load(in: InType): OutType = {

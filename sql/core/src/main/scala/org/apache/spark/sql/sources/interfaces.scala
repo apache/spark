@@ -573,6 +573,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
+    val needConversion = this.needConversion
 
     val requiredOutput = requiredColumns.map { col =>
       val field = dataSchema(col)
@@ -580,7 +581,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }.toSeq
 
     buildScan(inputFiles).mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled) {
+      // Codegen can not work with external data type in Row
+      val buildProjection = if (codegenEnabled && !needConversion) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)

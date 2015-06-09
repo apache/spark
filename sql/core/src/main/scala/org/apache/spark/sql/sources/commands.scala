@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter => MapReduceFileOutputCommitter}
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
@@ -218,24 +218,20 @@ private[sql] case class InsertIntoHadoopFsRelation(
         val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
         val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-        if (needsConversion) {
-          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-          while (iterator.hasNext) {
-            val row = iterator.next()
-            val partitionPart = partitionProj(row)
-            val dataPart = dataProj(row)
-            val convertedDataPart = converter(dataPart).asInstanceOf[Row]
-            writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
-          }
+        val partitionSchema = StructType.fromAttributes(partitionOutput)
+        val partConverter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
+        val dataConverter = if (needsConversion) {
+          CatalystTypeConverters.createToScalaConverter(dataSchema)
         } else {
-          val partitionSchema = StructType.fromAttributes(partitionOutput)
-          val converter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
-          while (iterator.hasNext) {
-            val row = iterator.next()
-            val partitionPart = converter(partitionProj(row)).asInstanceOf[Row]
-            val dataPart = dataProj(row)
-            writerContainer.outputWriterForRow(partitionPart).write(dataPart)
-          }
+          x: Row => x
+        }
+
+        while (iterator.hasNext) {
+          val row = iterator.next()
+          val partitionPart = partConverter(partitionProj(row)).asInstanceOf[Row]
+          val dataPart = dataProj(row)
+          val convertedDataPart = dataConverter(dataPart).asInstanceOf[Row]
+          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
         }
 
         writerContainer.commitTask()

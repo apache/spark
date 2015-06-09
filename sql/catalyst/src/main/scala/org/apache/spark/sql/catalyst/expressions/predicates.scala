@@ -254,6 +254,37 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
       case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
         (c1, c3) => s"$c1 $symbol $c3"
       })
+      case DateType => defineCodeGen (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
+      })
+      case BinaryType =>
+        val eval1 = left.gen(ctx)
+        val eval2 = right.gen(ctx)
+        s"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          boolean ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${eval2.code}
+            if (!${eval2.isNull}) {
+              boolean done = false;
+              for (int j = 0; j < ${eval1.primitive}.length && j < ${eval2.primitive}.length; j++) {
+                byte a = ${eval1.primitive}[j];
+                byte b = ${eval2.primitive}[j];
+                if (a != b) {
+                  ${ev.primitive} = a $symbol b;
+                  done = true;
+                  break;
+                }
+              }
+              if (!done) {
+                ${ev.primitive} = ${eval1.primitive}.length $symbol ${eval2.primitive}.length;
+              }
+            } else {
+              ${ev.isNull} = true;
+            }
+          }
+        """
       case TimestampType =>
         // java.sql.Timestamp does not have compare()
         super.genCode(ctx, ev)
