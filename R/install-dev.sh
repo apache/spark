@@ -34,5 +34,12 @@ LIB_DIR="$FWDIR/lib"
 
 mkdir -p $LIB_DIR
 
-# Install R
+pushd $FWDIR
+
+# Generate Rd files if devtools is installed
+Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
+
+# Install SparkR to $LIB_DIR
 R CMD INSTALL --library=$LIB_DIR $FWDIR/pkg/
+
+popd
