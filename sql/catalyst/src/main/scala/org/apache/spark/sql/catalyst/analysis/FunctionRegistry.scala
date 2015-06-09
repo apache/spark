@@ -89,14 +89,10 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
-    expression[Lower]("lower"),
-    expression[Substring]("substr"),
-    expression[Substring]("substring"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
     expression[Sqrt]("sqrt"),
-    expression[Upper]("upper"),
 
     // Math functions
     expression[Acos]("acos"),
@@ -130,7 +126,14 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Max]("max"),
     expression[Min]("min"),
-    expression[Sum]("sum")
+    expression[Sum]("sum"),
+
+    // string functions
+    expression[Upper]("upper"),
+    expression[Lower]("lower"),
+    expression[Substring]("substr"),
+    expression[Substring]("substring"),
+    expression[Length]("length")
   )
 
   /** See usage above. */
