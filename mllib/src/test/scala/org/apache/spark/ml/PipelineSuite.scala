@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import scala.collection.JavaConverters._
+
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar.mock
@@ -80,5 +82,20 @@ class PipelineSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       pipeline.fit(dataset)
     }
+  }
+
+  test("pipeline model constructors") {
+    val transform0 = mock[Transformer]
+    val model1 = mock[MyModel]
+
+    val stages = Array(transform0, model1)
+    val pipelineModel0 = new PipelineModel("pipeline0", stages)
+    assert(pipelineModel0.uid === "pipeline0")
+    assert(pipelineModel0.stages === stages)
+
+    val stagesAsList = stages.toList.asJava
+    val pipelineModel1 = new PipelineModel("pipeline1", stagesAsList)
+    assert(pipelineModel1.uid === "pipeline1")
+    assert(pipelineModel1.stages === stages)
   }
 }
