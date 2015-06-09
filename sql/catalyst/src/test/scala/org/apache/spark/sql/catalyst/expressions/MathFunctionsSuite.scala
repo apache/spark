@@ -23,6 +23,24 @@ import org.apache.spark.sql.types.DoubleType
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /**
+   * Used for testing leaf math expressions.
+   *
+   * @param e expression
+   * @param c The constants in scala.math
+   * @param domain The set of values to run the function with
+   * @tparam T Generic type for primitives
+   */
+  private def testLeaf[T](
+      e: () => Expression,
+      c: T,
+      domain: Iterable[T] = (-20 to 20).map(_ * 0.1)): Unit = {
+    domain.foreach { value =>
+      checkEvaluation(e(), c, EmptyRow)
+    }
+    checkEvaluation(e(), c, create_row(null))
+  }
+
+  /**
    * Used for testing unary math expressions.
    *
    * @param c expression
@@ -72,6 +90,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("e") {
+    testLeaf(E, math.E)
+  }
+
+  test("pi") {
+    testLeaf(Pi, math.Pi)
   }
 
   test("sin") {
