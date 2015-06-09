@@ -20,6 +20,7 @@ defaults = {
         'statsd_on': False,
         'statsd_host': 'localhost',
         'statsd_port': 8125,
+        'statsd_prefix': 'airflow',
         'job_heartbeat_sec': 5,
         'scheduler_heartbeat_sec': 60,
         'authenticate': False,
@@ -129,6 +130,12 @@ job_heartbeat_sec = 5
 # scheduler section in the docs for more information). This defines
 # how often the scheduler should run (in seconds).
 scheduler_heartbeat_sec = 5
+
+# Statsd (https://github.com/etsy/statsd) integration settings
+# statsd_on =  False
+# statsd_host =  localhost
+# statsd_port =  8125
+# statsd_prefix = airflow
 """
 
 TEST_CONFIG = """\

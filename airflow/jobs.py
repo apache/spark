@@ -31,7 +31,7 @@ if conf.get('scheduler', 'statsd_on'):
     statsd = StatsClient(
         host=conf.get('scheduler', 'statsd_host'),
         port=conf.getint('scheduler', 'statsd_port'),
-        prefix='airflow')
+        prefix=conf.get('scheduler', 'statsd_prefix'))
 
 
 class BaseJob(Base):
