@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.sql.Date
+import java.sql.{Timestamp, Date}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -58,6 +58,7 @@ object CatalystTypeConverters {
       case structType: StructType => StructConverter(structType)
       case StringType => StringConverter
       case DateType => DateConverter
+      case TimestampType => TimestampConverter
       case dt: DecimalType => BigDecimalConverter
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -274,6 +275,13 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: Row, column: Int): Date = toScala(row.getInt(column))
   }
 
+  private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
+    override def toCatalystImpl(scalaValue: Timestamp): Long = DateUtils.fromTimestamp(scalaValue)
+    override def toScala(catalystValue: Any): Timestamp =
+      if (catalystValue == null) null else DateUtils.toTimestamp(catalystValue.asInstanceOf[Long])
+    override def toScalaImpl(row: Row, column: Int): Timestamp = toScala(row.getLong(column))
+  }
+
   private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
@@ -367,6 +375,7 @@ object CatalystTypeConverters {
   def convertToCatalyst(a: Any): Any = a match {
     case s: String => StringConverter.toCatalyst(s)
     case d: Date => DateConverter.toCatalyst(d)
+    case t: Timestamp => TimestampConverter.toCatalyst(t)
     case d: BigDecimal => BigDecimalConverter.toCatalyst(d)
     case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
     case seq: Seq[Any] => seq.map(convertToCatalyst)

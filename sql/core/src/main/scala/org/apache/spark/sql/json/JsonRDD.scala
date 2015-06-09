@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.json
 
-import java.sql.Timestamp
-
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
@@ -398,11 +396,11 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toTimestamp(value: Any): Timestamp = {
+  private def toTimestamp(value: Any): Long = {
     value match {
-      case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
-      case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 10000L
+      case value: java.lang.Long => value * 10000L
+      case value: java.lang.String => DateUtils.stringToTime(value).getTime * 10000L
     }
   }
 

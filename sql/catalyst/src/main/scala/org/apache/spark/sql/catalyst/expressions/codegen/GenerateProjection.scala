@@ -73,7 +73,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
       val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
+        case (e, i) if e.dataType == dataType
+          || dataType == IntegerType && e.dataType == DateType
+          || dataType == LongType && e.dataType == TimestampType =>
           s"case $i: return c$i;"
         case _ => ""
       }.mkString("\n        ")
@@ -96,7 +98,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
       val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
+        case (e, i) if e.dataType == dataType
+          || dataType == IntegerType && e.dataType == DateType
+          || dataType == LongType && e.dataType == TimestampType =>
           s"case $i: { c$i = value; return; }"
         case _ => ""
       }.mkString("\n")
@@ -119,7 +123,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"
-        case LongType => s"$col ^ ($col >>> 32)"
+        case LongType | TimestampType => s"$col ^ ($col >>> 32)"
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"

@@ -122,7 +122,7 @@ class CodeGenContext {
     case BinaryType => "byte[]"
     case StringType => stringType
     case DateType => "int"
-    case TimestampType => "java.sql.Timestamp"
+    case TimestampType => "long"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -140,6 +140,7 @@ class CodeGenContext {
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case DateType => "Integer"
+    case TimestampType => "Long"
     case _ => javaType(dt)
   }
 
@@ -155,6 +156,7 @@ class CodeGenContext {
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"
+    case TimestampType => "-1L"
     case _ => "null"
   }
 

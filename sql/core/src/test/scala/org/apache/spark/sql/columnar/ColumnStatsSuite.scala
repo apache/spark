@@ -31,7 +31,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[FixedDecimalColumnStats], FIXED_DECIMAL(15, 10), Row(null, null, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
   testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(Long.MaxValue, Long.MinValue, 0))
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],

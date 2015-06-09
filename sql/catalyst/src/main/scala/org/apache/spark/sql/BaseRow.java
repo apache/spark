@@ -19,6 +19,7 @@ package org.apache.spark.sql;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 
 import scala.collection.Seq;
@@ -100,6 +101,11 @@ public abstract class BaseRow implements Row {
 
   @Override
   public Date getDate(int i) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public Timestamp getTimestamp(int i) {
     throw new UnsupportedOperationException();
   }
 

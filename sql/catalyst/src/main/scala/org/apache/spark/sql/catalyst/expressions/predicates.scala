@@ -254,9 +254,9 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
       case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
         (c1, c3) => s"$c1 $symbol $c3"
       })
-      case TimestampType =>
-        // java.sql.Timestamp does not have compare()
-        super.genCode(ctx, ev)
+      case DateType | TimestampType => defineCodeGen (ctx, ev, {
+        (c1, c3) => s"$c1 $symbol $c3"
+      })
       case other => defineCodeGen (ctx, ev, {
         (c1, c2) => s"$c1.compare($c2) $symbol 0"
       })

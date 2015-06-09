@@ -37,7 +37,7 @@ object Literal {
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: Decimal => Literal(d, DecimalType.Unlimited)
-    case t: Timestamp => Literal(t, TimestampType)
+    case t: Timestamp => Literal(DateUtils.fromTimestamp(t), TimestampType)
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
@@ -100,7 +100,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
           ev.isNull = "false"
           ev.primitive = value.toString
           ""
-        case FloatType =>  // This must go before NumericType
+        case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
             super.genCode(ctx, ev)
@@ -109,7 +109,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             ev.primitive = s"${value}f"
             ""
           }
-        case DoubleType =>  // This must go before NumericType
+        case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
             super.genCode(ctx, ev)
@@ -118,14 +118,17 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
             ev.primitive = s"${value}"
             ""
           }
-
-        case ByteType | ShortType =>  // This must go before NumericType
+        case ByteType | ShortType =>
           ev.isNull = "false"
           ev.primitive = s"(${ctx.javaType(dataType)})$value"
           ""
-        case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
+        case IntegerType | DateType =>
           ev.isNull = "false"
           ev.primitive = value.toString
+          ""
+        case TimestampType | LongType =>
+          ev.isNull = "false"
+          ev.primitive = s"${value}L"
           ""
         // eval() version may be faster for non-primitive types
         case other =>

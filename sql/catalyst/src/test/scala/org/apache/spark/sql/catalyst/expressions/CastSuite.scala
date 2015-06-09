@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -137,7 +138,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
     checkEvaluation(cast(cast(nts, TimestampType), StringType), nts)
-    checkEvaluation(cast(cast(ts, StringType), TimestampType), ts)
+    checkEvaluation(cast(cast(ts, StringType), TimestampType), DateUtils.fromTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(cast(cast(cast(nts, TimestampType), DateType), StringType), sd)
@@ -269,9 +270,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.002f)
     checkEvaluation(cast(ts, DoubleType), 15.002)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType), ts)
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType), ts)
-    checkEvaluation(cast(cast(tss, LongType), TimestampType), ts)
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateUtils.fromTimestamp(ts))
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType), DateUtils.fromTimestamp(ts))
+    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateUtils.fromTimestamp(ts))
     checkEvaluation(
       cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
@@ -283,7 +284,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       Decimal(1))
 
     // A test for higher precision than millis
-    checkEvaluation(cast(cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+    checkEvaluation(cast(cast(0.0000001, TimestampType), DoubleType), 0.0000001)
 
     checkEvaluation(cast(Double.NaN, TimestampType), null)
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
