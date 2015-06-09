@@ -1389,7 +1389,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] override def requestTotalExecutors(
       numExecutors: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalityToCount: scala.Predef.Map[String, Int]): Boolean = {
+      preferredLocalityToCount: scala.collection.immutable.Map[String, Int]): Boolean = {
     assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {

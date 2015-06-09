@@ -136,9 +136,6 @@ private[yarn] class YarnAllocator(
   // Locality required pending task number
   private var localityAwarePendingTaskNum: Int = 0
 
-  // A weak reference to store the host and rack name mapping.
-  private val hostToRackNameCache = new WeakHashMap[String, String]
-
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
   def getNumExecutorsFailed: Int = numExecutorsFailed
@@ -243,38 +240,51 @@ private[yarn] class YarnAllocator(
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
-      // Calculated the number of executors we expected to satisfy all the preferred locality tasks
+      // Calculate the number of executors we expected to satisfy all the preferred locality tasks
       val localityAwareTaskCores = localityAwarePendingTaskNum * CPUS_PER_TASK
       val expectedLocalityAwareContainerNum =
         (localityAwareTaskCores + resource.getVirtualCores - 1) / resource.getVirtualCores
 
-      // Get the all the existed and locality matched containers
-      val existedMatchedContainers = allocatedHostToContainersMap.filter { case (host, _) =>
-        preferredLocalityToCounts.contains(host)
+      // Calculate the expected container distribution according to the preferred locality ratio
+      // and existed container distribution
+      val totalPreferredLocalities = preferredLocalityToCounts.values.sum
+      val expectedLocalityToContainerNum = preferredLocalityToCounts.map { case (host, count) =>
+        val expectedCount =
+          count.toDouble * expectedLocalityAwareContainerNum / totalPreferredLocalities
+        val existedCount = allocatedHostToContainersMap.get(host).map(s => s.size).getOrElse(0)
+        if (expectedCount > existedCount) {
+          // Get the actual container number if existing container can not fully satisfy the
+          // expected number of container
+          (host, (expectedCount - existedCount).floor.toInt)
+        } else {
+          // If the current existed container number can fully satisfy the expected number of
+          // containers, set the required containers to be 0
+          (host, 0)
+        }
       }
-      val existedMatchedContainerNum = existedMatchedContainers.values.map(_.size).sum
+      // Newly calculated locality required container number, which excludes some requests which
+      // has already been satisfied by current containers.
+      val updatedLocalityAwareContainerNum = expectedLocalityToContainerNum.values.sum
 
       // The number of containers to allocate, divided into two groups, one with node locality,
       // and the other without locality preference.
       var requiredLocalityFreeContainerNum: Int = 0
       var requiredLocalityAwareContainerNum: Int = 0
 
-      if (expectedLocalityAwareContainerNum <= existedMatchedContainerNum) {
+      if (updatedLocalityAwareContainerNum == 0) {
         // If the current allocated executor can satisfy all the locality preferred tasks,
         // allocate the new container with no locality preference
         requiredLocalityFreeContainerNum = missing
       } else {
-        if (expectedLocalityAwareContainerNum - existedMatchedContainerNum >= missing) {
+        if (updatedLocalityAwareContainerNum >= missing) {
           // If newly requested containers cannot satisfy the locality preferred tasks,
           // allocate all the new container with locality preference
           requiredLocalityAwareContainerNum = missing
         } else {
           // If part of newly requested can satisfy the locality preferred tasks, allocate part of
           // the containers with locality preference, and another part with no locality preference
-          requiredLocalityAwareContainerNum =
-            expectedLocalityAwareContainerNum - existedMatchedContainerNum
-          requiredLocalityFreeContainerNum = missing -
-            (expectedLocalityAwareContainerNum - existedMatchedContainerNum)
+          requiredLocalityAwareContainerNum = updatedLocalityAwareContainerNum
+          requiredLocalityFreeContainerNum = missing - updatedLocalityAwareContainerNum
         }
       }
 
@@ -289,26 +299,28 @@ private[yarn] class YarnAllocator(
       }
 
       if (requiredLocalityAwareContainerNum > 0) {
-        var largestRatio = 0
-        for ( (_, ratio) <- preferredLocalityToCounts if ratio > largestRatio) {
-          largestRatio = ratio
-        }
-
-        // Calculate the ratio of locality preference
-        var preferredLocalityRatio = preferredLocalityToCounts.mapValues { ratio =>
+        val largestRatio = expectedLocalityToContainerNum.values.max
+        // Round the ratio of preferred locality to the number of locality required container
+        // number, which is used for locality preferred host calculating.
+        var preferredLocalityRatio = expectedLocalityToContainerNum.mapValues { ratio =>
           val adjustedRatio = ratio.toDouble * requiredLocalityAwareContainerNum / largestRatio
           adjustedRatio.floor.toInt
         }
 
         for (i <- 0 until requiredLocalityAwareContainerNum) {
+          // Only filter out the ratio which is larger than 0, which means the current host can
+          // still be allocated with new container request.
           val hosts = preferredLocalityToCounts.filter(_._2 > 0).keys.toArray
-          val racks = hosts.map(h => rackLookUp(h, conf)).toSet
+          val racks = hosts.map(h => RackResolver.resolve(conf, h).getNetworkLocation).toSet
           val request = createContainerRequest(resource, hosts, racks.toArray)
           amClient.addContainerRequest(request)
           val nodes = request.getNodes
           val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
           logInfo(s"Container request (host: $hostStr, capability: $resource)")
 
+          // Each time when the host is used, subtract 1. When the current ratio is 0,
+          // which means all the required ratio is satisfied, this host will not allocated again.
+          // Details can be seen in the SPARK-4352.
           preferredLocalityRatio = preferredLocalityRatio.mapValues(i => i - 1)
         }
       }
@@ -358,7 +370,7 @@ private[yarn] class YarnAllocator(
     // Match remaining by rack
     val remainingAfterRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterHostMatches) {
-      val rack = rackLookUp(allocatedContainer.getNodeId.getHost, conf)
+      val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
       matchContainerToRequest(allocatedContainer, rack, containersToUse,
         remainingAfterRackMatches)
     }
@@ -517,16 +529,6 @@ private[yarn] class YarnAllocator(
   private def internalReleaseContainer(container: Container): Unit = {
     releasedContainers.add(container.getId())
     amClient.releaseAssignedContainer(container.getId())
-  }
-
-  private def rackLookUp(host: String, conf: Configuration): String = {
-    hostToRackNameCache.get(host) match {
-      case Some(s) => s
-      case None =>
-        val rack = RackResolver.resolve(conf, host).getNetworkLocation
-        hostToRackNameCache.put(host, rack)
-        rack
-    }
   }
 }
 
