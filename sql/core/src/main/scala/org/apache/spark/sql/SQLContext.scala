@@ -86,7 +86,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConf(key, value)
+  def setConf(key: String, value: String): Unit = conf.setRawConf(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -94,7 +94,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = conf.getConf(key)
+  def getConf(key: String): String = conf.getRawConf(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -103,7 +103,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = conf.getRawConf(key, defaultValue)
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -154,7 +154,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
         val dialect = conf.dialect
         // reset the sql dialect
-        conf.unsetConf(SQLConf.DIALECT)
+        conf.unsetConf(SQLConf.DIALECT.key)
         // throw out the exception, and the default sql dialect will take effect for next query.
         throw new DialectException(
           s"""Instantiating dialect '$dialect' failed.

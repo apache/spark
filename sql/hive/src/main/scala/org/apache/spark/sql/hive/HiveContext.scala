@@ -407,8 +407,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
-      override def caseSensitiveAnalysis: Boolean =
-        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
     }
 
     /**

@@ -68,12 +68,12 @@ class DataFrameAggregateSuite extends QueryTest {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf("spark.sql.retainGroupColumns", "false")
+    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    ctx.conf.setConf("spark.sql.retainGroupColumns", "true")
+    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {

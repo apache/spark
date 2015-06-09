@@ -220,7 +220,7 @@ private[sql] class ParquetRelation2(
     }
 
     conf.setClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS,
+      SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
       classOf[ParquetOutputCommitter])
 
@@ -259,7 +259,7 @@ private[sql] class ParquetRelation2(
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA.key, "true").toBoolean
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
@@ -498,7 +498,7 @@ private[sql] object ParquetRelation2 extends Logging {
       ParquetTypesConverter.convertToString(dataSchema.toAttributes))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+    conf.set(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache.toString)
   }
 
   /** This closure sets input paths at the driver side. */

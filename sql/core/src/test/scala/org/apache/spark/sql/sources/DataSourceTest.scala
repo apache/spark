@@ -27,7 +27,7 @@ abstract class DataSourceTest extends QueryTest with BeforeAndAfter {
   // We want to test some edge cases.
   protected implicit lazy val caseInsensitiveContext = {
     val ctx = new SQLContext(TestSQLContext.sparkContext)
-    ctx.setConf(SQLConf.CASE_SENSITIVE, "false")
+    ctx.setConf(SQLConf.CASE_SENSITIVE.key, "false")
     ctx
   }
 

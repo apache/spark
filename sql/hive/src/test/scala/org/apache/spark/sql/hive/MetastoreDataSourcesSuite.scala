@@ -456,7 +456,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
       withTable("savedJsonTable") {
         val df = (1 to 10).map(i => i -> s"str$i").toDF("a", "b")
 
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME -> "json") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
           // Save the df as a managed table (by not specifying the path).
           df.write.saveAsTable("savedJsonTable")
 
@@ -484,7 +484,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
         }
 
         // Create an external table by specifying the path.
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME -> "not a source name") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           df.write
             .format("org.apache.spark.sql.json")
             .mode(SaveMode.Append)
@@ -508,7 +508,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
           s"""{ "a": $i, "b": "str$i" }"""
         }))
 
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME -> "not a source name") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           df.write
             .format("json")
             .mode(SaveMode.Append)
@@ -516,7 +516,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
             .saveAsTable("savedJsonTable")
         }
 
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME -> "json") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
           createExternalTable("createdJsonTable", tempPath.toString)
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
@@ -533,7 +533,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
         checkAnswer(read.json(tempPath.toString), df)
 
         // Try to specify the schema.
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME -> "not a source name") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
           createExternalTable(
             "createdJsonTable",
@@ -564,7 +564,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(
       "spark.sql.hive.convertMetastoreParquet" -> "true",
-      SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+      SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
 
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
@@ -706,7 +706,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   }
 
   test("SPARK-6024 wide schema support") {
-    withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD -> "4000") {
+    withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
       withTable("wide_schema") {
         // We will need 80 splits for this schema if the threshold is 4000.
         val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))

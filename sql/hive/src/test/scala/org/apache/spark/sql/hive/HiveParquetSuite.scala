@@ -82,11 +82,11 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
     }
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
     run("Parquet data source enabled")
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "false") {
     run("Parquet data source disabled")
   }
 }

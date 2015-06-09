@@ -332,7 +332,7 @@ private[sql] abstract class BaseWriterContainer(
 
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     val committerClass = context.getConfiguration.getClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
+      SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
       logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")

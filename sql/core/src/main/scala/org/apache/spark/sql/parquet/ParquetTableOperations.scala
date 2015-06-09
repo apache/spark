@@ -114,8 +114,8 @@ private[sql] case class ParquetTableScan(
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.set(
-      SQLConf.PARQUET_CACHE_METADATA,
-      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true"))
+      SQLConf.PARQUET_CACHE_METADATA.key,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA.key, "true"))
 
     val baseRDD =
       new org.apache.spark.rdd.NewHadoopRDD(
@@ -536,7 +536,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
     import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
 
-    val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)
+    val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA.key, true)
 
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val filter: Filter = ParquetInputFormat.getFilter(configuration)

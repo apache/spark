@@ -332,7 +332,7 @@ class SQLQuerySuite extends QueryTest {
 
     val origUseParquetDataSource = conf.parquetUseDataSourceApi
     try {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, "false")
       sql(
         """CREATE TABLE ctas5
           | STORED AS parquet AS
@@ -356,7 +356,7 @@ class SQLQuerySuite extends QueryTest {
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
       sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
     } finally {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, origUseParquetDataSource.toString)
     }
   }
 

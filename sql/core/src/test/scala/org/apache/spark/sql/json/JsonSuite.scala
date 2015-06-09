@@ -822,7 +822,7 @@ class JsonSuite extends QueryTest with TestJsonData {
   test("Corrupt records") {
     // Test if we can query corrupt records.
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
-    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
+    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key, "_unparsed")
 
     val jsonDF = ctx.read.json(corruptRecords)
     jsonDF.registerTempTable("jsonTable")
@@ -874,7 +874,7 @@ class JsonSuite extends QueryTest with TestJsonData {
         Row("]") :: Nil
     )
 
-    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
+    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key, oldColumnNameOfCorruptRecord)
   }
 
   test("SPARK-4068: nulls in arrays") {
@@ -1073,15 +1073,15 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
-    val useStreaming = ctx.getConf(SQLConf.USE_JACKSON_STREAMING_API, "true")
+    val useStreaming = ctx.conf.useJacksonStreamingAPI
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
-    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
+    ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key, "_unparsed")
 
     val schemaWithSimpleMap = StructType(
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
     try{
       for (useStreaming <- List("true", "false")) {
-        ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
+        ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API.key, useStreaming)
         val temp = Utils.createTempDir().getPath
 
         val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
@@ -1094,8 +1094,8 @@ class JsonSuite extends QueryTest with TestJsonData {
         checkAnswer(ctx.read.parquet(temp), df2.collect())
       }
     } finally {
-      ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
-      ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
+      ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API.key, useStreaming.toString)
+      ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key, oldColumnNameOfCorruptRecord)
     }
   }
 

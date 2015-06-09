@@ -95,14 +95,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     try {
-      ctx.conf.setConf("spark.sql.planner.sortMergeJoin", "true")
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
       Seq(
         ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
-      ctx.conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
     }
   }
 
@@ -118,7 +118,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         classOf[BroadcastHashJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     try {
-      ctx.conf.setConf("spark.sql.planner.sortMergeJoin", "true")
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
       Seq(
         ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
         ("SELECT * FROM testData join testData2 ON key = a and key = 2",
@@ -127,7 +127,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
           classOf[BroadcastHashJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
-      ctx.conf.setConf("spark.sql.planner.sortMergeJoin", SORTMERGEJOIN_ENABLED.toString)
+      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
     }
 
     ctx.sql("UNCACHE TABLE testData")
@@ -432,7 +432,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case (query, joinClass) => assertJoin(query, joinClass)
     }
 
-    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp.toString)
+    ctx.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp)
     ctx.sql("UNCACHE TABLE testData")
   }
 

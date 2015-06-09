@@ -91,7 +91,7 @@ case class SetCommand(
           "determining the number of reducers is not supported."
         throw new IllegalArgumentException(msg)
       } else {
-        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
+        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
         Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
       }
 
@@ -252,5 +252,28 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     }
 
     rows
+  }
+}
+
+/**
+ * TODO
+ *
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case object ConfCommand extends RunnableCommand {
+
+  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("key", StringType, false) ::
+        StructField("default", StringType, false) ::
+        StructField("meaning", StringType, false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.conf.getAllDefinedConfs.map { case (k, d, v) => Row(k, d, v) }
   }
 }

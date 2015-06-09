@@ -51,7 +51,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val query = df
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
@@ -314,17 +314,17 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
   lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
     import sqlContext.implicits._
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
         (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
@@ -343,17 +343,17 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
   lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
 
   override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
   }
 
   test("SPARK-6742: don't push down predicates which reference partition columns") {
     import sqlContext.implicits._
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/part=1"
         (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)

@@ -57,6 +57,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val AS = Keyword("AS")
   protected val CACHE = Keyword("CACHE")
   protected val CLEAR = Keyword("CLEAR")
+  protected val CONF = Keyword("CONF")
   protected val IN = Keyword("IN")
   protected val LAZY = Keyword("LAZY")
   protected val SET = Keyword("SET")
@@ -65,7 +66,8 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val TABLES = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
 
-  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | show | others
+  override protected lazy val start: Parser[LogicalPlan] =
+    cache | uncache | set | show | conf | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -89,6 +91,9 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
       case _ ~ dbName => ShowTablesCommand(dbName)
     }
+
+  private lazy val conf: Parser[LogicalPlan] =
+    CONF ^^^ ConfCommand
 
   private lazy val others: Parser[LogicalPlan] =
     wholeInput ^^ {

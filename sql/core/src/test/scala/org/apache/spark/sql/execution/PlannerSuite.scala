@@ -64,7 +64,7 @@ class PlannerSuite extends SparkFunSuite {
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
     def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
-      setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold.toString)
+      setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, newThreshold.toString)
       val fields = fieldTypes.zipWithIndex.map {
         case (dataType, index) => StructField(s"c${index}", dataType, true)
       } :+ StructField("key", IntegerType, true)
@@ -120,12 +120,12 @@ class PlannerSuite extends SparkFunSuite {
 
     checkPlan(complexTypes, newThreshold = 901617)
 
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, origThreshold.toString)
   }
 
   test("InMemoryRelation statistics propagation") {
     val origThreshold = conf.autoBroadcastJoinThreshold
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, 81920.toString)
 
     testData.limit(3).registerTempTable("tiny")
     sql("CACHE TABLE tiny")
@@ -140,6 +140,6 @@ class PlannerSuite extends SparkFunSuite {
     assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
     assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
 
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, origThreshold.toString)
   }
 }

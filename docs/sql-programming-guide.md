@@ -1220,7 +1220,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td>false</td>
   <td>
     Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
-    not differentiate between binary data and strings when writing out the Parquet schema.  This
+    not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
 </tr>
@@ -1237,7 +1237,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
   <td>true</td>
   <td>
-    Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
+    Turns on caching of Parquet schema metadata. Can speed up querying of static data.
   </td>
 </tr>
 <tr>
