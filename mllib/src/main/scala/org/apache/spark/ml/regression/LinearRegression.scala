@@ -83,7 +83,7 @@ class LinearRegression(override val uid: String)
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */

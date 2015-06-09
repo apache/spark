@@ -19,8 +19,8 @@ package org.apache.spark.sql.parquet.timestamp
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import parquet.Preconditions
-import parquet.io.api.{Binary, RecordConsumer}
+import org.apache.parquet.Preconditions
+import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 private[parquet] class NanoTime extends Serializable {
   private var julianDay = 0

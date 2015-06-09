@@ -97,7 +97,7 @@ object FiltersPushed {
 
 class FilteredScanSuite extends DataSourceTest {
 
-  import caseInsensitiveContext._
+  import caseInsensitiveContext.sql
 
   before {
     sql(

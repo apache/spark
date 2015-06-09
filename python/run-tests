@@ -93,6 +93,7 @@ function run_mllib_tests() {
     run_test "pyspark.mllib.recommendation"
     run_test "pyspark.mllib.regression"
     run_test "pyspark.mllib.stat._statistics"
+    run_test "pyspark.mllib.stat.KernelDensity"
     run_test "pyspark.mllib.tree"
     run_test "pyspark.mllib.util"
     run_test "pyspark.mllib.tests"

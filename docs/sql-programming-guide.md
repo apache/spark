@@ -1102,7 +1102,11 @@ root
 {% endhighlight %}
 
 Notice that the data types of the partitioning columns are automatically inferred.  Currently,
-numeric data types and string type are supported.
+numeric data types and string type are supported. Sometimes users may not want to automatically
+infer the data types of the partitioning columns. For these use cases, the automatic type inference
+can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
+`true`. When type inference is disabled, string type will be used for the partitioning columns.
+
 
 ### Schema merging
 
@@ -1783,6 +1787,13 @@ that these options will be deprecated in future release as more optimizations ar
     <td>200</td>
     <td>
       Configures the number of partitions to use when shuffling data for joins or aggregations.
+    </td>
+  </tr>
+   <tr>
+    <td><code>spark.sql.planner.externalSort</code></td>
+    <td>false</td>
+    <td>
+      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
     </td>
   </tr>
 </table>

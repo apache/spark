@@ -97,8 +97,6 @@ class AtomicType(DataType):
     """An internal type used to represent everything that is not
     null, UDTs, arrays, structs, and maps."""
 
-    __metaclass__ = DataTypeSingleton
-
 
 class NumericType(AtomicType):
     """Numeric data types.
@@ -108,6 +106,8 @@ class NumericType(AtomicType):
 class IntegralType(NumericType):
     """Integral data types.
     """
+
+    __metaclass__ = DataTypeSingleton
 
 
 class FractionalType(NumericType):
@@ -119,25 +119,35 @@ class StringType(AtomicType):
     """String data type.
     """
 
+    __metaclass__ = DataTypeSingleton
+
 
 class BinaryType(AtomicType):
     """Binary (byte array) data type.
     """
+
+    __metaclass__ = DataTypeSingleton
 
 
 class BooleanType(AtomicType):
     """Boolean data type.
     """
 
+    __metaclass__ = DataTypeSingleton
+
 
 class DateType(AtomicType):
     """Date (datetime.date) data type.
     """
 
+    __metaclass__ = DataTypeSingleton
+
 
 class TimestampType(AtomicType):
     """Timestamp (datetime.datetime) data type.
     """
+
+    __metaclass__ = DataTypeSingleton
 
 
 class DecimalType(FractionalType):
@@ -172,10 +182,14 @@ class DoubleType(FractionalType):
     """Double data type, representing double precision floats.
     """
 
+    __metaclass__ = DataTypeSingleton
+
 
 class FloatType(FractionalType):
     """Float data type, representing single precision floats.
     """
+
+    __metaclass__ = DataTypeSingleton
 
 
 class ByteType(IntegralType):

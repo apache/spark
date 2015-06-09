@@ -179,7 +179,7 @@ object GradientDescent extends Logging {
      * if it's L2 updater; for L1 updater, the same logic is followed.
      */
     var regVal = updater.compute(
-      weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
+      weights, Vectors.zeros(weights.size), 0, 1, regParam)._2
 
     for (i <- 1 to numIterations) {
       val bcWeights = data.context.broadcast(weights)

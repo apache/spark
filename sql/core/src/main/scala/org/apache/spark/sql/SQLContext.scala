@@ -120,7 +120,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(conf)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = {
+    val fr = new SimpleFunctionRegistry
+    FunctionRegistry.expressions.foreach { case (name, func) => fr.registerFunction(name, func) }
+    fr
+  }
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -182,9 +186,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
-    case _ =>
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.foreach {
+      case (key, value) => setConf(key, value)
+    }
   }
 
   @transient
@@ -686,7 +709,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end`(exclusive) with step value 1.
+   * in an range from 0 to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.1
+   * @group dataframe
+   */
+  @Experimental
+  def range(end: Long): DataFrame = range(0, end)
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 1.4.0
    * @group dataframe
@@ -701,7 +735,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end`(exclusive) with an step value, with partition number
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
    * @since 1.4.0
@@ -884,6 +918,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def detachSession(): Unit = {
     tlSession.remove()
+  }
+
+  protected[sql] def setSession(session: SQLSession): Unit = {
+    detachSession()
+    tlSession.set(session)
   }
 
   protected[sql] class SQLSession {
