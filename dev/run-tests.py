@@ -60,11 +60,14 @@ def rm_r(path):
 
 def run_cmd(cmd):
     """Given a command as a list of arguments will attempt to execute the
-    command and, on failure, print an error message"""
+    command from the determined SPARK_HOME directory and, on failure, print
+    an error message"""
 
     if not isinstance(cmd, list):
         cmd = cmd.split()
     try:
+        # prepend SPARK_HOME onto the first element of the command
+        cmd[0] = os.path.join(SPARK_HOME, *filter(lambda x: x, cmd[0].split(os.path.sep)))
         subprocess.check_call(cmd)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
@@ -194,9 +197,8 @@ def exec_sbt(sbt_args=[]):
 
 
 def get_hadoop_profiles(hadoop_version):
-    """Return a list of profiles indicating which Hadoop version to use from a Hadoop version tag."""
-
-    #amplab_jenkins_build_profile = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE")
+    """Return a list of profiles indicating which Hadoop version to use from
+    a Hadoop version tag."""
 
     sbt_maven_hadoop_profiles = {
         "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
@@ -224,11 +226,14 @@ def get_build_profiles(hadoop_version="hadoop2.3",
     base_profiles = ["-Pkinesis-asl"]
     hive_profiles = ["-Phive", "-Phive-thriftserver"]
     hadoop_profiles = get_hadoop_profiles(hadoop_version)
-    
+
+    build_profiles = hadoop_profiles
     # first, check and add the base profiles
-    if base_profiles: build_profiles = build_profile + base_profiles
+    if base_profiles:
+        build_profiles = build_profiles + base_profiles
     # second, check and add the hive profiles
-    if hive_profiles: build_profiles = build_profile + hive_profiles
+    if hive_profiles:
+        build_profiles = build_profiles + hive_profiles
 
     return build_profiles
 
@@ -238,7 +243,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) with these arguments:",
+    print "[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments:",
     print " ".join(profiles_and_goals)
 
     exec_maven(profiles_and_goals)
@@ -251,7 +256,7 @@ def build_spark_sbt(hadoop_version):
                  "streaming-kafka-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) with these arguments:",
+    print "[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments:",
     print " ".join(profiles_and_goals)
 
     exec_sbt(profiles_and_goals)
@@ -296,9 +301,31 @@ def determine_test_modules(test_env):
 
         # find any sql files
         sql_files = [f for f in changed_files
-                     if any(f.startswith(p) for p in ["sql/",
-                                                      "bin/spark-sql",
-                                                      "sbin/start-thriftserver.sh"])]
+                     if any(f.startswith(p) for p in
+                            ["sql/",
+                             "bin/spark-sql",
+                             "sbin/start-thriftserver.sh",
+                             "examples/src/main/java/org/apache/spark/examples/sql/",
+                             "examples/src/main/scala/org/apache/spark/examples/sql/"])]
+        mllib_files = [f for f in changed_files
+                       if any(f.startswith(p) for p in
+                              ["examples/src/main/java/org/apache/spark/examples/mllib/",
+                               "examples/src/main/scala/org/apache/spark/examples/mllib",
+                               "data/mllib/",
+                               "mllib/"])]
+        streaming_files = [f for f in changed_files
+                           if any(f.startswith(p) for p in
+                                  ["examples/scala-2.10/",
+                                   "examples/src/main/java/org/apache/spark/examples/streaming/",
+                                   "examples/src/main/scala/org/apache/spark/examples/streaming/",
+                                   "external/",
+                                   "extras/java8-tests/",
+                                   "extras/kinesis-asl/",
+                                   "streaming/"])]
+        graphx_files = [f for f in changed_files
+                        if any(f.startswith(p) for p in
+                               ["examples/src/main/scala/org/apache/spark/examples/graphx/",
+                                "graphx/"])]
 
         non_sql_files = set(changed_files).difference(set(sql_files))
 
@@ -309,11 +336,20 @@ def determine_test_modules(test_env):
             test_suite.append("SQL")
             if not non_sql_files:
                 print "[info] Detected no changes except in SQL. Will only run SQL tests."
+        if mllib_files:
+            print "[info] Detected changes in MLlib. Will run MLlib test suite."
+            test_suite.append("MLLIB")
+        if streaming_files:
+            print "[info] Detected changes in Streaming. Will run Streaming test suite."
+            test_suite.append("STREAMING")
+        if graphx_files:
+            print "[info] Detected changes in GraphX. Will run GraphX test suite."
+            test_suite.append("GRAPHX")
+
         return set(test_suite)
     else:
         # we aren't in the Amplab environment so simply run all tests
-        test_suite.append("CORE")
-        test_suite.append("SQL")
+        test_suite.append("ALL")
         return set(test_suite)
 
 
@@ -321,26 +357,45 @@ def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print "[info] Running Spark tests with these arguments:",
+    print "[info] Running Spark tests using Maven with these arguments:",
     print " ".join(profiles_and_goals)
 
     exec_maven(profiles_and_goals)
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
-    # if we only have changes in SQL build a custom test list
-    if "SQL" in test_modules and "CORE" not in test_modules:
-        sbt_test_goals = ["catalyst/test",
-                          "sql/test",
-                          "hive/test",
-                          "hive-thriftserver/test",
-                          "mllib/test"]
-    else:
+    if "ALL" in test_modules:
         sbt_test_goals = ["test"]
+    else:
+        # if we only have changes in SQL build a custom test list
+        if "SQL" in test_modules and "CORE" not in test_modules:
+            sbt_test_goals = ["catalyst/test",
+                              "sql/test",
+                              "hive/test",
+                              "hive-thriftserver/test",
+                              "mllib/test",
+                              "examples/test"]
+        if "MLLIB" in test_modules and "CORE" not in test_modules:
+            sbt_test_goals = sbt_test_goals + ["mllib/test",
+                                               "examples/test"]
+        if "STREAMING" in test_modules and "CORE" not in test_modules:
+            sbt_test_goals = sbt_test_goals + ["streaming/test",
+                                               "streaming-flume/test",
+                                               "streaming-flume-sink/test",
+                                               "streaming-kafka/test",
+                                               "streaming-mqtt/test",
+                                               "streaming-twitter/test",
+                                               "streaming-zeromq/test",
+                                               "examples/test"]
+        if "GRAPHX" in test_modules and "CORE" not in test_modules:
+            sbt_test_goals = sbt_test_goals + ["graphx/test",
+                                               "examples/test"]
+        if not sbt_test_goals:
+            sbt_test_goals = ["test"]
 
     profiles_and_goals = test_profiles + sbt_test_goals
 
-    print "[info] Running Spark tests with these arguments:",
+    print "[info] Running Spark tests using SBT with these arguments:",
     print " ".join(profiles_and_goals)
 
     exec_sbt(profiles_and_goals)
@@ -393,7 +448,7 @@ def main():
         print "ensure the $HOME environment variable is set properly."
         sys.exit(1)
 
-    os.chdir(SPARK_HOME)
+        #os.chdir(SPARK_HOME)
 
     rm_r(os.path.join(SPARK_HOME, "work"))
     rm_r(os.path.join(USER_HOME, ".ivy2/local/org.apache.spark"))
@@ -418,12 +473,15 @@ def main():
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
-        test_env="amplab_jenkins"
+        test_env = "amplab_jenkins"
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
         hadoop_version = "hadoop2.3"
-        test_env="local"
+        test_env = "local"
+
+    print "[info] Using build tool", build_tool, "with profile", hadoop_version,
+    print "under environment", test_env
 
     # license checks
     run_apache_rat_checks()
