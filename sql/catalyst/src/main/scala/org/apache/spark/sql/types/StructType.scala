@@ -94,7 +94,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
-  def this() = this(null)
+  def this() = this(Array[StructField]())
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -150,18 +150,18 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataType.fromString(dataType), true, Metadata.empty)
+    add(name, DataTypeParser.parse(dataType), true, Metadata.empty)
   }
 
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataType.fromString(dataType), nullable, Metadata.empty)
+    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
   }
 
   def add(name: String,
     dataType: String,
     nullable: Boolean,
     metadata: Metadata): StructType = {
-    add(name, DataType.fromString(dataType), nullable, metadata)
+    add(name, DataTypeParser.parse(dataType), nullable, metadata)
   }
 
   /**

@@ -822,7 +822,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(DataType.fromString(to))
+  def cast(to: String): Column = cast(DataTypeParser.parse(to))
 
   /**
    * Returns an ordering used in sorting.
