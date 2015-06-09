@@ -46,7 +46,7 @@ private[hive] abstract class HiveFunctionRegistry
 
   def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
 
-  def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
     // not always serializable.
     val functionInfo: FunctionInfo =

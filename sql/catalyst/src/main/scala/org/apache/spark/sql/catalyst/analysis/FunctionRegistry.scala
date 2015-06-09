@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
@@ -34,14 +33,11 @@ trait FunctionRegistry {
 
   @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
-
-  def conf: CatalystConf
 }
-
 
 trait OverrideFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
@@ -52,7 +48,7 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
   }
 }
 
-class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
+class SimpleFunctionRegistry extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
@@ -80,8 +76,6 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
-
-  override def conf: CatalystConf = throw new UnsupportedOperationException
 }
 
 
