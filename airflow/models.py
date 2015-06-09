@@ -226,16 +226,19 @@ class DagBag(object):
                     patterns += [p for p in f.read().split('\n') if p]
                     f.close()
                 for f in files:
-                    filepath = os.path.join(root, f)
-                    if not os.path.isfile(filepath):
-                        continue
-                    mod_name, file_ext = os.path.splitext(
-                        os.path.split(filepath)[-1])
-                    if file_ext != '.py':
-                        continue
-                    if not any([re.findall(p, filepath) for p in patterns]):
-                        self.process_file(
-                            filepath, only_if_updated=only_if_updated)
+                    try:
+                        filepath = os.path.join(root, f)
+                        if not os.path.isfile(filepath):
+                            continue
+                        mod_name, file_ext = os.path.splitext(
+                            os.path.split(filepath)[-1])
+                        if file_ext != '.py':
+                            continue
+                        if not any([re.findall(p, filepath) for p in patterns]):
+                            self.process_file(
+                                filepath, only_if_updated=only_if_updated)
+                    except:
+                        pass
 
     def deactivate_inactive_dags(self):
         active_dag_ids = [dag.dag_id for dag in self.dags.values()]
