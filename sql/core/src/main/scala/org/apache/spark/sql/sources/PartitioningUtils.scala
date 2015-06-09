@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
+import java.lang.{Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 
 import scala.collection.mutable.ArrayBuffer
@@ -178,7 +178,7 @@ private[sql] object PartitioningUtils {
    * {{{
    *   NullType ->
    *   IntegerType -> LongType ->
-   *   FloatType -> DoubleType -> DecimalType.Unlimited ->
+   *   DoubleType -> DecimalType.Unlimited ->
    *   StringType
    * }}}
    */
@@ -208,8 +208,8 @@ private[sql] object PartitioningUtils {
   }
 
   /**
-   * Converts a string to a `Literal` with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[FloatType]], [[DoubleType]], [[DecimalType.Unlimited]], and
+   * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.Unlimited]], and
    * [[StringType]].
    */
   private[sql] def inferPartitionColumnValue(
@@ -221,13 +221,15 @@ private[sql] object PartitioningUtils {
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
         .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
         // Then falls back to fractional types
-        .orElse(Try(Literal.create(JFloat.parseFloat(raw), FloatType)))
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
         // Then falls back to string
         .getOrElse {
-          if (raw == defaultPartitionName) Literal.create(null, NullType)
-          else Literal.create(unescapePathName(raw), StringType)
+          if (raw == defaultPartitionName) {
+            Literal.create(null, NullType)
+          } else {
+            Literal.create(unescapePathName(raw), StringType)
+          }
         }
     } else {
       if (raw == defaultPartitionName) {

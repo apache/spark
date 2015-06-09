@@ -53,7 +53,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
     check("10", Literal.create(10, IntegerType))
     check("1000000000000000", Literal.create(1000000000000000L, LongType))
-    check("1.5", Literal.create(1.5f, FloatType))
+    check("1.5", Literal.create(1.5, DoubleType))
     check("hello", Literal.create("hello", StringType))
     check(defaultPartitionName, Literal.create(null, NullType))
   }
@@ -83,13 +83,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         ArrayBuffer(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
-          Literal.create(1.5f, FloatType)))
+          Literal.create(1.5, DoubleType)))
     })
 
     check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
         ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5f, FloatType)))
+        ArrayBuffer(Literal.create(1.5, DoubleType)))
     })
 
     check("file:///", None)
@@ -121,7 +121,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       "hdfs://host:9000/path/a=10.5/b=hello"),
       PartitionSpec(
         StructType(Seq(
-          StructField("a", FloatType),
+          StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
           Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
@@ -140,7 +140,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       "hdfs://host:9000/path/a=10.5/b=world/_temporary/path"),
       PartitionSpec(
         StructType(Seq(
-          StructField("a", FloatType),
+          StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
           Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
@@ -162,7 +162,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"),
       PartitionSpec(
         StructType(Seq(
-          StructField("a", FloatType),
+          StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
           Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),

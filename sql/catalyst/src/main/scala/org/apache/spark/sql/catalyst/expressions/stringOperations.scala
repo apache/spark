@@ -227,6 +227,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+
   override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
@@ -285,5 +286,11 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     // TODO: This is broken because max is not an integer value.
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"
+  }
+}
+
+object Substring {
+  def apply(str: Expression, pos: Expression): Substring = {
+    apply(str, pos, Literal(Integer.MAX_VALUE))
   }
 }
