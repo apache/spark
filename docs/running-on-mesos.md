@@ -184,6 +184,14 @@ acquire. By default, it will acquire *all* cores in the cluster (that get offere
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
 
+You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
+
+{% highlight scala %}
+conf.set("spark.mesos.constraints", "tachyon=true;us-east-1=false")
+{% endhighlight %}
+
+For example, Let's say `spark.mesos.constraints` is set to `tachyon=true;us-east-1=false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
 # Mesos Docker Support
 
 Spark can make use of a Mesos Docker containerizer by setting the property `spark.mesos.executor.docker.image`
@@ -296,6 +304,13 @@ See the [configuration page](configuration.html) for information on Spark config
     The amount of additional memory, specified in MB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
     the final overhead will be this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.constraints</code></td>
+  <td>Attribute based constraints to be matched against when accepting resource offers.</td>
+  <td>
+    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
   </td>
 </tr>
 </table>
