@@ -945,6 +945,14 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * Returns the value of the e.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def e(): Column = E()
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1104,6 +1112,14 @@ object functions {
    * @since 1.4.0
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
+
+  /**
+   * Returns the value of the pi.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pi(): Column = Pi()
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
