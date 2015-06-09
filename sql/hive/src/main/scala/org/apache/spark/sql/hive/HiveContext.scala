@@ -39,13 +39,12 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -143,6 +142,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
     getConf("spark.sql.hive.metastore.barrierPrefixes", "")
       .split(",").filterNot(_ == "")
+
+  /*
+   * hive thrift server use background spark sql thread pool to execute sql queries
+   */
+  protected[hive] def hiveThriftServerAsync: Boolean =
+    getConf("spark.sql.hive.thriftServer.async", "true").toBoolean
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -368,10 +373,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
-  override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry {
-      override def conf: CatalystConf = currentSession().conf
-    }
+  override protected[sql] lazy val functionRegistry: FunctionRegistry =
+    new HiveFunctionRegistry with OverrideFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient
