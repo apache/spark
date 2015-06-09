@@ -38,7 +38,17 @@ class UDFSuite extends QueryTest {
 
   test("built-in expressions with multiple constructors") {
     val df = Seq(("abcd", 2)).toDF("a", "b")
-    df.selectExpr("substr(a, 2)", "substr(a, 2, 3)")
+    df.selectExpr("substr(a, 2)", "substr(a, 2, 3)").collect()
+  }
+
+  test("count") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("count(a)")
+  }
+
+  test("count distinct") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("count(distinct a)")
   }
 
   test("error reporting for incorrect number of arguments") {

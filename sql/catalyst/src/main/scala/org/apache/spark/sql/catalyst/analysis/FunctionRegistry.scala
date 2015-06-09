@@ -39,6 +39,52 @@ trait FunctionRegistry {
 }
 
 
+trait OverrideFunctionRegistry extends FunctionRegistry {
+
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    functionBuilders.put(name, builder)
+  }
+
+  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
+  }
+}
+
+class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
+
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
+
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    functionBuilders.put(name, builder)
+  }
+
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    val func = functionBuilders.get(name).getOrElse {
+      throw new AnalysisException(s"undefined function $name")
+    }
+    func(children)
+  }
+}
+
+/**
+ * A trivial catalog that returns an error when a function is requested. Used for testing when all
+ * functions are already filled in and the analyzer needs only to resolve attribute references.
+ */
+object EmptyFunctionRegistry extends FunctionRegistry {
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    throw new UnsupportedOperationException
+  }
+
+  override def conf: CatalystConf = throw new UnsupportedOperationException
+}
+
+
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
@@ -121,50 +167,4 @@ object FunctionRegistry {
     }
     (name, builder)
   }
-}
-
-
-trait OverrideFunctionRegistry extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
-  }
-}
-
-class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
-
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](conf.caseSensitiveAnalysis)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).getOrElse {
-      throw new AnalysisException(s"undefined function $name")
-    }
-    func(children)
-  }
-}
-
-/**
- * A trivial catalog that returns an error when a function is requested. Used for testing when all
- * functions are already filled in and the analyzer needs only to resolve attribute references.
- */
-object EmptyFunctionRegistry extends FunctionRegistry {
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    throw new UnsupportedOperationException
-  }
-
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    throw new UnsupportedOperationException
-  }
-
-  override def conf: CatalystConf = throw new UnsupportedOperationException
 }

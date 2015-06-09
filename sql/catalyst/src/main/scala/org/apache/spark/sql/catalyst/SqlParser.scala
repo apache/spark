@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -57,7 +58,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
-  protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -92,7 +92,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val RLIKE = Keyword("RLIKE")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
-  protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
   protected val THEN = Keyword("THEN")
   protected val TRUE = Keyword("TRUE")
@@ -265,14 +264,36 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       )
 
   protected lazy val function: Parser[Expression] =
-    ( SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
-    | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
-    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
-      { case exps => CountDistinct(exps) }
-    | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
-      { case exp => ApproxCountDistinct(exp) }
-    | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
-      { case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble) }
+    ( ident <~ ("(" ~ "*" ~ ")") ^^ { case udfName =>
+      if (lexical.normalizeKeyword(udfName) == "count") {
+        Count(Literal(1))
+      } else {
+        throw new AnalysisException(s"invalid expression $udfName(*)")
+      }
+    }
+    | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
+      { case udfName ~ exprs => UnresolvedFunction(lexical.normalizeKeyword(udfName), exprs) }
+    | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
+      lexical.normalizeKeyword(udfName) match {
+        case "sum" => SumDistinct(exprs.head)
+        case "count" => CountDistinct(exprs)
+      }
+    }
+    | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
+      if (lexical.normalizeKeyword(udfName) == "count") {
+        ApproxCountDistinct(exp)
+      } else {
+        throw new AnalysisException(s"invalid function approximate $udfName")
+      }
+    }
+    | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ ident ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
+      { case s ~ _ ~ udfName ~ _ ~ _ ~ exp =>
+        if (lexical.normalizeKeyword(udfName) == "count") {
+          ApproxCountDistinct(exp, s.toDouble)
+        } else {
+          throw new AnalysisException(s"invalid function approximate($floatLit) $udfName")
+        }
+      }
     | CASE ~> expression.? ~ rep1(WHEN ~> expression ~ (THEN ~> expression)) ~
         (ELSE ~> expression).? <~ END ^^ {
           case casePart ~ altPart ~ elsePart =>
@@ -281,9 +302,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
             } ++ elsePart
             casePart.map(CaseKeyWhen(_, branches)).getOrElse(CaseWhen(branches))
         }
-    | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
-      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
-    )
+      )
+
+  //protected lazy val functionName: Parser[String] = ident | COUNT
 
   protected lazy val cast: Parser[Expression] =
     CAST ~ "(" ~> expression ~ (AS ~> dataType) <~ ")" ^^ {
