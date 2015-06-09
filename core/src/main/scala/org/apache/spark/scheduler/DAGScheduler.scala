@@ -834,7 +834,6 @@ class DAGScheduler(
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
 
-
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
@@ -894,7 +893,7 @@ class DAGScheduler(
         partitionsToCompute.map { id =>
           val locs = getPreferredLocs(stage.rdd, id)
           val part = stage.rdd.partitions(id)
-          new ShuffleMapTask(stage.id, taskBinary, part, locs)
+          new ShuffleMapTask(stage.id, stage.attemptId, taskBinary, part, locs)
         }
 
       case stage: ResultStage =>
@@ -903,7 +902,7 @@ class DAGScheduler(
           val p: Int = job.partitions(id)
           val part = stage.rdd.partitions(p)
           val locs = getPreferredLocs(stage.rdd, p)
-          new ResultTask(stage.id, taskBinary, part, locs, id)
+          new ResultTask(stage.id, stage.attemptId, taskBinary, part, locs, id)
         }
     }
 
@@ -977,6 +976,7 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
+    // REVIEWERS: does this need special handling for multiple completions of the same task?
     outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
       event.taskInfo.attempt, event.reason)
 
@@ -1039,10 +1039,11 @@ class DAGScheduler(
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
+              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
+
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
@@ -1106,9 +1107,14 @@ class DAGScheduler(
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the scheduler.
         if (runningStages.contains(failedStage)) {
-          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-            s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some(failureMessage))
+          if (failedStage.attemptId - 1 > task.stageAttemptId) {
+            logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
+              s" ${task.stageAttemptId}, which has already failed")
+          } else {
+            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+              s"due to a fetch failure from $mapStage (${mapStage.name})")
+            markStageAsFinished(failedStage, Some(failureMessage))
+          }
         }
 
         if (disallowStageRetryForTest) {
