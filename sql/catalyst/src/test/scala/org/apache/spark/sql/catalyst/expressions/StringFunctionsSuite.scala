@@ -215,4 +215,14 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluate("abbbbc" rlike regEx, create_row("**"))
     }
   }
+
+  test("length for string") {
+    val regEx = 'a.string.at(0)
+    checkEvaluation(Literal("abc").length(), 3, create_row("abdef"))
+    checkEvaluation(regEx.length(), 5, create_row("abdef"))
+    checkEvaluation(regEx.length(), 0, create_row(""))
+    checkEvaluation(Literal.create(null, StringType).length(), null, create_row(""))
+  }
+
+
 }
