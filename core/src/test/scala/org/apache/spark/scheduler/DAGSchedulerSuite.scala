@@ -821,7 +821,7 @@ class DAGSchedulerSuite
   }
 
   test("reducer locality with different sizes") {
-    val numMapTasks = scheduler.NUM_REDUCER_PREF_LOCS + 1
+    val numMapTasks = 4
     // Create an shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -834,7 +834,7 @@ class DAGSchedulerSuite
     }
     complete(taskSets(0), statuses)
 
-    // Reducer should prefer the last hosts where output size is larger
+    // Reducer should prefer the last 3 hosts as they have 20%, 30% and 40% of data
     val hosts = (1 to numMapTasks).map(i => "host" + i).reverse.take(numMapTasks - 1)
 
     val reduceTaskSet = taskSets(1)

@@ -292,8 +292,13 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   /**
-   * Return a list of locations which have the largest map outputs given a shuffleId
-   * and a reducerId.
+   * Return a list of locations which have fraction of map output greater than specified threshold.
+   *
+   * @param shuffleId id of the shuffle
+   * @param reducerId id of the reduce task
+   * @param numReducers total number of reducers in the shuffle
+   * @param fractionThreshold fraction of total map output size that a location must have
+   *                          for it to be considered large.
    *
    * This method is not thread-safe
    */
@@ -301,35 +306,37 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       shuffleId: Int,
       reducerId: Int,
       numReducers: Int,
-      numTopLocs: Int)
+      fractionThreshold: Double)
     : Option[Array[BlockManagerId]] = {
-    if (!shuffleIdToReduceLocations.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
+
+    if (mapStatuses.contains(shuffleId)) {
       // Pre-compute the top locations for each reducer and cache it
       val statuses = mapStatuses(shuffleId)
       if (statuses.nonEmpty) {
-        val ordering = Ordering.by[(BlockManagerId, Long), Long](_._2).reverse
-        shuffleIdToReduceLocations(shuffleId) = new HashMap[Int, Array[BlockManagerId]]
-        var reduceIdx = 0
         // HashMap to add up sizes of all blocks at the same location
         val locs = new HashMap[BlockManagerId, Long]
-        while (reduceIdx < numReducers) {
-          var mapIdx = 0
-          locs.clear()
-          while (mapIdx < statuses.length) {
-            val blockSize = statuses(mapIdx).getSizeForBlock(reduceIdx)
-            if (blockSize > 0) {
-              locs(statuses(mapIdx).location) = locs.getOrElse(statuses(mapIdx).location, 0L) +
-                blockSize
-            }
-            mapIdx = mapIdx + 1
+        var totalOutputSize = 0L
+        var mapIdx = 0
+        while (mapIdx < statuses.length) {
+          val blockSize = statuses(mapIdx).getSizeForBlock(reducerId)
+          if (blockSize > 0) {
+            locs(statuses(mapIdx).location) = locs.getOrElse(statuses(mapIdx).location, 0L) +
+              blockSize
+            totalOutputSize += blockSize
           }
-          val topLocs = CollectionUtils.takeOrdered(locs.toIterator, numTopLocs)(ordering)
-          shuffleIdToReduceLocations(shuffleId) += (reduceIdx -> topLocs.map(_._1).toArray)
-          reduceIdx = reduceIdx + 1
+          mapIdx = mapIdx + 1
+        }
+        val topLocs = locs.filter { case (loc, size) =>
+          size.toDouble / totalOutputSize >= fractionThreshold
+        }
+        // Only add this reducer to our map if we have any locations which satisfy
+        // the required threshold
+        if (topLocs.nonEmpty) {
+          return Some(topLocs.map(_._1).toArray)
         }
       }
     }
-    shuffleIdToReduceLocations.get(shuffleId).flatMap(_.get(reducerId))
+    None
   }
 
   def incrementEpoch() {

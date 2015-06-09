@@ -146,10 +146,13 @@ class DAGScheduler(
   private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
   // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
   private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
-  // Number of preferred locations to use for reducer tasks.
-  // Making this smaller will focus on the locations where the most data can be read locally, but
-  // may lead to more delay in scheduling if all of those locations are busy.
-  private[scheduler] val NUM_REDUCER_PREF_LOCS = 5
+
+  // Fraction of total map output that must be at a location for it to considered as a preferred
+  // location for a reduce task.
+  // Making this larger will focus on fewer locations where most data can be read locally, but
+  // may lead to more delay in scheduling if those locations are busy.
+  //
+  private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -1411,14 +1414,14 @@ class DAGScheduler(
           }
         }
       case s: ShuffleDependency[_, _, _] =>
-        // For shuffle dependencies, pick the 5 locations with the largest map outputs as preferred
-        // locations
+        // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
+        // of data as preferred locations
         if (shuffleLocalityEnabled &&
             rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
             s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
           // Get the preferred map output locations for this reducer
           val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
-            partition, rdd.partitions.size, NUM_REDUCER_PREF_LOCS)
+            partition, rdd.partitions.size, REDUCER_PREF_LOCS_FRACTION)
           if (topLocsForReducer.nonEmpty) {
             return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
           }
