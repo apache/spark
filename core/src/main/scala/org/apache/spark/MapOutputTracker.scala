@@ -30,7 +30,6 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
-import org.apache.spark.util.collection.{Utils => CollectionUtils}
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
