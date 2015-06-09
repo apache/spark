@@ -1,6 +1,7 @@
 from airflow.hooks.base_hook import BaseHook
 from snakebite.client import Client, HAClient, Namenode
 
+
 class HDFSHook(BaseHook):
     '''
     Interact with HDFS. This class is a wrapper around the snakebite library.

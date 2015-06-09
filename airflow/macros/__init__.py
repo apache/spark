@@ -6,7 +6,7 @@ import uuid
 
 
 def ds_add(ds, days):
-    '''
+    """
     Add or subtract days from a YYYY-MM-DD
 
     :param ds: anchor date in ``YYYY-MM-DD`` format to add to
@@ -18,15 +18,16 @@ def ds_add(ds, days):
     '2015-01-06'
     >>> ds_add('2015-01-06', -5)
     '2015-01-01'
-    '''
+    """
 
     ds = datetime.strptime(ds, '%Y-%m-%d')
     if days:
         ds = ds + timedelta(days)
     return ds.isoformat()[:10]
 
+
 def ds_format(ds, input_format, output_format):
-    '''
+    """
     Takes an input string and outputs another string
     as specified in the output format
 
@@ -41,5 +42,5 @@ def ds_format(ds, input_format, output_format):
     '01-01-15'
     >>> ds_format('1/5/2015', "%m/%d/%Y",  "%Y-%m-%d")
     '2015-01-05'
-    '''
+    """
     return datetime.strptime(ds, input_format).strftime(output_format)

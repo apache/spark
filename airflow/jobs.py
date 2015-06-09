@@ -352,7 +352,6 @@ class SchedulerJob(BaseJob):
                         ti.task = task
                         executor.queue_task_instance(ti)
 
-
     def _execute(self):
         dag_id = self.dag_id
 

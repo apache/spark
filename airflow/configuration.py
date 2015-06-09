@@ -204,7 +204,6 @@ class ConfigParserWithDefaults(ConfigParser):
         return int(self.get(section, key))
 
 
-
 def mkdir_p(path):
     try:
         os.makedirs(path)
@@ -214,10 +213,10 @@ def mkdir_p(path):
         else:
             raise Exception('Had trouble creating a directory')
 
-'''
+"""
 Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
 "~/airflow" and "~/airflow/airflow.cfg" respectively as defaults.
-'''
+"""
 
 if 'AIRFLOW_HOME' not in os.environ:
     AIRFLOW_HOME = os.path.expanduser('~/airflow')
@@ -235,11 +234,11 @@ else:
     AIRFLOW_CONFIG = os.environ['AIRFLOW_CONFIG']
 
 if not os.path.isfile(AIRFLOW_CONFIG):
-    '''
-    These configuration options are used to generate a default configuration when
-    it is missing. The right way to change your configuration is to alter your
-    configuration file, not this code.
-    '''
+    """
+    These configuration options are used to generate a default configuration
+    when it is missing. The right way to change your configuration is to alter
+    your configuration file, not this code.
+    """
     logging.info("Creating new config file in: " + AIRFLOW_CONFIG)
     f = open(AIRFLOW_CONFIG, 'w')
     f.write(DEFAULT_CONFIG.format(**locals()))

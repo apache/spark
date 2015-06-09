@@ -5,9 +5,6 @@ import fnmatch
 import ConfigParser
 from urlparse import urlparse
 
-from airflow.models import Connection
-from airflow import settings
-
 from airflow.hooks.base_hook import BaseHook
 
 import boto
@@ -94,10 +91,11 @@ class S3Hook(BaseHook):
             if self._sts_conn_required:
                 self.aws_account_id = self.extra_params['aws_account_id']
                 self.aws_iam_role = self.extra_params['aws_iam_role']
-                self.role_arn = "arn:aws:iam::" + self.aws_account_id + ":role/"
-                self.role_arn += self.aws_iam_role
+                self.role_arn = "arn:aws:iam::" + self.aws_account_id
+                self.role_arn += ":role/" + self.aws_iam_role
         except TypeError as e:
-            raise Exception("S3 connection needs to set config params in extra")
+            raise Exception("S3 connection needs to set configuration"
+                            "parameters in extra")
         except KeyError as e:
             raise Exception("S3 connection definition needs to include"
                             "{p} in extra".format(p=e.message))
@@ -201,7 +199,7 @@ class S3Hook(BaseHook):
         b = self.get_bucket(bucket_name)
         plist = b.list(prefix=prefix, delimiter=delimiter)
         prefix_names = [p.name for p in plist
-                          if isinstance(p, boto.s3.prefix.Prefix)]
+                        if isinstance(p, boto.s3.prefix.Prefix)]
         return prefix_names if prefix_names != [] else None
 
     def check_for_key(self, key, bucket_name=None):
@@ -262,7 +260,6 @@ class S3Hook(BaseHook):
         prefix = prefix + delimiter if prefix[-1] != delimiter else prefix
         prefix_split = re.split(r'(\w+[{d}])$'.format(d=delimiter), prefix, 1)
         previous_level = prefix_split[0]
-        leaf_prefix = prefix_split[1]
         plist = self.list_prefixes(bucket_name, previous_level, delimiter)
         return False if plist is None else prefix in plist
 
@@ -293,6 +290,7 @@ class S3Hook(BaseHook):
             key_obj = bucket.new_key(key_name=key)
         else:
             key_obj = bucket.get_key(key)
-        key_size = key_obj.set_contents_from_filename(filename, replace=replace)
+        key_size = key_obj.set_contents_from_filename(filename,
+                                                      replace=replace)
         logging.info("The key {key} now contains"
                      " {key_size} bytes".format(**locals()))

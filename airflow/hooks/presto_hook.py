@@ -34,7 +34,7 @@ class PrestoHook(BaseHook):
                 Connection).filter(
                     Connection.conn_id == presto_conn_id)
             if db.count() == 0:
-                raise Exception("The presto_conn_id you provided isn't defined")
+                raise Exception("The presto_conn_id provided isn't defined")
             else:
                 db = db.all()[0]
             self.host = db.host

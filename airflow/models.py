@@ -659,7 +659,6 @@ class TaskInstance(Base):
 
         return open_slots <= 0
 
-
     def run(
             self,
             verbose=True,

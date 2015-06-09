@@ -7,6 +7,7 @@ from flask import after_this_request, request
 import wtforms
 from wtforms.compat import text_type
 
+
 def limit_sql(sql, limit):
     sql = sql.strip()
     sql = sql.rstrip(';')
@@ -18,6 +19,7 @@ def limit_sql(sql, limit):
         LIMIT {limit}
         """.format(**locals())
     return sql
+
 
 def gzipped(f):
     '''
@@ -64,6 +66,7 @@ def make_cache_key(*args, **kwargs):
     args = str(hash(frozenset(request.args.items())))
     return (path + args).encode('ascii', 'ignore')
 
+
 class AceEditorWidget(wtforms.widgets.TextArea):
     """
     Renders an ACE code editor.
@@ -82,4 +85,3 @@ class AceEditorWidget(wtforms.widgets.TextArea):
             form_name=field.id,
         )
         return wtforms.widgets.core.HTMLString(html)
-
