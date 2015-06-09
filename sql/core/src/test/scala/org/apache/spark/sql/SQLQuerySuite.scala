@@ -1372,16 +1372,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
             |ORDER BY sum(b) + 1
           """.stripMargin),
       Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT substr(a, 1, 1), sum(b)
-          |FROM orderByData
-          |GROUP BY substr(a, 1, 1)
-          |ORDER BY substr(a, 1, 1)
-        """.stripMargin),
-      Row("1", 7) :: Row("2", 15) :: Row("3", 11) :: Row("4", 3) :: Nil)
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {

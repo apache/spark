@@ -410,9 +410,9 @@ class Analyzer(
         val aliasedOrdering = resolvedOrdering.zipWithIndex.map {
           case (o, i) => {
             o transform {
-              case aggOrSub @ (_: AggregateExpression | _: Substring) =>
-                val aliasName = aggOrSub.nodeName + i
-                val alias = Alias(aggOrSub, aliasName)()
+              case agg: AggregateExpression =>
+                val aliasName = agg.nodeName + i
+                val alias = Alias(agg, aliasName)()
                 addForAlias += alias
                 alias.toAttribute
             }
