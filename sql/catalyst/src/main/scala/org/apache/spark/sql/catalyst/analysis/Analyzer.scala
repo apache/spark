@@ -461,7 +461,9 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
-            registry.lookupFunction(name, children)
+            withPosition(u) {
+              registry.lookupFunction(name, children)
+            }
         }
     }
   }

@@ -35,7 +35,10 @@ class StringKeyHashMap[T](normalizer: (String) => String) {
   def apply(key: String): T = base(normalizer(key))
 
   def get(key: String): Option[T] = base.get(normalizer(key))
+
   def put(key: String, value: T): Option[T] = base.put(normalizer(key), value)
+
   def remove(key: String): Option[T] = base.remove(normalizer(key))
+
   def iterator: Iterator[(String, T)] = base.toIterator
 }

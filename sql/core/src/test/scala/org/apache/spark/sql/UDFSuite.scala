@@ -41,6 +41,22 @@ class UDFSuite extends QueryTest {
     df.selectExpr("substr(a, 2)", "substr(a, 2, 3)")
   }
 
+  test("error reporting for incorrect number of arguments") {
+    val df = ctx.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      df.selectExpr("substr('abcd', 2, 3, 4)")
+    }
+    assert(e.getMessage.contains("arguments"))
+  }
+
+  test("error reporting for undefined functions") {
+    val df = ctx.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      df.selectExpr("a_function_that_does_not_exist()")
+    }
+    assert(e.getMessage.contains("undefined function"))
+  }
+
   test("Simple UDF") {
     ctx.udf.register("strLenScala", (_: String).length)
     assert(ctx.sql("SELECT strLenScala('test')").head().getInt(0) === 4)

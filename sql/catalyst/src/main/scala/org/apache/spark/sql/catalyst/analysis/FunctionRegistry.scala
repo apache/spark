@@ -32,6 +32,7 @@ trait FunctionRegistry {
 
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
+  @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 
   def conf: CatalystConf
@@ -145,7 +146,10 @@ class SimpleFunctionRegistry(val conf: CatalystConf) extends FunctionRegistry {
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders(name)(children)
+    val func = functionBuilders.get(name).getOrElse {
+      throw new AnalysisException(s"undefined function $name")
+    }
+    func(children)
   }
 }
 
