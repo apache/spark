@@ -83,7 +83,7 @@ abstract class StreamingLinearAlgorithm[
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
     data.foreachRDD { (rdd, time) =>
-      if (rdd.toLocalIterator.nonEmpty) {
+      if (!rdd.isEmpty) {
         model = Some(algorithm.run(rdd, model.get.weights))
         logInfo("Model updated at time %s".format(time.toString))
         val display = model.get.weights.size match {
