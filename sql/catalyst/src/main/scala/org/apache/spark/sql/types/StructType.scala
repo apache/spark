@@ -150,18 +150,18 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), true, Metadata.empty)
+    add(name, DataType.fromString(dataType), true, Metadata.empty)
   }
 
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+    add(name, DataType.fromString(dataType), nullable, Metadata.empty)
   }
 
   def add(name: String,
     dataType: String,
     nullable: Boolean,
     metadata: Metadata): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+    add(name, DataType.fromString(dataType), nullable, metadata)
   }
 
   /**

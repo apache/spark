@@ -36,7 +36,7 @@ class DataTypeSuite extends SparkFunSuite {
   test("construct with add") {
     val struct = (new StructType)
       .add("a", IntegerType, true)
-      .add("b", LongType, true)
+      .add("b", LongType, false)
       .add("c", StringType, true)
 
     assert(StructField("b", LongType, false) === struct("b"))
