@@ -20,28 +20,37 @@
 library(SparkR)
 
 ## Initialize SparkContext
-sc <- sparkR.init(master = "local", appName = "MyApp")
+sc <- sparkR.init(appName = "SparkR-data-manipulation-example")
 
 ## Initialize SQLContext
 sqlContext <- SparkRSQL.init(sc)
 
 # For this example, we shall use the "flights" dataset
-# The data can be downloaded from: https://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv 
 # The dataset consists of every flight departing Houston in 2011.
 # The data set is made up of 227,496 rows x 14 columns. 
 
 
-# Option 1: Create a local R data frame and then convert it to a SparkR DataFrame -------
+args <- commandArgs(trailing = TRUE)
+if (length(args) != 1) {
+  print("Usage: data-manipulation.R <path-to-flights.csv")
+  print("The data can be downloaded from: http://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv ")
+  q("no")
+}
 
-## Create a local R dataframe
-flights_df <- read.csv("flights.csv")
+flightsCsvPath <- args[[1]]
+
+
+# # Option 1: Create a local R data frame and then convert it to a SparkR DataFrame -------
+
+# ## Create a local R dataframe
+flights_df <- read.csv(flightsCsvPath, header = TRUE)
 flights_df$date <- as.Date(flights_df$date)
 
 ## Convert the local data frame into a SparkR DataFrame
 flightsDF <- createDataFrame(sqlContext, flights_df)
 
 # Option 2: Alternatively, directly create a SparkR DataFrame from the source data -------
-flightsDF <- read.df(sqlContext, "flights.csv", source = "csv", header = "true")
+flightsDF <- read.df(sqlContext, flightsCsvPath, source = "csv", header = "true")
 
 # Print the schema of this Spark DataFrame
 printSchema(flightsDF)
