@@ -63,7 +63,7 @@ class ReceivedBlockHandlerSuite
   var tempDirectory: File = null
   var storageLevel = StorageLevel.MEMORY_ONLY_SER
 
-  private def makeBlockManager(
+  private def createBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     conf.set("spark.storage.unrollMemoryThreshold", "512")
@@ -307,7 +307,7 @@ class ReceivedBlockHandlerSuite
 
   test("BlockManagerBasedBlockHandler - isFullyConsumed-MEMORY_ONLY") {
     storageLevel = StorageLevel.MEMORY_ONLY
-    blockManager = makeBlockManager(12000)
+    blockManager = createBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
     // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
@@ -324,7 +324,7 @@ class ReceivedBlockHandlerSuite
 
   test("BlockManagerBasedBlockHandler - isFullyConsumed-MEMORY_AND_DISK") {
     storageLevel = StorageLevel.MEMORY_AND_DISK
-    blockManager = makeBlockManager(12000)
+    blockManager = createBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
     // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store
@@ -338,7 +338,7 @@ class ReceivedBlockHandlerSuite
 
   test("WriteAheadLogBasedBlockHandler - isFullyConsumed-MEMORY_ONLY") {
     storageLevel = StorageLevel.MEMORY_ONLY
-    blockManager = makeBlockManager(12000)
+    blockManager = createBlockManager(12000)
     val block = List.fill(70)(new Array[Byte](100))
     // spark.storage.unrollFraction set to 0.4 for BlockManager
     // With 12000 * 0.4 = 4800 bytes of free space for unroll , there is not enough space to store

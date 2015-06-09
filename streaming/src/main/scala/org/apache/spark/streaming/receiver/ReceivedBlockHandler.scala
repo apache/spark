@@ -230,7 +230,7 @@ private class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
    def hasNext(): Boolean = iterator.hasNext
    def isFullyConsumed: Boolean = !iterator.hasNext
    def next(): T = {
-    count+=1
+    count += 1
     iterator.next()
    }
 }
