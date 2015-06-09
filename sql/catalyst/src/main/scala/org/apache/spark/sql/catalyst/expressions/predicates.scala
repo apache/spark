@@ -267,19 +267,8 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
           if (!${ev.isNull}) {
             ${eval2.code}
             if (!${eval2.isNull}) {
-              boolean done = false;
-              for (int j = 0; j < ${eval1.primitive}.length && j < ${eval2.primitive}.length; j++) {
-                byte a = ${eval1.primitive}[j];
-                byte b = ${eval2.primitive}[j];
-                if (a != b) {
-                  ${ev.primitive} = a $symbol b;
-                  done = true;
-                  break;
-                }
-              }
-              if (!done) {
-                ${ev.primitive} = ${eval1.primitive}.length $symbol ${eval2.primitive}.length;
-              }
+              ${ev.primitive} = org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary(
+                ${eval1.primitive}, ${eval2.primitive}) $symbol 0;
             } else {
               ${ev.isNull} = true;
             }

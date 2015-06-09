@@ -61,12 +61,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
             {
               byte[] x = ${if (asc) evalA.primitive else evalB.primitive};
               byte[] y = ${if (!asc) evalB.primitive else evalA.primitive};
-              int j = 0;
-              while (j < x.length && j < y.length) {
-                if (x[j] != y[j]) return x[j] - y[j];
-                j = j + 1;
-              }
-              int d = x.length - y.length;
+              int d = org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary(x, y);
               if (d != 0) {
                 return d;
               }

@@ -148,6 +148,9 @@ public abstract class BaseRow implements Row {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * A generic version of Row.equals(Row), which is used for tests.
+   */
   @Override
   public boolean equals(Object other) {
     if (other instanceof Row) {
