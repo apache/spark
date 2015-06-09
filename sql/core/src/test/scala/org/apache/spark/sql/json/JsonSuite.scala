@@ -1073,7 +1073,6 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
-    val useStreaming = ctx.getConf(SQLConf.USE_JACKSON_STREAMING_API, "true")
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
     ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
@@ -1081,7 +1080,6 @@ class JsonSuite extends QueryTest with TestJsonData {
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
     try{
       for (useStreaming <- List("true", "false")) {
-        ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
         val temp = Utils.createTempDir().getPath
 
         val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
@@ -1094,7 +1092,6 @@ class JsonSuite extends QueryTest with TestJsonData {
         checkAnswer(ctx.read.parquet(temp), df2.collect())
       }
     } finally {
-      ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
       ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
     }
   }

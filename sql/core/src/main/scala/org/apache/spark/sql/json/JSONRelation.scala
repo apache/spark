@@ -130,51 +130,27 @@ private[sql] class JSONRelation(
       samplingRatio,
       userSpecifiedSchema)(sqlContext)
 
-  private val useJacksonStreamingAPI: Boolean = sqlContext.conf.useJacksonStreamingAPI
-
   override val needConversion: Boolean = false
 
   override lazy val schema = userSpecifiedSchema.getOrElse {
-    if (useJacksonStreamingAPI) {
-      InferSchema(
-        baseRDD(),
-        samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)
-    } else {
-      JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(
-          baseRDD(),
-          samplingRatio,
-          sqlContext.conf.columnNameOfCorruptRecord))
-    }
+    InferSchema(
+      baseRDD(),
+      samplingRatio,
+      sqlContext.conf.columnNameOfCorruptRecord)
   }
 
   override def buildScan(): RDD[Row] = {
-    if (useJacksonStreamingAPI) {
-      JacksonParser(
-        baseRDD(),
-        schema,
-        sqlContext.conf.columnNameOfCorruptRecord)
-    } else {
-      JsonRDD.jsonStringToRow(
-        baseRDD(),
-        schema,
-        sqlContext.conf.columnNameOfCorruptRecord)
-    }
+    JacksonParser(
+      baseRDD(),
+      schema,
+      sqlContext.conf.columnNameOfCorruptRecord)
   }
 
   override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
-    if (useJacksonStreamingAPI) {
-      JacksonParser(
-        baseRDD(),
-        StructType.fromAttributes(requiredColumns),
-        sqlContext.conf.columnNameOfCorruptRecord)
-    } else {
-      JsonRDD.jsonStringToRow(
-        baseRDD(),
-        StructType.fromAttributes(requiredColumns),
-        sqlContext.conf.columnNameOfCorruptRecord)
-    }
+    JacksonParser(
+      baseRDD(),
+      StructType.fromAttributes(requiredColumns),
+      sqlContext.conf.columnNameOfCorruptRecord)
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
