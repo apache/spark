@@ -63,7 +63,7 @@ class VectorsSuite extends FunSuite {
     assert(vec.toArray.eq(arr))
   }
 
-  test("dense argmax"){
+  test("dense argmax") {
     val vec = Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector]
     assert(vec.argmax === -1)
 
@@ -81,7 +81,7 @@ class VectorsSuite extends FunSuite {
     assert(vec.toArray === arr)
   }
 
-  test("sparse argmax"){
+  test("sparse argmax") {
     val vec = Vectors.sparse(0,Array.empty[Int],Array.empty[Double]).asInstanceOf[SparseVector]
     val noMax = vec.argmax
     assert(noMax === -1)

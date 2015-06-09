@@ -736,9 +736,9 @@ class SparseVector(
       }
 
       // look for inactive values in case all active node values are negative
-      if (size != values.size && maxValue <= 0){
+      if (size != values.size && maxValue <= 0) {
         val firstInactiveIdx = calcFirstInactiveIdx(0)
-        if (!(maxValue == 0 && firstInactiveIdx >= maxIdx)){
+        if (!(maxValue == 0 && firstInactiveIdx >= maxIdx)) {
           maxIdx = firstInactiveIdx
         }
         maxValue = 0
