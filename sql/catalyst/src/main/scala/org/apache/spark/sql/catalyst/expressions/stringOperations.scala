@@ -324,6 +324,10 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
   }
 
   override def toString: String = s"LENGTH($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).length()")
+  }
 }
 
 
