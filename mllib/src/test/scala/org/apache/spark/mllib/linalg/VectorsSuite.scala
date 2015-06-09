@@ -91,22 +91,26 @@ class VectorsSuite extends FunSuite {
     val max = vec2.argmax
     assert(max === 3)
 
-    val vec3 = Vectors.sparse(5,Array(2, 4),Array(1.0,-.7))
+    val vec3 = Vectors.sparse(5,Array(2, 3, 4),Array(1.0, 0.0, -.7))
     val max2 = vec3.argmax
     assert(max2 === 2)
 
     // check for case that sparse vector is created with only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
-    val vec4 = Vectors.sparse(5,Array(2, 3),Array(-1.0,-.7))
+    val vec4 = Vectors.sparse(5,Array(2, 3),Array(-1.0, -.7))
     val max3 = vec4.argmax
     assert(max3 === 0)
 
-    val vec5 = Vectors.sparse(11,Array(0, 3, 10),Array(-1.0,-.7,0.0))
+    val vec5 = Vectors.sparse(11,Array(0, 3, 10),Array(-1.0, -.7, 0.0))
     val max4 = vec5.argmax
     assert(max4 === 1)
 
-    val vec6 = Vectors.sparse(5,Array(0, 1, 3),Array(-1.0, 0.0, -.7))
+    val vec6 = Vectors.sparse(11,Array(0, 1, 2),Array(-1.0, -.7, 0.0))
     val max5 = vec6.argmax
-    assert(max5 === 1)
+    assert(max5 === 2)
+
+    val vec7 = Vectors.sparse(5,Array(0, 1, 3),Array(-1.0, 0.0, -.7))
+    val max6 = vec7.argmax
+    assert(max6 === 1)
 
     var vec8 = Vectors.sparse(5,Array(1, 2),Array(0.0, -1.0))
     val max7 = vec8.argmax
