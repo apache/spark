@@ -37,38 +37,32 @@ writeObject <- function(con, object, writeType = TRUE) {
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
   type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
-  isNA <- FALSE
+  # Checking types is needed here, since ‘is.na’ only handles atomic vectors,
+  # lists and pairlists
   if (type %in% c("integer", "character", "logical", "double", "numeric")) {
-    isNA <- writeNA(con, object)
-  }
-  if (!isNA) {
-    if (writeType) {
-      writeType(con, type)
+    if (is.na(object)) {
+      object <- NULL
+      type <- "NULL"
     }
-    switch(type,
-           NULL = writeVoid(con),
-           integer = writeInt(con, object),
-           character = writeString(con, object),
-           logical = writeBoolean(con, object),
-           double = writeDouble(con, object),
-           numeric = writeDouble(con, object),
-           raw = writeRaw(con, object),
-           list = writeList(con, object),
-           jobj = writeJobj(con, object),
-           environment = writeEnv(con, object),
-           Date = writeDate(con, object),
-           POSIXlt = writeTime(con, object),
-           POSIXct = writeTime(con, object),
-           stop(paste("Unsupported type for serialization", type)))
   }
-}
-
-writeNA <- function(con, value) {
-  if(is.na(value)) {
-    writeBin(charToRaw("n"), con) 
-    writeVoid(con)
-    TRUE
-  } else FALSE
+  if (writeType) {
+    writeType(con, type)
+  }
+  switch(type,
+         NULL = writeVoid(con),
+         integer = writeInt(con, object),
+         character = writeString(con, object),
+         logical = writeBoolean(con, object),
+         double = writeDouble(con, object),
+         numeric = writeDouble(con, object),
+         raw = writeRaw(con, object),
+         list = writeList(con, object),
+         jobj = writeJobj(con, object),
+         environment = writeEnv(con, object),
+         Date = writeDate(con, object),
+         POSIXlt = writeTime(con, object),
+         POSIXct = writeTime(con, object),
+         stop(paste("Unsupported type for serialization", type)))
 }
 
 writeVoid <- function(con) {
