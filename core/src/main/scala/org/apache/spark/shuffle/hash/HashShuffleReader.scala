@@ -53,15 +53,17 @@ private[spark] class HashShuffleReader[K, C](
     val recordIterator = wrappedStreams.flatMap { wrappedStream =>
       val kvIter = serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator
       CompletionIterator[(Any, Any), Iterator[(Any, Any)]](kvIter, {
-        // Close the stream once all the records have been read from it
+        // Close the stream once all the records have been read from it to free underlying
+        // ManagedBuffer as soon as possible. Note that in case of task failure, the task's
+        // TaskCompletionListener will make sure this is released.
         wrappedStream.close()
       })
     }
 
     // Update read metrics for each record materialized
-    val iter = new InterruptibleIterator[Any](context, recordIterator) {
+    val iter = new InterruptibleIterator[(Any, Any)](context, recordIterator) {
      val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
-     override def next(): Any = {
+     override def next(): (Any, Any) = {
        readMetrics.incRecordsRead(1)
        delegate.next()
      }
@@ -70,14 +72,14 @@ private[spark] class HashShuffleReader[K, C](
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         // We are reading values that are already combined
-        val combinedKeyValuesIterator = iter.asInstanceOf[Iterator[(K,C)]]
+        val combinedKeyValuesIterator = iter.asInstanceOf[Iterator[(K, C)]]
         new InterruptibleIterator(context,
           dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context))
       } else {
         // We don't know the value type, but also don't care -- the dependency *should*
         // have made sure its compatible w/ this aggregator, which will convert the value
         // type to the combined type C
-        val keyValuesIterator = iter.asInstanceOf[Iterator[(K,Nothing)]]
+        val keyValuesIterator = iter.asInstanceOf[Iterator[(K, Nothing)]]
         new InterruptibleIterator(context,
           dep.aggregator.get.combineValuesByKey(keyValuesIterator, context))
       }

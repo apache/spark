@@ -20,8 +20,7 @@ package org.apache.spark.storage
 import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.{Failure, Try}
 
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -96,7 +95,7 @@ final class ShuffleBlockFetcherIterator(
    * Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
    * the number of bytes in flight is limited to maxBytesInFlight.
    */
-  private[this] val fetchRequests = new mutable.Queue[FetchRequest]
+  private[this] val fetchRequests = new Queue[FetchRequest]
 
   /** Current bytes in flight from our requests */
   private[this] var bytesInFlight = 0L
@@ -275,6 +274,12 @@ final class ShuffleBlockFetcherIterator(
 
   override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
 
+  /**
+   * Fetches the next (BlockId, Try[InputStream]). If a task fails, the ManagedBuffers
+   * underlying each InputStream will be freed by the cleanup() method registered with the
+   * TaskCompletionListener. However, callers should close() these InputStreams
+   * as soon as they are no longer needed, in order to release memory as early as possible.
+   */
   override def next(): (BlockId, Try[InputStream]) = {
     numBlocksProcessed += 1
     val startFetchWait = System.currentTimeMillis()
