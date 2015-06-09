@@ -1102,7 +1102,11 @@ root
 {% endhighlight %}
 
 Notice that the data types of the partitioning columns are automatically inferred.  Currently,
-numeric data types and string type are supported.
+numeric data types and string type are supported. Sometimes users may not want to automatically
+infer the data types of the partitioning columns. For these use cases, the automatic type inference
+can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
+`true`. When type inference is disabled, string type will be used for the partitioning columns.
+
 
 ### Schema merging
 

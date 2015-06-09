@@ -120,7 +120,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(conf)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = {
+    val fr = new SimpleFunctionRegistry
+    FunctionRegistry.expressions.foreach { case (name, func) => fr.registerFunction(name, func) }
+    fr
+  }
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =

@@ -25,6 +25,48 @@ class UDFSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
+  test("built-in fixed arity expressions") {
+    val df = ctx.emptyDataFrame
+    df.selectExpr("rand()", "randn()", "rand(5)", "randn(50)")
+  }
+
+  test("built-in vararg expressions") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    df.selectExpr("array(a, b)")
+    df.selectExpr("struct(a, b)")
+  }
+
+  test("built-in expressions with multiple constructors") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("substr(a, 2)", "substr(a, 2, 3)").collect()
+  }
+
+  test("count") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("count(a)")
+  }
+
+  test("count distinct") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("count(distinct a)")
+  }
+
+  test("error reporting for incorrect number of arguments") {
+    val df = ctx.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      df.selectExpr("substr('abcd', 2, 3, 4)")
+    }
+    assert(e.getMessage.contains("arguments"))
+  }
+
+  test("error reporting for undefined functions") {
+    val df = ctx.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      df.selectExpr("a_function_that_does_not_exist()")
+    }
+    assert(e.getMessage.contains("undefined function"))
+  }
+
   test("Simple UDF") {
     ctx.udf.register("strLenScala", (_: String).length)
     assert(ctx.sql("SELECT strLenScala('test')").head().getInt(0) === 4)
