@@ -376,20 +376,4 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
-
-  def fromString(dataType: String): DataType = {
-    dataType match {
-      case "byte" => org.apache.spark.sql.types.ByteType
-      case "long" => org.apache.spark.sql.types.LongType
-      case "float" => org.apache.spark.sql.types.FloatType
-      case "int" | "integer" => org.apache.spark.sql.types.IntegerType
-      case "double" | "numeric" => org.apache.spark.sql.types.DoubleType
-      case "string" | "character" => org.apache.spark.sql.types.StringType
-      case "raw" | "binary" => org.apache.spark.sql.types.BinaryType
-      case "boolean" | "logical" => org.apache.spark.sql.types.BooleanType
-      case "timestamp" => org.apache.spark.sql.types.TimestampType
-      case "date" => org.apache.spark.sql.types.DateType
-      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
-    }
-  }
 }

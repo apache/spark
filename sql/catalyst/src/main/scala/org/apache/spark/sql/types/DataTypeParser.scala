@@ -44,7 +44,7 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     "(?i)tinyint".r ^^^ ByteType |
     "(?i)smallint".r ^^^ ShortType |
     "(?i)double".r ^^^ DoubleType |
-    "(?i)bigint".r ^^^ LongType |
+    "(?i)(?:bigint|long)".r ^^^ LongType |
     "(?i)binary".r ^^^ BinaryType |
     "(?i)boolean".r ^^^ BooleanType |
     fixedDecimalType |
