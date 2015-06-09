@@ -800,7 +800,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
-  test("shuffle with reducer locality") {
+  test("reduce tasks should be placed locally with map output") {
     // Create an shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -820,7 +820,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty
   }
 
-  test("reducer locality with different sizes") {
+  test("reduce task locality preferences should only include machines with largest map outputs") {
     val numMapTasks = 4
     // Create an shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)

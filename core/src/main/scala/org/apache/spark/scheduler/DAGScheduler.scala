@@ -142,7 +142,7 @@ class DAGScheduler(
     sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
   // Number of map, reduce tasks above which we do not assign preferred locations
   // based on map output sizes. We limit the size of jobs for which assign preferred locations
-  // as sorting the locations by size becomes expensive.
+  // as computing the top locations by size becomes expensive.
   private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
   // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
   private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
@@ -151,7 +151,6 @@ class DAGScheduler(
   // location for a reduce task.
   // Making this larger will focus on fewer locations where most data can be read locally, but
   // may lead to more delay in scheduling if those locations are busy.
-  //
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
   // Called by TaskScheduler to report task's starting.

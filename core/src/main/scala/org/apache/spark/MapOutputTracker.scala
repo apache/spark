@@ -304,7 +304,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     : Option[Array[BlockManagerId]] = {
 
     if (mapStatuses.contains(shuffleId)) {
-      // Pre-compute the top locations for each reducer and cache it
       val statuses = mapStatuses(shuffleId)
       if (statuses.nonEmpty) {
         // HashMap to add up sizes of all blocks at the same location
@@ -312,10 +311,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         var totalOutputSize = 0L
         var mapIdx = 0
         while (mapIdx < statuses.length) {
-          val blockSize = statuses(mapIdx).getSizeForBlock(reducerId)
+          val status = statuses(mapIdx)
+          val blockSize = status.getSizeForBlock(reducerId)
           if (blockSize > 0) {
-            locs(statuses(mapIdx).location) = locs.getOrElse(statuses(mapIdx).location, 0L) +
-              blockSize
+            locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
             totalOutputSize += blockSize
           }
           mapIdx = mapIdx + 1
@@ -323,8 +322,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         val topLocs = locs.filter { case (loc, size) =>
           size.toDouble / totalOutputSize >= fractionThreshold
         }
-        // Only add this reducer to our map if we have any locations which satisfy
-        // the required threshold
+        // Return if we have any locations which satisfy the required threshold
         if (topLocs.nonEmpty) {
           return Some(topLocs.map(_._1).toArray)
         }
