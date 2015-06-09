@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
+
+/**
+ * For Catalyst to work correctly, concrete implementations of [[Expression]]s must be case classes
+ * whose constructor arguments are all Expressions types. In addition, if we want to support more
+ * than one constructor, define those constructors explicitly as apply methods in the companion
+ * object.
+ *
+ * See [[Substring]] for an example.
+ */
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
 

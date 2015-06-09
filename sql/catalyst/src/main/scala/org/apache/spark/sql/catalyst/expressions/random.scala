@@ -48,26 +48,28 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 case class Rand(seed: Long) extends RDG(seed) {
+  override def eval(input: Row): Double = rng.nextDouble()
+}
 
-  def this(seed: Expression) = this(seed match {
+object Rand {
+  def apply(): Rand = apply(Utils.random.nextLong())
+
+  def apply(seed: Expression): Rand = apply(seed match {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
-
-  def this() = this(Utils.random.nextLong())
-
-  override def eval(input: Row): Double = rng.nextDouble()
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
 case class Randn(seed: Long) extends RDG(seed) {
+  override def eval(input: Row): Double = rng.nextGaussian()
+}
 
-  def this(seed: Expression) = this(seed match {
+object Randn {
+  def apply(): Randn = apply(Utils.random.nextLong())
+
+  def apply(seed: Expression): Randn = apply(seed match {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
-
-  def this() = this(Utils.random.nextLong())
-
-  override def eval(input: Row): Double = rng.nextGaussian()
 }

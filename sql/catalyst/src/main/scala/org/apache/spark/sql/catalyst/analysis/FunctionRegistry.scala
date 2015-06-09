@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Constructor
-
 import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystConf
@@ -96,26 +95,27 @@ object FunctionRegistry {
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
-    val constructors = tag.runtimeClass.getDeclaredConstructors.toSeq
+    // Use the companion class to find apply methods.
+    val objectClass = Class.forName(tag.runtimeClass.getName + "$")
+    val companionObj = objectClass.getDeclaredField("MODULE$").get(null)
+
+    // See if we can find an apply that accepts Seq[Expression]
+    val varargApply = Try(objectClass.getDeclaredMethod("apply", classOf[Seq[_]])).toOption
+
     val builder = (expressions: Seq[Expression]) => {
-      // First see if there is a constructor that accepts a Seq[Expression]
-      val varargCtor: Option[Constructor[_]] = constructors.find { ctor =>
-        val params = ctor.getParameterTypes
-        params.length == 1 && params(0) == classOf[Seq[_]]
-      }
-
-      if (varargCtor.isDefined) {
-        // If there is a constructor that accepts Seq[Expression], use that one.
-        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+      if (varargApply.isDefined) {
+        // If there is an apply method that accepts Seq[Expression], use that one.
+        varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
       } else {
-        // Otherwise, find a constructor that matches the number of arguments, and use that.
-        val ctor = constructors.find { ctor =>
-          val params = ctor.getParameterTypes
-          val valid = params.forall(classOf[Expression].isAssignableFrom)
-          params.length == expressions.size && valid
-        }.getOrElse(throw new AnalysisException(s"Invalid number of arguments for function $name"))
-
-        ctor.newInstance(expressions : _*).asInstanceOf[Expression]
+        // Otherwise, find an apply method that matches the number of arguments, and use that.
+        val params = Seq.fill(expressions.size)(classOf[Expression])
+        val f = Try(objectClass.getDeclaredMethod("apply", params : _*)) match {
+          case Success(e) =>
+            e
+          case Failure(e) =>
+            throw new AnalysisException(s"Invalid number of arguments for function $name")
+        }
+        f.invoke(companionObj, expressions : _*).asInstanceOf[Expression]
       }
     }
     (name, builder)

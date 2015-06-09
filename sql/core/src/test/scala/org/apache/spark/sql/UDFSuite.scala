@@ -36,6 +36,11 @@ class UDFSuite extends QueryTest {
     df.selectExpr("struct(a, b)")
   }
 
+  test("built-in expressions with multiple constructors") {
+    val df = Seq(("abcd", 2)).toDF("a", "b")
+    df.selectExpr("substr(a, 2)", "substr(a, 2, 3)")
+  }
+
   test("Simple UDF") {
     ctx.udf.register("strLenScala", (_: String).length)
     assert(ctx.sql("SELECT strLenScala('test')").head().getInt(0) === 4)
