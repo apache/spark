@@ -328,28 +328,17 @@ private[spark] object ClosureCleaner extends Logging {
   private def instantiateClass(
       cls: Class[_],
       enclosingObject: AnyRef): AnyRef = {
-    if (!Utils.isInInterpreter) {
-      // This is a bona fide closure class, whose constructor has no effects
-      // other than to set its fields, so use its constructor
-      val cons = cls.getConstructors()(0)
-      val params = cons.getParameterTypes.map(createNullValue).toArray
-      if (enclosingObject != null) {
-        params(0) = enclosingObject // First param is always enclosing object
-      }
-      return cons.newInstance(params: _*).asInstanceOf[AnyRef]
-    } else {
-      // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-      val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-      val obj = newCtor.newInstance().asInstanceOf[AnyRef]
-      if (enclosingObject != null) {
-        val field = cls.getDeclaredField("$outer")
-        field.setAccessible(true)
-        field.set(obj, enclosingObject)
-      }
-      obj
+    // Use reflection to instantiate object without calling constructor
+    val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+    if (enclosingObject != null) {
+      val field = cls.getDeclaredField("$outer")
+      field.setAccessible(true)
+      field.set(obj, enclosingObject)
     }
+    obj
   }
 }
 
