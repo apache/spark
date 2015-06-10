@@ -204,7 +204,7 @@ case class Pow(left: Expression, right: Expression)
 }
 
 object Logarithm {
-  def apply(exprs: Seq[Expression]) = {
+  def apply(exprs: Seq[Expression]): Expression = {
     if (exprs.length == 1) {
       new Log(exprs(0))
     } else if (exprs.length == 2) {
@@ -213,7 +213,7 @@ object Logarithm {
       sys.error(s"Log only accepts two input expressions")
     }
   }
-  def apply(child: Expression) = new Log(child)
+  def apply(child: Expression): Expression = new Log(child)
 }
 
 case class Logarithm(left: Expression, right: Expression)

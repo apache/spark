@@ -96,6 +96,7 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(
       df.select(org.apache.spark.sql.functions.log("a"),
       org.apache.spark.sql.functions.log(2.0, "a"),
-      org.apache.spark.sql.functions.log("b")), Row(math.log(123), math.log(123) / math.log(2), null))
+      org.apache.spark.sql.functions.log("b")),
+      Row(math.log(123), math.log(123) / math.log(2), null))
   }
 }

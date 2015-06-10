@@ -144,7 +144,7 @@ _binary_mathfunctions = {
              'polar coordinates (r, theta).',
     'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
-    'logarithm': 'Returns the first argument-based logarithm of the second argument',
+    'log': 'Returns the first argument-based logarithm of the second argument',
 }
 
 _window_functions = {
