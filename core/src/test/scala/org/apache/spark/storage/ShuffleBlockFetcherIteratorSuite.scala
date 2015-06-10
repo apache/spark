@@ -28,10 +28,10 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
+import org.apache.spark.{SparkFunSuite, TaskContextImpl}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.{SparkFunSuite, TaskContextImpl}
 
 
 class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
@@ -61,11 +61,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
   // Create a mock managed buffer for testing
   def createMockManagedBuffer(): ManagedBuffer = {
     val mockManagedBuffer = mock(classOf[ManagedBuffer])
-    when(mockManagedBuffer.createInputStream()).thenAnswer(new Answer[InputStream] {
-      override def answer(invocation: InvocationOnMock): InputStream = {
-        mock(classOf[InputStream])
-      }
-    })
+    when(mockManagedBuffer.createInputStream()).thenReturn(mock(classOf[InputStream]))
     mockManagedBuffer
   }
 
@@ -76,9 +72,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
     // Make sure blockManager.getBlockData would return the blocks
     val localBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer]))
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
     localBlocks.foreach { case (blockId, buf) =>
       doReturn(buf).when(blockManager).getBlockData(meq(blockId))
     }
@@ -86,9 +82,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val remoteBlocks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockId(0, 3, 0) -> mock(classOf[ManagedBuffer]),
-      ShuffleBlockId(0, 4, 0) -> mock(classOf[ManagedBuffer])
-    )
+      ShuffleBlockId(0, 3, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 4, 0) -> createMockManagedBuffer())
 
     val transfer = createMockTransfer(remoteBlocks)
 
@@ -109,13 +104,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
     for (i <- 0 until 5) {
       assert(iterator.hasNext, s"iterator should have 5 elements but actually has $i elements")
-      val (blockId, subIterator) = iterator.next()
-      assert(subIterator.isSuccess,
+      val (blockId, inputStream) = iterator.next()
+      assert(inputStream.isSuccess,
         s"iterator should have 5 elements defined but actually has $i elements")
 
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
-      val wrappedInputStream = new BufferReleasingInputStream(mock(classOf[InputStream]), iterator)
+      val wrappedInputStream = new BufferReleasingInputStream(inputStream.get, iterator)
       verify(mockBuf, times(0)).release()
       wrappedInputStream.close()
       verify(mockBuf, times(1)).release()
