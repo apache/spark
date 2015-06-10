@@ -25,7 +25,7 @@ import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{HiveMetastoreCatalog, HiveContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -254,5 +254,35 @@ case class CreateMetastoreDataSourceAsSelect(
     // Refresh the cache of the table in the catalog.
     hiveContext.refreshTable(tableName)
     Seq.empty[Row]
+  }
+}
+
+private[hive]
+case class ShowTablesCommand(databaseName: Option[String], pattern: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("tableName", StringType, false) ::
+        StructField("isTemporary", BooleanType, false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we need to return a Seq of rows, we will call getTables directly
+    // instead of calling tables in sqlContext.
+    val rows = pattern.isDefined match {
+      case true => sqlContext.catalog.asInstanceOf[HiveMetastoreCatalog]
+        .getTables(databaseName, pattern.get).map {
+        case (tableName, isTemporary) => Row(tableName, isTemporary)
+      }
+      // we should notic this branch wll can OverrideCatalog.getTables first
+      case false => sqlContext.catalog.getTables(databaseName).map {
+        case (tableName, isTemporary) => Row(tableName, isTemporary)
+      }
+    }
+
+    rows
   }
 }

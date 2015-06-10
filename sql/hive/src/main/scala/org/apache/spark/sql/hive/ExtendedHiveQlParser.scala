@@ -21,8 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
-import org.apache.spark.sql.execution.ShowTablesCommand
+import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand, ShowTablesCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
@@ -64,6 +63,6 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   private lazy val showInHive: Parser[LogicalPlan] =
     SHOW ~ TABLES ~> (IN ~> ident).? ~ opt(stringLit) ^^ {
-      case dbName ~ reg => {println("aaa:" + reg + "|dbName:" + dbName);ShowTablesCommand(dbName)}
+      case dbName ~ reg => ShowTablesCommand(dbName, reg)
     }
 }

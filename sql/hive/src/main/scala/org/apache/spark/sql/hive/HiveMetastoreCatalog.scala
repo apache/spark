@@ -343,6 +343,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     client.listTables(db).map(tableName => (tableName, false))
   }
 
+  def getTables(databaseName: Option[String], pattern: String): Seq[(String, Boolean)] = {
+    val db = databaseName.getOrElse(client.currentDatabase)
+
+    client.listTables(db, Some(pattern)).map(tableName => (tableName, false))
+  }
+
   protected def processDatabaseAndTableName(
       databaseName: Option[String],
       tableName: String): (Option[String], String) = {
