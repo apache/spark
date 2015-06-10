@@ -121,6 +121,10 @@ class ClosureCleanerSuite extends SparkFunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testSubmitJob(sc) }
     }
   }
+
+  test("createNullValue") {
+    new TestCreateNullValue().run()
+  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
@@ -348,5 +352,40 @@ private object TestUserClosuresActuallyCleaned {
       { case (_, _) => return }: (Int, Int) => Unit,
       { return }
     )
+  }
+}
+
+class TestCreateNullValue {
+
+  var x = 5
+
+  def getX: Int = x
+
+  def run(): Unit = {
+    val bo: Boolean = true
+    val c: Char = '1'
+    val b: Byte = 1
+    val s: Short = 1
+    val i: Int = 1
+    val l: Long = 1
+    val f: Float = 1
+    val d: Double = 1
+
+    val nestedClosure = () => {
+      println(bo)
+      println(c)
+      println(b)
+      println(s)
+      println(i)
+      println(l)
+      println(f)
+      println(d)
+
+      val closure = () => {
+        println(getX)
+      }
+      ClosureCleaner.clean(closure)
+    }
+    nestedClosure()
   }
 }

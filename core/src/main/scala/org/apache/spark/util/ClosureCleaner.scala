@@ -109,7 +109,16 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def createNullValue(cls: Class[_]): AnyRef = {
     if (cls.isPrimitive) {
-      new java.lang.Byte(0: Byte) // Should be convertible to any primitive type
+      if (cls == java.lang.Boolean.TYPE) {
+        new java.lang.Boolean(false)
+      } else if (cls == java.lang.Character.TYPE) {
+        new java.lang.Character('\0')
+      } else if (cls == java.lang.Void.TYPE) {
+        // It should not happen because `Foo(void x) {}` won't be compiled.
+        throw new IllegalStateException("This should not happen")
+      } else {
+        new java.lang.Byte(0: Byte)
+      }
     } else {
       null
     }
