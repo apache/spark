@@ -251,7 +251,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, {
-      (c1, c2) => s"${ctx.genCmop(left.dataType, c1, c2)} $symbol 0"
+      (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0"
     })
   }
 

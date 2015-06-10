@@ -349,7 +349,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val compCode = ctx.genCmop(dataType, eval1.primitive, eval2.primitive)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
     eval1.code + eval2.code + s"""
       boolean ${ev.isNull} = false;
@@ -401,7 +401,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val compCode = ctx.genCmop(dataType, eval1.primitive, eval2.primitive)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
     eval1.code + eval2.code + s"""
       boolean ${ev.isNull} = false;

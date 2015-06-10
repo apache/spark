@@ -159,7 +159,7 @@ class CodeGenContext {
   }
 
   /**
-   * Returns a function to generate equal expression in Java
+   * Generate code for equal expression in Java
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType =>  s"java.util.Arrays.equals($c1, $c2)"
@@ -169,9 +169,9 @@ class CodeGenContext {
   }
 
   /**
-   * Return a function to generate compare expression in Java
+   * Generate code for compare expression in Java
    */
-  def genCmop(dataType: DataType, c1: String, c2: String): String = dataType match {
+  def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case IntegerType | LongType | DoubleType | FloatType | ShortType | ByteType | DateType =>
       s"$c1 - $c2"
