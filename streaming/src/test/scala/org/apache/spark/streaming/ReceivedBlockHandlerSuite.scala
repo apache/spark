@@ -142,7 +142,7 @@ class ReceivedBlockHandlerSuite
         val loggedData = walSegments.flatMap { walSegment =>
           val fileSegment = walSegment.asInstanceOf[FileBasedWriteAheadLogSegment]
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
-          val bytes = LargeByteBufferHelper.asLargeByteBuffer(reader.read(segment))
+          val bytes = LargeByteBufferHelper.asLargeByteBuffer(reader.read(fileSegment))
           reader.close()
           blockManager.dataDeserialize(generateBlockId(), bytes).toList
         }

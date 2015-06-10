@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
+import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.util.Utils
 
 
@@ -47,7 +48,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(blockId: BlockId, bytes: LargeByteBuffer, level: StorageLevel): PutResult = {
     putIntoExternalBlockStore(blockId, bytes, returnValues = true)
   }
 
@@ -100,7 +101,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
 
   private def putIntoExternalBlockStore(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      bytes: LargeByteBuffer,
       returnValues: Boolean): PutResult = {
     logTrace(s"Attempting to put block $blockId into ExternalBlockStore")
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.
@@ -110,7 +111,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
         val byteBuffer = bytes.duplicate()
         byteBuffer.rewind()
         externalBlockManager.get.putBytes(blockId, byteBuffer)
-        val size = bytes.limit()
+        val size = bytes.size()
         val data = if (returnValues) {
           Right(bytes)
         } else {
@@ -152,7 +153,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     try {
       externalBlockManager.flatMap(_.getBytes(blockId))
     } catch {

@@ -1220,7 +1220,7 @@ private[spark] class BlockManager(
       bytes: LargeByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
-    dataDeserializeStream(blockId, LargeByteBufferInputStream(bytes, true), serializer)
+    dataDeserializeStream(blockId, new LargeByteBufferInputStream(bytes, true), serializer)
   }
 
   /**
