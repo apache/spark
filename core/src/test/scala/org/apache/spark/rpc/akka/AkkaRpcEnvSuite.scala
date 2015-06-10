@@ -59,72 +59,60 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     }
   }
 
-  test("Future failure with RpcTimeout") {
+  test("timeout on ask Future with RpcTimeout") {
 
-    class EchoActor extends Actor {
+    class EchoActor(sleepDuration: Long) extends Actor {
       def receive: Receive = {
         case msg =>
-          Thread.sleep(500)
+          Thread.sleep(sleepDuration)
           sender() ! msg
       }
     }
 
     val system = ActorSystem("EchoSystem")
-    val echoActor = system.actorOf(Props(new EchoActor), name = "echoA")
+    val echoActor = system.actorOf(Props(new EchoActor(0)), name = "echo")
+    val sleepyActor = system.actorOf(Props(new EchoActor(50)), name = "sleepy")
 
-    val timeout = new RpcTimeout(50 millis, "spark.rpc.short.timeout")
+    val shortProp = "spark.rpc.short.timeout"
+    val timeout = new RpcTimeout(10 millis, shortProp)
 
-    val fut = echoActor.ask("hello")(1000 millis).mapTo[String].recover {
-      case te: TimeoutException => throw timeout.amend(te)
-    }
-
-    fut.onFailure {
-      case te: TimeoutException => println("failed with timeout exception")
-    }
-
-    fut.onComplete {
-      case Success(str) => println("future success")
-      case Failure(ex) => println("future failure")
-    }
-
-    println("sleeping")
-    Thread.sleep(50)
-    println("Future complete: " + fut.isCompleted.toString() + ", " + fut.value.toString())
-
-    println("Caught TimeoutException: " +
-      intercept[TimeoutException] {
-        //timeout.awaitResult(fut)  // prints RpcTimeout description twice
-        Await.result(fut, 10 millis)
-      }.getMessage()
-    )
-
-    /*
-    val ref = env.setupEndpoint("test_future", new RpcEndpoint {
-      override val rpcEnv = env
-
-      override def receive = {
-        case _ =>
-      }
-    })
-    val conf = new SparkConf()
-    val newRpcEnv = new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
     try {
-      val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_future")
-      val akkaActorRef = newRef.asInstanceOf[AkkaRpcEndpointRef].actorRef
 
-      val timeout = new RpcTimeout(1 millis, "spark.rpc.short.timeout")
-      val fut = akkaActorRef.ask("hello")(timeout.duration).mapTo[String]
+      // Ask with immediate response
+      var fut = echoActor.ask("hello")(timeout.duration).mapTo[String].
+        recover(timeout.addMessageIfTimeout)
 
-      Thread.sleep(500)
-      println("Future complete: " + fut.isCompleted.toString() + ", " + fut.value.toString())
+      // This should complete successfully
+      val result = timeout.awaitResult(fut)
+
+      assert(result.nonEmpty)
+
+      // Ask with delayed response
+      fut = sleepyActor.ask("goodbye")(timeout.duration).mapTo[String].
+        recover(timeout.addMessageIfTimeout)
+
+      // Allow future to complete with failure using plain Await.result, this will return
+      // once the future is complete
+      val msg1 =
+        intercept[RpcTimeoutException] {
+          Await.result(fut, 200 millis)
+        }.getMessage()
+
+      assert(msg1.contains(shortProp))
+
+      // Use RpcTimeout.awaitResult to process Future, since it has already failed with
+      // RpcTimeoutException, the same exception should be thrown
+      val msg2 =
+        intercept[RpcTimeoutException] {
+          timeout.awaitResult(fut)
+        }.getMessage()
+
+      // Ensure description is not in message twice after addMessageIfTimeout and awaitResult
+      assert(shortProp.r.findAllIn(msg2).length === 1)
 
     } finally {
-      newRpcEnv.shutdown()
+      system.shutdown()
     }
-    */
-
-
   }
 
 }
