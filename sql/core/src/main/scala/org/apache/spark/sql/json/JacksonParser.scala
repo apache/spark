@@ -18,7 +18,6 @@
 package org.apache.spark.sql.json
 
 import java.io.ByteArrayOutputStream
-import java.sql.Timestamp
 
 import scala.collection.Map
 
@@ -65,10 +64,10 @@ private[sql] object JacksonParser {
         DateUtils.millisToDays(DateUtils.stringToTime(parser.getText).getTime)
 
       case (VALUE_STRING, TimestampType) =>
-        new Timestamp(DateUtils.stringToTime(parser.getText).getTime)
+        DateUtils.stringToTime(parser.getText).getTime * 10000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        new Timestamp(parser.getLongValue)
+        parser.getLongValue * 10000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()

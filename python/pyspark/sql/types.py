@@ -19,6 +19,7 @@ import sys
 import decimal
 import time
 import datetime
+import calendar
 import keyword
 import warnings
 import json
@@ -654,6 +655,8 @@ def _need_python_to_sql_conversion(dataType):
             _need_python_to_sql_conversion(dataType.valueType)
     elif isinstance(dataType, UserDefinedType):
         return True
+    elif isinstance(dataType, TimestampType):
+        return True
     else:
         return False
 
@@ -707,6 +710,14 @@ def _python_to_sql_converter(dataType):
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
+    elif isinstance(dataType, TimestampType):
+
+        def to_posix_timstamp(dt):
+            if dt.tzinfo is None:
+                return int(time.mktime(dt.timetuple()) * 1e7 + dt.microsecond * 10)
+            else:
+                return int(calendar.timegm(dt.utctimetuple()) * 1e7 + dt.microsecond * 10)
+        return to_posix_timstamp
     else:
         raise ValueError("Unexpected type %r" % dataType)
 
