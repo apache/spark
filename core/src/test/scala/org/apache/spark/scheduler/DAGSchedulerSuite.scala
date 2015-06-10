@@ -586,12 +586,12 @@ class DAGSchedulerSuite
       Map[Long, Any](),
       createFakeTaskInfo(),
       null))
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(1))
 
     // Trigger resubmission of the failed map stage.
     runEvent(ResubmitFailedStages)
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 
     // Another attempt for the map stage should have been submitted, resulting in 2 total attempts.
     assert(countSubmittedMapStageAttempts() === 2)
@@ -608,7 +608,7 @@ class DAGSchedulerSuite
     // Another ResubmitFailedStages event should not result result in another attempt for the map
     // stage being run concurrently.
     runEvent(ResubmitFailedStages)
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
 
     // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't effect anything --
@@ -634,7 +634,7 @@ class DAGSchedulerSuite
     }
 
     // The map stage should have been submitted.
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 1)
 
     // Complete the map stage.
@@ -643,7 +643,7 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostB", 1))))
 
     // The reduce stage should have been submitted.
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedReduceStageAttempts() === 1)
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
@@ -661,7 +661,7 @@ class DAGSchedulerSuite
 
     // Because the map stage finished, another attempt for the reduce stage should have been
     // submitted, resulting in 2 total attempts for each the map and the reduce stage.
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
     assert(countSubmittedReduceStageAttempts() === 2)
 
