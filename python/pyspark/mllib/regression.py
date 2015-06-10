@@ -100,6 +100,7 @@ class LinearRegressionModelBase(LinearModel):
         Predict the value of the dependent variable given a vector x
         containing values for the independent variables.
         """
+        print(self.weights)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -573,34 +574,59 @@ class IsotonicRegression(object):
 
 @inherit_doc
 class StreamingLinearRegressionWithSGD(LinearRegressionModel):
+    """
+    Run LinearRegression with SGD on a stream of data.
+
+    The problem minimized is (1 / n_samples) * (y - weights'X)**2.
+    After training on a stream of data, the weights obtained at the end of
+    training are used as initial weights for the next stream of data.
+
+    :param: stepSize          Step size for each iteration of gradient
+                              descent.
+    :param: numIterations     Total number of iterations run.
+    :param: miniBatchFraction Fraction of data on which SGD is run for each
+                              iteration.
+    """
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.miniBatchFraction = miniBatchFraction
+        self._model = None
 
     def _validate_dstream(self, dstream):
         if not isinstance(dstream, DStream):
             raise TypeError(
                 "dstream should be a DStream object, got %s" % type(dstream))
-        if not self.latestModel:
+        if not self._model:
             raise ValueError(
                 "Model must be intialized using setInitialWeights")
 
-    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
-        self.stepSize = stepSize
-        self.numIterations = numIterations
-        self.miniBatchFraction = miniBatchFraction
-        self.latestModel = None
+    @property
+    def latestModel(self):
+        """Returns a LinearRegressionModel fit on the latest stream of data.
+
+        The weights and intercepts can be got from the `weights` and
+        `intercept` attributes.
+        """
+        return self._model
 
     def __repr__(self):
-        if self.latestModel is None:
+        if self._model is None:
             return '(weights=None, intercept=None)'
         else:
-            return str(self.latestModel)
-
+            return str(self._model)
 
     def setInitialWeights(self, initialWeights):
+        """Set the initial value of weights.
+
+        This must be set before running trainOn and predicOn
+        """
         initialWeights = _convert_to_vector(initialWeights)
-        self.latestModel = LinearRegressionModel(initialWeights, 0)
+        self._model = LinearRegressionModel(initialWeights, 0)
         return self
 
     def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
         self._validate_dstream(dstream)
 
         def update(rdd):
@@ -610,20 +636,28 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
             except ValueError:
                 pass
             else:
-                self.latestModel = LinearRegressionWithSGD.train(
+                self._model = LinearRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
-                    self.miniBatchFraction, self.latestModel.weights,
-                    self.latestModel.intercept)
+                    self.miniBatchFraction, self._model.weights,
+                    self._model.intercept)
 
         dstream.foreachRDD(update)
 
     def predictOn(self, dstream):
+        """Make predictions on a dstream.
+
+        Returns a transformed dstream object.
+        """
         self._validate_dstream(dstream)
-        return dstream.map(self.latestModel.predict)
+        return dstream.map(self._model.predict)
 
     def predictOnValues(self, dstream):
+        """Make predictions on a keyed dstream.
+
+        Returns a transformed dstream object.
+        """
         self._validate_dstream(dstream)
-        return dstream.mapValues(self.latestModel.predict)
+        return dstream.mapValues(self._model.predict)
 
 
 def _test():

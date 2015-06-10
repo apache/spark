@@ -1179,7 +1179,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             self.assertAlmostEqual(i, j, dec)
 
     def test_parameter_accuracy(self):
-        """Test that coefs can be predicted accurately"""
+        """Test that coefs are predicted accurately by fitting on toy data."""
 
         # Test that fitting (10*X1 + 10*X2), (X1, X2) gives coefficients
         # (10, 10)
@@ -1253,7 +1253,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 5, 0.01)
 
-        # Test that
+        # Test that mean absolute error on each batch is less than 0.1
         for batch in samples:
             true, predicted = zip(*batch)
             self.assertTrue(mean(abs(array(true) - array(predicted))) < 0.1)
