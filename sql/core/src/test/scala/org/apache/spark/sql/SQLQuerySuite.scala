@@ -145,17 +145,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Seq(Row("1"), Row("2")))
   }
 
-  test("constant functions") {
-    checkAnswer(
-      sql("SELECT E()"),
-      Row(scala.math.E)
-    )
-    checkAnswer(
-      sql("SELECT PI()"),
-      Row(scala.math.Pi)
-    )
-  }
-
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),

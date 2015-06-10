@@ -85,13 +85,21 @@ class DataFrameFunctionsSuite extends QueryTest {
     }
   }
 
-  test("constant function") {
+  test("constant functions") {
     checkAnswer(
       testData2.select(e()).limit(1),
       Row(scala.math.E)
     )
     checkAnswer(
       testData2.select(pi()).limit(1),
+      Row(scala.math.Pi)
+    )
+    checkAnswer(
+      ctx.sql("SELECT E()"),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      ctx.sql("SELECT PI()"),
       Row(scala.math.Pi)
     )
   }
