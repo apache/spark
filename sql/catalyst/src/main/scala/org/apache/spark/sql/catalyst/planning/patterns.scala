@@ -160,10 +160,9 @@ object PartialAggregation {
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
             val trimmed = e.transform { case Alias(g: ExtractValue, _) => g }
-            namedGroupingExpressions
-              .find { case (expr, _) => expr semanticEquals trimmed }
-              .map(_._2.toAttribute)
-              .getOrElse(e)
+            namedGroupingExpressions.collectFirst {
+              case (expr, ne) if expr semanticEquals trimmed => ne.toAttribute
+            }.getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
         val partialComputation = namedGroupingExpressions.map(_._2) ++

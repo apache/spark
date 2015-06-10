@@ -223,10 +223,9 @@ case class GeneratedAggregate(
     val resultExpressions = aggregateExpressions.map(_.transform {
       case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
       case e: Expression =>
-        namedGroups
-          .find { case (expr, _) => expr semanticEquals e }
-          .map(_._2)
-          .getOrElse(e)
+        namedGroups.collectFirst {
+          case (expr, attr) if expr semanticEquals e => attr
+        }.getOrElse(e)
     })
 
     val aggregationBufferSchema: StructType = StructType.fromAttributes(computationSchema)
