@@ -1495,6 +1495,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### SparkR
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.r.numRBackendThreads</code></td>
+  <td>2</td>
+  <td>
+    Number of threads used by RBackend to handle RPC calls from SparkR package.
+  </td>
+</tr>
+</table>
+
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
