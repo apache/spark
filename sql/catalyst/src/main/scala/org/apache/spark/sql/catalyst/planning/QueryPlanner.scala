@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
@@ -51,7 +51,10 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    * filled in automatically by the QueryPlanner using the other execution strategies that are
    * available.
    */
-  protected def planLater(plan: LogicalPlan) = this.plan(plan).next()
+  protected def planLater(plan: LogicalPlan) = plan match {
+    case BroadcastHint(child) => this.plan(child).next()
+    case _ => this.plan(plan).next()
+  }
 
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
