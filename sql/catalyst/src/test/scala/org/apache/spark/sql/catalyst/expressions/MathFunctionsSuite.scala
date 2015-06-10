@@ -89,7 +89,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("e") {
-    testLeaf(E, math.E)
+    testLeaf(EulerNumber, math.E)
   }
 
   test("pi") {

@@ -106,7 +106,7 @@ object FunctionRegistry {
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Cos]("cos"),
-    expression[E]("e"),
+    expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),

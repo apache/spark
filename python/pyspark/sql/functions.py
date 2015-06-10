@@ -138,13 +138,6 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
-_functions_1_5 = {
-    'e': 'Returns the double value that is closer than any other to e, the base of the natural ' +
-         'logarithms.',
-    'pi': 'Returns the double value that is closer than any other to pi, the ratio of the ' +
-          'circumference of a circle to its diameter.'
-}
-
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -195,14 +188,11 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
-for _name, _doc in _functions_1_5.items():
-    globals()[_name] = since(1.5)(_create_function(_name, _doc))
 del _name, _doc
 __all__ += _functions.keys()
 __all__ += _functions_1_4.keys()
 __all__ += _binary_mathfunctions.keys()
 __all__ += _window_functions.keys()
-__all__ += _functions_1_5.keys()
 __all__.sort()
 
 
@@ -356,24 +346,6 @@ def randn(seed=None):
     else:
         jc = sc._jvm.functions.randn()
     return Column(jc)
-
-
-@since(1.5)
-def e():
-    """Returns the double value that is closer than any other to e, the base of the natural
-    logarithms.
-    """
-    import math
-    return Column(math.e)
-
-
-@since(1.5)
-def pi():
-    """Returns the double value that is closer than any other to pi, the ratio of the circumference
-    of a circle to its diameter.
-    """
-    import math
-    return Column(math.pi)
 
 
 @since(1.4)

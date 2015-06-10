@@ -951,7 +951,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def e(): Column = E()
+  def e(): Column = EulerNumber()
 
   /**
    * Computes the exponential of the given value.
