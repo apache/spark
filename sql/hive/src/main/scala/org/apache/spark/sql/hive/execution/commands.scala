@@ -50,26 +50,31 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
  */
 private[hive]
 case class DropTable(
+    db: Option[String],
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
-    } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
-      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
-      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
-      // (e.g. invalid paths). We catch it and log a warning message.
-      // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
+    val databaseName = db.getOrElse(hiveContext.sessionState.getCurrentDatabase)
+    if (hiveContext.catalog.tableExists(Seq(databaseName, tableName))) {
+      val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+      val dbTableName = if (db == None) tableName else db.get + "." + tableName
+      try {
+        hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+      } catch {
+        // This table's metadata is not in Hive metastore (e.g. the table does not exist).
+        case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+        case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
+        // Other Throwables can be caused by users providing wrong parameters in OPTIONS
+        // (e.g. invalid paths). We catch it and log a warning message.
+        // Users should be able to drop such kinds of tables regardless if there is an error.
+        case e: Throwable => log.warn(s"${e.getMessage}", e)
+      }
+      hiveContext.invalidateTable(tableName)
+      hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$dbTableName")
+      hiveContext.catalog.unregisterTable(Seq(tableName))
     }
-    hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
   }
 }

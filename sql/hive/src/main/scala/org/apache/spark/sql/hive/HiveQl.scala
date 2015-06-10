@@ -487,11 +487,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Special drop table that also uncaches.
-    case Token("TOK_DROPTABLE",
-           Token("TOK_TABNAME", tableNameParts) ::
-           ifExists) =>
-      val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
-      DropTable(tableName, ifExists.nonEmpty)
+     case Token("TOK_DROPTABLE",
+            (t @ Token("TOK_TABNAME", tableNameParts)) ::
+            ifExists) =>
+      val (db, tableName) = extractDbNameTableName(t)
+      DropTable(db, tableName, ifExists.nonEmpty)
     // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
     case Token("TOK_ANALYZE",
            Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
