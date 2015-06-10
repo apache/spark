@@ -357,6 +357,7 @@ def randn(seed=None):
         jc = sc._jvm.functions.randn()
     return Column(jc)
 
+
 @since(1.5)
 def e():
     """Returns the double value that is closer than any other to e, the base of the natural
@@ -365,6 +366,7 @@ def e():
     import math
     return Column(math.e)
 
+
 @since(1.5)
 def pi():
     """Returns the double value that is closer than any other to pi, the ratio of the circumference
@@ -372,6 +374,7 @@ def pi():
     """
     import math
     return Column(math.pi)
+
 
 @since(1.4)
 def sparkPartitionId():
