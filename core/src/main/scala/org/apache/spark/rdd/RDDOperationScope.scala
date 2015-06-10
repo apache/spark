@@ -95,17 +95,17 @@ private[spark] object RDDOperationScope extends Logging {
   private[spark] def withScope[T](
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
-    val stackTrace = Thread.currentThread.getStackTrace().tail // ignore "Thread#getStackTrace"
-    val ourMethodName = stackTrace(1).getMethodName // i.e. withScope
-    // Climb upwards to find the first method that's called something different
-    val callerMethodName = stackTrace
-      .find(_.getMethodName != ourMethodName)
+
+    val callerMethodName = Thread.currentThread.getStackTrace()
+      .dropWhile(_.getMethodName != "withScope")
+      .find(_.getMethodName != "withScope")
       .map(_.getMethodName)
       .getOrElse {
         // Log a warning just in case, but this should almost certainly never happen
         logWarning("No valid method name for this RDD operation scope!")
         "N/A"
       }
+
     withScope[T](sc, callerMethodName, allowNesting, ignoreParent = false)(body)
   }
 
