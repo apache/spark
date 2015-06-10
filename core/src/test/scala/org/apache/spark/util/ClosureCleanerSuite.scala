@@ -372,14 +372,16 @@ class TestCreateNullValue {
     val d: Double = 1
 
     val nestedClosure = () => {
-      println(bo)
-      println(c)
-      println(b)
-      println(s)
-      println(i)
-      println(l)
-      println(f)
-      println(d)
+      if (s.toString == "123") { // Don't really output them to avoid noisy
+        println(bo)
+        println(c)
+        println(b)
+        println(s)
+        println(i)
+        println(l)
+        println(f)
+        println(d)
+      }
 
       val closure = () => {
         println(getX)
