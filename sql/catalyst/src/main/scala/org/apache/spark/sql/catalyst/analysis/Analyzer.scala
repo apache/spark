@@ -798,7 +798,7 @@ class Analyzer(
       // Second, we group extractedWindowExprBuffer based on their Window Spec.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
-          case WindowExpression(_, spec: WindowSpecDefinition, _, _) => 
+          case WindowExpression(_, spec: WindowSpecDefinition, _, _) =>
             spec.copy(frameSpecification = SpecifiedWindowFrame.unbounded)
         }.distinct
 

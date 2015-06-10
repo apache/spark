@@ -198,7 +198,7 @@ object FunctionRegistry {
 
   /** Add a leaf expression. */
   private def leaf(name: String, value: => Expression): (String, FunctionBuilder) = {
-    val f = (args:Seq[Expression]) => {
+    val f = (args: Seq[Expression]) => {
       if (!args.isEmpty) {
         throw new AnalysisException(s"Invalid number of arguments for function $name")
       }
@@ -208,7 +208,7 @@ object FunctionRegistry {
   }
 
   private def ntile: (String, FunctionBuilder) = {
-    val f = (args:Seq[Expression]) => {
+    val f = (args: Seq[Expression]) => {
       args match {
         case IntegerLiteral(buckets) :: Nil =>
           WindowFunction.ntile(buckets)
@@ -220,7 +220,7 @@ object FunctionRegistry {
   }
 
   private def lead: (String, FunctionBuilder) = {
-    val f = (args:Seq[Expression]) => {
+    val f = (args: Seq[Expression]) => {
       val (e, offset, default) = leadLagParams("lead", args)
       WindowFunction.lead(e, offset, default)
     }
@@ -228,14 +228,14 @@ object FunctionRegistry {
   }
 
   private def lag: (String, FunctionBuilder) = {
-    val f = (args:Seq[Expression]) => {
+    val f = (args: Seq[Expression]) => {
       val (e, offset, default) = leadLagParams("lag", args)
       WindowFunction.lag(e, offset, default)
     }
     ("lag", f)
   }
 
-  private def leadLagParams(name: String, args:Seq[Expression]): (Expression, Int, Expression) = {
+  private def leadLagParams(name: String, args: Seq[Expression]): (Expression, Int, Expression) = {
     args match {
       case Seq(e: Expression) =>
         (e, 1, null)

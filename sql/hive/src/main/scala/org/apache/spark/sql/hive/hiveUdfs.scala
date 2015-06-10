@@ -80,7 +80,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
           val expr = function match {
             case gu: HiveGenericUdaf if (FunctionRegistry.isRankingFunction(name.toLowerCase)) =>
               HiveRankImpliedOrderSpec(gu.copy(pivot = true))
-            case gu: HiveGenericUdaf if (info.isPivotResult) => 
+            case gu: HiveGenericUdaf if (info.isPivotResult) =>
               gu.copy(pivot = true)
           }
 
