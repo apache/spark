@@ -99,13 +99,9 @@ class DataFrameFunctionsSuite extends QueryTest {
         val l = if (v == null) null else v.length
         Row(l, l)
       })
-  }
-
-  test("length in SQL") {
-    nullStrings.registerTempTable("null_strings")
 
     checkAnswer(
-      ctx.sql("SELECT length(s) FROM null_strings"),
+      nullStrings.selectExpr("length(s)"),
       nullStrings.collect().toSeq.map { r =>
         val v = r.getString(1)
         val l = if (v == null) null else v.length
