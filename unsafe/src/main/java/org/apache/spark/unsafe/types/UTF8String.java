@@ -22,6 +22,8 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import javax.annotation.Nullable;
 
+import org.apache.spark.unsafe.PlatformDependent;
+
 /**
  * A UTF-8 String for internal Spark use.
  * <p>
@@ -35,7 +37,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Nullable
   private byte[] bytes;
 
-  private int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     4, 4, 4, 4, 4, 4, 4, 4,
@@ -156,8 +158,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     try {
       return new String(bytes, "utf-8");
     } catch (UnsupportedEncodingException e) {
-      e.printStackTrace();
-      return "unsupported encoding";
+      // Turn the exception into unchecked so we can find out about it at runtime, but
+      // don't need to add lots of boilerplate code everywhere.
+      PlatformDependent.throwException(e);
+      return "unknown";  // we will never reach here.
     }
   }
 
