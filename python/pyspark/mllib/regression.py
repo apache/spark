@@ -56,6 +56,42 @@ class LabeledPoint(object):
     def __repr__(self):
         return "LabeledPoint(%s, %s)" % (self.label, self.features)
 
+    @staticmethod
+    def parse(s):
+        """
+        Parse string representation back into a LabeledPoint.
+
+        >>> LabeledPoint.parse('  ( 3,  [1.0,   2.0]')
+        LabeledPoint(3.0, [1.0,2.0])
+        >>> lp = LabeledPoint(2, [1.0])
+        >>> LabeledPoint.parse(str(lp))
+        LabeledPoint(2.0, [1.0])
+        >>> LabeledPoint.parse('3, 2.0 3.0 4.0')
+        LabeledPoint(3.0, [2.0,3.0,4.0])
+        """
+        bracket = s.find('(')
+        if bracket != -1:
+            try:
+                label = float(s[s.find('(') + 1: s.find(',')])
+            except ValueError:
+                raise ValueError("Cannot parse label from %s" % s)
+            try:
+                features = s[s.find('[') + 1: s.find(']')].split(',')
+            except ValueError:
+                raise ValueError("Cannot parse features from %s" % s)
+        # Representation before v 1.0
+        else:
+            lsplit = s.find(',')
+            try:
+                label = float(s[: lsplit])
+            except ValueError:
+                raise ValueError("Cannot parse label from %s" % s)
+            try:
+                features = s[lsplit + 1:].strip().split(" ")
+            except ValueError:
+                raise ValueError("Cannot parse features from %s" % s)
+        return LabeledPoint(label, features)
+
 
 class LinearModel(object):
 
