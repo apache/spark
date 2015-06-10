@@ -19,6 +19,8 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Row
@@ -320,7 +322,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    UTF8String(stringBytes)
+    UTF8String.fromBytes(stringBytes)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {

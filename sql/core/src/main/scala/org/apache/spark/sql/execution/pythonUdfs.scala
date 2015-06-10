@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -204,8 +206,10 @@ object EvaluatePython {
     case (c: Long, IntegerType) => c.toInt
     case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
-    case (c: String, StringType) => UTF8String(c)
-    case (c, StringType) if !c.isInstanceOf[String] => UTF8String(c.toString)
+    case (c: String, StringType) => UTF8String.fromString(c)
+    case (c, StringType) =>
+      // If we get here, c is not a string. Call toString on it.
+      UTF8String.fromString(c.toString)
 
     case (c, _) => c
   }

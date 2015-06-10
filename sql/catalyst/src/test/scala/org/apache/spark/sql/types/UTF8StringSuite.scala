@@ -18,22 +18,24 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off
 class UTF8StringSuite extends SparkFunSuite {
   test("basic") {
     def check(str: String, len: Int) {
 
-      assert(UTF8String(str).length == len)
-      assert(UTF8String(str.getBytes("utf8")).length() == len)
+      assert(UTF8String.fromString(str).length === len)
+      assert(UTF8String.fromBytes(str.getBytes("utf8")).length() === len)
 
-      assert(UTF8String(str) == str)
-      assert(UTF8String(str.getBytes("utf8")) == str)
-      assert(UTF8String(str).toString == str)
-      assert(UTF8String(str.getBytes("utf8")).toString == str)
-      assert(UTF8String(str.getBytes("utf8")) == UTF8String(str))
+      assert(UTF8String.fromString(str) === str)
+      assert(UTF8String.fromBytes(str.getBytes("utf8")) === str)
+      assert(UTF8String.fromString(str).toString === str)
+      assert(UTF8String.fromBytes(str.getBytes("utf8")).toString == str)
+      assert(UTF8String.fromBytes(str.getBytes("utf8")) === UTF8String.fromString(str))
 
-      assert(UTF8String(str).hashCode() == UTF8String(str.getBytes("utf8")).hashCode())
+      assert(UTF8String.fromString(str).hashCode() ===
+        UTF8String.fromBytes(str.getBytes("utf8")).hashCode())
     }
 
     check("hello", 5)
@@ -41,30 +43,30 @@ class UTF8StringSuite extends SparkFunSuite {
   }
 
   test("contains") {
-    assert(UTF8String("hello").contains(UTF8String("ello")))
-    assert(!UTF8String("hello").contains(UTF8String("vello")))
-    assert(UTF8String("大千世界").contains(UTF8String("千世")))
-    assert(!UTF8String("大千世界").contains(UTF8String("世千")))
+    assert(UTF8String.fromString("hello").contains(UTF8String.fromString("ello")))
+    assert(!UTF8String.fromString("hello").contains(UTF8String.fromString("vello")))
+    assert(UTF8String.fromString("大千世界").contains(UTF8String.fromString("千世")))
+    assert(!UTF8String.fromString("大千世界").contains(UTF8String.fromString("世千")))
   }
 
   test("prefix") {
-    assert(UTF8String("hello").startsWith(UTF8String("hell")))
-    assert(!UTF8String("hello").startsWith(UTF8String("ell")))
-    assert(UTF8String("大千世界").startsWith(UTF8String("大千")))
-    assert(!UTF8String("大千世界").startsWith(UTF8String("千")))
+    assert(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hell")))
+    assert(!UTF8String.fromString("hello").startsWith(UTF8String.fromString("ell")))
+    assert(UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千")))
+    assert(!UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("千")))
   }
 
   test("suffix") {
-    assert(UTF8String("hello").endsWith(UTF8String("ello")))
-    assert(!UTF8String("hello").endsWith(UTF8String("ellov")))
-    assert(UTF8String("大千世界").endsWith(UTF8String("世界")))
-    assert(!UTF8String("大千世界").endsWith(UTF8String("世")))
+    assert(UTF8String.fromString("hello").endsWith(UTF8String.fromString("ello")))
+    assert(!UTF8String.fromString("hello").endsWith(UTF8String.fromString("ellov")))
+    assert(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世界")))
+    assert(!UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世")))
   }
 
   test("slice") {
-    assert(UTF8String("hello").slice(1, 3) == UTF8String("el"))
-    assert(UTF8String("大千世界").slice(0, 1) == UTF8String("大"))
-    assert(UTF8String("大千世界").slice(1, 3) == UTF8String("千世"))
-    assert(UTF8String("大千世界").slice(3, 5) == UTF8String("界"))
+    assert(UTF8String.fromString("hello").slice(1, 3) == UTF8String.fromString("el"))
+    assert(UTF8String.fromString("大千世界").slice(0, 1) == UTF8String.fromString("大"))
+    assert(UTF8String.fromString("大千世界").slice(1, 3) == UTF8String.fromString("千世"))
+    assert(UTF8String.fromString("大千世界").slice(3, 5) == UTF8String.fromString("界"))
   }
 }

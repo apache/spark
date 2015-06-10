@@ -23,6 +23,8 @@ import java.sql.{Timestamp, Date}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -257,7 +259,7 @@ object CatalystTypeConverters {
 
   private object StringConverter extends CatalystTypeConverter[Any, String, Any] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
-      case str: String => UTF8String(str)
+      case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
     }
     override def toScala(catalystValue: Any): String = catalystValue match {

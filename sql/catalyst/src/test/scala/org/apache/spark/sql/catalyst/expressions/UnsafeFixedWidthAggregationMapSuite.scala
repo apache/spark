@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.collection.JavaConverters._
 import scala.util.Random
 
@@ -82,7 +84,7 @@ class UnsafeFixedWidthAggregationMapSuite
       1024, // initial capacity
       false // disable perf metrics
     )
-    val groupKey = new GenericRow(Array[Any](UTF8String("cats")))
+    val groupKey = new GenericRow(Array[Any](UTF8String.fromString("cats")))
 
     // Looking up a key stores a zero-entry in the map (like Python Counters or DefaultDicts)
     map.getAggregationBuffer(groupKey)
@@ -111,7 +113,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val rand = new Random(42)
     val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
     groupKeys.foreach { keyString =>
-      map.getAggregationBuffer(new GenericRow(Array[Any](UTF8String(keyString))))
+      map.getAggregationBuffer(new GenericRow(Array[Any](UTF8String.fromString(keyString))))
     }
     val seenKeys: Set[String] = map.iterator().asScala.map { entry =>
       entry.key.getString(0)

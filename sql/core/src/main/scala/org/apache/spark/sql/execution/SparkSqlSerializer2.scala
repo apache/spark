@@ -21,6 +21,8 @@ import java.io._
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -434,7 +436,7 @@ private[sql] object SparkSqlSerializer2 {
                 val length = in.readInt()
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
-                mutableRow.update(i, UTF8String(bytes))
+                mutableRow.update(i, UTF8String.fromBytes(bytes))
               }
 
             case BinaryType =>
