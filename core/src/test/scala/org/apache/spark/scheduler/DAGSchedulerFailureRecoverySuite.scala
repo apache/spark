@@ -26,7 +26,7 @@ import org.apache.spark._
 
 class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
-  test("no concurrent retries for stage attempts (SPARK-8103)") {
+  ignore("no concurrent retries for stage attempts (SPARK-8103)") {
     // make sure that if we get fetch failures after the retry has started, we ignore them,
     // and so don't end up submitting multiple concurrent attempts for the same stage
 
