@@ -395,22 +395,50 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def join(right: DataFrame, usingColumn: String): DataFrame = {
+    join(right, Seq(usingColumn))
+  }
+
+  /**
+   * Inner equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * {{{
+   *   // Joining df1 and df2 using the columns "user_id" and "user_name"
+   *   df1.join(df2, Seq("user_id", "user_name"))
+   * }}}
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @group dfops
+   * @since 1.4.0
+   */
+  def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
-    // Project only one of the join column.
-    val joinedCol = joined.right.resolve(usingColumn)
+    // Project only one of the join columns.
+    val joinedCols = usingColumns.map(col => joined.right.resolve(col))
+    val condition = usingColumns.map { col =>
+      catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col))
+    }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
+      catalyst.expressions.And(cond, eqTo)
+    }
+
     Project(
-      joined.output.filterNot(_ == joinedCol),
+      joined.output.filterNot(joinedCols.contains(_)),
       Join(
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(catalyst.expressions.EqualTo(
-          joined.left.resolve(usingColumn),
-          joined.right.resolve(usingColumn))))
+        condition)
     )
   }
 
@@ -1083,6 +1111,22 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This version of drop accepts a Column rather than a name.
+   * This is a no-op if the DataFrame doesn't have a column
+   * with an equivalent expression.
+   * @group dfops
+   * @since 1.4.1
+   */
+  def drop(col: Column): DataFrame = {
+    val attrs = this.logicalPlan.output
+    val colsAfterDrop = attrs.filter { attr =>
+      attr != col.expr
+    }.map(attr => Column(attr))
+    select(colsAfterDrop : _*)
+  }
+
+  /**
    * Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]].
    * This is an alias for `distinct`.
    * @group dfops
@@ -1295,7 +1339,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  override def distinct: DataFrame = Distinct(logicalPlan)
+  override def distinct: DataFrame = dropDuplicates()
 
   /**
    * @group basic

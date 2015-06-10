@@ -51,7 +51,8 @@ public class JavaTestParams extends JavaParams {
   public int getMyIntParam() { return (Integer)getOrDefault(myIntParam_); }
 
   public JavaTestParams setMyIntParam(int value) {
-    set(myIntParam_, value); return this;
+    set(myIntParam_, value);
+    return this;
   }
 
   private DoubleParam myDoubleParam_;
@@ -60,7 +61,8 @@ public class JavaTestParams extends JavaParams {
   public double getMyDoubleParam() { return (Double)getOrDefault(myDoubleParam_); }
 
   public JavaTestParams setMyDoubleParam(double value) {
-    set(myDoubleParam_, value); return this;
+    set(myDoubleParam_, value);
+    return this;
   }
 
   private Param<String> myStringParam_;
@@ -69,7 +71,18 @@ public class JavaTestParams extends JavaParams {
   public String getMyStringParam() { return getOrDefault(myStringParam_); }
 
   public JavaTestParams setMyStringParam(String value) {
-    set(myStringParam_, value); return this;
+    set(myStringParam_, value);
+    return this;
+  }
+
+  private DoubleArrayParam myDoubleArrayParam_;
+  public DoubleArrayParam myDoubleArrayParam() { return myDoubleArrayParam_; }
+
+  public double[] getMyDoubleArrayParam() { return getOrDefault(myDoubleArrayParam_); }
+
+  public JavaTestParams setMyDoubleArrayParam(double[] value) {
+    set(myDoubleArrayParam_, value);
+    return this;
   }
 
   private void init() {
@@ -79,8 +92,14 @@ public class JavaTestParams extends JavaParams {
     List<String> validStrings = Lists.newArrayList("a", "b");
     myStringParam_ = new Param<String>(this, "myStringParam", "this is a string param",
       ParamValidators.inArray(validStrings));
-    setDefault(myIntParam_, 1);
-    setDefault(myDoubleParam_, 0.5);
+    myDoubleArrayParam_ =
+      new DoubleArrayParam(this, "myDoubleArrayParam", "this is a double param");
+
+    setDefault(myIntParam(), 1);
+    setDefault(myIntParam().w(1));
+    setDefault(myDoubleParam(), 0.5);
     setDefault(myIntParam().w(1), myDoubleParam().w(0.5));
+    setDefault(myDoubleArrayParam(), new double[] {1.0, 2.0});
+    setDefault(myDoubleArrayParam().w(new double[] {1.0, 2.0}));
   }
 }

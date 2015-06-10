@@ -379,10 +379,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
     def refresh(): Unit = {
-      // We don't filter files/directories whose name start with "_" or "." here, as specific data
-      // sources may take advantages over them (e.g. Parquet _metadata and _common_metadata files).
-      // But "_temporary" directories are explicitly ignored since failed tasks/jobs may leave
-      // partial/corrupted data files there.
+      // We don't filter files/directories whose name start with "_" except "_temporary" here, as
+      // specific data sources may take advantages over them (e.g. Parquet _metadata and
+      // _common_metadata files). "_temporary" directories are explicitly ignored since failed
+      // tasks/jobs may leave partial/corrupted data files there.
       def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
         if (status.getPath.getName.toLowerCase == "_temporary") {
           Set.empty
@@ -400,6 +400,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
+      }.filterNot { status =>
+        // SPARK-8037: Ignores files like ".DS_Store" and other hidden files/directories
+        status.getPath.getName.startsWith(".")
       }
 
       val files = statuses.filterNot(_.isDir)
@@ -432,8 +435,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           // partition values.
           userDefinedPartitionColumns.map { partitionSchema =>
             val spec = discoverPartitions()
+            val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+              val literals = values.toSeq.zip(partitionColumnTypes).map {
                 case (value, dataType) => Literal.create(value, dataType)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
@@ -487,9 +491,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
+    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
+      typeInference)
   }
 
   /**
@@ -500,7 +506,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   override lazy val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionSpec.partitionColumns.filterNot { column =>
+    StructType(dataSchema ++ partitionColumns.filterNot { column =>
       dataSchemaColumnNames.contains(column.name.toLowerCase)
     })
   }

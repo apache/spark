@@ -77,6 +77,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private final List<String> sparkArgs;
+  private final boolean printHelp;
 
   /**
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
@@ -87,10 +88,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<String>();
+    this.printHelp = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
-    this();
+    this.sparkArgs = new ArrayList<String>();
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.allowsMixedArguments = true;
@@ -104,14 +106,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       this.allowsMixedArguments = false;
     }
 
-    new OptionParser().parse(submitArgs);
+    OptionParser parser = new OptionParser();
+    parser.parse(submitArgs);
+    this.printHelp = parser.helpRequested;
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
-    if (PYSPARK_SHELL_RESOURCE.equals(appResource)) {
+    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printHelp) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL_RESOURCE.equals(appResource)) {
+    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printHelp) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -311,6 +315,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
+    boolean helpRequested = false;
+
     @Override
     protected boolean handle(String opt, String value) {
       if (opt.equals(MASTER)) {
@@ -341,6 +347,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           allowsMixedArguments = true;
           appResource = specialClasses.get(value);
         }
+      } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
+        helpRequested = true;
+        sparkArgs.add(opt);
       } else {
         sparkArgs.add(opt);
         if (value != null) {
@@ -360,6 +369,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         appArgs.add(opt);
         return true;
       } else {
+        checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
         sparkArgs.add(opt);
         return false;
       }

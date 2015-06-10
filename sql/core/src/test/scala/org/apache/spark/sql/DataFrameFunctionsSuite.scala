@@ -19,13 +19,15 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
 class DataFrameFunctionsSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("array with column name") {
     val df = Seq((0, 1)).toDF("a", "b")
@@ -81,6 +83,25 @@ class DataFrameFunctionsSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       struct(col("a") * 2)
     }
+  }
+
+  test("constant functions") {
+    checkAnswer(
+      testData2.select(e()).limit(1),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      testData2.select(pi()).limit(1),
+      Row(scala.math.Pi)
+    )
+    checkAnswer(
+      ctx.sql("SELECT E()"),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      ctx.sql("SELECT PI()"),
+      Row(scala.math.Pi)
+    )
   }
 
   test("bitwiseNOT") {

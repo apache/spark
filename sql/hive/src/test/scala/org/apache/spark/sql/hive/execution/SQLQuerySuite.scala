@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.hive.{HiveQLDialect, HiveShim, MetastoreRelation}
+import org.apache.spark.sql.hive.{HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
@@ -330,35 +330,33 @@ class SQLQuerySuite extends QueryTest {
       "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
     )
 
-    if (HiveShim.version =="0.13.1") {
-      val origUseParquetDataSource = conf.parquetUseDataSourceApi
-      try {
-        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
-        sql(
-          """CREATE TABLE ctas5
-            | STORED AS parquet AS
-            |   SELECT key, value
-            |   FROM src
-            |   ORDER BY key, value""".stripMargin).collect()
+    val origUseParquetDataSource = conf.parquetUseDataSourceApi
+    try {
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect()
 
-        checkExistence(sql("DESC EXTENDED ctas5"), true,
-          "name:key", "type:string", "name:value", "ctas5",
-          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-          "MANAGED_TABLE"
-        )
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
 
-        val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
-        // use the Hive SerDe for parquet tables
-        sql("set spark.sql.hive.convertMetastoreParquet = false")
-        checkAnswer(
-          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-          sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-        sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
-      } finally {
-        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
-      }
+      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      // use the Hive SerDe for parquet tables
+      sql("set spark.sql.hive.convertMetastoreParquet = false")
+      checkAnswer(
+        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+    } finally {
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
     }
   }
 
@@ -778,6 +776,42 @@ class SQLQuerySuite extends QueryTest {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("window function: multiple window expressions in a single expression") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.registerTempTable("nums")
+
+    val expected =
+      Row(1, 1, 1, 55, 1, 57) ::
+      Row(0, 2, 3, 55, 2, 60) ::
+      Row(1, 3, 6, 55, 4, 65) ::
+      Row(0, 4, 10, 55, 6, 71) ::
+      Row(1, 5, 15, 55, 9, 79) ::
+      Row(0, 6, 21, 55, 12, 88) ::
+      Row(1, 7, 28, 55, 16, 99) ::
+      Row(0, 8, 36, 55, 20, 111) ::
+      Row(1, 9, 45, 55, 25, 125) ::
+      Row(0, 10, 55, 55, 30, 140) :: Nil
+
+    val actual = sql(
+      """
+        |SELECT
+        |  y,
+        |  x,
+        |  sum(x) OVER w1 AS running_sum,
+        |  sum(x) OVER w2 AS total_sum,
+        |  sum(x) OVER w3 AS running_sum_per_y,
+        |  ((sum(x) OVER w1) + (sum(x) OVER w2) + (sum(x) OVER w3)) as combined2
+        |FROM nums
+        |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UnBOUNDED PRECEDiNG AND CuRRENT RoW),
+        |       w2 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOuNDED FoLLOWING),
+        |       w3 AS (PARTITION BY y ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+      """.stripMargin)
+
+    checkAnswer(actual, expected)
+
+    dropTempTable("nums")
   }
 
   test("test case key when") {

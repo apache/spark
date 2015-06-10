@@ -60,4 +60,12 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
   }
+
+  test("StringIndexerModel should keep silent if the input column does not exist.") {
+    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+    val df = sqlContext.range(0L, 10L)
+    assert(indexerModel.transform(df).eq(df))
+  }
 }
