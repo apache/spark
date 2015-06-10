@@ -237,6 +237,7 @@ abstract class HiveComparisonTest
 
     test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
+      logDebug(s"$sql")
 
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
