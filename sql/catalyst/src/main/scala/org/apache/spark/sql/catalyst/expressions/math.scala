@@ -36,14 +36,10 @@ abstract class LeafMathExpression(c: Double, name: String)
 
   override def eval(input: Row): Any = c
 
-  // name of constant in java.lang.Math
-  def constName: String = name
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${ev.primitive} = java.lang.Math.$constName;
+      ${ctx.javaType(dataType)} ${ev.primitive} = java.lang.Math.$name;
     """
   }
 }

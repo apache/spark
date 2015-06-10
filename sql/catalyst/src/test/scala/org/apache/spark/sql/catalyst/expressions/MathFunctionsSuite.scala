@@ -27,16 +27,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    *
    * @param e expression
    * @param c The constants in scala.math
-   * @param domain The set of values to run the function with
    * @tparam T Generic type for primitives
    */
   private def testLeaf[T](
       e: () => Expression,
-      c: T,
-      domain: Iterable[T] = (-20 to 20).map(_ * 0.1)): Unit = {
-    domain.foreach { value =>
-      checkEvaluation(e(), c, EmptyRow)
-    }
+      c: T): Unit = {
+    checkEvaluation(e(), c, EmptyRow)
     checkEvaluation(e(), c, create_row(null))
   }
 

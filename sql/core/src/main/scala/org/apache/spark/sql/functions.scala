@@ -945,7 +945,8 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * Returns the value of the e.
+   * Returns the double value that is closer than any other to e, the base of the natural
+   * logarithms.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1114,7 +1115,8 @@ object functions {
   def log1p(columnName: String): Column = log1p(Column(columnName))
 
   /**
-   * Returns the value of the pi.
+   * Returns the double value that is closer than any other to pi, the ratio of the circumference
+   * of a circle to its diameter.
    *
    * @group math_funcs
    * @since 1.5.0
