@@ -1206,7 +1206,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): LargeByteBuffer = {
-    val byteStream = new LargeByteBufferOutputStream()
+    val byteStream = new LargeByteBufferOutputStream(65536)
     dataSerializeStream(blockId, byteStream, values, serializer)
     byteStream.largeBuffer
   }
@@ -1311,7 +1311,7 @@ object BlockSizeLimitException {
   def sizeMsg(cause: BufferTooLargeException): String = {
     s"that was ${Utils.bytesToString(cause.actualSize)} (too " +
     s"large by ${Utils.bytesToString(cause.extra)} / " +
-      s"${cause.actualSize.toDouble / LargeByteBufferHelper.MAX_CHUNK}x)."
+      s"${cause.actualSize.toDouble / LargeByteBufferHelper.MAX_CHUNK_SIZE}x)."
   }
 
   def sizeMsgAndAdvice(cause: BufferTooLargeException): String = {
