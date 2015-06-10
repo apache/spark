@@ -298,6 +298,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("LOG") {
+    checkAnswer(
+      sql("SELECT LOG(key) FROM testData"),
+      (1 to 100).map(x => Row(math.log(x.toDouble))).toSeq
+    )
+    checkAnswer(
+      sql("SELECT LOG(2.0, key) FROM testData"),
+      (1 to 100).map(x => Row(math.log(x.toDouble) / math.log(2.0))).toSeq
+    )
+  }
+
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
       sql("SELECT substr(tableName, 1, 2) FROM tableName"),

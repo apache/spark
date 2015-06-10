@@ -110,7 +110,7 @@ object FunctionRegistry {
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Hypot]("hypot"),
-    expression[Log]("log"),
+    expression[Logarithm]("log"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
     expression[Pow]("pow"),
@@ -122,7 +122,6 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("todegrees"),
     expression[ToRadians]("toradians"),
-    expression[Logarithm]("logarithm"),
 
     // aggregate functions
     expression[Average]("avg"),

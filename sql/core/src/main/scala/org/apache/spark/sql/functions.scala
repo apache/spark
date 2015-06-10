@@ -1074,6 +1074,22 @@ object functions {
   def log(columnName: String): Column = log(Column(columnName))
 
   /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, a: Column): Column = Logarithm(lit(base).expr, a.expr)
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, a: String): Column = log(base, Column(a))
+
+  /**
    * Computes the logarithm of the given value in Base 10.
    *
    * @group math_funcs
@@ -1298,71 +1314,6 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(l: Column, r: Column): Column = Logarithm(l.expr, r.expr)
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(l: Column, rightName: String): Column = logarithm(l, Column(rightName))
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(leftName: String, r: Column): Column = logarithm(Column(leftName), r)
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(leftName: String, rightName: String): Column =
-    logarithm(Column(leftName), Column(rightName))
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(l: Column, r: Double): Column = logarithm(l, lit(r).expr)
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(leftName: String, r: Double): Column = logarithm(Column(leftName), r)
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(l: Double, r: Column): Column = logarithm(lit(l).expr, r)
-
-  /**
-   * Returns the first argument-base logarithm of the second argument.
-   *
-   * @group math_funcs
-   * @since 1.4.0
-   */
-  def logarithm(l: Double, rightName: String): Column = logarithm(l, Column(rightName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -203,6 +203,19 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
+object Logarithm {
+  def apply(exprs: Seq[Expression]) = {
+    if (exprs.length == 1) {
+      new Log(exprs(0))
+    } else if (exprs.length == 2) {
+      new Logarithm(exprs(0), exprs(1))
+    } else {
+      sys.error(s"Log only accepts two input expressions")
+    }
+  }
+  def apply(child: Expression) = new Log(child)
+}
+
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

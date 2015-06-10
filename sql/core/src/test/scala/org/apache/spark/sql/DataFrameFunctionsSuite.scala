@@ -90,4 +90,12 @@ class DataFrameFunctionsSuite extends QueryTest {
       testData2.select(bitwiseNOT($"a")),
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
+
+  test("log") {
+    val df = Seq[(Integer, Integer)]((123, null)).toDF("a", "b")
+    checkAnswer(
+      df.select(org.apache.spark.sql.functions.log("a"),
+      org.apache.spark.sql.functions.log(2.0, "a"),
+      org.apache.spark.sql.functions.log("b")), Row(math.log(123), math.log(123) / math.log(2), null))
+  }
 }
