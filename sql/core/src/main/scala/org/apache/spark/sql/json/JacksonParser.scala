@@ -19,8 +19,6 @@ package org.apache.spark.sql.json
 
 import java.io.ByteArrayOutputStream
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.collection.Map
 
 import com.fasterxml.jackson.core._
@@ -30,6 +28,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
 
 private[sql] object JacksonParser {
   def apply(

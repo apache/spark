@@ -19,14 +19,13 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from

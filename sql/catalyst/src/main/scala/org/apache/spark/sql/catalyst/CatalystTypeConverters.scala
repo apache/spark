@@ -23,13 +23,12 @@ import java.sql.{Timestamp, Date}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.

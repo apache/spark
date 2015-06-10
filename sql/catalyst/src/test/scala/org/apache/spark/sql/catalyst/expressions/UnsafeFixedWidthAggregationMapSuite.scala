@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
+import org.apache.spark.unsafe.types.UTF8String
+
 
 class UnsafeFixedWidthAggregationMapSuite
   extends SparkFunSuite

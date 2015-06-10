@@ -21,8 +21,6 @@ import java.io._
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -30,6 +28,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in

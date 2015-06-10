@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * :: DeveloperApi ::

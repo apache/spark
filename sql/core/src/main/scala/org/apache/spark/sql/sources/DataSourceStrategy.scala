@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
@@ -30,6 +29,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
 import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
