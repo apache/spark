@@ -73,25 +73,19 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
         sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
       }
 
-      // Wrap a window function in a Window Expression.
+      // Wrap a pivotting window function in a Window Expression.
       FunctionRegistry.getWindowFunctionInfo(name.toLowerCase) match {
-        case info: WindowFunctionInfo =>
-          // Pivot & Wrap Implied Order.
+        case info: WindowFunctionInfo if info.isPivotResult =>
+          // Wrap Implied Order.
           val expr = function match {
-            case gu: HiveGenericUdaf if (classOf[GenericUDAFRank].isAssignableFrom(functionInfo.getFunctionClass)) =>
+            case gu: HiveGenericUdaf if (FunctionRegistry.isRankingFunction(name.toLowerCase)) =>
               HiveRankImpliedOrderSpec(gu.copy(pivot = true))
             case gu: HiveGenericUdaf if (info.isPivotResult) => 
               gu.copy(pivot = true)
-            case f if (!info.isPivotResult) => 
-              f
           }
 
-          // Fixed Frame
-          val frame = if (!info.isSupportsWindow) SpecifiedWindowFrame.unbounded
-          else UnspecifiedFrame
-
           // Construct Partial Window Expression
-          WindowExpression(expr, WindowSpecDefinition.empty, frame, info.isPivotResult)
+          WindowExpression(expr, WindowSpecDefinition.empty, SpecifiedWindowFrame.unbounded, true)
         case _ => function
       }
     }

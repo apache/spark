@@ -412,7 +412,6 @@ object WindowFunction {
   }
 
   def cumeDist(spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {
-    // FIXME so it appears that Hive's CUME_DIST behaves a bit unexpected...
     val rankInclCurrentValue = WindowExpression(Count(Literal(1)), spec,
       SpecifiedWindowFrame.rangeRunning)
     ComposedWindowFunction(Divide(rankInclCurrentValue, count(spec)))

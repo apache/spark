@@ -161,7 +161,13 @@ case class Window(
             FrameBoundaryExtractor(low),
             UnboundedFollowing)) =>
             val lBoundOrdering = createBoundOrdering(frameType, low)
-            val factories = aggregateFrameExpressions
+            // Flip First/Last operators because we will iterate through the rows in reverse.
+            val factories = frameExpressions.map { _ match {
+              case First(e) => Last(e)
+              case Last(e) => First(e)
+              case a:AggregateExpression => a
+              }
+            }
             input: Seq[Row] => new UnboundedFollowingWindowFunctionFrame(input,
               factories, lBoundOrdering)
           // Sliding
