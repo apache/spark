@@ -642,6 +642,16 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>com.sun.jersey</groupId>
         <artifactId>jersey-server</artifactId>
         <version>1.9</version>
@@ -1061,6 +1071,11 @@
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-avatica</artifactId>
           </exclusion>
+          <!-- excluded to keep out transitive dependencies -->
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1074,7 +1089,6 @@
         <artifactId>hive-metastore</artifactId>
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
-<!--
         <exclusions>
           <exclusion>
             <groupId>org.apache.hive</groupId>
@@ -1085,7 +1099,6 @@
             <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
           </exclusion>
         </exclusions>
--->
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -1155,11 +1168,39 @@
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
         <version>${calcite.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-avatica</artifactId>
         <version>${calcite.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
