@@ -22,7 +22,7 @@ import java.util.concurrent._
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, WeakHashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
@@ -161,9 +161,9 @@ private[yarn] class YarnAllocator(
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]): Boolean = synchronized {
+      preferredLocalities: Map[String, Int]): Boolean = synchronized {
     this.localityAwarePendingTaskNum = localityAwarePendingTasks
-    this.preferredLocalityToCounts = preferredLocalityToCounts
+    this.preferredLocalityToCounts = preferredLocalities
 
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
@@ -255,7 +255,7 @@ private[yarn] class YarnAllocator(
         if (expectedCount > existedCount) {
           // Get the actual container number if existing container can not fully satisfy the
           // expected number of container
-          (host, (expectedCount - existedCount).floor.toInt)
+          (host, (expectedCount - existedCount).ceil.toInt)
         } else {
           // If the current existed container number can fully satisfy the expected number of
           // containers, set the required containers to be 0
@@ -304,13 +304,13 @@ private[yarn] class YarnAllocator(
         // number, which is used for locality preferred host calculating.
         var preferredLocalityRatio = expectedLocalityToContainerNum.mapValues { ratio =>
           val adjustedRatio = ratio.toDouble * requiredLocalityAwareContainerNum / largestRatio
-          adjustedRatio.floor.toInt
+          adjustedRatio.ceil.toInt
         }
 
         for (i <- 0 until requiredLocalityAwareContainerNum) {
           // Only filter out the ratio which is larger than 0, which means the current host can
           // still be allocated with new container request.
-          val hosts = preferredLocalityToCounts.filter(_._2 > 0).keys.toArray
+          val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
           val racks = hosts.map(h => RackResolver.resolve(conf, h).getNetworkLocation).toSet
           val request = createContainerRequest(resource, hosts, racks.toArray)
           amClient.addContainerRequest(request)
@@ -341,7 +341,7 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  private def createContainerRequest(resource: Resource, nodes: Array[String], racks: Array[String]
+  protected def createContainerRequest(resource: Resource, nodes: Array[String], racks: Array[String]
       ): ContainerRequest = {
     nodeLabelConstructor.map { constructor =>
       constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
