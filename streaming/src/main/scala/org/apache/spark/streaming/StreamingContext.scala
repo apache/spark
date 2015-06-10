@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// TODO: ADDING CHANGE TO TEST run-tests SCRIPT
+
 package org.apache.spark.streaming
 
 import java.io.{InputStream, NotSerializableException}
