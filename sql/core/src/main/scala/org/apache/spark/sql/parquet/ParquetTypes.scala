@@ -57,7 +57,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
       parquetSchema: MessageType,
       isBinaryAsString: Boolean,
       isInt96AsTimestamp: Boolean): Seq[Attribute] = {
-    val converter = new CatalystSchemaConverter(isBinaryAsString, isInt96AsTimestamp)
+    val converter = new CatalystSchemaConverter(
+      isBinaryAsString, isInt96AsTimestamp, followParquetFormatSpec = false)
     converter.convert(parquetSchema).toAttributes
   }
 

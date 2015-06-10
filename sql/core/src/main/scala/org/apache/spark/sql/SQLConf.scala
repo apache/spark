@@ -264,6 +264,14 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
+    key = "spark.sql.parquet.followParquetFormatSpec",
+    defaultValue = Some(false),
+    doc = "Wether to stick to Parquet format specification when converting Parquet schema to " +
+      "Spark SQL schema and vice versa.  Sticks to the specification if set to true; falls back " +
+      "to compatible mode if set to false.",
+    isPublic = false)
+
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
     defaultValue = Some(classOf[ParquetOutputCommitter].getName),
