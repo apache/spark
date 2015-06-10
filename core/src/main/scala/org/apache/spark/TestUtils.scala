@@ -51,7 +51,7 @@ private[spark] object TestUtils {
       classpathUrls: Seq[URL] = Seq()): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
-      createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls) 
+      createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
     }
     val files2 = for ((childName, baseName) <- classNamesWithBase) yield {
       createCompiledClass(childName, tempDir, toStringValue, baseName, classpathUrls)

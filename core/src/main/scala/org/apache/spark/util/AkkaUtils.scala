@@ -63,7 +63,7 @@ private[spark] object AkkaUtils extends Logging {
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
 
-    val akkaThreads   = conf.getInt("spark.akka.threads", 4)
+    val akkaThreads = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
     val akkaTimeoutS = conf.getTimeAsSeconds("spark.akka.timeout",
       conf.get("spark.network.timeout", "120s"))

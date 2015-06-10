@@ -236,7 +236,7 @@ private[sql] case class InMemoryColumnarTableScan(
     case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
     case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
 
-    case IsNull(a: Attribute)    => statsFor(a).nullCount > 0
+    case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
   }
 

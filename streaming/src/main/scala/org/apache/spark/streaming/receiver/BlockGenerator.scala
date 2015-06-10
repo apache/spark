@@ -164,7 +164,7 @@ private[streaming] class BlockGenerator(
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
     try {
-      while(!stopped) {
+      while (!stopped) {
         Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
@@ -191,7 +191,7 @@ private[streaming] class BlockGenerator(
     logError(message, t)
     listener.onError(message, t)
   }
-  
+
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)

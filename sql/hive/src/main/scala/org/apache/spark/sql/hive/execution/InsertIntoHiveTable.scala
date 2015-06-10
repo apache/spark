@@ -19,26 +19,24 @@ package org.apache.spark.sql.hive.execution
 
 import java.util
 
-import scala.collection.JavaConversions._
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
-import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
+
+import scala.collection.JavaConversions._
 
 private[hive]
 case class InsertIntoHiveTable(
@@ -106,7 +104,7 @@ case class InsertIntoHiveTable(
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, table.schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 
@@ -126,7 +124,7 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
+    val tmpLocation = hiveContext.getExternalTmpPath(tableLocation.toUri)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = sc.hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
@@ -194,10 +192,9 @@ case class InsertIntoHiveTable(
     if (partition.nonEmpty) {
 
       // loadPartition call orders directories created on the iteration order of the this map
-      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
-      table.hiveQlTable.getPartCols().foreach{
-        entry=>
-          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+      table.hiveQlTable.getPartCols().foreach { entry =>
+        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
 

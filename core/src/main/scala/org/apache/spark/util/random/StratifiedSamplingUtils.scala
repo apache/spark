@@ -196,7 +196,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
    *
    * The sampling function has a unique seed per partition.
    */
-  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K,  V)],
+  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K, V)],
       fractions: Map[K, Double],
       exact: Boolean,
       seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {

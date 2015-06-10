@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
@@ -28,16 +29,17 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import parquet.filter2.predicate.FilterApi
-import parquet.hadoop._
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.util.ContextUtil
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
@@ -82,7 +84,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
             case partFilePattern(id) => id.toInt
             case name if name.startsWith("_") => 0
             case name if name.startsWith(".") => 0
-            case name => sys.error(
+            case name => throw new AnalysisException(
               s"Trying to write Parquet files to directory $outputPath, " +
                 s"but found items with illegal name '$name'.")
           }.reduceOption(_ max _).getOrElse(0)
@@ -154,7 +156,7 @@ private[sql] class ParquetRelation2(
     meta
   }
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case that: ParquetRelation2 =>
       val schemaEquality = if (shouldMergeSchemas) {
         this.shouldMergeSchemas == that.shouldMergeSchemas
@@ -189,7 +191,7 @@ private[sql] class ParquetRelation2(
     }
   }
 
-  override def dataSchema: StructType = metadataCache.dataSchema
+  override def dataSchema: StructType = maybeDataSchema.getOrElse(metadataCache.dataSchema)
 
   override private[sql] def refresh(): Unit = {
     super.refresh()
@@ -209,6 +211,13 @@ private[sql] class ParquetRelation2(
         "spark.sql.parquet.output.committer.class",
         classOf[ParquetOutputCommitter],
         classOf[ParquetOutputCommitter])
+
+    if (conf.get("spark.sql.parquet.output.committer.class") == null) {
+      logInfo("Using default output committer for Parquet: " +
+        classOf[ParquetOutputCommitter].getCanonicalName)
+    } else {
+      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+    }
 
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS,
@@ -282,20 +291,27 @@ private[sql] class ParquetRelation2(
         val cacheMetadata = useMetadataCache
 
         @transient val cachedStatuses = inputFiles.map { f =>
-          // In order to encode the authority of a Path containing special characters such as /,
-          // we need to use the string returned by the URI of the path to create a new Path.
-          val pathWithAuthority = new Path(f.getPath.toUri.toString)
-
+          // In order to encode the authority of a Path containing special characters such as '/'
+          // (which does happen in some S3N credentials), we need to use the string returned by the
+          // URI of the path to create a new Path.
+          val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
           new FileStatus(
             f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
-            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithAuthority)
+            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
         }.toSeq
 
         @transient val cachedFooters = footers.map { f =>
           // In order to encode the authority of a Path containing special characters such as /,
           // we need to use the string returned by the URI of the path to create a new Path.
-          new Footer(new Path(f.getFile.toUri.toString), f.getParquetMetadata)
+          new Footer(escapePathUserInfo(f.getFile), f.getParquetMetadata)
         }.toSeq
+
+        private def escapePathUserInfo(path: Path): Path = {
+          val uri = path.toUri
+          new Path(new URI(
+            uri.getScheme, uri.getRawUserInfo, uri.getHost, uri.getPort, uri.getPath,
+            uri.getQuery, uri.getFragment))
+        }
 
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
@@ -372,12 +388,13 @@ private[sql] class ParquetRelation2(
       // time-consuming.
       if (dataSchema == null) {
         dataSchema = {
-          val dataSchema0 =
-            maybeDataSchema
-              .orElse(readSchema())
-              .orElse(maybeMetastoreSchema)
-              .getOrElse(sys.error("Failed to get the schema."))
-        
+          val dataSchema0 = maybeDataSchema
+            .orElse(readSchema())
+            .orElse(maybeMetastoreSchema)
+            .getOrElse(throw new AnalysisException(
+              s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
+                paths.mkString("\n\t")))
+
           // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
           // case insensitivity issue and possible schema mismatch (probably caused by schema
           // evolution).

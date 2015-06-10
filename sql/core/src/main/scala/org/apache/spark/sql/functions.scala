@@ -24,7 +24,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.mathfuncs._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -187,7 +186,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -1299,7 +1298,7 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
-    
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
