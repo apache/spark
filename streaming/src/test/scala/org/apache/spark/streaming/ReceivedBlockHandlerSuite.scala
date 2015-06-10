@@ -193,7 +193,20 @@ class ReceivedBlockHandlerSuite
     val byteBufferBlock = ByteBuffer.wrap(bytes)
     withBlockManagerBasedBlockHandler { handler =>
       val blockStoreResult = storeBlock(handler, ByteBufferBlock(byteBufferBlock))
-      assert(blockStoreResult.numRecords === None)
+      // ByteBufferBlock is counted as single record
+      assert(blockStoreResult.numRecords === Some(1))
+    }
+  }
+
+  test("WriteAheadLogBasedBlockHandler-MEMORY_ONLY-ByteBufferBlock - count messages") {
+    storageLevel = StorageLevel.MEMORY_ONLY
+    // Create a non-trivial (not all zeros) byte array
+    val bytes = Array.tabulate(100)(i => i.toByte)
+    val byteBufferBlock = ByteBuffer.wrap(bytes)
+    withWriteAheadLogBasedBlockHandler { handler =>
+      val blockStoreResult = storeBlock(handler, ByteBufferBlock(byteBufferBlock))
+      // ByteBufferBlock is counted as single record
+      assert(blockStoreResult.numRecords === Some(1))
     }
   }
 

@@ -84,6 +84,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         numRecords = Some(countIterator.count)
         putResult
       case ByteBufferBlock(byteBuffer) =>
+        numRecords = Some(1)
         blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
@@ -180,6 +181,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
         numRecords = Some(countIterator.count)
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
+        numRecords = Some(1)
         byteBuffer
       case _ =>
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
