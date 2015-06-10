@@ -582,24 +582,38 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
             raise ValueError(
                 "Model must be intialized using setInitialWeights")
 
-    def __init__(self, stepSize, numIterations, miniBatchFraction):
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.miniBatchFraction = miniBatchFraction
         self.latestModel = None
 
+    def __repr__(self):
+        if self.latestModel is None:
+            return '(weights=None, intercept=None)'
+        else:
+            return str(self.latestModel)
+
+
     def setInitialWeights(self, initialWeights):
         initialWeights = _convert_to_vector(initialWeights)
         self.latestModel = LinearRegressionModel(initialWeights, 0)
+        return self
 
     def trainOn(self, dstream):
         self._validate_dstream(dstream)
 
         def update(rdd):
-            if rdd:
+            # Empty RDD raises a ValueError.
+            try:
+                rdd.first()
+            except ValueError:
+                pass
+            else:
                 self.latestModel = LinearRegressionWithSGD.train(
-                    rdd, self.numIteration, self.stepSize,
-                    self.miniBatchFraction, self.latestModel.weights)
+                    rdd, self.numIterations, self.stepSize,
+                    self.miniBatchFraction, self.latestModel.weights,
+                    self.latestModel.intercept)
 
         dstream.foreachRDD(update)
 
