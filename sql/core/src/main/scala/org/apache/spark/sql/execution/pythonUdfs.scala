@@ -89,7 +89,8 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
             // Rewrite the child that has the input required for the UDF
             val newChildren = plan.children.map { child =>
               // Check to make sure that the UDF can be evaluated with only the input of this child.
-              // Other cases are disallowed as they are ambiguous or would require a cartesian product.
+              // Other cases are disallowed as they are ambiguous or would require a cartesian
+              // product.
               if (udf.references.subsetOf(child.outputSet)) {
                 evaluation = EvaluatePython(udf, child)
                 evaluation
