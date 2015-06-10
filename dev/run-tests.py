@@ -293,7 +293,8 @@ def determine_test_modules(test_env):
 
     if test_env == "amplab_jenkins":
         target_branch = os.environ.get("ghprbTargetBranch")
-        run_cmd(['git', 'fetch', 'origin', target_branch+":"+target_branch])
+        print "target_branch at", target_branch
+        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
 
         raw_output = subprocess.check_output(['git', 'diff', '--name-only', target_branch])
         # remove any empty strings
