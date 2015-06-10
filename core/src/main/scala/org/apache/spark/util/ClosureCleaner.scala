@@ -109,7 +109,14 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def createNullValue(cls: Class[_]): AnyRef = {
     if (cls.isPrimitive) {
-      new java.lang.Byte(0: Byte) // Should be convertible to any primitive type
+      cls match {
+        case java.lang.Boolean.TYPE => new java.lang.Boolean(false)
+        case java.lang.Character.TYPE => new java.lang.Character('\0')
+        case java.lang.Void.TYPE =>
+          // This should not happen because `Foo(void x) {}` cannot be compiled.
+          throw new IllegalStateException("This should not happen")
+        case _ => new java.lang.Byte(0: Byte)
+      }
     } else {
       null
     }
@@ -319,28 +326,17 @@ private[spark] object ClosureCleaner extends Logging {
   private def instantiateClass(
       cls: Class[_],
       enclosingObject: AnyRef): AnyRef = {
-    if (!Utils.isInInterpreter) {
-      // This is a bona fide closure class, whose constructor has no effects
-      // other than to set its fields, so use its constructor
-      val cons = cls.getConstructors()(0)
-      val params = cons.getParameterTypes.map(createNullValue).toArray
-      if (enclosingObject != null) {
-        params(0) = enclosingObject // First param is always enclosing object
-      }
-      return cons.newInstance(params: _*).asInstanceOf[AnyRef]
-    } else {
-      // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-      val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-      val obj = newCtor.newInstance().asInstanceOf[AnyRef]
-      if (enclosingObject != null) {
-        val field = cls.getDeclaredField("$outer")
-        field.setAccessible(true)
-        field.set(obj, enclosingObject)
-      }
-      obj
+    // Use reflection to instantiate object without calling constructor
+    val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+    if (enclosingObject != null) {
+      val field = cls.getDeclaredField("$outer")
+      field.setAccessible(true)
+      field.set(obj, enclosingObject)
     }
+    obj
   }
 }
 
