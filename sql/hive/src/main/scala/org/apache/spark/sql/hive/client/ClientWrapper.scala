@@ -390,7 +390,8 @@ private[hive] class ClientWrapper(
       replace,
       holdDDLTime,
       inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      isSkewedStoreAsSubdir,
+      false, false)
   }
 
   def loadTable(
@@ -402,7 +403,8 @@ private[hive] class ClientWrapper(
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime)
+      holdDDLTime,
+      false, false, false)
   }
 
   def loadDynamicPartitions(
@@ -420,7 +422,8 @@ private[hive] class ClientWrapper(
       replace,
       numDP,
       holdDDLTime,
-      listBucketingEnabled)
+      listBucketingEnabled,
+      false, 0)
   }
 
   def reset(): Unit = withHiveState {
@@ -428,7 +431,8 @@ private[hive] class ClientWrapper(
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).foreach { index =>
-          client.dropIndex("default", t, index.getIndexName, true)
+          client.dropIndex("default", t, index.getIndexName, true,
+            false)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)

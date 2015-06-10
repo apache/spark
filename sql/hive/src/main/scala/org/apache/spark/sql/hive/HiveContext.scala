@@ -532,7 +532,7 @@ private[hive] object HiveContext {
     // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
-        propMap.put(confvar.varname, confvar.defaultVal)
+        propMap.put(confvar.varname, confvar.defaultStrVal)
       }
     }
     propMap.put("javax.jdo.option.ConnectionURL",
