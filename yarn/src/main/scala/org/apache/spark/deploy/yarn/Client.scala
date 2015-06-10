@@ -28,6 +28,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -771,6 +772,9 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+          case NonFatal(e) =>
+            logError(s"Failed to contact YARN for application $appId.", e)
+            return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
 
