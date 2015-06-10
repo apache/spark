@@ -162,7 +162,7 @@ class CodeGenContext {
    * Generate code for equal expression in Java
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
-    case BinaryType =>  s"java.util.Arrays.equals($c1, $c2)"
+    case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
     case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType
          | DateType => s"$c1 == $c2"
     case other => s"$c1.equals($c2)"
