@@ -611,15 +611,16 @@ class DAGSchedulerSuite
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
 
-    // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't effect anything --
-    // our calling it just makes *SURE* it gets called between the desired event and our check.
-
+    // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't
+    // effect anything -- our calling it just makes *SURE* it gets called between the desired event
+    // and our check.
   }
 
   /** This tests the case where a late FetchFailed comes in after the map stage has finished getting
     * retried and a new reduce stage starts running.
     */
-  test("extremely late fetch failures don't cause multiple concurrent attempts for the same stage") {
+  test("extremely late fetch failures don't cause multiple concurrent attempts for " +
+      "the same stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId

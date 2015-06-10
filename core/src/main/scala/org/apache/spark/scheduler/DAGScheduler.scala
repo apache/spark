@@ -1108,8 +1108,8 @@ class DAGScheduler(
         } else {
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
-          // multiple tasks running concurrently on different executors). In that case, it is possible
-          // the fetch failure has already been handled by the scheduler.
+          // multiple tasks running concurrently on different executors). In that case, it is
+          // possible the fetch failure has already been handled by the scheduler.
           if (runningStages.contains(failedStage)) {
             logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
               s"due to a fetch failure from $mapStage (${mapStage.name})")
