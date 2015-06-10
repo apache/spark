@@ -296,7 +296,6 @@ private[spark] object SerDe {
   }
 
   def writeTime(out: DataOutputStream, value: Timestamp): Unit = {
-    println(s"$value ${(value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9}")
     out.writeDouble((value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9)
   }
 
