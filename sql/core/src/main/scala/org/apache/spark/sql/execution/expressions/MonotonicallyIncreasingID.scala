@@ -49,11 +49,5 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
     (TaskContext.get().partitionId().toLong << 33) + currentCount
   }
 
-  /**
-   * This expression is stateful and not thread safe, it can not be reused. Change equals() to
-   * always return `false`, make the generated expressions to not be cached.
-   */
-  override def equals(other: Any): Boolean = {
-    false
-  }
+  override def isThreadSafe: Boolean = false
 }

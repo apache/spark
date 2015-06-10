@@ -21,7 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DateType, BinaryType, NumericType}
+import org.apache.spark.sql.types.{DateType, BinaryType, DecimalType, NumericType}
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
@@ -66,7 +66,16 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
                 return d;
               }
             }"""
-        case _: NumericType | DateType =>
+        case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
+          s"""
+            if (${evalA.primitive} != ${evalB.primitive}) {
+              if (${evalA.primitive} > ${evalB.primitive}) {
+                return ${if (asc) "1" else "-1"};
+              } else {
+                return ${if (asc) "-1" else "1"};
+              }
+            }"""
+        case DateType =>
           s"""
             if (${evalA.primitive} != ${evalB.primitive}) {
               if (${evalA.primitive} > ${evalB.primitive}) {

@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types.DataType
 
 case class Coalesce(children: Seq[Expression]) extends Expression {
@@ -53,6 +52,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
+  override def isThreadSafe: Boolean = children.forall(_.isThreadSafe)
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
       boolean ${ev.isNull} = true;
@@ -73,7 +74,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 }
 
-case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = false
 
@@ -91,7 +92,7 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
   override def toString: String = s"IS NULL $child"
 }
 
-case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = false
   override def toString: String = s"IS NOT NULL $child"

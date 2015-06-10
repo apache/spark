@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{NumericType, DataType}
+import org.apache.spark.sql.types.{DataType, NumericType}
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for

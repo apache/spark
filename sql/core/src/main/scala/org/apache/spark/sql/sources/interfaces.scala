@@ -582,7 +582,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     buildScan(inputFiles).mapPartitions { rows =>
       // Codegen can not work with external data type in Row
-      val buildProjection = if (codegenEnabled && !needConversion) {
+      val buildProjection = if (codegenEnabled && !needConversion
+        && requiredOutput.forall(_.isThreadSafe)) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
