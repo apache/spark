@@ -250,37 +250,9 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case DateType => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case BinaryType =>
-        val eval1 = left.gen(ctx)
-        val eval2 = right.gen(ctx)
-        s"""
-          ${eval1.code}
-          boolean ${ev.isNull} = ${eval1.isNull};
-          boolean ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${eval2.code}
-            if (!${eval2.isNull}) {
-              ${ev.primitive} = org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary(
-                ${eval1.primitive}, ${eval2.primitive}) $symbol 0;
-            } else {
-              ${ev.isNull} = true;
-            }
-          }
-        """
-      case TimestampType =>
-        // java.sql.Timestamp does not have compare()
-        super.genCode(ctx, ev)
-      case other => defineCodeGen (ctx, ev, {
-        (c1, c2) => s"$c1.compare($c2) $symbol 0"
-      })
-    }
+    defineCodeGen(ctx, ev, {
+      (c1, c2) => s"${ctx.genCmop(left.dataType, c1, c2)} $symbol 0"
+    })
   }
 
   protected def evalInternal(evalE1: Any, evalE2: Any): Any =
@@ -301,7 +273,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
+    defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
 
@@ -327,7 +299,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
         boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||

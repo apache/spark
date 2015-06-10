@@ -161,28 +161,21 @@ class CodeGenContext {
   /**
    * Returns a function to generate equal expression in Java
    */
-  def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
-    case BinaryType => { case (eval1, eval2) =>
-      s"java.util.Arrays.equals($eval1, $eval2)" }
+  def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
+    case BinaryType =>  s"java.util.Arrays.equals($c1, $c2)"
     case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType
-         | DateType =>
-      { case (eval1, eval2) => s"$eval1 == $eval2" }
-    case other =>
-      { case (eval1, eval2) => s"$eval1.equals($eval2)" }
+         | DateType => s"$c1 == $c2"
+    case other => s"$c1.equals($c2)"
   }
 
   /**
    * Return a function to generate compare expression in Java
    */
-  def compFunc(dataType: DataType): (String, String) => String = dataType match {
-    case BinaryType => {
-      case (c1, c2) =>
-        s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
-    }
-    case IntegerType | LongType | DoubleType | FloatType | ShortType | ByteType | DateType => {
-      case (c1, c2) => s"$c1 - $c2"
-    }
-    case other => { case (c1, c2) => s"$c1.compare($c2)" }
+  def genCmop(dataType: DataType, c1: String, c2: String): String = dataType match {
+    case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case IntegerType | LongType | DoubleType | FloatType | ShortType | ByteType | DateType =>
+      s"$c1 - $c2"
+    case other => s"$c1.compare($c2)"
   }
 
   /**
