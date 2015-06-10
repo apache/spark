@@ -79,6 +79,7 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
+  private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -345,6 +346,22 @@ object SparkSubmit {
       if (args.pyFiles != null) {
         sysProps("spark.submit.pyFiles") = args.pyFiles
       }
+    }
+
+    // In yarn mode for an R app, add the SparkR package archive to archives
+    // that can be distributed with the job
+    if (args.isR && clusterManager == YARN) {
+      val sparkHome = sys.env.get("SPARK_HOME")
+      if (sparkHome.isEmpty) {
+        printErrorAndExit("SPARK_HOME does not exist for R application in yarn mode.")
+      }
+      val rPackagePath = Seq(sparkHome.get, "R", "lib").mkString(File.separator)
+      val rPackageFile = new File(rPackagePath, SPARKR_PACKAGE_ARCHIVE)
+      if (!rPackageFile.exists()) {
+        printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in yarn mode.")
+      }
+      val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
+      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
     }
 
     // If we're running a R app, set the main class to our specific R runner
