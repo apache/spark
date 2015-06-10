@@ -138,8 +138,8 @@ private[streaming] class ReceiverSupervisorImpl(
     ) {
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val numRecords = receivedBlock match {
-      case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
-      case _ => -1
+      case ArrayBufferBlock(arrayBuffer) => Some(arrayBuffer.size.toLong)
+      case _ => None
     }
 
     val time = System.currentTimeMillis

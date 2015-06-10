@@ -50,8 +50,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   private var jID: SerializableWritable[JobID] = null
   private var taID: SerializableWritable[TaskAttemptID] = null
 
-  @transient private var writer: RecordWriter[AnyRef,AnyRef] = null
-  @transient private var format: OutputFormat[AnyRef,AnyRef] = null
+  @transient private var writer: RecordWriter[AnyRef, AnyRef] = null
+  @transient private var format: OutputFormat[AnyRef, AnyRef] = null
   @transient private var committer: OutputCommitter = null
   @transient private var jobContext: JobContext = null
   @transient private var taskContext: TaskAttemptContext = null
@@ -114,10 +114,10 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   // ********* Private Functions *********
 
-  private def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {
+  private def getOutputFormat(): OutputFormat[AnyRef, AnyRef] = {
     if (format == null) {
       format = conf.value.getOutputFormat()
-        .asInstanceOf[OutputFormat[AnyRef,AnyRef]]
+        .asInstanceOf[OutputFormat[AnyRef, AnyRef]]
     }
     format
   }
@@ -138,7 +138,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   private def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
-      taskContext =  newTaskAttemptContext(conf.value, taID.value)
+      taskContext = newTaskAttemptContext(conf.value, taID.value)
     }
     taskContext
   }

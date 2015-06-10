@@ -243,8 +243,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 case (predicate, None) => predicate
                 // Filter needs to be applied above when it contains partitioning
                 // columns
-                case (predicate, _) if(!predicate.references.map(_.name).toSet
-                  .intersect (partitionColNames).isEmpty) => predicate
+                case (predicate, _)
+                  if !predicate.references.map(_.name).toSet.intersect(partitionColNames).isEmpty =>
+                  predicate
               }
             }
           } else {
@@ -270,7 +271,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
+          InMemoryColumnarTableScan(_, filters, mem)) :: Nil
       case _ => Nil
     }
   }
@@ -283,8 +284,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
       case logical.Distinct(child) =>
-        execution.Distinct(partial = false,
-          execution.Distinct(partial = true, planLater(child))) :: Nil
+        throw new IllegalStateException(
+          "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Repartition(numPartitions, shuffle, child) =>
         execution.Repartition(numPartitions, shuffle, planLater(child)) :: Nil
       case logical.SortPartitions(sortExprs, child) =>

@@ -110,7 +110,7 @@ private[streaming] class FlumePollingReceiver(
 }
 
 /**
- * A wrapper around the transceiver and the Avro IPC API. 
+ * A wrapper around the transceiver and the Avro IPC API.
  * @param transceiver The transceiver to use for communication with Flume
  * @param client The client that the callbacks are received on.
  */

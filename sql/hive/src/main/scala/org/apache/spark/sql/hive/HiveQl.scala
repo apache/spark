@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
@@ -39,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
@@ -46,6 +45,7 @@ import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
@@ -57,7 +57,7 @@ private[hive] case object NativePlaceholder extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-case class CreateTableAsSelect(
+private[hive] case class CreateTableAsSelect(
     tableDesc: HiveTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
@@ -665,7 +665,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 HiveColumn(field.getName, field.getType, field.getComment)
               })
           }
-        case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil)=>
+        case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil) =>
           val serdeParams = new java.util.HashMap[String, String]()
           child match {
             case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
@@ -775,7 +775,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     // Support "TRUNCATE TABLE table_name [PARTITION partition_spec]"
     case Token("TOK_TRUNCATETABLE",
-          Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
+          Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
         if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
@@ -1151,7 +1151,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case Seq(false, false) => Inner
       }.toBuffer
 
-      val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
+      val joinedTables = tables.reduceLeft(Join(_, _, Inner, None))
 
       // Must be transform down.
       val joinedResult = joinedTables transform {
@@ -1171,7 +1171,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      throw new UnsupportedOperationException
 
     case Token(allJoinTokens(joinToken),
            relation1 ::
@@ -1306,16 +1307,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     HiveParser.DecimalLiteral)
 
   /* Case insensitive matches */
-  val ARRAY = "(?i)ARRAY".r
-  val COALESCE = "(?i)COALESCE".r
   val COUNT = "(?i)COUNT".r
-  val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
-  val MAX = "(?i)MAX".r
-  val MIN = "(?i)MIN".r
-  val UPPER = "(?i)UPPER".r
-  val LOWER = "(?i)LOWER".r
-  val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
   val NOT = "(?i)NOT".r
@@ -1329,8 +1322,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
-  val SUBSTR = "(?i)SUBSTR(?:ING)?".r
-  val SQRT = "(?i)SQRT".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -1352,18 +1343,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedStar(Some(name))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTION", Token(AVG(), Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(COUNT(), Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
     case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
-
-    /* System functions about string operations */
-    case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -1413,7 +1395,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
     case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
     case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
-    case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
@@ -1467,17 +1448,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
-
-    /* Other functions */
-    case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
-      CreateArray(children.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand()
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: seed :: Nil) => Rand(seed.toString.toLong)
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
-      Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
-      Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
-    case Token("TOK_FUNCTION", Token(COALESCE(), Nil) :: list) => Coalesce(list.map(nodeToExpr))
 
     /* Window Functions */
     case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
@@ -1560,6 +1530,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          """.stripMargin)
   }
 
+  /* Case insensitive matches for Window Specification */
+  val PRECEDING = "(?i)preceding".r
+  val FOLLOWING = "(?i)following".r
+  val CURRENT = "(?i)current".r
   def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
@@ -1613,11 +1587,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         } else {
           val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
           def nodeToBoundary(node: Node): FrameBoundary = node match {
-            case Token("preceding", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedPreceding else ValuePreceding(count.toInt)
-            case Token("following", Token(count, Nil) :: Nil) =>
-              if (count == "unbounded") UnboundedFollowing else ValueFollowing(count.toInt)
-            case Token("current", Nil) => CurrentRow
+            case Token(PRECEDING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedPreceding
+              } else {
+                ValuePreceding(count.toInt)
+              }
+            case Token(FOLLOWING(), Token(count, Nil) :: Nil) =>
+              if (count.toLowerCase() == "unbounded") {
+                UnboundedFollowing
+              } else {
+                ValueFollowing(count.toInt)
+              }
+            case Token(CURRENT(), Nil) => CurrentRow
             case _ =>
               throw new NotImplementedError(
                 s"""No parse rules for the Window Frame Boundary based on Node ${node.getName}

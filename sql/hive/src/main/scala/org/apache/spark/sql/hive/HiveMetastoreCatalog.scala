@@ -19,11 +19,13 @@ package org.apache.spark.sql.hive
 
 import com.google.common.base.Objects
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.Warehouse
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata._
-import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
@@ -37,7 +39,6 @@ import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode, sources}
-import org.apache.spark.util.Utils
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -546,13 +547,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = ???
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   override def unregisterAllTables(): Unit = {}
 }
@@ -592,7 +597,7 @@ private[hive] case class MetastoreRelation
 
   self: Product =>
 
-  override def equals(other: scala.Any): Boolean = other match {
+  override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
         tableName == relation.tableName &&
@@ -666,8 +671,8 @@ private[hive] case class MetastoreRelation
 
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstTotalSize)
-      val rawDataSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstRawDataSize)
+      val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
+      val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.  An
@@ -693,11 +698,7 @@ private[hive] case class MetastoreRelation
     }
   }
 
-  val tableDesc = HiveShim.getTableDesc(
-    Class.forName(
-      hiveQlTable.getSerializationLib,
-      true,
-      Utils.getContextOrSparkClassLoader).asInstanceOf[Class[Deserializer]],
+  val tableDesc = new TableDesc(
     hiveQlTable.getInputFormatClass,
     // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
     // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
@@ -707,25 +708,25 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: FieldSchema) {
+  implicit class SchemaAttribute(f: HiveColumn) {
     def toAttribute: AttributeReference = AttributeReference(
-      f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      f.name,
+      HiveMetastoreTypes.toDataType(f.hiveType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
-  // Must be a stable value since new attributes are born here.
-  val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
+  /** PartitionKey attributes */
+  val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute)
+  val attributes = table.schema.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o,o)))
+  val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
@@ -738,6 +739,11 @@ private[hive] case class MetastoreRelation
 
 private[hive] object HiveMetastoreTypes {
   def toDataType(metastoreType: String): DataType = DataTypeParser.parse(metastoreType)
+
+  def decimalMetastoreString(decimalType: DecimalType): String = decimalType match {
+    case DecimalType.Fixed(precision, scale) => s"decimal($precision,$scale)"
+    case _ => s"decimal($HiveShim.UNLIMITED_DECIMAL_PRECISION,$HiveShim.UNLIMITED_DECIMAL_SCALE)"
+  }
 
   def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
@@ -755,7 +761,7 @@ private[hive] object HiveMetastoreTypes {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DateType => "date"
-    case d: DecimalType => HiveShim.decimalMetastoreString(d)
+    case d: DecimalType => decimalMetastoreString(d)
     case TimestampType => "timestamp"
     case NullType => "void"
     case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)

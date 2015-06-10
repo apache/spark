@@ -102,12 +102,6 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    getEstimatorParamMaps.foreach { eMap =>
-      getEstimator.validateParams(eMap ++ paramMap)
-    }
-  }
-
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -141,11 +135,19 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(uid, bestModel).setParent(this))
+    copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
+  }
+
+  override def validateParams(): Unit = {
+    super.validateParams()
+    val est = $(estimator)
+    for (paramMap <- $(estimatorParamMaps)) {
+      est.copy(paramMap).validateParams()
+    }
   }
 }
 
@@ -156,11 +158,12 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 @Experimental
 class CrossValidatorModel private[ml] (
     override val uid: String,
-    val bestModel: Model[_])
+    val bestModel: Model[_],
+    val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
-  override def validateParams(paramMap: ParamMap): Unit = {
-    bestModel.validateParams(paramMap)
+  override def validateParams(): Unit = {
+    bestModel.validateParams()
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -170,5 +173,13 @@ class CrossValidatorModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     bestModel.transformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): CrossValidatorModel = {
+    val copied = new CrossValidatorModel(
+      uid,
+      bestModel.copy(extra).asInstanceOf[Model[_]],
+      avgMetrics.clone())
+    copyValues(copied, extra)
   }
 }

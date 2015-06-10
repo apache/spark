@@ -54,7 +54,7 @@ import org.apache.spark.SparkConf
 
 <div data-lang="java"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Java 6 and higher. If you are using Java 8, Spark supports
+Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java 8, Spark supports
 [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.

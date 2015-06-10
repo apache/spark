@@ -56,8 +56,8 @@ private[spark] case class PythonUDF(
 
   def nullable: Boolean = true
 
-  override def eval(input: Row): PythonUDF.this.EvaluatedType = {
-    sys.error("PythonUDFs can not be directly evaluated.")
+  override def eval(input: Row): Any = {
+    throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
   }
 }
 
@@ -71,43 +71,49 @@ private[spark] case class PythonUDF(
 private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Skip EvaluatePython nodes.
-    case p: EvaluatePython => p
+    case plan: EvaluatePython => plan
 
-    case l: LogicalPlan =>
+    case plan: LogicalPlan =>
       // Extract any PythonUDFs from the current operator.
-      val udfs = l.expressions.flatMap(_.collect { case udf: PythonUDF => udf})
+      val udfs = plan.expressions.flatMap(_.collect { case udf: PythonUDF => udf })
       if (udfs.isEmpty) {
         // If there aren't any, we are done.
-        l
+        plan
       } else {
         // Pick the UDF we are going to evaluate (TODO: Support evaluating multiple UDFs at a time)
         // If there is more than one, we will add another evaluation operator in a subsequent pass.
-        val udf = udfs.head
+        udfs.find(_.resolved) match {
+          case Some(udf) =>
+            var evaluation: EvaluatePython = null
 
-        var evaluation: EvaluatePython = null
+            // Rewrite the child that has the input required for the UDF
+            val newChildren = plan.children.map { child =>
+              // Check to make sure that the UDF can be evaluated with only the input of this child.
+              // Other cases are disallowed as they are ambiguous or would require a cartesian
+              // product.
+              if (udf.references.subsetOf(child.outputSet)) {
+                evaluation = EvaluatePython(udf, child)
+                evaluation
+              } else if (udf.references.intersect(child.outputSet).nonEmpty) {
+                sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+              } else {
+                child
+              }
+            }
 
-        // Rewrite the child that has the input required for the UDF
-        val newChildren = l.children.map { child =>
-          // Check to make sure that the UDF can be evaluated with only the input of this child.
-          // Other cases are disallowed as they are ambiguous or would require a cartisian product.
-          if (udf.references.subsetOf(child.outputSet)) {
-            evaluation = EvaluatePython(udf, child)
-            evaluation
-          } else if (udf.references.intersect(child.outputSet).nonEmpty) {
-            sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
-          } else {
-            child
-          }
+            assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
+
+            // Trim away the new UDF value if it was only used for filtering or something.
+            logical.Project(
+              plan.output,
+              plan.transformExpressions {
+                case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
+              }.withNewChildren(newChildren))
+
+          case None =>
+            // If there is no Python UDF that is resolved, skip this round.
+            plan
         }
-
-        assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
-
-        // Trim away the new UDF value if it was only used for filtering or something.
-        logical.Project(
-          l.output,
-          l.transformExpressions {
-            case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
-          }.withNewChildren(newChildren))
       }
   }
 }

@@ -309,7 +309,7 @@ private class StringRRDD[T: ClassTag](
 }
 
 private object SpecialLengths {
-  val TIMING_DATA   = -1
+  val TIMING_DATA = -1
 }
 
 private[r] class BufferedStreamThread(
@@ -355,7 +355,6 @@ private[r] object RRDD {
 
     val sparkConf = new SparkConf().setAppName(appName)
                                    .setSparkHome(sparkHome)
-                                   .setJars(jars)
 
     // Override `master` if we have a user-specified value
     if (master != "") {
@@ -373,7 +372,11 @@ private[r] object RRDD {
       sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
     }
 
-    new JavaSparkContext(sparkConf)
+    val jsc = new JavaSparkContext(sparkConf)
+    jars.foreach { jar =>
+      jsc.addJar(jar)
+    }
+    jsc
   }
 
   /**
