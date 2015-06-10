@@ -26,10 +26,11 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * Used for testing unary math expressions.
    *
    * @param c expression
-   * @param f The functions in scala.math
+   * @param f The functions in scala.math or elsewhere used to generate expected results
    * @param domain The set of values to run the function with
    * @param expectNull Whether the given values should return null or not
    * @tparam T Generic type for primitives
+   * @tparam U Generic type for the output of the given function `f`
    */
   private def testUnary[T, U](
       c: Expression => Expression,

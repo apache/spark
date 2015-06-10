@@ -94,8 +94,9 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("bin") {
+    val df = Seq[(Integer, Integer)]((12, null)).toDF("a", "b")
     checkAnswer(
-      testData2.select(bin($"a")),
-      testData2.collect().toSeq.map(r => Row(JLong.toBinaryString(r.getInt(0).toLong))))
+      df.select(bin("a"), bin("b")),
+      Row("1100", null))
   }
 }

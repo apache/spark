@@ -1300,7 +1300,8 @@ object functions {
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
 
   /**
-   * Computes the binary format of the given value.
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1308,7 +1309,8 @@ object functions {
   def bin(e: Column): Column = Bin(e.expr)
 
   /**
-   * Computes the binary format of the given value.
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
    *
    * @group math_funcs
    * @since 1.4.0

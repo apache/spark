@@ -39,6 +39,9 @@ abstract class AbstractUnaryMathExpression[T, U](name: String)
   def funcName: String = name.toLowerCase
 }
 
+/**
+ * Base for [[AbstractUnaryMathExpression]] that accepts a Double and returns a Double.
+ */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
   extends AbstractUnaryMathExpression[Double, Double](name) {
   self: Product =>
