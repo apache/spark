@@ -78,7 +78,7 @@ class SparkEnv (
 
   // TODO Remove actorSystem
   @deprecated("Actor system is no longer supported as of 1.4")
-  def actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+  val actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
