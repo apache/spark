@@ -137,6 +137,22 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  // Flag to control if reduce tasks are assigned preferred locations
+  private val shuffleLocalityEnabled =
+    sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
+  // Number of map, reduce tasks above which we do not assign preferred locations
+  // based on map output sizes. We limit the size of jobs for which assign preferred locations
+  // as computing the top locations by size becomes expensive.
+  private[this] val SHUFFLE_PREF_MAP_THRESHOLD = 1000
+  // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
+  private[this] val SHUFFLE_PREF_REDUCE_THRESHOLD = 1000
+
+  // Fraction of total map output that must be at a location for it to considered as a preferred
+  // location for a reduce task.
+  // Making this larger will focus on fewer locations where most data can be read locally, but
+  // may lead to more delay in scheduling if those locations are busy.
+  private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
+
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessLoop.post(BeginEvent(task, taskInfo))
@@ -1384,17 +1400,32 @@ class DAGScheduler(
     if (rddPrefs.nonEmpty) {
       return rddPrefs.map(TaskLocation(_))
     }
-    // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
-    // that has any placement preferences. Ideally we would choose based on transfer sizes,
-    // but this will do for now.
+
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
+        // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
+        // that has any placement preferences. Ideally we would choose based on transfer sizes,
+        // but this will do for now.
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }
         }
+      case s: ShuffleDependency[_, _, _] =>
+        // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
+        // of data as preferred locations
+        if (shuffleLocalityEnabled &&
+            rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
+            s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
+          // Get the preferred map output locations for this reducer
+          val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
+            partition, rdd.partitions.size, REDUCER_PREF_LOCS_FRACTION)
+          if (topLocsForReducer.nonEmpty) {
+            return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
+          }
+        }
+
       case _ =>
     }
     Nil
