@@ -162,27 +162,25 @@ class CodeGenContext {
    * Returns a function to generate equal expression in Java
    */
   def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
-    case BinaryType => { case (eval1, eval2) =>
-      s"java.util.Arrays.equals($eval1, $eval2)" }
+    case BinaryType =>
+      (eval1, eval2) => s"java.util.Arrays.equals($eval1, $eval2)"
     case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType
          | DateType =>
-      { case (eval1, eval2) => s"$eval1 == $eval2" }
+      (eval1, eval2) => s"$eval1 == $eval2" 
     case other =>
-      { case (eval1, eval2) => s"$eval1.equals($eval2)" }
+      (eval1, eval2) => s"$eval1.equals($eval2)"
   }
 
   /**
    * Return a function to generate compare expression in Java
    */
   def compFunc(dataType: DataType): (String, String) => String = dataType match {
-    case BinaryType => {
-      case (c1, c2) =>
-        s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
-    }
-    case IntegerType | LongType | DoubleType | FloatType | ShortType | ByteType | DateType => {
-      case (c1, c2) => s"$c1 - $c2"
-    }
-    case other => { case (c1, c2) => s"$c1.compare($c2)" }
+    case BinaryType => 
+      (c1, c2) => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case IntegerType | LongType | DoubleType | FloatType | ShortType | ByteType | DateType =>
+      (c1, c2) => s"$c1 - $c2"
+    case other => 
+      (c1, c2) => s"$c1.compare($c2)"
   }
 
   /**
