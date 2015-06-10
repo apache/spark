@@ -21,7 +21,6 @@ import java.io.OutputStream
 
 import scala.collection.mutable.ArrayBuffer
 
-
 /**
  * An OutputStream that writes to fixed-size chunks of byte arrays.
  *
@@ -98,7 +97,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   /**
    * Get a copy of the data between the two endpoints, start <= idx < until.  Always returns
-   * an array of size (until - start).  Throws an IllegalArgumentException if
+   * an array of size (until - start).  Throws an IllegalArgumentException unless
    * 0 <= start <= until <= size
    */
   def slice(start: Long, until: Long): Array[Byte] = {
@@ -112,11 +111,11 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     var foundStart = false
     val result = new Array[Byte](length)
     while (!foundStart) {
-      val nextSize = chunkStart + chunks(chunkIdx).size
-      if (nextSize > start) {
+      val nextChunkStart = chunkStart + chunks(chunkIdx).size
+      if (nextChunkStart > start) {
         foundStart = true
       } else {
-        chunkStart = nextSize
+        chunkStart = nextChunkStart
         chunkIdx += 1
       }
     }
@@ -134,6 +133,5 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     }
     result
   }
-
 
 }

@@ -20,34 +20,55 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.util.io.ByteArrayChunkOutputStream;
 
+/**
+ * An OutputStream that will write all data to memory.  It supports writing over 2GB
+ * and the resulting data can be retrieved as a
+ * {@link org.apache.spark.network.buffer.LargeByteBuffer}
+ */
 public class LargeByteBufferOutputStream extends OutputStream {
 
-  private final int chunkSize;
-  final ByteArrayChunkOutputStream output;
+  private final ByteArrayChunkOutputStream output;
 
+  /**
+   * Create a new LargeByteBufferOutputStream which writes to byte arrays of the given size.  Note
+   * that <code>chunkSize</code> has <b>no effect</b> on the LargeByteBuffer returned by
+   * {@link #largeBuffer()}.
+   *
+   * @param chunkSize size of the byte arrays used by this output stream, in bytes
+   */
   public LargeByteBufferOutputStream(int chunkSize) {
-    this.chunkSize = chunkSize;
     output = new ByteArrayChunkOutputStream(chunkSize);
   }
 
+  @Override
   public void write(int b) {
     output.write(b);
   }
 
+  @Override
   public void write(byte[] bytes, int off, int len) {
     output.write(bytes, off, len);
   }
 
+  /**
+   * Get all of the data written to the stream so far as a LargeByteBuffer.  This method can be
+   * called multiple times, and each returned buffer will be completely independent (the data
+   * is copied for each returned buffer).  It does not close the stream.
+   *
+   * @return the data written to the stream as a LargeByteBuffer
+   */
   public LargeByteBuffer largeBuffer() {
     return largeBuffer(LargeByteBufferHelper.MAX_CHUNK_SIZE);
   }
 
-/**
- * exposed for testing.  You don't really ever want to call this method -- the returned
- * buffer will not implement {{asByteBuffer}} correctly.
- */
+  /**
+   * exposed for testing.  You don't really ever want to call this method -- the returned
+   * buffer will not implement {{asByteBuffer}} correctly.
+   */
+  @VisibleForTesting
   LargeByteBuffer largeBuffer(int maxChunk) {
     long totalSize = output.size();
     int chunksNeeded = (int) ((totalSize + maxChunk - 1) / maxChunk);
@@ -63,6 +84,7 @@ public class LargeByteBufferOutputStream extends OutputStream {
     return new WrappedLargeByteBuffer(chunks, maxChunk);
   }
 
+  @Override
   public void close() throws IOException {
     output.close();
   }

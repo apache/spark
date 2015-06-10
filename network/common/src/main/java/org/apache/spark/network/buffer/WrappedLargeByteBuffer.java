@@ -84,7 +84,12 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       ByteBuffer b = underlying[i].duplicate();
       b.position(0);
       this.underlying[i] = b;
-      if (i != underlying.length -1 && b.capacity() != subBufferSize) {
+      if (i != underlying.length - 1 && b.capacity() != subBufferSize) {
+        // this is to make sure that asByteBuffer() is implemented correctly.  We need the first
+        // subBuffer to be LargeByteBufferHelper.MAX_CHUNK_SIZE.  We don't *have* to check all the
+        // subBuffers, but I figure its makes it more consistent this way.  (Also, this check
+        // really only serves a purpose when using the public constructor -- subBufferSize is a
+        // a parameter just to allow small tests.)
         throw new IllegalArgumentException("All buffers, except for the final one, must have " +
           "size = " + subBufferSize);
       }
@@ -96,8 +101,14 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     size = sum;
   }
 
+
   @Override
-  public void get(byte[] dest, int offset, int length) {
+  public WrappedLargeByteBuffer get(byte[] dest) {
+    return get(dest, 0, dest.length);
+  }
+
+  @Override
+  public WrappedLargeByteBuffer get(byte[] dest, int offset, int length) {
     if (length > remaining()) {
       throw new BufferUnderflowException();
     }
@@ -109,6 +120,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
       updateCurrentBufferIfNeeded();
     }
     _pos += moved;
+    return this;
   }
 
   @Override

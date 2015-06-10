@@ -21,7 +21,6 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
-
 class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
 
   test("empty output") {
@@ -110,7 +109,7 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
   test("slice") {
     val ref = new Array[Byte](30)
     Random.nextBytes(ref)
-    val o = new ByteArrayChunkOutputStream(10)
+    val o = new ByteArrayChunkOutputStream(5)
     o.write(ref)
 
     for {

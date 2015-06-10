@@ -74,7 +74,7 @@ class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
 
   test("io stream roundtrip") {
     val out = new LargeByteBufferOutputStream(128)
-    (0 until 200).foreach{idx => out.write(idx)}
+    (0 until 200).foreach { idx => out.write(idx) }
     out.close()
 
     val lb = out.largeBuffer(128)
@@ -85,11 +85,9 @@ class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
     val arr = new Array[Byte](500)
     val nRead = rawIn.read(arr, 0, 500)
     nRead should be (200)
-    (0 until 200).foreach{idx =>
+    (0 until 200).foreach { idx =>
       arr(idx) should be (idx.toByte)
     }
-
   }
-
 
 }
