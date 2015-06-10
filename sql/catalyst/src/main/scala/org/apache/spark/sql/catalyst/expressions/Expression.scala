@@ -212,6 +212,9 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not not null, use `f` to generate the expression.
@@ -232,8 +235,8 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
     ev.isNull = eval.isNull
     child match {
       case Literal(null, _) =>
-        // If the child expression is null constantly, the current node
-        // will be assigned with the default value.
+        // If the child expression value is null constantly, then the current node
+        // will be assigned with default value.
         // TODO how about the contant Not Null? leave it for further improvement
         eval.code +
         s"""

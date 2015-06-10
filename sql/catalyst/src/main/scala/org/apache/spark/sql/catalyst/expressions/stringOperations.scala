@@ -299,23 +299,12 @@ object Substring {
  * A function that return the length of the given string expression.
  */
 case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = child.nullable
-
   override def dataType: DataType = IntegerType
-
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: Row): Any = {
     val string = child.eval(input)
-
-    if (string == null) {
-      null
-    } else {
-      string.asInstanceOf[UTF8String].length
-    }
+    if (string == null) null else string.asInstanceOf[UTF8String].length
   }
 
   override def toString: String = s"length($child)"
