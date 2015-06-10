@@ -313,7 +313,8 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writeTimestamp(ts: Long): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(DateUtils.toJavaTimestamp(ts))
+    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(
+      DateUtils.toJavaTimestamp(ts))
     writer.addBinary(binaryNanoTime)
   }
 }

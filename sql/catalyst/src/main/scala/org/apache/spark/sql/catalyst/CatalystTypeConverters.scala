@@ -276,9 +276,11 @@ object CatalystTypeConverters {
   }
 
   private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
-    override def toCatalystImpl(scalaValue: Timestamp): Long = DateUtils.fromJavaTimestamp(scalaValue)
+    override def toCatalystImpl(scalaValue: Timestamp): Long =
+      DateUtils.fromJavaTimestamp(scalaValue)
     override def toScala(catalystValue: Any): Timestamp =
-      if (catalystValue == null) null else DateUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
+      if (catalystValue == null) null
+      else DateUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
     override def toScalaImpl(row: Row, column: Int): Timestamp = toScala(row.getLong(column))
   }
 
