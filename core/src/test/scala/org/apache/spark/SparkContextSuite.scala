@@ -23,8 +23,6 @@ import java.util.concurrent.TimeUnit
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
-import org.scalatest.FunSuite
-
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
@@ -33,7 +31,7 @@ import org.apache.spark.util.Utils
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-class SparkContextSuite extends FunSuite with LocalSparkContext {
+class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
@@ -73,22 +71,22 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     var sc2: SparkContext = null
     SparkContext.clearActiveContext()
     val conf = new SparkConf().setAppName("test").setMaster("local")
-    
+
     sc = SparkContext.getOrCreate(conf)
-    
+
     assert(sc.getConf.get("spark.app.name").equals("test"))
     sc2 = SparkContext.getOrCreate(new SparkConf().setAppName("test2").setMaster("local"))
     assert(sc2.getConf.get("spark.app.name").equals("test"))
     assert(sc === sc2)
     assert(sc eq sc2)
-    
+
     // Try creating second context to confirm that it's still possible, if desired
     sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
         .set("spark.driver.allowMultipleContexts", "true"))
-    
+
     sc2.stop()
   }
-  
+
   test("BytesWritable implicit conversion is correct") {
     // Regression test for SPARK-3121
     val bytesWritable = new BytesWritable()
@@ -222,8 +220,8 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val dir1 = Utils.createTempDir()
     val dir2 = Utils.createTempDir()
 
-    val dirpath1=dir1.getAbsolutePath
-    val dirpath2=dir2.getAbsolutePath
+    val dirpath1 = dir1.getAbsolutePath
+    val dirpath2 = dir2.getAbsolutePath
 
     // file1 and file2 are placed inside dir1, they are also used for
     // textFile, hadoopFile, and newAPIHadoopFile
@@ -235,11 +233,11 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val file4 = new File(dir2, "part-00001")
     val file5 = new File(dir2, "part-00002")
 
-    val filepath1=file1.getAbsolutePath
-    val filepath2=file2.getAbsolutePath
-    val filepath3=file3.getAbsolutePath
-    val filepath4=file4.getAbsolutePath
-    val filepath5=file5.getAbsolutePath
+    val filepath1 = file1.getAbsolutePath
+    val filepath2 = file2.getAbsolutePath
+    val filepath3 = file3.getAbsolutePath
+    val filepath4 = file4.getAbsolutePath
+    val filepath5 = file5.getAbsolutePath
 
 
     try {

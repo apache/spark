@@ -97,7 +97,7 @@ public class JavaSimpleParamsExample {
     DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform() method.
-    // LogisticRegression.transform will only use the 'features' column.
+    // LogisticRegressionModel.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     DataFrame results = model2.transform(test);

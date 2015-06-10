@@ -309,7 +309,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       output: Seq[Attribute],
       rdd: RDD[Row]): SparkPlan = {
     val converted = if (relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, relation.schema)
+      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
       rdd
     }

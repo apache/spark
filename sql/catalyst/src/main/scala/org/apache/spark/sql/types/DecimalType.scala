@@ -82,12 +82,12 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
 object DecimalType {
   val Unlimited: DecimalType = DecimalType(None)
 
-  object Fixed {
+  private[sql] object Fixed {
     def unapply(t: DecimalType): Option[(Int, Int)] =
       t.precisionInfo.map(p => (p.precision, p.scale))
   }
 
-  object Expression {
+  private[sql] object Expression {
     def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
       case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
       case _ => None

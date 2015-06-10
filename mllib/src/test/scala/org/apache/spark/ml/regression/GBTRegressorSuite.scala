@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[GBTRegressor]].
  */
-class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
+class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import GBTRegressorSuite.compareAPIs
 
@@ -129,7 +128,7 @@ private object GBTRegressorSuite {
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTRegressionModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)

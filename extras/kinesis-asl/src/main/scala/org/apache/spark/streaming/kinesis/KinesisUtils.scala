@@ -55,7 +55,7 @@ object KinesisUtils {
    */
   def createStream(
       ssc: StreamingContext,
-      kinesisAppName:  String,
+      kinesisAppName: String,
       streamName: String,
       endpointUrl: String,
       regionName: String,
@@ -102,7 +102,7 @@ object KinesisUtils {
    */
   def createStream(
       ssc: StreamingContext,
-      kinesisAppName:  String,
+      kinesisAppName: String,
       streamName: String,
       endpointUrl: String,
       regionName: String,

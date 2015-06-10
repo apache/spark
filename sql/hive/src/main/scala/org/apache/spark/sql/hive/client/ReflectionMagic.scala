@@ -30,7 +30,7 @@ private[client] object ReflectionException {
 /**
  * Provides implicit functions on any object for calling methods reflectively.
  */
-protected trait ReflectionMagic {
+private[client] trait ReflectionMagic {
     /** code for InstanceMagic
         println(
     (1 to 22).map { n =>

@@ -23,9 +23,9 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ThreadUtilsSuite extends FunSuite {
+class ThreadUtilsSuite extends SparkFunSuite {
 
   test("newDaemonSingleThreadExecutor") {
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("this-is-a-thread-name")

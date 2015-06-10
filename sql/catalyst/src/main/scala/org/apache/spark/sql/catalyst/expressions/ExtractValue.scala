@@ -47,7 +47,7 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), Literal(fieldName, StringType)) =>
         val ordinal = findField(fields, fieldName.toString, resolver)
         GetArrayStructFields(child, fields(ordinal), ordinal, containsNull)
-      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType]  =>
+      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
         GetArrayItem(child, extraction)
       case (_: MapType, _) =>
         GetMapValue(child, extraction)
@@ -92,8 +92,6 @@ object ExtractValue {
 
 trait ExtractValue extends UnaryExpression {
   self: Product =>
-
-  type EvaluatedType = Any
 }
 
 /**
