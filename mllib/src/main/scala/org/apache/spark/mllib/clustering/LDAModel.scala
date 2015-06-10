@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum}
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx.{VertexId, EdgeContext, Graph}
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.rdd.RDD
@@ -203,7 +204,7 @@ class DistributedLDAModel private (
 
   import LDA._
 
-  private[clustering] def this(state: LDA.EMOptimizer, iterationTimes: Array[Double]) = {
+  private[clustering] def this(state: EMLDAOptimizer, iterationTimes: Array[Double]) = {
     this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
       state.topicConcentration, iterationTimes)
   }
@@ -343,6 +344,11 @@ class DistributedLDAModel private (
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
       (docID.toLong, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
     }
+  }
+
+  /** Java-friendly version of [[topicDistributions]] */
+  def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
+    JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
   }
 
   // TODO:

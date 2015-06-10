@@ -46,7 +46,7 @@ private[spark] object TestClient {
   def main(args: Array[String]) {
     val url = args(0)
     val conf = new SparkConf
-    val (actorSystem, _) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress, 0,
+    val (actorSystem, _) = AkkaUtils.createActorSystem("spark", Utils.localHostName(), 0,
       conf = conf, securityManager = new SecurityManager(conf))
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
       Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored")

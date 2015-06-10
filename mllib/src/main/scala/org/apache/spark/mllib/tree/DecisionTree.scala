@@ -169,7 +169,7 @@ object DecisionTree extends Serializable with Logging {
       numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
-      categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
     new DecisionTree(strategy).run(input)
@@ -768,7 +768,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private def calculatePredictImpurity(
       leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) =  {
+      rightImpurityCalculator: ImpurityCalculator): (Predict, Double) = {
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
     val predict = calculatePredict(parentNodeAgg)
@@ -1147,7 +1147,10 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    assert(splits.length > 0)
+    // TODO: Do not fail; just ignore the useless feature.
+    assert(splits.length > 0,
+      s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
+        "  Please remove this feature and then try again.")
     // set number of splits accordingly
     metadata.setNumSplits(featureIndex, splits.length)
 

@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import org.mockito.Mockito._
 import org.mockito.Matchers.any
 
-import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -28,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
 
 
-class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
   test("calls TaskCompletionListener after failure") {
     TaskContextSuite.completed = false
@@ -51,7 +50,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
   }
 
   test("all TaskCompletionListeners should be called even if some fail") {
-    val context = new TaskContextImpl(0, 0, 0, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
     val listener = mock(classOf[TaskCompletionListener])
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
     context.addTaskCompletionListener(listener)

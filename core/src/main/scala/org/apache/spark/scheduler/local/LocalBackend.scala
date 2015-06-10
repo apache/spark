@@ -18,13 +18,11 @@
 package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{Executors, TimeUnit}
 
-import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
 
 private case class ReviveOffers()
@@ -47,9 +45,6 @@ private[spark] class LocalEndpoint(
     private val totalCores: Int)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  private val reviveThread = Executors.newSingleThreadScheduledExecutor(
-    Utils.namedThreadFactory("local-revive-thread"))
-
   private var freeCores = totalCores
 
   private val localExecutorId = SparkContext.DRIVER_IDENTIFIER
@@ -71,31 +66,21 @@ private[spark] class LocalEndpoint(
 
     case KillTask(taskId, interruptThread) =>
       executor.killTask(taskId, interruptThread)
+  }
 
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case StopExecutor =>
       executor.stop()
+      context.reply(true)
   }
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    val tasks = scheduler.resourceOffers(offers).flatten
-    for (task <- tasks) {
+    for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
         task.name, task.serializedTask)
     }
-    if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
-      // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
-      reviveThread.schedule(new Runnable {
-        override def run(): Unit = Utils.tryLogNonFatalError {
-          Option(self).foreach(_.send(ReviveOffers))
-        }
-      }, 1000, TimeUnit.MILLISECONDS)
-    }
-  }
-
-  override def onStop(): Unit = {
-    reviveThread.shutdownNow()
   }
 }
 
@@ -104,8 +89,11 @@ private[spark] class LocalEndpoint(
  * master all run in the same JVM. It sits behind a TaskSchedulerImpl and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
-private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend {
+private[spark] class LocalBackend(
+    conf: SparkConf,
+    scheduler: TaskSchedulerImpl,
+    val totalCores: Int)
+  extends SchedulerBackend with ExecutorBackend with Logging {
 
   private val appId = "local-" + System.currentTimeMillis
   var localEndpoint: RpcEndpointRef = null
@@ -116,7 +104,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def stop() {
-    localEndpoint.send(StopExecutor)
+    localEndpoint.ask(StopExecutor)
   }
 
   override def reviveOffers() {

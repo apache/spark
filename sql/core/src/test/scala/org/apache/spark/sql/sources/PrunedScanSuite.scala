@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -34,12 +35,12 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   extends BaseRelation
   with PrunedScan {
 
-  override def schema =
+  override def schema: StructType =
     StructType(
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Array[String]) = {
+  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
@@ -51,10 +52,9 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
 }
 
 class PrunedScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
 
   before {
-    sql(
+    caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
@@ -114,7 +114,7 @@ class PrunedScanSuite extends DataSourceTest {
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
+      val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {

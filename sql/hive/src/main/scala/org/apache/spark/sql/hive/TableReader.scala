@@ -25,16 +25,17 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
-import org.apache.spark.SerializableWritable
+import org.apache.spark.{Logging, SerializableWritable}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.util.Utils
 
 /**
  * A trait for subclasses that handle table scans.
@@ -56,7 +57,7 @@ class HadoopTableReader(
     @transient relation: MetastoreRelation,
     @transient sc: HiveContext,
     @transient hiveExtraConf: HiveConf)
-  extends TableReader {
+  extends TableReader with Logging {
 
   // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
   // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
@@ -76,7 +77,9 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
-      relation.tableDesc.getDeserializerClass.asInstanceOf[Class[Deserializer]],
+      Class.forName(
+        relation.tableDesc.getSerdeClassName, true, Utils.getContextOrSparkClassLoader)
+        .asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
   /**
@@ -142,9 +145,48 @@ class HadoopTableReader(
       partitionToDeserializer: Map[HivePartition,
       Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[Row] = {
-    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
+
+    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
+    def verifyPartitionPath(
+        partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
+        Map[HivePartition, Class[_ <: Deserializer]] = {
+      if (!sc.conf.verifyPartitionPath) {
+        partitionToDeserializer
+      } else {
+        var existPathSet = collection.mutable.Set[String]()
+        var pathPatternSet = collection.mutable.Set[String]()
+        partitionToDeserializer.filter {
+          case (partition, partDeserializer) =>
+            def updateExistPathSetByPathPattern(pathPatternStr: String) {
+              val pathPattern = new Path(pathPatternStr)
+              val fs = pathPattern.getFileSystem(sc.hiveconf)
+              val matches = fs.globStatus(pathPattern)
+              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
+            }
+            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
+            def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
+              var path = tempPath
+              for (i <- (1 to parNum)) path = path.getParent
+              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
+              path.toString + tails
+            }
+
+            val partPath = partition.getDataLocation
+            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
+            var pathPatternStr = getPathPatternByPath(partNum, partPath)
+            if (!pathPatternSet.contains(pathPatternStr)) {
+              pathPatternSet += pathPatternStr
+              updateExistPathSetByPathPattern(pathPatternStr)
+            }
+            existPathSet.contains(partPath.toString)
+        }
+      }
+    }
+
+    val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
+      .map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
-      val partPath = HiveShim.getDataLocationPath(partition)
+      val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
@@ -246,7 +288,7 @@ class HadoopTableReader(
   }
 }
 
-private[hive] object HadoopTableReader extends HiveInspectors {
+private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
@@ -282,10 +324,12 @@ private[hive] object HadoopTableReader extends HiveInspectors {
     val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
       rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
     } else {
-      HiveShim.getConvertedOI(
+      ObjectInspectorConverters.getConvertedOI(
         rawDeser.getObjectInspector,
         tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
     }
+
+    logDebug(soi.toString)
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
       soi.getStructFieldRef(attr.name) -> ordinal

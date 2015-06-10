@@ -35,9 +35,9 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      // We are inserting into an InsertableRelation.
+      // We are inserting into an InsertableRelation or HadoopFsRelation.
       case i @ InsertIntoTable(
-      l @ LogicalRelation(r: InsertableRelation), partition, child, overwrite) => {
+      l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation), _, child, _, _) => {
         // First, make sure the data to be inserted have the same number of fields with the
         // schema of the relation.
         if (l.output.size != child.output.size) {
@@ -84,7 +84,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
-        l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
+        l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite, ifNotExists) =>
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
           failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
@@ -101,12 +101,25 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         }
 
-      case i @ logical.InsertIntoTable(
-        l: LogicalRelation, partition, query, overwrite) if !l.isInstanceOf[InsertableRelation] =>
+      case logical.InsertIntoTable(LogicalRelation(r: HadoopFsRelation), part, _, _, _) =>
+        // We need to make sure the partition columns specified by users do match partition
+        // columns of the relation.
+        val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
+        val specifiedPartitionColumns = part.keySet
+        if (existingPartitionColumns != specifiedPartitionColumns) {
+          failAnalysis(s"Specified partition columns " +
+            s"(${specifiedPartitionColumns.mkString(", ")}) " +
+            s"do not match the partition columns of the table. Please use " +
+            s"(${existingPartitionColumns.mkString(", ")}) as the partition columns.")
+        } else {
+          // OK
+        }
+
+      case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
-      case CreateTableUsingAsSelect(tableName, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (catalog.tableExists(Seq(tableName))) {

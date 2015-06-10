@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
@@ -26,7 +25,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * Provides helper methods for comparing plans.
  */
-class PlanTest extends FunSuite {
+class PlanTest extends SparkFunSuite {
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -45,12 +44,13 @@ class PlanTest extends FunSuite {
   protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
     val normalized1 = normalizeExprIds(plan1)
     val normalized2 = normalizeExprIds(plan2)
-    if (normalized1 != normalized2)
+    if (normalized1 != normalized2) {
       fail(
         s"""
           |== FAIL: Plans do not match ===
           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-        """.stripMargin)
+         """.stripMargin)
+    }
   }
 
   /** Fails the test if the two expressions do not match */

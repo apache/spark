@@ -17,33 +17,34 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Evaluator
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
-
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
-@AlphaComponent
-class BinaryClassificationEvaluator extends Evaluator with Params
-  with HasRawPredictionCol with HasLabelCol {
+@Experimental
+class BinaryClassificationEvaluator(override val uid: String)
+  extends Evaluator with HasRawPredictionCol with HasLabelCol {
+
+  def this() = this(Identifiable.randomUID("binEval"))
 
   /**
    * param for metric name in evaluation
    * @group param
    */
   val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
+    "metric name in evaluation (areaUnderROC|areaUnderPR)")
 
   /** @group getParam */
-  def getMetricName: String = get(metricName)
+  def getMetricName: String = $(metricName)
 
   /** @group setParam */
   def setMetricName(value: String): this.type = set(metricName, value)
@@ -54,20 +55,20 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
-    val map = this.paramMap ++ paramMap
+  setDefault(metricName -> "areaUnderROC")
 
+  override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
-    checkInputColumn(schema, map(rawPredictionCol), new VectorUDT)
-    checkInputColumn(schema, map(labelCol), DoubleType)
+    SchemaUtils.checkColumnType(schema, $(rawPredictionCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select(map(rawPredictionCol), map(labelCol))
+    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
       .map { case Row(rawPrediction: Vector, label: Double) =>
         (rawPrediction(1), label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = map(metricName) match {
+    val metric = $(metricName) match {
       case "areaUnderROC" =>
         metrics.areaUnderROC()
       case "areaUnderPR" =>

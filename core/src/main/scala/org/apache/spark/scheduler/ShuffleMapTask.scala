@@ -33,7 +33,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 * See [[org.apache.spark.scheduler.Task]] for more information.
 *
  * @param stageId id of the stage this task belongs to
- * @param taskBinary broadcast version of of the RDD and the ShuffleDependency. Once deserialized,
+ * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
@@ -56,9 +56,11 @@ private[spark] class ShuffleMapTask(
 
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
+    val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+    _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)
     var writer: ShuffleWriter[Any, Any] = null

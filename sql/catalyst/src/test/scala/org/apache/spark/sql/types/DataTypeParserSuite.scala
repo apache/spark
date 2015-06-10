@@ -17,27 +17,29 @@
 
 package org.apache.spark.sql.types
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class DataTypeParserSuite extends FunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
-      assert(DataTypeParser(dataTypeString) === expectedDataType)
+      assert(DataTypeParser.parse(dataTypeString) === expectedDataType)
     }
   }
 
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
-      intercept[DataTypeException](DataTypeParser(dataTypeString))
+      intercept[DataTypeException](DataTypeParser.parse(dataTypeString))
     }
   }
 
   checkDataType("int", IntegerType)
+  checkDataType("integer", IntegerType)
   checkDataType("BooLean", BooleanType)
   checkDataType("tinYint", ByteType)
   checkDataType("smallINT", ShortType)
   checkDataType("INT", IntegerType)
+  checkDataType("INTEGER", IntegerType)
   checkDataType("bigint", LongType)
   checkDataType("float", FloatType)
   checkDataType("dOUBle", DoubleType)

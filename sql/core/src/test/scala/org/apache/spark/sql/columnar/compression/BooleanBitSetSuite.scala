@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.{NoopColumnStats, BOOLEAN}
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
-class BooleanBitSetSuite extends FunSuite {
+class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
 
   def skeleton(count: Int) {

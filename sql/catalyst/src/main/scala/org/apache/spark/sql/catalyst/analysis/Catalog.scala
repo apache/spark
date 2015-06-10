@@ -17,22 +17,30 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
- * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
+ * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
  * as an AnalysisException with the correct position information.
  */
 class NoSuchTableException extends Exception
+
+class NoSuchDatabaseException extends Exception
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
@@ -55,10 +63,10 @@ trait Catalog {
   def unregisterAllTables(): Unit
 
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (!caseSensitive) {
-      tableIdentifier.map(_.toLowerCase)
-    } else {
+    if (conf.caseSensitiveAnalysis) {
       tableIdentifier
+    } else {
+      tableIdentifier.map(_.toLowerCase)
     }
   }
 
@@ -76,19 +84,19 @@ trait Catalog {
   }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
-  val tables = new mutable.HashMap[String, LogicalPlan]()
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
+  val tables = new ConcurrentHashMap[String, LogicalPlan]
 
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables += ((getDbTableName(tableIdent), plan))
+    tables.put(getDbTableName(tableIdent), plan)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables -= getDbTableName(tableIdent)
+    tables.remove(getDbTableName(tableIdent))
   }
 
   override def unregisterAllTables(): Unit = {
@@ -97,10 +105,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables.get(getDbTableName(tableIdent)) match {
-      case Some(_) => true
-      case None => false
-    }
+    tables.containsKey(getDbTableName(tableIdent))
   }
 
   override def lookupRelation(
@@ -108,7 +113,10 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
     val tableFullName = getDbTableName(tableIdent)
-    val table = tables.getOrElse(tableFullName, sys.error(s"Table Not Found: $tableFullName"))
+    val table = tables.get(tableFullName)
+    if (table == null) {
+      sys.error(s"Table Not Found: $tableFullName")
+    }
     val tableWithQualifiers = Subquery(tableIdent.last, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
@@ -117,9 +125,11 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    tables.map {
-      case (name, _) => (name, true)
-    }.toSeq
+    val result = ArrayBuffer.empty[(String, Boolean)]
+    for (name <- tables.keySet()) {
+      result += ((name, true))
+    }
+    result
   }
 
   override def refreshTable(databaseName: String, tableName: String): Unit = {
@@ -136,7 +146,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
-  val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
+  val overrides = new mutable.HashMap[(Option[String], String), LogicalPlan]()
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
@@ -162,10 +172,10 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = if (!caseSensitive) {
-      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
-    } else {
+    val dbName = if (conf.caseSensitiveAnalysis) {
       databaseName
+    } else {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
     }
 
     val temporaryTables = overrides.filter {
@@ -201,11 +211,11 @@ trait OverrideCatalog extends Catalog {
 
 /**
  * A trivial catalog that returns an error when a relation is requested.  Used for testing when all
- * relations are already filled in and the analyser needs only to resolve attribute references.
+ * relations are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyCatalog extends Catalog {
 
-  override val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException

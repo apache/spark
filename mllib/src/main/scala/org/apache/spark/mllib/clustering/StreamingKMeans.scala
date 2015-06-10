@@ -20,10 +20,11 @@ package org.apache.spark.mllib.clustering
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -165,7 +166,7 @@ class StreamingKMeansModel(
 class StreamingKMeans(
     var k: Int,
     var decayFactor: Double,
-    var timeUnit: String) extends Logging {
+    var timeUnit: String) extends Logging with Serializable {
 
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
 
@@ -179,7 +180,7 @@ class StreamingKMeans(
 
   /** Set the decay factor directly (for forgetful algorithms). */
   def setDecayFactor(a: Double): this.type = {
-    this.decayFactor = decayFactor
+    this.decayFactor = a
     this
   }
 
@@ -235,6 +236,9 @@ class StreamingKMeans(
     }
   }
 
+  /** Java-friendly version of `trainOn`. */
+  def trainOn(data: JavaDStream[Vector]): Unit = trainOn(data.dstream)
+
   /**
    * Use the clustering model to make predictions on batches of data from a DStream.
    *
@@ -244,6 +248,11 @@ class StreamingKMeans(
   def predictOn(data: DStream[Vector]): DStream[Int] = {
     assertInitialized()
     data.map(model.predict)
+  }
+
+  /** Java-friendly version of `predictOn`. */
+  def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Integer] = {
+    JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Integer]])
   }
 
   /**
@@ -256,6 +265,14 @@ class StreamingKMeans(
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Int)] = {
     assertInitialized()
     data.mapValues(model.predict)
+  }
+
+  /** Java-friendly version of `predictOnValues`. */
+  def predictOnValues[K](
+      data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Integer] = {
+    implicit val tag = fakeClassTag[K]
+    JavaPairDStream.fromPairDStream(
+      predictOnValues(data.dstream).asInstanceOf[DStream[(K, java.lang.Integer)]])
   }
 
   /** Check whether cluster centers have been initialized. */

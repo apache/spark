@@ -19,17 +19,16 @@ package org.apache.spark.mllib.regression
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
 
-class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
+class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
-  override def maxWaitTimeMillis = 20000
+  override def maxWaitTimeMillis: Int = 20000
 
   // Assert that two values are equal within tolerance epsilon
   def assertEqual(v1: Double, v2: Double, epsilon: Double) {

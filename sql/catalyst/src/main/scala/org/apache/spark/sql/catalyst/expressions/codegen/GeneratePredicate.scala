@@ -20,29 +20,51 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
+ * Interface for generated predicate
+ */
+abstract class Predicate {
+  def eval(r: Row): Boolean
+}
+
+/**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[Row]].
  */
 object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
 
-  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer(in)
+  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
   protected def create(predicate: Expression): ((Row) => Boolean) = {
-    val cEval = expressionEvaluator(predicate)
+    val ctx = newCodeGenContext()
+    val eval = predicate.gen(ctx)
+    val code = s"""
+      import org.apache.spark.sql.Row;
 
-    val code =
-      q"""
-        (i: $rowType) => {
-          ..${cEval.code}
-          if (${cEval.nullTerm}) false else ${cEval.primitiveTerm}
+      public SpecificPredicate generate($exprType[] expr) {
+        return new SpecificPredicate(expr);
+      }
+
+      class SpecificPredicate extends ${classOf[Predicate].getName} {
+        private final $exprType[] expressions;
+        public SpecificPredicate($exprType[] expr) {
+          expressions = expr;
         }
-      """
 
-    log.debug(s"Generated predicate '$predicate':\n$code")
-    toolBox.eval(code).asInstanceOf[Row => Boolean]
+        @Override
+        public boolean eval(Row i) {
+          ${eval.code}
+          return !${eval.isNull} && ${eval.primitive};
+        }
+      }"""
+
+    logDebug(s"Generated predicate '$predicate':\n$code")
+
+    val c = compile(code)
+    // fetch the only one method `generate(Expression[])`
+    val m = c.getDeclaredMethods()(0)
+    val p = m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Predicate]
+    (r: Row) => p.eval(r)
   }
 }

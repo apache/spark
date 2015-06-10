@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.PrintStream
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.scheduler.StatsReportListener
-import org.apache.spark.sql.hive.{HiveShim, HiveContext}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
@@ -37,8 +40,7 @@ private[hive] object SparkSQLEnv extends Logging {
       val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
 
       sparkConf
-        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}")
-        .set("spark.sql.hive.version", HiveShim.version)
+        .setAppName(s"SparkSQL::${Utils.localHostName()}")
         .set(
           "spark.serializer",
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
@@ -49,6 +51,12 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
+
+      hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      hiveContext.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+
+      hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
         hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>

@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
@@ -37,7 +37,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   extends Logging {
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
-  private val getTaskResultExecutor = Utils.newDaemonFixedThreadPool(
+  private val getTaskResultExecutor = ThreadUtils.newDaemonFixedThreadPool(
     THREADS, "task-result-getter")
 
   protected val serializer = new ThreadLocal[SerializerInstance] {
@@ -56,6 +56,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
                 return
               }
+              // deserialize "value" without holding any lock so that it won't block other threads.
+              // We should call it here, so that when it's called again in
+              // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
+              directResult.value()
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {

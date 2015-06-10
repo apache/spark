@@ -166,7 +166,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
   // determines the tradeoff between load-balancing the partitions sizes and their locality
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
-  val slack = (balanceSlack * prev.partitions.size).toInt
+  val slack = (balanceSlack * prev.partitions.length).toInt
 
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
@@ -310,11 +310,11 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   def throwBalls() {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
-        for ((p,i) <- prev.partitions.zipWithIndex) {
+        for ((p, i) <- prev.partitions.zipWithIndex) {
           groupArr(i).arr += p
         }
       } else { // no locality available, then simply split partitions based on positions in array
-        for(i <- 0 until maxPartitions) {
+        for (i <- 0 until maxPartitions) {
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
           (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }

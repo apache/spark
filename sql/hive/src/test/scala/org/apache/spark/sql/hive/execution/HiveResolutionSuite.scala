@@ -18,26 +18,27 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.test.TestHive.{sparkContext, jsonRDD, sql}
+import org.apache.spark.sql.hive.test.TestHive.{read, sparkContext, jsonRDD, sql}
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 
 /**
- * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
+ * A set of test cases expressed in Hive QL that are not covered by the tests
+ * included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
 
   test("SPARK-3698: case insensitive test for nested data") {
-    jsonRDD(sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": [{"a": {"a": 1}}]}""" :: Nil)).registerTempTable("nested")
     // This should be successfully analyzed
     sql("SELECT a[0].A.A from nested").queryExecution.analyzed
   }
 
   test("SPARK-5278: check ambiguous reference to fields") {
-    jsonRDD(sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": [{"b": 1, "B": 2}]}""" :: Nil)).registerTempTable("nested")
 
     // there are 2 filed matching field name "b", we should report Ambiguous reference error
@@ -76,7 +77,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("caseSensitivityTest")
 
     val query = sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
@@ -87,14 +88,14 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   ignore("case insensitivity with scala reflection joins") {
     // Test resolution with Scala Reflection
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("caseSensitivityTest")
 
     sql("SELECT * FROM casesensitivitytest a JOIN casesensitivitytest b ON a.a = b.a").collect()
   }
 
   test("nested repeated resolution") {
-    sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+    sparkContext.parallelize(Data(1, 2, Nested(1, 2), Seq(Nested(1, 2))) :: Nil)
       .toDF().registerTempTable("nestedRepeatedTest")
     assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }

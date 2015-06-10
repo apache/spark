@@ -20,15 +20,14 @@ package org.apache.spark.sql.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.scalatest.FunSuite
-import parquet.schema.MessageTypeParser
+import org.apache.parquet.schema.MessageTypeParser
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 
-class ParquetSchemaSuite extends FunSuite with ParquetTest {
-  val sqlContext = TestSQLContext
+class ParquetSchemaSuite extends SparkFunSuite with ParquetTest {
+  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.
@@ -180,10 +179,12 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
     val caseClassString =
       "StructType(List(StructField(c1,IntegerType,false), StructField(c2,BinaryType,true)))"
 
+    // scalastyle:off
     val jsonString =
       """
         |{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}
       """.stripMargin
+    // scalastyle:on
 
     val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
     val fromJson = ParquetTypesConverter.convertFromString(jsonString)

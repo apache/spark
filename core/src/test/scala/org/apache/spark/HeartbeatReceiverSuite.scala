@@ -22,7 +22,6 @@ import scala.language.postfixOps
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
@@ -31,7 +30,7 @@ import org.apache.spark.scheduler.TaskScheduler
 import org.apache.spark.util.RpcUtils
 import org.scalatest.concurrent.Eventually._
 
-class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
+class HeartbeatReceiverSuite extends SparkFunSuite with LocalSparkContext {
 
   test("HeartbeatReceiver") {
     sc = spy(new SparkContext("local[2]", "test"))
@@ -48,7 +47,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
 
     val metrics = new TaskMetrics
     val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithReply[HeartbeatResponse](
+    val response = receiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
 
     verify(scheduler).executorHeartbeatReceived(
@@ -71,7 +70,7 @@ class HeartbeatReceiverSuite extends FunSuite with LocalSparkContext {
 
     val metrics = new TaskMetrics
     val blockManagerId = BlockManagerId("executor-1", "localhost", 12345)
-    val response = receiverRef.askWithReply[HeartbeatResponse](
+    val response = receiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat("executor-1", Array(1L -> metrics), blockManagerId))
 
     verify(scheduler).executorHeartbeatReceived(

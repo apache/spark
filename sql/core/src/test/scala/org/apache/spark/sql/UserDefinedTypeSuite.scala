@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql
 
-import java.io.File
-
-import org.apache.spark.util.Utils
-
 import scala.beans.{BeanInfo, BeanProperty}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.OpenHashSet
 
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
@@ -63,17 +61,19 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
     }
   }
 
-  override def userClass = classOf[MyDenseVector]
+  override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest {
-  val points = Seq(
-    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
-    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-  val pointsRDD = sparkContext.parallelize(points).toDF()
 
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+
+  private lazy val pointsRDD = Seq(
+    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0)))).toDF()
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
@@ -91,10 +91,10 @@ class UserDefinedTypeSuite extends QueryTest {
   }
 
   test("UDTs and UDFs") {
-    TestSQLContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    ctx.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
-      sql("SELECT testType(features) from points"),
+      ctx.sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
   }
 
@@ -102,13 +102,13 @@ class UserDefinedTypeSuite extends QueryTest {
   test("UDTs with Parquet") {
     val tempDir = Utils.createTempDir()
     tempDir.delete()
-    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+    pointsRDD.write.parquet(tempDir.getCanonicalPath)
   }
 
   test("Repartition UDTs with Parquet") {
     val tempDir = Utils.createTempDir()
     tempDir.delete()
-    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
+    pointsRDD.repartition(1).write.parquet(tempDir.getCanonicalPath)
   }
 
   // Tests to make sure that all operators correctly convert types on the way out.
@@ -118,5 +118,24 @@ class UserDefinedTypeSuite extends QueryTest {
     df.take(1)(0).getAs[MyDenseVector](1)
     df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
+  }
+
+  test("HyperLogLogUDT") {
+    val hyperLogLogUDT = HyperLogLogUDT
+    val hyperLogLog = new HyperLogLog(0.4)
+    (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
+
+    val actual = hyperLogLogUDT.deserialize(hyperLogLogUDT.serialize(hyperLogLog))
+    assert(actual.cardinality() === hyperLogLog.cardinality())
+    assert(java.util.Arrays.equals(actual.getBytes, hyperLogLog.getBytes))
+  }
+
+  test("OpenHashSetUDT") {
+    val openHashSetUDT = new OpenHashSetUDT(IntegerType)
+    val set = new OpenHashSet[Int]
+    (1 to 10).foreach(i => set.add(i))
+
+    val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
+    assert(actual.iterator.toSet === set.iterator.toSet)
   }
 }

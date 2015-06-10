@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -24,13 +25,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
  * is to ensure that constant folding and other optimizations do not break anything.
  */
-class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
+class ExpressionOptimizationSuite extends SparkFunSuite with ExpressionEvalHelper {
   override def checkEvaluation(
       expression: Expression,
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer(plan)
+    val optimizedPlan = DefaultOptimizer.execute(plan)
     super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
   }
 }

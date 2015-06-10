@@ -48,7 +48,8 @@ case class HashOuterJoin(
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+    case x =>
+      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }
 
   override def requiredChildDistribution: Seq[ClusteredDistribution] =
@@ -63,7 +64,7 @@ case class HashOuterJoin(
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
-        throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+        throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
     }
   }
 
@@ -183,7 +184,7 @@ case class HashOuterJoin(
     hashTable
   }
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[Row] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
@@ -216,7 +217,8 @@ case class HashOuterJoin(
               rightHashTable.getOrElse(key, EMPTY_LIST), joinedRow)
           }
 
-        case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+        case x =>
+          throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
       }
     }
   }

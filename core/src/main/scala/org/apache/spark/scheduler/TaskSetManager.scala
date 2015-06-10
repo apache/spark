@@ -46,7 +46,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *
  * @param sched           the TaskSchedulerImpl associated with the TaskSetManager
  * @param taskSet         the TaskSet to manage scheduling for
- * @param maxTaskFailures if any particular task fails more than this number of times, the entire
+ * @param maxTaskFailures if any particular task fails this number of times, the entire
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
@@ -620,6 +620,12 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markSuccessful()
     removeRunningTask(tid)
+    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
+    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
+    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
+    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
+    // Note: "result.value()" only deserializes the value when it's called at the first time, so
+    // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
@@ -775,10 +781,10 @@ private[spark] class TaskSetManager(
     // that it's okay if we add a task to the same queue twice (if it had multiple preferred
     // locations), because dequeueTaskFromList will skip already-running tasks.
     for (index <- getPendingTasksForExecutor(execId)) {
-      addPendingTask(index, readding=true)
+      addPendingTask(index, readding = true)
     }
     for (index <- getPendingTasksForHost(host)) {
-      addPendingTask(index, readding=true)
+      addPendingTask(index, readding = true)
     }
 
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
@@ -848,15 +854,18 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3000")
-    level match {
-      case TaskLocality.PROCESS_LOCAL =>
-        conf.get("spark.locality.wait.process", defaultWait).toLong
-      case TaskLocality.NODE_LOCAL =>
-        conf.get("spark.locality.wait.node", defaultWait).toLong
-      case TaskLocality.RACK_LOCAL =>
-        conf.get("spark.locality.wait.rack", defaultWait).toLong
-      case _ => 0L
+    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val localityWaitKey = level match {
+      case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
+      case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
+      case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+      case _ => null
+    }
+
+    if (localityWaitKey != null) {
+      conf.getTimeAsMs(localityWaitKey, defaultWait)
+    } else {
+      0L
     }
   }
 

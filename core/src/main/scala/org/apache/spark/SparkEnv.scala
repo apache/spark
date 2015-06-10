@@ -20,6 +20,8 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
+import akka.actor.ActorSystem
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
@@ -40,6 +42,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
@@ -69,11 +72,13 @@ class SparkEnv (
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
+    val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
   // TODO Remove actorSystem
-  val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+  @deprecated("Actor system is no longer supported as of 1.4")
+  val actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -103,7 +108,7 @@ class SparkEnv (
     // actorSystem.awaitTermination()
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
-    
+
     // If we only stop sc, but the driver process still run as a services then we need to delete
     // the tmp dir, if not, it will create too many tmp dirs.
     // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
@@ -296,7 +301,7 @@ object SparkEnv extends Logging {
       }
     }
 
-    val mapOutputTracker =  if (isDriver) {
+    val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf)
     } else {
       new MapOutputTrackerWorker(conf)
@@ -311,7 +316,8 @@ object SparkEnv extends Logging {
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
       "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
-      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
+      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
+      "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
@@ -345,7 +351,7 @@ object SparkEnv extends Logging {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
         val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
-        conf.set("spark.fileserver.uri",  server.serverUri)
+        conf.set("spark.fileserver.uri", server.serverUri)
         server
       } else {
         null
@@ -375,18 +381,21 @@ object SparkEnv extends Logging {
       "."
     }
 
-    // Warn about deprecated spark.cache.class property
-    if (conf.contains("spark.cache.class")) {
-      logWarning("The spark.cache.class property is no longer being used! Specify storage " +
-        "levels using the RDD.persist() method instead.")
-    }
-
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
-      new OutputCommitCoordinator(conf)
+      new OutputCommitCoordinator(conf, isDriver)
     }
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
+
+    val executorMemoryManager: ExecutorMemoryManager = {
+      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
+        MemoryAllocator.UNSAFE
+      } else {
+        MemoryAllocator.HEAP
+      }
+      new ExecutorMemoryManager(allocator)
+    }
 
     val envInstance = new SparkEnv(
       executorId,
@@ -404,9 +413,10 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       shuffleMemoryManager,
+      executorMemoryManager,
       outputCommitCoordinator,
       conf)
-      
+
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.

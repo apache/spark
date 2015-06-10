@@ -25,15 +25,19 @@ import kafka.message.MessageAndMetadata
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 
-class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
-  val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-  var sc: SparkContext = _
+class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
+
+  private var kafkaTestUtils: KafkaTestUtils = _
+
+  private val sparkConf = new SparkConf().setMaster("local[4]")
+    .setAppName(this.getClass.getSimpleName)
+  private var sc: SparkContext = _
+
   override def beforeAll {
     sc = new SparkContext(sparkConf)
-
-    setupKafka()
+    kafkaTestUtils = new KafkaTestUtils
+    kafkaTestUtils.setup()
   }
 
   override def afterAll {
@@ -41,22 +45,25 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
       sc.stop
       sc = null
     }
-    tearDownKafka()
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown()
+      kafkaTestUtils = null
+    }
   }
 
   test("basic usage") {
-    val topic = "topicbasic"
-    createTopic(topic)
+    val topic = s"topicbasic-${Random.nextInt}"
+    kafkaTestUtils.createTopic(topic)
     val messages = Set("the", "quick", "brown", "fox")
-    sendMessages(topic, messages.toArray)
+    kafkaTestUtils.sendMessages(topic, messages.toArray)
 
-
-    val kafkaParams = Map("metadata.broker.list" -> brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
+    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "group.id" -> s"test-consumer-${Random.nextInt}")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
-    val rdd =  KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
+    val rdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
       sc, kafkaParams, offsetRanges)
 
     val received = rdd.map(_._2).collect.toSet
@@ -65,41 +72,52 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
 
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
-    val topic = "topic1"
+    val topic = s"topicboundary-${Random.nextInt}"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
-    createTopic(topic)
+    kafkaTestUtils.createTopic(topic)
 
-    val kafkaParams = Map("metadata.broker.list" -> brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
+    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "group.id" -> s"test-consumer-${Random.nextInt}")
 
     val kc = new KafkaCluster(kafkaParams)
 
     // this is the "lots of messages" case
-    sendMessages(topic, sent)
+    kafkaTestUtils.sendMessages(topic, sent)
+    val sentCount = sent.values.sum
+
     // rdd defined from leaders after sending messages, should get the number sent
     val rdd = getRdd(kc, Set(topic))
 
     assert(rdd.isDefined)
-    assert(rdd.get.count === sent.values.sum, "didn't get all sent messages")
 
-    val ranges = rdd.get.asInstanceOf[HasOffsetRanges]
-      .offsetRanges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
+    val ranges = rdd.get.asInstanceOf[HasOffsetRanges].offsetRanges
+    val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
 
-    kc.setConsumerOffsets(kafkaParams("group.id"), ranges)
+    assert(rangeCount === sentCount, "offset range didn't include all sent messages")
+    assert(rdd.get.count === sentCount, "didn't get all sent messages")
+
+    val rangesMap = ranges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
+
+    // make sure consumer offsets are committed before the next getRdd call
+    kc.setConsumerOffsets(kafkaParams("group.id"), rangesMap).fold(
+      err => throw new Exception(err.mkString("\n")),
+      _ => ()
+    )
 
     // this is the "0 messages" case
     val rdd2 = getRdd(kc, Set(topic))
     // shouldn't get anything, since message is sent after rdd was defined
     val sentOnlyOne = Map("d" -> 1)
 
-    sendMessages(topic, sentOnlyOne)
+    kafkaTestUtils.sendMessages(topic, sentOnlyOne)
+
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = getRdd(kc, Set(topic))
     // send lots of messages after rdd was defined, they shouldn't show up
-    sendMessages(topic, Map("extra" -> 22))
+    kafkaTestUtils.sendMessages(topic, Map("extra" -> 22))
 
     assert(rdd3.isDefined)
     assert(rdd3.get.count === sentOnlyOne.values.sum, "didn't get exactly one message")

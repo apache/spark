@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-
 
 class DataFrameNaFunctionsSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   def createDF(): DataFrame = {
     Seq[(String, java.lang.Integer, java.lang.Double)](
@@ -153,5 +154,39 @@ class DataFrameNaFunctionsSuite extends QueryTest {
         "d" -> 2.2
       ))),
       Row("test", null, 1, 2.2))
+  }
+
+  test("replace") {
+    val input = createDF()
+
+    // Replace two numeric columns: age and height
+    val out = input.na.replace(Seq("age", "height"), Map(
+      16 -> 61,
+      60 -> 6,
+      164.3 -> 461.3  // Alice is really tall
+    ))
+
+    checkAnswer(
+      out,
+      Row("Bob", 61, 176.5) ::
+        Row("Alice", null, 461.3) ::
+        Row("David", 6, null) ::
+        Row("Amy", null, null) ::
+        Row(null, null, null) :: Nil)
+
+    // Replace only the age column
+    val out1 = input.na.replace("age", Map(
+      16 -> 61,
+      60 -> 6,
+      164.3 -> 461.3  // Alice is really tall
+    ))
+
+    checkAnswer(
+      out1,
+      Row("Bob", 61, 176.5) ::
+        Row("Alice", null, 164.3) ::
+        Row("David", 6, null) ::
+        Row("Amy", null, null) ::
+        Row(null, null, null) :: Nil)
   }
 }

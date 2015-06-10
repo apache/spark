@@ -45,7 +45,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
-      outputStreams.foreach(_.validate)
+      outputStreams.foreach(_.validateAtStart)
       inputStreams.par.foreach(_.start())
     }
   }
@@ -110,6 +110,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       .toArray
   }
 
+  def getInputStreamName(streamId: Int): Option[String] = synchronized {
+    inputStreams.find(_.id == streamId).map(_.name)
+  }
+
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
     val jobs = this.synchronized {
@@ -153,10 +157,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def validate() {
     this.synchronized {
-      assert(batchDuration != null, "Batch duration has not been set")
+      require(batchDuration != null, "Batch duration has not been set")
       // assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration +
       // " is very low")
-      assert(getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
+      require(getOutputStreams().size > 0, "No output operations registered, so nothing to execute")
     }
   }
 

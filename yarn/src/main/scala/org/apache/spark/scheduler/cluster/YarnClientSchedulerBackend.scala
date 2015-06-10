@@ -34,7 +34,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  @volatile private var stopping: Boolean = false
+  private var monitorThread: Thread = null
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -57,7 +57,8 @@ private[spark] class YarnClientSchedulerBackend(
     client = new Client(args, conf)
     appId = client.submitApplication()
     waitForApplication()
-    asyncMonitorApplication()
+    monitorThread = asyncMonitorApplication()
+    monitorThread.start()
   }
 
   /**
@@ -75,7 +76,8 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue")
+        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
+        ("--py-files", null, "spark.submit.pyFiles")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
@@ -85,7 +87,7 @@ private[spark] class YarnClientSchedulerBackend(
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
       if (sc.getConf.contains(sparkProp)) {
         extraArgs += (optionName, sc.getConf.get(sparkProp))
-      } else if (System.getenv(envVar) != null) {
+      } else if (envVar != null && System.getenv(envVar) != null) {
         extraArgs += (optionName, System.getenv(envVar))
         if (deprecatedEnvVars.contains(envVar)) {
           logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
@@ -123,34 +125,22 @@ private[spark] class YarnClientSchedulerBackend(
    * If the application has exited for any reason, stop the SparkContext.
    * This assumes both `client` and `appId` have already been set.
    */
-  private def asyncMonitorApplication(): Unit = {
+  private def asyncMonitorApplication(): Thread = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
     val t = new Thread {
       override def run() {
-        while (!stopping) {
-          var state: YarnApplicationState = null
-          try {
-            val report = client.getApplicationReport(appId)
-            state = report.getYarnApplicationState()
-          } catch {
-            case e: ApplicationNotFoundException =>
-              state = YarnApplicationState.KILLED
-          }
-          if (state == YarnApplicationState.FINISHED ||
-            state == YarnApplicationState.KILLED ||
-            state == YarnApplicationState.FAILED) {
-            logError(s"Yarn application has already exited with state $state!")
-            sc.stop()
-            stopping = true
-          }
-          Thread.sleep(1000L)
+        try {
+          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+          logError(s"Yarn application has already exited with state $state!")
+          sc.stop()
+        } catch {
+          case e: InterruptedException => logInfo("Interrupting monitor thread")
         }
-        Thread.currentThread().interrupt()
       }
     }
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
-    t.start()
+    t
   }
 
   /**
@@ -158,7 +148,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    stopping = true
+    monitorThread.interrupt()
     super.stop()
     client.stop()
     logInfo("Stopped")

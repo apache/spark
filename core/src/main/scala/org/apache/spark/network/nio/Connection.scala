@@ -181,7 +181,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     buffer.get(bytes)
     bytes.foreach(x => print(x + " "))
     buffer.position(curPosition)
-    print(" (" + bytes.size + ")")
+    print(" (" + bytes.length + ")")
   }
 
   def printBuffer(buffer: ByteBuffer, position: Int, length: Int) {
@@ -326,15 +326,14 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
   // MUST be called within the selector loop
   def connect() {
-    try{
+    try {
       channel.register(selector, SelectionKey.OP_CONNECT)
       channel.connect(address)
       logInfo("Initiating connection to [" + address + "]")
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         logError("Error connecting to " + address, e)
         callOnExceptionCallbacks(e)
-      }
     }
   }
 

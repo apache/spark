@@ -77,8 +77,13 @@ sealed trait Matrix extends Serializable {
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. */
+  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
   def multiply(y: DenseVector): DenseVector = {
+    multiply(y.asInstanceOf[Vector])
+  }
+
+  /** Convenience method for `Matrix`-`Vector` multiplication. */
+  def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
     BLAS.gemv(1.0, this, y, 0.0, output)
     output
@@ -86,6 +91,9 @@ sealed trait Matrix extends Serializable {
 
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
+
+  /** A human readable representation of the matrix with maximum lines and width */
+  def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
@@ -270,7 +278,8 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f))
+  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+    isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
@@ -532,7 +541,7 @@ class SparseMatrix(
   }
 
   private[mllib] def map(f: Double => Double) =
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f))
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[mllib] def update(f: Double => Double): SparseMatrix = {
     val len = values.length

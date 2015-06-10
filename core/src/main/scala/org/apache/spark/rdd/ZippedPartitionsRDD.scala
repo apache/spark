@@ -52,8 +52,8 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     if (preservesPartitioning) firstParent[Any].partitioner else None
 
   override def getPartitions: Array[Partition] = {
-    val numParts = rdds.head.partitions.size
-    if (!rdds.forall(rdd => rdd.partitions.size == numParts)) {
+    val numParts = rdds.head.partitions.length
+    if (!rdds.forall(rdd => rdd.partitions.length == numParts)) {
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
     Array.tabulate[Partition](numParts) { i =>
@@ -123,7 +123,7 @@ private[spark] class ZippedPartitionsRDD3
 }
 
 private[spark] class ZippedPartitionsRDD4
-  [A: ClassTag, B: ClassTag, C: ClassTag, D:ClassTag, V: ClassTag](
+  [A: ClassTag, B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag](
     sc: SparkContext,
     var f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
     var rdd1: RDD[A],

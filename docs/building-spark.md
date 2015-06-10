@@ -7,11 +7,7 @@ redirect_from: "building-with-maven.html"
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
-
-**Note:** Building Spark with Java 7 or later can create JAR files that may not be
-readable with early versions of Java 6, due to the large number of files in the JAR
-archive. Build with Java 6 if this is an issue for your deployment.
+Building Spark using Maven requires Maven 3.0.4 or newer and Java 7+.
 
 # Building with `build/mvn`
 
@@ -34,6 +30,16 @@ and in `project/SparkBuild.scala` add:
 
 to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
 
+# Building a Runnable Distribution
+
+To create a Spark distribution like those distributed by the 
+[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as 
+to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
+with Maven profile settings and so on like the direct Maven build. Example:
+
+    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    
+For more information on usage, run `./make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
 
@@ -59,18 +65,18 @@ You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 # Specifying the Hadoop Version
 
-Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default. Note that certain build profiles are required for particular Hadoop versions:
+Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 2.2.0 by default. Note that certain build profiles are required for particular Hadoop versions:
 
 <table class="table">
   <thead>
     <tr><th>Hadoop version</th><th>Profile required</th></tr>
   </thead>
   <tbody>
-    <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
-    <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
+    <tr><td>1.x to 2.1.x</td><td>hadoop-1</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
+    <tr><td>2.6.x and later 2.x</td><td>hadoop-2.6</td></tr>
   </tbody>
 </table>
 
@@ -78,13 +84,10 @@ For Apache Hadoop versions 1.x, Cloudera CDH "mr1" distributions, and other Hado
 
 {% highlight bash %}
 # Apache Hadoop 1.2.1
-mvn -Dhadoop.version=1.2.1 -DskipTests clean package
+mvn -Dhadoop.version=1.2.1 -Phadoop-1 -DskipTests clean package
 
 # Cloudera CDH 4.2.0 with MapReduce v1
-mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
-
-# Apache Hadoop 0.23.x
-mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
+mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -Phadoop-1 -DskipTests clean package
 {% endhighlight %}
 
 You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.
@@ -92,8 +95,9 @@ You can enable the "yarn" profile and optionally set the "yarn.version" property
 Examples:
 
 {% highlight bash %}
+
 # Apache Hadoop 2.2.X
-mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
+mvn -Pyarn -Phadoop-2.2 -DskipTests clean package
 
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
@@ -111,14 +115,10 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings. You can also build for
-Hive 0.12.0 using the `-Phive-0.12.0` profile.
+By default Spark will build with Hive 0.13.1 bindings.
 {% highlight bash %}
 # Apache Hadoop 2.4.X with Hive 13 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
-
-# Apache Hadoop 2.4.X with Hive 12 support
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-0.12.0 -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
 # Building for Scala 2.11
@@ -127,9 +127,7 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
     dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
-Scala 2.11 support in Spark does not support a few features due to dependencies
-which are themselves not Scala 2.11 ready. Specifically, Spark's external 
-Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
+Spark does not yet support its JDBC component for Scala 2.11.
 
 # Spark Tests in Maven
 
@@ -173,7 +171,7 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 # Building Spark with IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IDESetup).
 
 # Running Java 8 Test Suites
 

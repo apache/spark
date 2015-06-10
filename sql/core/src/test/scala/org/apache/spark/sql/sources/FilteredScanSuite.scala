@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -41,7 +42,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       StructField("b", IntegerType, nullable = false) ::
       StructField("c", StringType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
@@ -96,7 +97,7 @@ object FiltersPushed {
 
 class FilteredScanSuite extends DataSourceTest {
 
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext.sql
 
   before {
     sql(
@@ -153,7 +154,7 @@ class FilteredScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IN (1,3,5)",
-    Seq(1,3,5).map(i => Row(i, i * 2)))
+    Seq(1, 3, 5).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE A = 1",

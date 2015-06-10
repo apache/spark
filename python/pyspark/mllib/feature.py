@@ -23,15 +23,22 @@ from __future__ import absolute_import
 import sys
 import warnings
 import random
+import binascii
+if sys.version >= '3':
+    basestring = str
+    unicode = str
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import RDD, SparkContext
+from pyspark import SparkContext
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, Vector, _convert_to_vector
+from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.regression import LabeledPoint
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
-           'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
+           'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
+           'ChiSqSelector', 'ChiSqSelectorModel']
 
 
 class VectorTransformer(object):
@@ -61,6 +68,8 @@ class Normalizer(VectorTransformer):
     For `p` = float('inf'), max(abs(vector)) will be used as norm for
     normalization.
 
+    :param p: Normalization in L^p^ space, p = 2 by default.
+
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)
@@ -75,9 +84,6 @@ class Normalizer(VectorTransformer):
     DenseVector([0.0, 0.5, 1.0])
     """
     def __init__(self, p=2.0):
-        """
-        :param p: Normalization in L^p^ space, p = 2 by default.
-        """
         assert p >= 1.0, "p should be greater than 1.0"
         self.p = float(p)
 
@@ -87,7 +93,7 @@ class Normalizer(VectorTransformer):
 
         :param vector: vector or RDD of vector to be normalized.
         :return: normalized vector. If the norm of the input is zero, it
-                will return the input vector.
+                 will return the input vector.
         """
         sc = SparkContext._active_spark_context
         assert sc is not None, "SparkContext should be initialized first"
@@ -132,6 +138,22 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
+    def setWithMean(self, withMean):
+        """
+        Setter of the boolean which decides
+        whether it uses mean or not
+        """
+        self.call("setWithMean", withMean)
+        return self
+
+    def setWithStd(self, withStd):
+        """
+        Setter of the boolean which decides
+        whether it uses std or not
+        """
+        self.call("setWithStd", withStd)
+        return self
+
 
 class StandardScaler(object):
     """
@@ -140,6 +162,13 @@ class StandardScaler(object):
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
     training set.
+
+    :param withMean: False by default. Centers the data with mean
+                     before scaling. It will build a dense output, so this
+                     does not work on sparse input and will raise an
+                     exception.
+    :param withStd: True by default. Scales the data to unit
+                    standard deviation.
 
     >>> vs = [Vectors.dense([-2.0, 2.3, 0]), Vectors.dense([3.8, 0.0, 1.9])]
     >>> dataset = sc.parallelize(vs)
@@ -151,14 +180,6 @@ class StandardScaler(object):
     DenseVector([0.7071, -0.7071, 0.7071])
     """
     def __init__(self, withMean=False, withStd=True):
-        """
-        :param withMean: False by default. Centers the data with mean
-                 before scaling. It will build a dense output, so this
-                 does not work on sparse input and will raise an
-                 exception.
-        :param withStd: True by default. Scales the data to unit
-                 standard deviation.
-        """
         if not (withMean or withStd):
             warnings.warn("Both withMean and withStd are false. The model does nothing.")
         self.withMean = withMean
@@ -170,12 +191,64 @@ class StandardScaler(object):
         for later scaling.
 
         :param data: The data used to compute the mean and variance
-                 to build the transformation model.
+                     to build the transformation model.
         :return: a StandardScalarModel
         """
         dataset = dataset.map(_convert_to_vector)
         jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
         return StandardScalerModel(jmodel)
+
+
+class ChiSqSelectorModel(JavaVectorTransformer):
+    """
+    .. note:: Experimental
+
+    Represents a Chi Squared selector model.
+    """
+    def transform(self, vector):
+        """
+        Applies transformation on a vector.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        :return: transformed vector.
+        """
+        return JavaVectorTransformer.transform(self, vector)
+
+
+class ChiSqSelector(object):
+    """
+    .. note:: Experimental
+
+    Creates a ChiSquared feature selector.
+
+    :param numTopFeatures: number of features that selector will select.
+
+    >>> data = [
+    ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
+    ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
+    ...     LabeledPoint(1.0, [0.0, 9.0, 8.0]),
+    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0])
+    ... ]
+    >>> model = ChiSqSelector(1).fit(sc.parallelize(data))
+    >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
+    SparseVector(1, {0: 6.0})
+    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
+    DenseVector([5.0])
+    """
+    def __init__(self, numTopFeatures):
+        self.numTopFeatures = int(numTopFeatures)
+
+    def fit(self, data):
+        """
+        Returns a ChiSquared feature selector.
+
+        :param data: an `RDD[LabeledPoint]` containing the labeled dataset
+                     with categorical features. Real-valued features will be
+                     treated as categorical for each distinct value.
+                     Apply feature discretizer before using this function.
+        """
+        jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
+        return ChiSqSelectorModel(jmodel)
 
 
 class HashingTF(object):
@@ -187,15 +260,14 @@ class HashingTF(object):
 
     Note: the terms must be hashable (can not be dict/set/list...).
 
+    :param numFeatures: number of features (default: 2^20)
+
     >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
-    SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
+    SparseVector(100, {...})
     """
     def __init__(self, numFeatures=1 << 20):
-        """
-        :param numFeatures: number of features (default: 2^20)
-        """
         self.numFeatures = numFeatures
 
     def indexOf(self, term):
@@ -235,7 +307,7 @@ class IDFModel(JavaVectorTransformer):
               Call transform directly on the RDD instead.
 
         :param x: an RDD of term frequency vectors or a term frequency
-                 vector
+                  vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
         if isinstance(x, RDD):
@@ -266,6 +338,9 @@ class IDF(object):
     `minDocFreq`). For terms that are not in at least `minDocFreq`
     documents, the IDF is found as 0, resulting in TF-IDFs of 0.
 
+    :param minDocFreq: minimum of documents in which a term
+                       should appear for filtering
+
     >>> n = 4
     >>> freqs = [Vectors.sparse(n, (1, 3), (1.0, 2.0)),
     ...          Vectors.dense([0.0, 1.0, 2.0, 3.0]),
@@ -286,10 +361,6 @@ class IDF(object):
     SparseVector(4, {1: 0.0, 3: 0.5754})
     """
     def __init__(self, minDocFreq=0):
-        """
-        :param minDocFreq: minimum of documents in which a term
-                           should appear for filtering
-        """
         self.minDocFreq = minDocFreq
 
     def fit(self, dataset):
@@ -344,6 +415,7 @@ class Word2VecModel(JavaVectorTransformer):
         return self.call("getVectors")
 
 
+@ignore_unicode_prefix
 class Word2Vec(object):
     """
     Word2Vec creates vector representation of words in a text corpus.
@@ -366,7 +438,7 @@ class Word2Vec(object):
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
-    >>> model = Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
+    >>> model = Word2Vec().setVectorSize(10).setSeed(42).fit(doc)
 
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
@@ -384,7 +456,7 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, sys.maxint)
+        self.seed = random.randint(0, sys.maxsize)
         self.minCount = 5
 
     def setVectorSize(self, vectorSize):
@@ -443,7 +515,7 @@ class Word2Vec(object):
             raise TypeError("data should be an RDD of list of string")
         jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), long(self.seed),
+                               int(self.numIterations), int(self.seed),
                                int(self.minCount))
         return Word2VecModel(jmodel)
 

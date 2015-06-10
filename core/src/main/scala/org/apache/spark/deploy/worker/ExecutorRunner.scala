@@ -28,6 +28,7 @@ import com.google.common.io.Files
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.FileAppender
 
 /**
@@ -50,7 +51,7 @@ private[deploy] class ExecutorRunner(
     val workerUrl: String,
     conf: SparkConf,
     val appLocalDirs: Seq[String],
-    var state: ExecutorState.Value)
+    @volatile var state: ExecutorState.Value)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -61,7 +62,7 @@ private[deploy] class ExecutorRunner(
 
   // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
-  private var shutdownHook: Thread = null
+  private var shutdownHook: AnyRef = null
 
   private[worker] def start() {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
@@ -69,12 +70,7 @@ private[deploy] class ExecutorRunner(
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
-    shutdownHook = new Thread() {
-      override def run() {
-        killProcess(Some("Worker shutting down"))
-      }
-    }
-    Runtime.getRuntime.addShutdownHook(shutdownHook)
+    shutdownHook = Utils.addShutdownHook { () => killProcess(Some("Worker shutting down")) }
   }
 
   /**
@@ -106,7 +102,7 @@ private[deploy] class ExecutorRunner(
       workerThread = null
       state = ExecutorState.KILLED
       try {
-        Runtime.getRuntime.removeShutdownHook(shutdownHook)
+        Utils.removeShutdownHook(shutdownHook)
       } catch {
         case e: IllegalStateException => None
       }

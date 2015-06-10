@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.executor.DataReadMethod
@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
-class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter
+class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with MockitoSugar {
 
   var blockManager: BlockManager = _
@@ -45,16 +45,17 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     rdd = new RDD[Int](sc, Nil) {
       override def getPartitions: Array[Partition] = Array(split)
       override val getDependencies = List[Dependency[_]]()
-      override def compute(split: Partition, context: TaskContext) = Array(1, 2, 3, 4).iterator
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] =
+        Array(1, 2, 3, 4).iterator
     }
     rdd2 = new RDD[Int](sc, List(new OneToOneDependency(rdd))) {
       override def getPartitions: Array[Partition] = firstParent[Int].partitions
-      override def compute(split: Partition, context: TaskContext) =
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] =
         firstParent[Int].iterator(split, context)
     }.cache()
     rdd3 = new RDD[Int](sc, List(new OneToOneDependency(rdd2))) {
       override def getPartitions: Array[Partition] = firstParent[Int].partitions
-      override def compute(split: Partition, context: TaskContext) =
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] =
         firstParent[Int].iterator(split, context)
     }.cache()
   }
@@ -64,7 +65,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     // in blockManager.put is a losing battle. You have been warned.
     blockManager = sc.env.blockManager
     cacheManager = sc.env.cacheManager
-    val context = new TaskContextImpl(0, 0, 0, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
     val computeValue = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     val getValue = blockManager.get(RDDBlockId(rdd.id, split.index))
     assert(computeValue.toList === List(1, 2, 3, 4))
@@ -76,7 +77,7 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
     when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
 
-    val context = new TaskContextImpl(0, 0, 0, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(5, 6, 7))
   }
@@ -85,14 +86,14 @@ class CacheManagerSuite extends FunSuite with LocalSparkContext with BeforeAndAf
     // Local computation should not persist the resulting value, so don't expect a put().
     when(blockManager.get(RDDBlockId(0, 0))).thenReturn(None)
 
-    val context = new TaskContextImpl(0, 0, 0, 0, true)
+    val context = new TaskContextImpl(0, 0, 0, 0, null, true)
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(1, 2, 3, 4))
   }
 
   test("verify task metrics updated correctly") {
     cacheManager = sc.env.cacheManager
-    val context = new TaskContextImpl(0, 0, 0, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, null)
     cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
     assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
   }

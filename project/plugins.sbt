@@ -19,13 +19,13 @@ addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.6.0")
 
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.7.4")
 
-addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.6.0")
+addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.7.0")
 
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 
-addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.1")
+addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 

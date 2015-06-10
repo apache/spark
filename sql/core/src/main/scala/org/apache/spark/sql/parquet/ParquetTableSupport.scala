@@ -20,12 +20,12 @@ package org.apache.spark.sql.parquet
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
-import parquet.column.ParquetProperties
-import parquet.hadoop.ParquetOutputFormat
-import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.hadoop.api.{ReadSupport, WriteSupport}
-import parquet.io.api._
-import parquet.schema.MessageType
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.api.{ReadSupport, WriteSupport}
+import org.apache.parquet.io.api._
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
@@ -129,7 +129,7 @@ private[parquet] object RowReadSupport {
 }
 
 /**
- * A `parquet.hadoop.api.WriteSupport` for Row ojects.
+ * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
@@ -189,7 +189,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case _ => writePrimitive(schema.asInstanceOf[NativeType], value)
+        case _ => writePrimitive(schema.asInstanceOf[AtomicType], value)
       }
     }
   }
@@ -198,10 +198,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     if (value != null) {
       schema match {
         case StringType => writer.addBinary(
-          Binary.fromByteArray(
-            value.asInstanceOf[String].getBytes("utf-8")
-          )
-        )
+          Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
@@ -349,7 +346,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[String].getBytes("utf-8")))
+        Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))

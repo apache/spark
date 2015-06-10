@@ -17,48 +17,56 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Expression
-import scala.collection.mutable
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
-  type FunctionBuilder = Seq[Expression] => Expression
 
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
+  @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
-
-  def caseSensitive: Boolean
 }
 
-trait OverrideFunctionRegistry extends FunctionRegistry {
+class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
 
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
-
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
-  }
-
-  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
-  }
-}
-
-class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistry {
-  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
     functionBuilders.put(name, builder)
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders(name)(children)
+    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
+  }
+}
+
+class SimpleFunctionRegistry extends FunctionRegistry {
+
+  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
+
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    functionBuilders.put(name, builder)
+  }
+
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    val func = functionBuilders.get(name).getOrElse {
+      throw new AnalysisException(s"undefined function $name")
+    }
+    func(children)
   }
 }
 
 /**
- * A trivial catalog that returns an error when a function is requested.  Used for testing when all
- * functions are already filled in and the analyser needs only to resolve attribute references.
+ * A trivial catalog that returns an error when a function is requested. Used for testing when all
+ * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
   override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
@@ -68,30 +76,97 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
-
-  override def caseSensitive: Boolean = throw new UnsupportedOperationException
 }
 
-/**
- * Build a map with String type of key, and it also supports either key case
- * sensitive or insensitive.
- * TODO move this into util folder?
- */
-object StringKeyHashMap {
-  def apply[T](caseSensitive: Boolean): StringKeyHashMap[T] = caseSensitive match {
-    case false => new StringKeyHashMap[T](_.toLowerCase)
-    case true => new StringKeyHashMap[T](identity)
+
+object FunctionRegistry {
+
+  type FunctionBuilder = Seq[Expression] => Expression
+
+  val expressions: Map[String, FunctionBuilder] = Map(
+    // Non aggregate functions
+    expression[Abs]("abs"),
+    expression[CreateArray]("array"),
+    expression[Coalesce]("coalesce"),
+    expression[Explode]("explode"),
+    expression[Lower]("lower"),
+    expression[Substring]("substr"),
+    expression[Substring]("substring"),
+    expression[Rand]("rand"),
+    expression[Randn]("randn"),
+    expression[CreateStruct]("struct"),
+    expression[Sqrt]("sqrt"),
+    expression[Upper]("upper"),
+
+    // Math functions
+    expression[Acos]("acos"),
+    expression[Asin]("asin"),
+    expression[Atan]("atan"),
+    expression[Atan2]("atan2"),
+    expression[Cbrt]("cbrt"),
+    expression[Ceil]("ceil"),
+    expression[Cos]("cos"),
+    expression[EulerNumber]("e"),
+    expression[Exp]("exp"),
+    expression[Expm1]("expm1"),
+    expression[Floor]("floor"),
+    expression[Hypot]("hypot"),
+    expression[Log]("log"),
+    expression[Log10]("log10"),
+    expression[Log1p]("log1p"),
+    expression[Pi]("pi"),
+    expression[Pow]("pow"),
+    expression[Rint]("rint"),
+    expression[Signum]("signum"),
+    expression[Sin]("sin"),
+    expression[Sinh]("sinh"),
+    expression[Tan]("tan"),
+    expression[Tanh]("tanh"),
+    expression[ToDegrees]("todegrees"),
+    expression[ToRadians]("toradians"),
+
+    // aggregate functions
+    expression[Average]("avg"),
+    expression[Count]("count"),
+    expression[First]("first"),
+    expression[Last]("last"),
+    expression[Max]("max"),
+    expression[Min]("min"),
+    expression[Sum]("sum")
+  )
+
+  val builtin: FunctionRegistry = {
+    val fr = new SimpleFunctionRegistry
+    expressions.foreach { case (name, builder) => fr.registerFunction(name, builder) }
+    fr
+  }
+
+  /** See usage above. */
+  private def expression[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
+    // Use the companion class to find apply methods.
+    val objectClass = Class.forName(tag.runtimeClass.getName + "$")
+    val companionObj = objectClass.getDeclaredField("MODULE$").get(null)
+
+    // See if we can find an apply that accepts Seq[Expression]
+    val varargApply = Try(objectClass.getDeclaredMethod("apply", classOf[Seq[_]])).toOption
+
+    val builder = (expressions: Seq[Expression]) => {
+      if (varargApply.isDefined) {
+        // If there is an apply method that accepts Seq[Expression], use that one.
+        varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
+      } else {
+        // Otherwise, find an apply method that matches the number of arguments, and use that.
+        val params = Seq.fill(expressions.size)(classOf[Expression])
+        val f = Try(objectClass.getDeclaredMethod("apply", params : _*)) match {
+          case Success(e) =>
+            e
+          case Failure(e) =>
+            throw new AnalysisException(s"Invalid number of arguments for function $name")
+        }
+        f.invoke(companionObj, expressions : _*).asInstanceOf[Expression]
+      }
+    }
+    (name, builder)
   }
 }
-
-class StringKeyHashMap[T](normalizer: (String) => String) {
-  private val base = new collection.mutable.HashMap[String, T]()
-
-  def apply(key: String): T = base(normalizer(key))
-
-  def get(key: String): Option[T] = base.get(normalizer(key))
-  def put(key: String, value: T): Option[T] = base.put(normalizer(key), value)
-  def remove(key: String): Option[T] = base.remove(normalizer(key))
-  def iterator: Iterator[(String, T)] = base.toIterator
-}
-
