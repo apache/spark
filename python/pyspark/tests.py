@@ -179,9 +179,12 @@ class SorterTests(unittest.TestCase):
                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
-        l = list(int(str(i) * 10) for i in range(1020))
+        class CustomizedSorter(ExternalSorter):
+            def _next_limit(self):
+                return self.memory_limit
+        l = list(range(1024))
         random.shuffle(l)
-        sorter = ExternalSorter(1)
+        sorter = CustomizedSorter(1)
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
         self.assertGreater(shuffle.DiskBytesSpilled, 0)
         last = shuffle.DiskBytesSpilled
