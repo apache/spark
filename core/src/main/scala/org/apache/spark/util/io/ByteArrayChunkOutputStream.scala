@@ -43,7 +43,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
    */
   private var position = chunkSize
 
-  var size: Long = 0L
+  private[spark] var size: Long = 0L
 
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()
@@ -97,21 +97,25 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
   }
 
   /**
-   * get a copy of the data between the two endpoints
+   * Get a copy of the data between the two endpoints, start <= idx < until.  Always returns
+   * an array of size (until - start).  Throws an IllegalArgumentException if
+   * 0 <= start <= until <= size
    */
   def slice(start: Long, until: Long): Array[Byte] = {
     require((until - start) < Integer.MAX_VALUE, "max slice length = Integer.MAX_VALUE")
+    require(start >= 0 && start <= until, s"start ($start) must be >= 0 and <= until ($until)")
+    require(until >= start && until <= size,
+      s"until ($until) must be >= start ($start) and <= size ($size)")
     var chunkStart = 0L
     var chunkIdx = 0
-    var foundStart = false
     val length = (until - start).toInt
+    var foundStart = false
     val result = new Array[Byte](length)
     while (!foundStart) {
       val nextSize = chunkStart + chunks(chunkIdx).size
       if (nextSize > start) {
         foundStart = true
-      }
-      else {
+      } else {
         chunkStart = nextSize
         chunkIdx += 1
       }
