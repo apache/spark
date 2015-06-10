@@ -1295,8 +1295,7 @@ private[spark] object Utils extends Logging {
       } catch {
         case t: Throwable =>
           if (originalThrowable != null) {
-            // We could do originalThrowable.addSuppressed(t), but it's
-            // not available in JDK 1.6.
+            originalThrowable.addSuppressed(t)
             logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
             throw originalThrowable
           } else {
@@ -2225,6 +2224,22 @@ private[spark] object Utils extends Logging {
       sc.setLocalProperty(CallSite.SHORT_FORM, oldShortCallSite)
       sc.setLocalProperty(CallSite.LONG_FORM, oldLongCallSite)
     }
+  }
+
+  /**
+   * Return whether the specified file is a parent directory of the child file.
+   */
+  def isInDirectory(parent: File, child: File): Boolean = {
+    if (child == null || parent == null) {
+      return false
+    }
+    if (!child.exists() || !parent.exists() || !parent.isDirectory()) {
+      return false
+    }
+    if (parent.equals(child)) {
+      return true
+    }
+    isInDirectory(parent, child.getParentFile)
   }
 
 }

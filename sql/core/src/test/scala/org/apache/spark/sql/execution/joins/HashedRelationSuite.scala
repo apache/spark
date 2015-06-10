@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Projection, Row}
 import org.apache.spark.util.collection.CompactBuffer
 
 
-class HashedRelationSuite extends FunSuite {
+class HashedRelationSuite extends SparkFunSuite {
 
   // Key is simply the record itself
   private val keyProjection = new Projection {

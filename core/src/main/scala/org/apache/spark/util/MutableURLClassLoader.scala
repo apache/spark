@@ -52,8 +52,8 @@ private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoa
    * Used to implement fine-grained class loading locks similar to what is done by Java 7. This
    * prevents deadlock issues when using non-hierarchical class loaders.
    *
-   * Note that due to Java 6 compatibility (and some issues with implementing class loaders in
-   * Scala), Java 7's `ClassLoader.registerAsParallelCapable` method is not called.
+   * Note that due to some issues with implementing class loaders in
+   * Scala, Java 7's `ClassLoader.registerAsParallelCapable` method is not called.
    */
   private val locks = new ConcurrentHashMap[String, Object]()
 

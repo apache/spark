@@ -20,15 +20,13 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext {
+class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
@@ -58,7 +56,7 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
       predictions(a.cluster) += a.id
     }
     assert(predictions.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
- 
+
     val model2 = new PowerIterationClustering()
       .setK(2)
       .setInitializationMode("degree")
@@ -130,7 +128,7 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
   }
 }
 
-object PowerIterationClusteringSuite extends FunSuite {
+object PowerIterationClusteringSuite extends SparkFunSuite {
   def createModel(sc: SparkContext, k: Int, nPoints: Int): PowerIterationClusteringModel = {
     val assignments = sc.parallelize(
       (0 until nPoints).map(p => PowerIterationClustering.Assignment(p, Random.nextInt(k))))

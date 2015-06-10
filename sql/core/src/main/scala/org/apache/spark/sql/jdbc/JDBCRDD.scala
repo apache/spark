@@ -211,12 +211,14 @@ private[sql] object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition]): RDD[Row] = {
+    val dialect = JdbcDialects.get(url)
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
-      requiredColumns,
+      quotedColumns,
       filters,
       parts,
       properties)
@@ -262,7 +264,7 @@ private[sql] class JDBCRDD(
   }
 
   private def escapeSql(value: String): String =
-    if (value == null) null else  StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -304,7 +306,7 @@ private[sql] class JDBCRDD(
 
   // Each JDBC-to-Catalyst conversion corresponds to a tag defined here so that
   // we don't have to potentially poke around in the Metadata once for every
-  // row.  
+  // row.
   // Is there a better way to do this?  I'd rather be using a type that
   // contains only the tags I define.
   abstract class JDBCConversion

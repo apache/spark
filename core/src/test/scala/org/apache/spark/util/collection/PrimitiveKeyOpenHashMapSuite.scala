@@ -19,12 +19,12 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class PrimitiveKeyOpenHashMapSuite extends FunSuite with Matchers {
+class PrimitiveKeyOpenHashMapSuite extends SparkFunSuite with Matchers {
 
   test("size for specialized, primitive key, value (int, int)") {
     val capacity = 1024
