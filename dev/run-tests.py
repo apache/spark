@@ -363,6 +363,9 @@ def run_scala_tests_maven(test_profiles):
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
+    # declare the variable for reference
+    sbt_test_goals = None
+
     if "ALL" in test_modules:
         sbt_test_goals = ["test"]
     else:
