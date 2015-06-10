@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.{SparkEnv, TaskContext, InterruptibleIterator}
+import org.apache.spark.{InterruptibleIterator, SparkEnv, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 import org.apache.spark.util.CompletionIterator
