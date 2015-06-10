@@ -97,7 +97,7 @@ private[spark] object RDDOperationScope extends Logging {
       allowNesting: Boolean = false)(body: => T): T = {
 
     val callerMethodName = Thread.currentThread.getStackTrace()
-      .dropWhile(! _.getMethodName().equals("withScope"))
+      .dropWhile(_.getMethodName != "withScope")
       .find(_.getMethodName != "withScope")
       .map(_.getMethodName)
       .getOrElse {
