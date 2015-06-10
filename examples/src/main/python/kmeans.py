@@ -68,7 +68,7 @@ if __name__ == "__main__":
         closest = data.map(
             lambda p: (closestPoint(p, kPoints), (p, 1)))
         pointStats = closest.reduceByKey(
-            lambda (p1, c1), (p2, c2): (p1 + p2, c1 + c2))
+            lambda (p1_c1, p2_c2): (p1_c1[0] + p2_c2[0], p1_c1[1] + p2_c2[1]))
         newPoints = pointStats.map(
             lambda st: (st[0], st[1][0] / st[1][1])).collect()
 
