@@ -26,35 +26,33 @@ import org.apache.spark._
 
 class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
 
-  // TODO we should run this with a matrix of configurations: different shufflers,
-  // external shuffle service, etc.  But that is really pushing the question of how to run
-  // such a long test ...
+  test("no concurrent retries for stage attempts (SPARK-8103)") {
+    // make sure that if we get fetch failures after the retry has started, we ignore them,
+    // and so don't end up submitting multiple concurrent attempts for the same stage
 
-  ignore("no concurrent retries for stage attempts (SPARK-7308)") {
-    // see SPARK-7308 for a detailed description of the conditions this is trying to recreate.
-    // note that this is somewhat convoluted for a test case, but isn't actually very unusual
-    // under a real workload.  We only fail the first attempt of stage 2, but that
-    // could be enough to cause havoc.
-
-    (0 until 100).foreach { idx =>
-      println(new Date() + "\ttrial " + idx)
+    (0 until 20).foreach { idx =>
       logInfo(new Date() + "\ttrial " + idx)
 
       val conf = new SparkConf().set("spark.executor.memory", "100m")
-      val clusterSc = new SparkContext("local-cluster[5,4,100]", "test-cluster", conf)
+      val clusterSc = new SparkContext("local-cluster[2,2,100]", "test-cluster", conf)
       val bms = ArrayBuffer[BlockManagerId]()
       val stageFailureCount = HashMap[Int, Int]()
+      val stageSubmissionCount = HashMap[Int, Int]()
       clusterSc.addSparkListener(new SparkListener {
         override def onBlockManagerAdded(bmAdded: SparkListenerBlockManagerAdded): Unit = {
           bms += bmAdded.blockManagerId
         }
 
+        override def onStageSubmitted(stageSubmited: SparkListenerStageSubmitted): Unit = {
+          val stage = stageSubmited.stageInfo.stageId
+          stageSubmissionCount(stage) = stageSubmissionCount.getOrElse(stage, 0) + 1
+        }
+
+
         override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
           if (stageCompleted.stageInfo.failureReason.isDefined) {
             val stage = stageCompleted.stageInfo.stageId
             stageFailureCount(stage) = stageFailureCount.getOrElse(stage, 0) + 1
-            val reason = stageCompleted.stageInfo.failureReason.get
-            println("stage " + stage + " failed: " + stageFailureCount(stage))
           }
         }
       })
@@ -66,7 +64,7 @@ class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
         // to avoid broadcast failures
         val someBlockManager = bms.filter{!_.isDriver}(0)
 
-        val shuffled = rawData.groupByKey(100).mapPartitionsWithIndex { case (idx, itr) =>
+        val shuffled = rawData.groupByKey(20).mapPartitionsWithIndex { case (idx, itr) =>
           // we want one failure quickly, and more failures after stage 0 has finished its
           // second attempt
           val stageAttemptId = TaskContext.get().asInstanceOf[TaskContextImpl].stageAttemptId
@@ -74,26 +72,29 @@ class DAGSchedulerFailureRecoverySuite extends SparkFunSuite with Logging {
             if (idx == 0) {
               throw new FetchFailedException(someBlockManager, 0, 0, idx,
                 cause = new RuntimeException("simulated fetch failure"))
-            } else if (idx > 0 && math.random < 0.2) {
-              Thread.sleep(5000)
+            } else if (idx == 1) {
+              Thread.sleep(2000)
               throw new FetchFailedException(someBlockManager, 0, 0, idx,
                 cause = new RuntimeException("simulated fetch failure"))
-            } else {
-              // want to make sure plenty of these finish after task 0 fails, and some even finish
-              // after the previous stage is retried and this stage retry is started
-              Thread.sleep((500 + math.random * 5000).toLong)
             }
+          } else {
+            // just to make sure the second attempt doesn't finish before we trigger more failures
+            // from the first attempt
+            Thread.sleep(2000)
           }
           itr.map { x => ((x._1 + 5) % 100) -> x._2 }
         }
-        val data = shuffled.mapPartitions { itr => itr.flatMap(_._2) }.collect()
+        val data = shuffled.mapPartitions { itr =>
+          itr.flatMap(_._2)
+        }.cache().collect()
         val count = data.size
         assert(count === 1e6.toInt)
         assert(data.toSet === (1 to 1e6.toInt).toSet)
 
         assert(stageFailureCount.getOrElse(1, 0) === 0)
-        assert(stageFailureCount.getOrElse(2, 0) == 1)
-        assert(stageFailureCount.getOrElse(3, 0) == 0)
+        assert(stageFailureCount.getOrElse(2, 0) === 1)
+        assert(stageSubmissionCount.getOrElse(1, 0) <= 2)
+        assert(stageSubmissionCount.getOrElse(2, 0) === 2)
       } finally {
         clusterSc.stop()
       }
