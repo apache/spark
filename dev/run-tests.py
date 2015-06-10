@@ -426,10 +426,6 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 def run_python_tests():
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    # Add path for Python3 in Jenkins if we're calling from a Jenkins machine
-    if AMPLAB_JENKINS:
-        os.environ["PATH"] = os.environ.get("PATH")+":/home/anaconda/envs/py3k/bin"
-
     run_cmd(["./python/run-tests"])
 
 
@@ -476,6 +472,8 @@ def main():
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
         test_env = "amplab_jenkins"
+        # add path for Python3 in Jenkins if we're calling from a Jenkins machine
+        os.environ["PATH"] = os.environ.get("PATH")+":/home/anaconda/envs/py3k/bin"
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
