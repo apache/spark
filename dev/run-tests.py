@@ -66,8 +66,6 @@ def run_cmd(cmd):
     if not isinstance(cmd, list):
         cmd = cmd.split()
     try:
-        # prepend SPARK_HOME onto the first element of the command
-        cmd[0] = os.path.join(SPARK_HOME, *filter(lambda x: x, cmd[0].split(os.path.sep)))
         subprocess.check_call(cmd)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
@@ -293,7 +291,7 @@ def determine_test_modules(test_env):
 
     if test_env == "amplab_jenkins":
         target_branch = os.environ.get("ghprbTargetBranch")
-        print "target_branch at", target_branch
+
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
 
         raw_output = subprocess.check_output(['git', 'diff', '--name-only', target_branch])
@@ -449,7 +447,7 @@ def main():
         print "ensure the $HOME environment variable is set properly."
         sys.exit(1)
 
-        #os.chdir(SPARK_HOME)
+    os.chdir(SPARK_HOME)
 
     rm_r(os.path.join(SPARK_HOME, "work"))
     rm_r(os.path.join(USER_HOME, ".ivy2/local/org.apache.spark"))
