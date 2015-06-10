@@ -32,7 +32,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -500,8 +500,8 @@ private[spark] class ApplicationMaster(
 
     var userArgs = args.userArgs
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
-      // Second argument is the list of files to add to PYTHONPATH, which Client.scala already
-      // handles, so it's empty.
+      // When running pyspark, the app is run using PythonRunner. The second argument is the list
+      // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
@@ -513,9 +513,7 @@ private[spark] class ApplicationMaster(
     val userThread = new Thread {
       override def run() {
         try {
-          val mainArgs = new Array[String](userArgs.size)
-          userArgs.copyToArray(mainArgs, 0, userArgs.size)
-          mainMethod.invoke(null, mainArgs)
+          mainMethod.invoke(null, userArgs.toArray)
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           logDebug("Done running users class")
         } catch {

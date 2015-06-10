@@ -607,7 +607,7 @@ private[spark] class Client(
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val pySparkArchives =
-      if (sys.props.getOrElse("spark.yarn.isPython", null) == "true") {
+      if (sys.props.getOrElse("spark.yarn.isPython", "false").toBoolean) {
         findPySparkArchives()
       } else {
         Nil
