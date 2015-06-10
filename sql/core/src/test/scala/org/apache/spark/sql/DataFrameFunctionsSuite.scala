@@ -93,11 +93,23 @@ class DataFrameFunctionsSuite extends QueryTest {
 
   test("length") {
     checkAnswer(
-      nullStrings.select(length($"a"), length("a")),
+      nullStrings.select(strlen($"s"), strlen("s")),
       nullStrings.collect().toSeq.map { r =>
         val v = r.getString(1)
         val l = if (v == null) null else v.length
         Row(l, l)
+      })
+  }
+
+  test("length in SQL") {
+    nullStrings.registerTempTable("null_strings")
+
+    checkAnswer(
+      ctx.sql("SELECT strlen(s) FROM null_strings"),
+      nullStrings.collect().toSeq.map { r =>
+        val v = r.getString(1)
+        val l = if (v == null) null else v.length
+        Row(l)
       })
   }
 

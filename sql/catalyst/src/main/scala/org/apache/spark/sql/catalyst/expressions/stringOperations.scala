@@ -298,32 +298,27 @@ object Substring {
 /**
  * A function that return the length of the given string expression.
  */
-case class Length(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def foldable: Boolean = child.foldable
 
-  override  def nullable: Boolean = child.nullable
+  override def nullable: Boolean = child.nullable
 
-  override def dataType: DataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
-    }
-    IntegerType
-  }
+  override def dataType: DataType = IntegerType
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: Row): Any = {
     val string = child.eval(input)
 
-    if ((string == null)) {
+    if (string == null) {
       null
     } else {
       string.asInstanceOf[UTF8String].length
     }
   }
 
-  override def toString: String = s"LENGTH($child)"
+  override def toString: String = s"strlen($child)"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).length()")

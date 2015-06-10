@@ -218,10 +218,11 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("length for string") {
     val regEx = 'a.string.at(0)
-    checkEvaluation(Literal("abc").length(), 3, create_row("abdef"))
-    checkEvaluation(regEx.length(), 5, create_row("abdef"))
-    checkEvaluation(regEx.length(), 0, create_row(""))
-    checkEvaluation(Literal.create(null, StringType).length(), null, create_row(""))
+    checkEvaluation(StringLength(Literal("abc")), 3, create_row("abdef"))
+    checkEvaluation(StringLength(regEx), 5, create_row("abdef"))
+    checkEvaluation(StringLength(regEx), 0, create_row(""))
+    checkEvaluation(StringLength(regEx), null, create_row(null))
+    checkEvaluation(StringLength(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
 

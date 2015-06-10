@@ -95,7 +95,6 @@ package object dsl {
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
-    def length(): Expression = Length(expr)
 
     def isNull: Predicate = IsNull(expr)
     def isNotNull: Predicate = IsNotNull(expr)

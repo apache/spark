@@ -1305,14 +1305,14 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def length(e: Column): Column = Length(e.expr)
+  def strlen(e: Column): Column = StringLength(e.expr)
 
   /**
    * Length of a given string column
    * @group string_funcs
    * @since 1.5.0
    */
-  def length(columnName: String): Column = length(Column(columnName))
+  def strlen(columnName: String): Column = strlen(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
