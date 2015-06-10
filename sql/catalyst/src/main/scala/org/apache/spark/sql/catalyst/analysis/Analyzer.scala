@@ -379,10 +379,16 @@ class Analyzer(
    * remove these attributes after sorting.
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
+
+    // Ignore window expressions so that this rule is valid
+    // when there are window function in select clause.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
-          if !s.resolved && p.resolved =>
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
+          if !s.resolved && child.resolved && resolvedExceptWindowExpressions(projectList) =>
+        val windowAttributes =
+          projectList.filter(e => hasWindowExpression(e)).map(_.toAttribute).toSet
+        val (resolvedOrdering, missing) =
+          resolveAndFindMissing(ordering, windowAttributes, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
@@ -395,15 +401,16 @@ class Analyzer(
           s // Nothing we can do here. Return original plan.
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
-          if !s.resolved && a.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+          if !s.resolved && child.resolved && resolvedExceptWindowExpressions(aggs) =>
+        val windowAttributes = aggs.filter(e => hasWindowExpression(e)).map(_.toAttribute).toSet
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
         val groupingRelation = LocalRelation(
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, a, groupingRelation)
+        val (resolvedOrdering, missing) =
+          resolveAndFindMissing(ordering, windowAttributes, a, groupingRelation)
 
         if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
@@ -415,6 +422,18 @@ class Analyzer(
         }
     }
 
+    private def hasWindowExpression(expr: NamedExpression): Boolean = {
+      expr.find {
+        case window: WindowExpression => true
+        case _ => false
+      }.isDefined
+    }
+
+    // check resolved ignore window expressions
+    private def resolvedExceptWindowExpressions(exprs: Seq[NamedExpression]): Boolean = {
+      exprs.filter(e => !hasWindowExpression(e)).forall(_.resolved)
+    }
+
     /**
      * Given a child and a grandchild that are present beneath a sort operator, returns
      * a resolved sort ordering and a list of attributes that are missing from the child
@@ -422,11 +441,17 @@ class Analyzer(
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],
+        windowAttributes: Set[Attribute],
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      // Find any attributes that remain unresolved in the sort.
+      // Find any attributes that remain unresolved in the sort, ignore window attribute here
       val unresolved: Seq[Seq[String]] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
+        ordering
+          .flatMap(
+            _.collect {
+              case u @ UnresolvedAttribute(nameParts) if !windowAttributes.contains(u) => nameParts
+            }
+          )
 
       // Create a map from name, to resolved attributes, when the desired name can be found
       // prior to the projection.

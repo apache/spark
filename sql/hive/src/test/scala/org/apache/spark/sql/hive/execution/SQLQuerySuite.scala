@@ -705,6 +705,8 @@ class SQLQuerySuite extends QueryTest {
         ("c", 10, 10d/17),
         ("c", 9, 9d/17)
       ).map(i => Row(i._1, i._2, i._3)))
+
+    dropTempTable("windowData")
   }
 
   test("window function: partition and order expressions") {
@@ -748,6 +750,8 @@ class SQLQuerySuite extends QueryTest {
         (5, "c", 9, 9),
         (6, "c", 10, 10)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+
+    dropTempTable("windowData")
   }
 
   test("window function: expressions in arguments of a window functions") {
@@ -776,6 +780,43 @@ class SQLQuerySuite extends QueryTest {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+
+    dropTempTable("windowData")
+  }
+
+  test("window function: sort by attributes that are not present in the SELECT clause") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(3, "b", 7),
+      WindowData(5, "c", 9)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    checkAnswer(
+      sql(
+        """
+          |select month,
+          |sum(product) over (partition by month)
+          |from windowData order by area
+        """.stripMargin),
+      Seq(
+        (1, 5),
+        (3, 7),
+        (5, 9)
+      ).map(i => Row(i._1, i._2)))
+
+    checkAnswer(
+      sql(
+        """
+          |select month,
+          |sum(sum(product)) over (partition by month)
+          |from windowData group by area, month order by area
+        """.stripMargin),
+      Seq(
+        (1, 5),
+        (3, 7),
+        (5, 9)
+      ).map(i => Row(i._1, i._2)))
+    dropTempTable("windowData")
   }
 
   test("window function: multiple window expressions in a single expression") {
