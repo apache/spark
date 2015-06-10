@@ -94,7 +94,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
-  def this() = this(Array[StructField]())
+  def this() = this(Array.empty[StructField])
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -120,9 +120,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * Creates a new [[StructType]] by adding a new field.
    *
    * val struct = (new StructType)
-   *  .add(StructField("a", IntegerType, true))
-   *  .add(StructField("b", LongType, false))
-   *  .add(StructField("c", StringType, true))
+   *   .add(StructField("a", IntegerType, true))
+   *   .add(StructField("b", LongType, false))
+   *   .add(StructField("c", StringType, true))
    */
   def add(name: String, dataType: DataType): StructType = {
     StructType(fields :+ new StructField(name, dataType, true, Metadata.empty))
@@ -132,10 +132,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
   }
 
-  def add(name: String,
-    dataType: DataType,
-    nullable: Boolean,
-    metadata: Metadata): StructType = {
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
     StructType(fields :+ new StructField(name, dataType, nullable, metadata))
   }
 
@@ -144,9 +145,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *
    * {{{
    * val struct = (new StructType)
-   *  .add("a", "int", true)
-   *  .add("b", "long", false)
-   *  .add("c", "string", true)
+   *   .add("a", "int", true)
+   *   .add("b", "long", false)
+   *   .add("c", "string", true)
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
@@ -157,10 +158,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
   }
 
-  def add(name: String,
-    dataType: String,
-    nullable: Boolean,
-    metadata: Metadata): StructType = {
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
     add(name, DataTypeParser.parse(dataType), nullable, metadata)
   }
 
