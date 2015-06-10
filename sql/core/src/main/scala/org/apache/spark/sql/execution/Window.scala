@@ -165,7 +165,7 @@ case class Window(
             val factories = frameExpressions.map { _ match {
               case First(e) => Last(e)
               case Last(e) => First(e)
-              case a:AggregateExpression => a
+              case a: AggregateExpression => a
               }
             }
             input: Seq[Row] => new UnboundedFollowingWindowFunctionFrame(input,
