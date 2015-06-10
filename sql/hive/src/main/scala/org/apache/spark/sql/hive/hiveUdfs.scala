@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ConstantObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
@@ -40,8 +41,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
-
-import scala.util.Try
 
 
 private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
