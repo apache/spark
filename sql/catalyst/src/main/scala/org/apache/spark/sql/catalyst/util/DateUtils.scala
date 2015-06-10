@@ -92,11 +92,11 @@ object DateUtils {
   /**
    * Return a java.sql.Timestamp from number of 100ns since epoch
    */
-  def toTimestamp(ns: Long): Timestamp = {
+  def toJavaTimestamp(num100ns: Long): Timestamp = {
     // setNanos() will overwrite the millisecond part, so the milliseconds should be
     // cut off at seconds
-    var seconds = ns / HUNDRED_NANOS_PER_SECOND
-    var nanos = ns % HUNDRED_NANOS_PER_SECOND
+    var seconds = num100ns / HUNDRED_NANOS_PER_SECOND
+    var nanos = num100ns % HUNDRED_NANOS_PER_SECOND
     // setNanos() can not accept negative value
     if (nanos < 0) {
       nanos += HUNDRED_NANOS_PER_SECOND
@@ -110,7 +110,7 @@ object DateUtils {
   /**
    * Return the number of 100ns since epoch from java.sql.Timestamp.
    */
-  def fromTimestamp(t: Timestamp): Long = {
+  def fromJavaTimestamp(t: Timestamp): Long = {
     if (t != null) {
       t.getTime() * 10000L + (t.getNanos().toLong / 100) % 10000L
     } else {

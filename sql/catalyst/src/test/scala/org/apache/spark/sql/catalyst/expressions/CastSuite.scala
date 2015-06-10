@@ -138,7 +138,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
     checkEvaluation(cast(cast(nts, TimestampType), StringType), nts)
-    checkEvaluation(cast(cast(ts, StringType), TimestampType), DateUtils.fromTimestamp(ts))
+    checkEvaluation(cast(cast(ts, StringType), TimestampType), DateUtils.fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(cast(cast(cast(nts, TimestampType), DateType), StringType), sd)
@@ -270,9 +270,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.002f)
     checkEvaluation(cast(ts, DoubleType), 15.002)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateUtils.fromTimestamp(ts))
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType), DateUtils.fromTimestamp(ts))
-    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateUtils.fromTimestamp(ts))
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType), DateUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateUtils.fromJavaTimestamp(ts))
     checkEvaluation(
       cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)

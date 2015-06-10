@@ -114,7 +114,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
     case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String(timestampToString(DateUtils.toTimestamp(t))))
+      t => UTF8String(timestampToString(DateUtils.toJavaTimestamp(t))))
     case _ => buildCast[Any](_, o => UTF8String(o.toString))
   }
 
@@ -159,7 +159,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         if (periodIdx != -1 && n.length() - periodIdx > 9) {
           n = n.substring(0, periodIdx + 10)
         }
-        try DateUtils.fromTimestamp(Timestamp.valueOf(n))
+        try DateUtils.fromJavaTimestamp(Timestamp.valueOf(n))
         catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>

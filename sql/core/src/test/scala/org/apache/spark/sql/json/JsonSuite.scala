@@ -76,12 +76,12 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkTypePromotion(
       Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
 
-    checkTypePromotion(DateUtils.fromTimestamp(new Timestamp(intNumber)),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(intNumber)),
         enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(DateUtils.fromTimestamp(new Timestamp(intNumber.toLong)),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong)),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
-    checkTypePromotion(DateUtils.fromTimestamp(Timestamp.valueOf(strTime)),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
         enforceCorrectType(strTime, TimestampType))
 
     val strDate = "2014-10-15"
@@ -89,11 +89,11 @@ class JsonSuite extends QueryTest with TestJsonData {
       DateUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
-    checkTypePromotion(DateUtils.fromTimestamp(new Timestamp(3601000)),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(3601000)),
         enforceCorrectType(ISO8601Time1, TimestampType))
     checkTypePromotion(DateUtils.millisToDays(3601000), enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
-    checkTypePromotion(DateUtils.fromTimestamp(new Timestamp(10801000)),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(10801000)),
         enforceCorrectType(ISO8601Time2, TimestampType))
     checkTypePromotion(DateUtils.millisToDays(10801000), enforceCorrectType(ISO8601Time2, DateType))
   }

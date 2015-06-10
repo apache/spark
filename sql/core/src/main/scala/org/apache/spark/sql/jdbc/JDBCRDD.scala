@@ -420,7 +420,7 @@ private[sql] class JDBCRDD(
             case TimestampConversion =>
               val t = rs.getTimestamp(pos)
               if (t != null) {
-                mutableRow.setLong(i, DateUtils.fromTimestamp(t))
+                mutableRow.setLong(i, DateUtils.fromJavaTimestamp(t))
               } else {
                 mutableRow.update(i, null)
               }

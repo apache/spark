@@ -37,7 +37,7 @@ object Literal {
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: Decimal => Literal(d, DecimalType.Unlimited)
-    case t: Timestamp => Literal(DateUtils.fromTimestamp(t), TimestampType)
+    case t: Timestamp => Literal(DateUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)

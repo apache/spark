@@ -318,7 +318,7 @@ private[hive] trait HiveInspectors {
         val t = x.getPrimitiveWritableObject(data)
         t.getSeconds * 10000000L + t.getNanos / 100
       case ti: TimestampObjectInspector =>
-        DateUtils.fromTimestamp(ti.getPrimitiveJavaObject(data))
+        DateUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
       case _ => pi.getPrimitiveJavaObject(data)
     }
     case li: ListObjectInspector =>
@@ -358,7 +358,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => DateUtils.toJavaDate(o.asInstanceOf[Int])
 
     case _: JavaTimestampObjectInspector =>
-      (o: Any) => DateUtils.toTimestamp(o.asInstanceOf[Long])
+      (o: Any) => DateUtils.toJavaTimestamp(o.asInstanceOf[Long])
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
@@ -469,7 +469,7 @@ private[hive] trait HiveInspectors {
       case _: DateObjectInspector if x.preferWritable() => getDateWritable(a)
       case _: DateObjectInspector => DateUtils.toJavaDate(a.asInstanceOf[Int])
       case _: TimestampObjectInspector if x.preferWritable() => getTimestampWritable(a)
-      case _: TimestampObjectInspector => DateUtils.toTimestamp(a.asInstanceOf[Long])
+      case _: TimestampObjectInspector => DateUtils.toJavaTimestamp(a.asInstanceOf[Long])
     }
     case x: SettableStructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
@@ -780,7 +780,7 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      new hiveIo.TimestampWritable(DateUtils.toTimestamp(value.asInstanceOf[Long]))
+      new hiveIo.TimestampWritable(DateUtils.toJavaTimestamp(value.asInstanceOf[Long]))
     }
 
   private def getDecimalWritable(value: Any): hiveIo.HiveDecimalWritable =

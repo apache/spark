@@ -268,7 +268,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    * Read a Timestamp value from a Parquet Int96Value
    */
   protected[parquet] def readTimestamp(value: Binary): Long = {
-    DateUtils.fromTimestamp(CatalystTimestampConverter.convertToTimestamp(value))
+    DateUtils.fromJavaTimestamp(CatalystTimestampConverter.convertToTimestamp(value))
   }
 }
 
