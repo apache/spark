@@ -203,17 +203,4 @@ object TestData {
         :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
-
-  case class OrderByData(a: String, b: Int)
-  val orderByData =
-    TestSQLContext.sparkContext.parallelize(
-      OrderByData("1", 3) ::
-        OrderByData("1", 4) ::
-        OrderByData("2", 7) ::
-        OrderByData("2", 8) ::
-        OrderByData("3", 5) ::
-        OrderByData("3", 6) ::
-        OrderByData("4", 1) ::
-        OrderByData("4", 2) :: Nil).toDF()
-  orderByData.registerTempTable("orderByData")
 }
