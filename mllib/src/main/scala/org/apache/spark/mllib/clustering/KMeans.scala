@@ -156,6 +156,26 @@ class KMeans private (
     this
   }
 
+  // Initial cluster centers can be provided as a KMeansModel object rather than using the
+  // random or k-means|| initializationMode
+  private var initialModel: Option[KMeansModel] = None
+
+  /** Set the initial starting point, bypassing the random initialization or k-means||
+    * The condition (model.k == this.k) must be met; failure will result in an
+    * IllegalArgumentException.
+    */
+  def setInitialModel(model: KMeansModel): this.type = {
+    if (model.k == k) {
+      initialModel = Some(model)
+    } else {
+      throw new IllegalArgumentException("mismatched cluster count (model.k != k)")
+    }
+    this
+  }
+
+  /** Return the user supplied initial KMeansModel, if supplied */
+  def getInitialModel: Option[KMeansModel] = initialModel
+
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
@@ -193,12 +213,19 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val centers = if (initializationMode == KMeans.RANDOM) {
-      initRandom(data)
-    } else {
-      initKMeansParallel(data)
+    val centers = initialModel match {
+      case Some(kMeansCenters) => {
+        Array.tabulate(runs)(r => kMeansCenters.clusterCenters
+          .map(s => new VectorWithNorm(s, Vectors.norm(s, 2.0))))
+      }
+      case None => {
+        if (initializationMode == KMeans.RANDOM) {
+          initRandom(data)
+        } else {
+          initKMeansParallel(data)
+        }
+      }
     }
-
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
@@ -476,6 +503,25 @@ object KMeans {
       maxIterations: Int,
       runs: Int): KMeansModel = {
     train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
+  }
+
+  /**
+   * Trains a k-means model using the given set of parameters and initial cluster centers
+   *
+   * @param data training points stored as `RDD[Vector]`
+   * @param k number of clusters
+   * @param maxIterations max number of iterations
+   * @param initialModel an existing set of cluster centers.
+   */
+  def train(
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int,
+             initialModel: KMeansModel): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitialModel(initialModel)
+      .run(data)
   }
 
   /**
