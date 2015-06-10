@@ -105,7 +105,7 @@ class DataFrameFunctionsSuite extends QueryTest {
     nullStrings.registerTempTable("null_strings")
 
     checkAnswer(
-      ctx.sql("SELECT strlen(s) FROM null_strings"),
+      ctx.sql("SELECT length(s) FROM null_strings"),
       nullStrings.collect().toSeq.map { r =>
         val v = r.getString(1)
         val l = if (v == null) null else v.length

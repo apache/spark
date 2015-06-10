@@ -129,13 +129,11 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
-    expression[Upper]("lcase"),
     expression[Lower]("lower"),
-    expression[StringLength]("strlen"),
+    expression[StringLength]("length"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
-    expression[Upper]("upper"),
-    expression[Upper]("ucase")
+    expression[Upper]("upper")
   )
 
   /** See usage above. */

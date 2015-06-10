@@ -318,7 +318,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
     }
   }
 
-  override def toString: String = s"strlen($child)"
+  override def toString: String = s"length($child)"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).length()")
