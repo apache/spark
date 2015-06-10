@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ConstantObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
@@ -33,6 +34,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -41,35 +43,40 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
 
-private[hive] abstract class HiveFunctionRegistry
+private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
-    // not always serializable.
-    val functionInfo: FunctionInfo =
-      Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
-        throw new AnalysisException(s"undefined function $name"))
+    Try(underlying.lookupFunction(name, children)).getOrElse {
+      // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
+      // not always serializable.
+      val functionInfo: FunctionInfo =
+        Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+          throw new AnalysisException(s"undefined function $name"))
 
-    val functionClassName = functionInfo.getFunctionClass.getName
+      val functionClassName = functionInfo.getFunctionClass.getName
 
-    if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveSimpleUdf(new HiveFunctionWrapper(functionClassName), children)
-    } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdf(new HiveFunctionWrapper(functionClassName), children)
-    } else if (
-         classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdaf(new HiveFunctionWrapper(functionClassName), children)
-    } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveUdaf(new HiveFunctionWrapper(functionClassName), children)
-    } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), children)
-    } else {
-      sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
+      if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        HiveSimpleUdf(new HiveFunctionWrapper(functionClassName), children)
+      } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        HiveGenericUdf(new HiveFunctionWrapper(functionClassName), children)
+      } else if (
+        classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
+        HiveGenericUdaf(new HiveFunctionWrapper(functionClassName), children)
+      } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        HiveUdaf(new HiveFunctionWrapper(functionClassName), children)
+      } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), children)
+      } else {
+        sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
+      }
     }
   }
+
+  override def registerFunction(name: String, builder: FunctionBuilder): Unit =
+    throw new UnsupportedOperationException
 }
 
 private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])

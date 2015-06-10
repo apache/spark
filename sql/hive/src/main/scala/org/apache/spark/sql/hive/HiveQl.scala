@@ -1307,16 +1307,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     HiveParser.DecimalLiteral)
 
   /* Case insensitive matches */
-  val ARRAY = "(?i)ARRAY".r
   val COALESCE = "(?i)COALESCE".r
   val COUNT = "(?i)COUNT".r
-  val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
-  val MAX = "(?i)MAX".r
-  val MIN = "(?i)MIN".r
-  val UPPER = "(?i)UPPER".r
-  val LOWER = "(?i)LOWER".r
-  val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
   val NOT = "(?i)NOT".r
@@ -1330,8 +1323,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
-  val SUBSTR = "(?i)SUBSTR(?:ING)?".r
-  val SQRT = "(?i)SQRT".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -1353,18 +1344,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedStar(Some(name))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTION", Token(AVG(), Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(COUNT(), Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
     case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
-
-    /* System functions about string operations */
-    case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -1414,7 +1396,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
     case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
     case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
-    case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
@@ -1468,17 +1449,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
-
-    /* Other functions */
-    case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
-      CreateArray(children.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand()
-    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: seed :: Nil) => Rand(seed.toString.toLong)
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
-      Substring(nodeToExpr(string), nodeToExpr(pos), Literal.create(Integer.MAX_VALUE, IntegerType))
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
-      Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
-    case Token("TOK_FUNCTION", Token(COALESCE(), Nil) :: list) => Coalesce(list.map(nodeToExpr))
 
     /* Window Functions */
     case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>

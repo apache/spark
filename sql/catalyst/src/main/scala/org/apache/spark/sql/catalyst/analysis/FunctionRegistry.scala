@@ -35,7 +35,7 @@ trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
 }
 
-trait OverrideFunctionRegistry extends FunctionRegistry {
+class OverrideFunctionRegistry(underlying: FunctionRegistry) extends FunctionRegistry {
 
   private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
 
@@ -43,8 +43,8 @@ trait OverrideFunctionRegistry extends FunctionRegistry {
     functionBuilders.put(name, builder)
   }
 
-  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionBuilders.get(name).map(_(children)).getOrElse(underlying.lookupFunction(name, children))
   }
 }
 
@@ -133,6 +133,12 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[Sum]("sum")
   )
+
+  val builtin: FunctionRegistry = {
+    val fr = new SimpleFunctionRegistry
+    expressions.foreach { case (name, builder) => fr.registerFunction(name, builder) }
+    fr
+  }
 
   /** See usage above. */
   private def expression[T <: Expression](name: String)
