@@ -29,6 +29,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.Logging
 
 /**
@@ -41,7 +42,8 @@ private[spark] class RBackend {
   private[this] var bossGroup: EventLoopGroup = null
 
   def init(): Int = {
-    bossGroup = new NioEventLoopGroup(2)
+    val conf = new SparkConf()
+    bossGroup = new NioEventLoopGroup(conf.getInt("spark.r.numRBackendThreads", 2))
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
 
