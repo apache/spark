@@ -179,7 +179,7 @@ class SorterTests(unittest.TestCase):
                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
-        l = list(range(1024))
+        l = list(int(str(i) * 10) for i in range(1020))
         random.shuffle(l)
         sorter = ExternalSorter(1)
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
