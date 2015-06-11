@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.3.1"
+SPARK_EC2_VERSION = "1.4.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -89,7 +89,7 @@ DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
 # Default location to get the spark-ec2 scripts (and ami-list) from
 DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
-DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.4"
 
 
 def setup_external_libs(libs):
