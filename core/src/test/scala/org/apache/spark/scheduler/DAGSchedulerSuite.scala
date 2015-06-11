@@ -558,6 +558,7 @@ class DAGSchedulerSuite
   /** This tests the case where another FetchFailed comes in while the map stage is getting
     * re-run. */
   test("late fetch failures don't cause multiple concurrent attempts for the same map stage") {
+    println("begin late fetch failure")
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
@@ -572,6 +573,7 @@ class DAGSchedulerSuite
     // The map stage should have been submitted.
     assert(countSubmittedMapStageAttempts() === 1)
 
+    println("late fetch failure: taskSets = " + taskSets)
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
@@ -579,6 +581,7 @@ class DAGSchedulerSuite
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
       Array("hostA", "hostB"))
 
+    println("late fetch failure: taskSets = " + taskSets)
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
       taskSets(1).tasks(0),
@@ -622,6 +625,7 @@ class DAGSchedulerSuite
     */
   test("extremely late fetch failures don't cause multiple concurrent attempts for " +
       "the same stage") {
+    println("begin extremely late fetch failure")
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
@@ -639,6 +643,7 @@ class DAGSchedulerSuite
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 1)
 
+    println("extremely late fetch failure: taskSets = " + taskSets)
     // Complete the map stage.
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
@@ -648,6 +653,7 @@ class DAGSchedulerSuite
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedReduceStageAttempts() === 1)
 
+    println("extremely late fetch failure: taskSets = " + taskSets)
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
       taskSets(1).tasks(0),
