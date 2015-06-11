@@ -19,6 +19,8 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
+import breeze.linalg.{max, min}
+
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -93,24 +95,64 @@ class NaiveBayesModel private[mllib] (
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
-        val prob = thetaMatrix.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
+        val prob = multinomialCalculation(testData)
         labels(prob.argmax)
       case Bernoulli =>
-        testData.foreachActive { (index, value) =>
-          if (value != 0.0 && value != 1.0) {
-            throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
-          }
-        }
-        val prob = thetaMinusNegTheta.get.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
-        BLAS.axpy(1.0, negThetaSum.get, prob)
+        val prob = bernoulliCalculation(testData)
         labels(prob.argmax)
       case _ =>
         // This should never happen.
         throw new UnknownError(s"Invalid modelType: $modelType.")
     }
+  }
+
+  def predictProbabilities(testData: RDD[Vector]): RDD[Map[Double, Double]] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapPartitions { iter =>
+      val model = bcModel.value
+      iter.map(model.predictProbabilities)
+    }
+  }
+
+  def predictProbabilities(testData: Vector): Map[Double, Double] = {
+    modelType match {
+      case Multinomial =>
+        val prob = multinomialCalculation(testData)
+        posteriorProbabilities(prob)
+      case Bernoulli =>
+        val prob = bernoulliCalculation(testData)
+        posteriorProbabilities(prob)
+      case _ =>
+        // This should never happen.
+        throw new UnknownError(s"Invalid modelType: $modelType.")
+    }
+  }
+
+  protected[classification] def multinomialCalculation(testData: Vector): DenseVector = {
+    val prob = thetaMatrix.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    prob
+  }
+
+  protected[classification] def bernoulliCalculation(testData: Vector): DenseVector = {
+    testData.foreachActive { (index, value) =>
+      if (value != 0.0 && value != 1.0) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
+      }
+    }
+    val prob = thetaMinusNegTheta.get.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    BLAS.axpy(1.0, negThetaSum.get, prob)
+    prob
+  }
+
+  protected[classification] def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
+    val maxLogs = max(prob.toBreeze)
+    val minLogs = min(prob.toBreeze)
+    val normalized = prob.toArray.map(e => (e - minLogs) / (maxLogs - minLogs))
+    val total = normalized.sum
+    (for ((v, i) <- normalized.map(_ / total).zipWithIndex) yield (labels(i), v)).toMap
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
