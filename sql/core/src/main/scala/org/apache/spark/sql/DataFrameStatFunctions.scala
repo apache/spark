@@ -36,9 +36,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return the covariance of the two columns.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
-   *    df.stat.cov("key", "value")
+   *    import org.apache.spark.sql.functions._
+   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.cov("rand1", "rand2")
    * }}}
    *
    * @since 1.4.0
@@ -57,9 +58,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return The Pearson Correlation Coefficient as a Double.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
-   *    df.stat.corr("key", "value", "pearson")
+   *    import org.apache.spark.sql.functions._
+   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.corr("rand1", "rand2", "pearson")
    * }}}
    *
    * @since 1.4.0
@@ -78,9 +80,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return The Pearson Correlation Coefficient as a Double.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
-   *    df.stat.corr("key", "value")
+   *    import org.apache.spark.sql.functions._
+   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *      .withColumn("rand2", rand(seed=27))
+   *    df.stat.corr("rand1", "rand2")
    * }}}
    *
    * @since 1.4.0
