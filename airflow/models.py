@@ -991,7 +991,7 @@ class BaseOperator(object):
             default_args=None,
             adhoc=False,
             priority_weight=1,
-            queue=None,
+            queue=conf.get('celery', 'default_queue'),
             pool=None,
             *args,
             **kwargs):
