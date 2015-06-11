@@ -107,9 +107,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * Creates a new [[StructType]] by adding a new field.
    * {{{
    * val struct = (new StructType)
-   *  .add(StructField("a", IntegerType, true))
-   *  .add(StructField("b", LongType, false))
-   *  .add(StructField("c", StringType, true))
+   *   .add(StructField("a", IntegerType, true))
+   *   .add(StructField("b", LongType, false))
+   *   .add(StructField("c", StringType, true))
    *}}}
    */
   def add(field: StructField): StructType = {
