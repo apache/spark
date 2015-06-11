@@ -245,7 +245,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
 
-  test("allocate locality preferred containers with enough resource and no matched existed containers") {
+  test("allocate locality preferred containers with enough resource and no matched existed " +
+    "containers") {
     // 1. All the locations of current containers cannot satisfy the new requirements
     // 2. Current requested container number can fully satisfy the pending tasks.
 

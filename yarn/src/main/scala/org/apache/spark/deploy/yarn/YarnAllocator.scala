@@ -341,8 +341,8 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  protected def createContainerRequest(resource: Resource, nodes: Array[String], racks: Array[String]
-      ): ContainerRequest = {
+  protected def createContainerRequest(resource: Resource, nodes: Array[String],
+      racks: Array[String]): ContainerRequest = {
     nodeLabelConstructor.map { constructor =>
       constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
         labelExpression.orNull)
