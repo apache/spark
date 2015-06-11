@@ -1194,11 +1194,11 @@ object Client extends Logging {
    *
    * This method uses two configuration values:
    *
-   * - spark.yarn.config.localPath: a string that identifies a portion of the input path that may only
-   *   be valid in the local process.
-   * - spark.yarn.config.clusterPath: a string with which to replace the local path. This may contain,
-   *   for example, env variable references, which will be expanded by the NMs when starting
-   *   containers.
+   * - spark.yarn.config.localPath: a string that identifies a portion of the input path that may
+   *   only be valid in the local process.
+   * - spark.yarn.config.clusterPath: a string with which to replace the local path. This may
+   *   contain, for example, env variable references, which will be expanded by the NMs when
+   *   starting containers.
    *
    * If either config is not available, the input path is returned.
    */
