@@ -20,9 +20,8 @@ package org.apache.spark.rpc
 import java.net.URI
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.duration._
 import scala.concurrent.{Awaitable, Await, Future}
+import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -229,7 +228,8 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
   }
 
   /**
-   * Waits for a completed result to catch and amend a TimeoutException message
+   * Wait for the completed result and return it. If the result is not available within this
+   * timeout, throw a [[RpcTimeoutException]] to indicate which configuration controls the timeout.
    * @param  awaitable  the `Awaitable` to be awaited
    * @throws RpcTimeoutException if after waiting for the specified time `awaitable`
    *         is still not ready
@@ -242,10 +242,6 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
 }
 
 
-/**
- * Create an RpcTimeout using a configuration property that controls the timeout duration so when
- * a TimeoutException is thrown, the property key will be indicated in the message.
- */
 object RpcTimeout {
 
   private[this] val messagePrefix = "This timeout is controlled by "

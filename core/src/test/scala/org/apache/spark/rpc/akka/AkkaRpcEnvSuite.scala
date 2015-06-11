@@ -28,7 +28,6 @@ import akka.pattern.ask
 import org.apache.spark.rpc._
 import org.apache.spark.{SecurityManager, SparkConf}
 
-
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 
   override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
