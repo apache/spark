@@ -99,7 +99,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * @param start the position of first code point
    * @param until the position after last code point, exclusive.
    */
-  public UTF8String slice(final int start, final int until) {
+  public UTF8String substring(final int start, final int until) {
     if (until <= start || start >= bytes.length) {
       return UTF8String.fromBytes(new byte[0]);
     }

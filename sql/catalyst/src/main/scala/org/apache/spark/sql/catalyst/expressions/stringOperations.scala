@@ -278,7 +278,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           ba.slice(st, end)
         case s: UTF8String =>
           val (st, end) = slicePos(start, length, () => s.length())
-          s.slice(st, end)
+          s.substring(st, end)
       }
     }
   }
