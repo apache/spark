@@ -89,7 +89,7 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
-    expression[If]("if"),
+    //expression[If]("if"),  TODO: turn this on after adding rules to auto cast types.
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Coalesce]("nvl"),
