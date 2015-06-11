@@ -138,7 +138,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   override def getTimestamp(i: Int): java.sql.Timestamp = {
     values(i) match {
       case null => null
-      case t: java.sql.Timestamp => t
+      case l: Long => DateUtils.toJavaTimestamp(l)
     }
   }
 
@@ -227,7 +227,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   }
 
   override def setTimestamp(ordinal: Int, value: java.sql.Timestamp): Unit = {
-    values(ordinal) = value 
+    values(ordinal) = DateUtils.fromJavaTimestamp(value)
   }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
