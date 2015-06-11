@@ -345,7 +345,6 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
   def getTables(databaseName: Option[String], pattern: String): Seq[(String, Boolean)] = {
     val db = databaseName.getOrElse(client.currentDatabase)
-
     client.listTables(db, Some(pattern)).map(tableName => (tableName, false))
   }
 

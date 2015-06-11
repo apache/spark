@@ -33,11 +33,9 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
   protected val DFS = Keyword("DFS")
   protected val FILE = Keyword("FILE")
   protected val JAR = Keyword("JAR")
-
-  protected val IN      = Keyword("IN")
-  protected val SHOW    = Keyword("SHOW")
-  protected val TABLES  = Keyword("TABLES")
-
+  protected val IN = Keyword("IN")
+  protected val SHOW = Keyword("SHOW")
+  protected val TABLES = Keyword("TABLES")
 
   protected lazy val start: Parser[LogicalPlan] = dfs | addJar | addFile | showInHive | hiveQl
 
@@ -63,6 +61,6 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   private lazy val showInHive: Parser[LogicalPlan] =
     SHOW ~ TABLES ~> (IN ~> ident).? ~ opt(stringLit) ^^ {
-      case dbName ~ reg => ShowTablesCommand(dbName, reg)
+      case dbName ~ regexPattern => ShowTablesCommand(dbName, regexPattern)
     }
 }

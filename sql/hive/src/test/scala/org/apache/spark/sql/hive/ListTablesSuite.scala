@@ -79,12 +79,11 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-7179:shwo table with pattern") {
-    val tables = sql("SHOW TABLes in listTablesSuitedb 'hive*'")
+  test("SPARK-7179:show tables with pattern") {
     checkAnswer(
-      sql("SHOW TABLes in listTablesSuitedb 'hive*'"),
+      sql("TABLES IN in listTablesSuitedb 'hive*'"),
       Row("hiveindblisttablessuitetable", false))
     // not match the pattern
-    assert(sql("SHOW TABLes in listTablesSuitedb 'aa*'").count() === 0)
+    assert(sql("TABLES IN in listTablesSuitedb 'aa*'").count() === 0)
   }
 }
