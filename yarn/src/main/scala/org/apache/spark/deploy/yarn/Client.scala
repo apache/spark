@@ -1106,16 +1106,15 @@ object Client extends Logging {
       env: HashMap[String, String],
       isAM: Boolean,
       extraClassPath: Option[String] = None): Unit = {
-    extraClassPath.foreach(addClasspathEntry(sparkConf, _, env))
-    addClasspathEntry(
-      sparkConf, YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
-    )
+    extraClassPath.foreach { cp =>
+      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+    }
+    addClasspathEntry(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env)
 
     if (isAM) {
-      addClasspathEntry(sparkConf,
-        buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-          LOCALIZED_CONF_DIR),
-        env)
+      addClasspathEntry(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
+          LOCALIZED_CONF_DIR, env)
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
@@ -1131,7 +1130,9 @@ object Client extends Logging {
     }
     addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
-    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(sparkConf, _, env))
+    sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
+      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+    }
   }
 
   /**
@@ -1171,9 +1172,9 @@ object Client extends Logging {
       fileName: String,
       env: HashMap[String, String]): Unit = {
     if (uri != null && uri.getScheme == LOCAL_SCHEME) {
-      addClasspathEntry(conf, uri.getPath, env)
+      addClasspathEntry(getClusterPath(conf, uri.getPath), env)
     } else if (fileName != null) {
-      addClasspathEntry(conf, buildPath(
+      addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
     }
   }
@@ -1182,12 +1183,8 @@ object Client extends Logging {
    * Add the given path to the classpath entry of the given environment map.
    * If the classpath is already set, this appends the new path to the existing classpath.
    */
-  private def addClasspathEntry(
-      conf: SparkConf,
-      path: String,
-      env: HashMap[String, String]): Unit =
-    YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name,
-      getClusterPath(conf, path))
+  private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
+    YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
 
   /**
    * Returns the path to be sent to the NM for a local path string.
