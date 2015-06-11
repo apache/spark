@@ -89,14 +89,10 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
-    expression[Lower]("lower"),
-    expression[Substring]("substr"),
-    expression[Substring]("substring"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
     expression[Sqrt]("sqrt"),
-    expression[Upper]("upper"),
 
     // Math functions
     expression[Acos]("acos"),
@@ -106,6 +102,7 @@ object FunctionRegistry {
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Cos]("cos"),
+    expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
@@ -113,6 +110,8 @@ object FunctionRegistry {
     expression[Logarithm]("log"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
+    expression[Pi]("pi"),
+    expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Rint]("rint"),
     expression[Signum]("signum"),
@@ -130,7 +129,14 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Max]("max"),
     expression[Min]("min"),
-    expression[Sum]("sum")
+    expression[Sum]("sum"),
+
+    // string functions
+    expression[Lower]("lower"),
+    expression[StringLength]("length"),
+    expression[Substring]("substr"),
+    expression[Substring]("substring"),
+    expression[Upper]("upper")
   )
 
   val builtin: FunctionRegistry = {

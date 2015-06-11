@@ -38,6 +38,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   import sqlContext.implicits._
   import sqlContext.sql
 
+  test("having clause") {
+    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")
+    checkAnswer(
+      sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
+      Row("one", 6) :: Row("three", 3) :: Nil)
+  }
+
   test("SPARK-6743: no columns from cache") {
     Seq(
       (83, 0, 38),
@@ -295,17 +302,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(
       sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
-    )
-  }
-
-  test("LOG") {
-    checkAnswer(
-      sql("SELECT LOG(key) FROM testData"),
-      (1 to 100).map(x => Row(math.log(x.toDouble))).toSeq
-    )
-    checkAnswer(
-      sql("SELECT LOG(2.0, key) FROM testData"),
-      (1 to 100).map(x => Row(math.log(x.toDouble) / math.log(2.0))).toSeq
     )
   }
 

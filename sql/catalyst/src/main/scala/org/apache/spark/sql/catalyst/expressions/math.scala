@@ -21,8 +21,33 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 /**
+ * A leaf expression specifically for math constants. Math constants expect no input.
+ * @param c The math constant.
+ * @param name The short name of the function
+ */
+abstract class LeafMathExpression(c: Double, name: String)
+  extends LeafExpression with Serializable {
+  self: Product =>
+
+  override def dataType: DataType = DoubleType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def toString: String = s"$name()"
+
+  override def eval(input: Row): Any = c
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.primitive} = java.lang.Math.$name;
+    """
+  }
+}
+
+/**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
  * input format, therefore these functions extend `ExpectsInputTypes`.
+ * @param f The math function.
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
@@ -100,6 +125,16 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Leaf math functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+case class EulerNumber() extends LeafMathExpression(math.E, "E")
+
+case class Pi() extends LeafMathExpression(math.Pi, "PI")
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Unary math functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +160,23 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
 
 case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
+
+case class Log2(child: Expression)
+  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
+        if (Double.valueOf(${ev.primitive}).isNaN()) {
+          ${ev.isNull} = true;
+        }
+      }
+    """
+  }
+}
 
 case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
 
@@ -204,15 +256,6 @@ case class Pow(left: Expression, right: Expression)
 }
 
 object Logarithm {
-  def apply(exprs: Seq[Expression]): Expression = {
-    if (exprs.length == 1) {
-      new Log(exprs(0))
-    } else if (exprs.length == 2) {
-      new Logarithm(exprs(0), exprs(1))
-    } else {
-      sys.error(s"Log only accepts two input expressions")
-    }
-  }
   def apply(child: Expression): Expression = new Log(child)
 }
 

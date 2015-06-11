@@ -1307,7 +1307,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     HiveParser.DecimalLiteral)
 
   /* Case insensitive matches */
-  val COALESCE = "(?i)COALESCE".r
   val COUNT = "(?i)COUNT".r
   val SUM = "(?i)SUM".r
   val AND = "(?i)AND".r

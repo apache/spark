@@ -37,6 +37,7 @@ import org.apache.spark.util.Utils
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
  * @groupname window_funcs Window functions
+ * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
  * @since 1.3.0
  */
@@ -945,6 +946,15 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * Returns the double value that is closer than any other to e, the base of the natural
+   * logarithms.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def e(): Column = EulerNumber()
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1090,7 +1100,7 @@ object functions {
   def log(base: Double, a: String): Column = log(base, Column(a))
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1098,7 +1108,7 @@ object functions {
   def log10(e: Column): Column = Log10(e.expr)
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1120,6 +1130,31 @@ object functions {
    * @since 1.4.0
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
+
+  /**
+   * Returns the double value that is closer than any other to pi, the ratio of the circumference
+   * of a circle to its diameter.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pi(): Column = Pi()
+
+  /**
+   * Computes the logarithm of the given column in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(expr: Column): Column = Log2(expr.expr)
+
+  /**
+   * Computes the logarithm of the given value in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1314,6 +1349,24 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // String functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the length of a given string value
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def strlen(e: Column): Column = StringLength(e.expr)
+
+  /**
+   * Computes the length of a given string column
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def strlen(columnName: String): Column = strlen(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

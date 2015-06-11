@@ -85,6 +85,25 @@ class DataFrameFunctionsSuite extends QueryTest {
     }
   }
 
+  test("constant functions") {
+    checkAnswer(
+      testData2.select(e()).limit(1),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      testData2.select(pi()).limit(1),
+      Row(scala.math.Pi)
+    )
+    checkAnswer(
+      ctx.sql("SELECT E()"),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      ctx.sql("SELECT PI()"),
+      Row(scala.math.Pi)
+    )
+  }
+
   test("bitwiseNOT") {
     checkAnswer(
       testData2.select(bitwiseNOT($"a")),
@@ -98,5 +117,41 @@ class DataFrameFunctionsSuite extends QueryTest {
       org.apache.spark.sql.functions.log(2.0, "a"),
       org.apache.spark.sql.functions.log("b")),
       Row(math.log(123), math.log(123) / math.log(2), null))
+
+    checkAnswer(
+      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
+      Row(math.log(123), math.log(123) / math.log(2), null))
+  }
+
+  test("length") {
+    checkAnswer(
+      nullStrings.select(strlen($"s"), strlen("s")),
+      nullStrings.collect().toSeq.map { r =>
+        val v = r.getString(1)
+        val l = if (v == null) null else v.length
+        Row(l, l)
+      })
+
+    checkAnswer(
+      nullStrings.selectExpr("length(s)"),
+      nullStrings.collect().toSeq.map { r =>
+        val v = r.getString(1)
+        val l = if (v == null) null else v.length
+        Row(l)
+      })
+  }
+
+  test("log2 functions test") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.select(log2("b") + log2("a")),
+      Row(1))
+
+    checkAnswer(
+      ctx.sql("SELECT LOG2(8)"),
+      Row(3))
+    checkAnswer(
+      ctx.sql("SELECT LOG2(null)"),
+      Row(null))
   }
 }
