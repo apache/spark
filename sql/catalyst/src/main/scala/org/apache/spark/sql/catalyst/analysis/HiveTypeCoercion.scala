@@ -678,7 +678,6 @@ trait HiveTypeCoercion {
       // Convert If(null literal, _, _) into boolean type.
       // In the optimizer, we should short-circuit this directly into false value.
       case i @ If(pred, left, right) if pred.dataType == NullType =>
-        println("fireing this rule")
         i.makeCopy(Array(Literal.create(null, BooleanType), left, right))
     }
   }
