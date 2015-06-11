@@ -149,7 +149,7 @@ public class CollaborativeFiltering {
 
     // Build the recommendation model using ALS
     int rank = 10;
-    int numIterations = 20;
+    int numIterations = 10;
     MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), rank, numIterations, 0.01); 
 
     // Evaluate the model on rating data
@@ -210,7 +210,7 @@ ratings = data.map(lambda l: l.split(',')).map(lambda l: Rating(int(l[0]), int(l
 
 # Build the recommendation model using Alternating Least Squares
 rank = 10
-numIterations = 20
+numIterations = 10
 model = ALS.train(ratings, rank, numIterations)
 
 # Evaluate the model on training data

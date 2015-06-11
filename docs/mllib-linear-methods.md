@@ -499,7 +499,7 @@ Note that the Python API does not yet support multiclass classification and mode
 will in the future.
 
 {% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
 from pyspark.mllib.regression import LabeledPoint
 from numpy import array
 
@@ -518,6 +518,10 @@ model = LogisticRegressionWithLBFGS.train(parsedData)
 labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LogisticRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
@@ -668,7 +672,7 @@ values. We compute the mean squared error at the end to evaluate
 Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
 from numpy import array
 
 # Load and parse the data
@@ -686,6 +690,10 @@ model = LinearRegressionWithSGD.train(parsedData)
 valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y) / valuesAndPreds.count()
 print("Mean Squared Error = " + str(MSE))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LinearRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
