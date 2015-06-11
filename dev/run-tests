@@ -180,6 +180,9 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
 {
+
+  sbt/sbt -Phive -Dspark.hive.whitelist="inputddl5.*" "hive/test-only org.apache.spark.sql.hive.execution.HiveCompatibilitySuite"
+
   # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
   # This must be a single argument, as it is.
   if [ -n "$_RUN_SQL_TESTS" ]; then
