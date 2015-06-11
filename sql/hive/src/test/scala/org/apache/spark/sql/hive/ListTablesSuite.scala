@@ -81,9 +81,9 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-7179:show tables with pattern") {
     checkAnswer(
-      sql("TABLES IN in listTablesSuitedb 'hive*'"),
+      sql("SHOW TABLES IN listTablesSuitedb 'hive*'"),
       Row("hiveindblisttablessuitetable", false))
     // not match the pattern
-    assert(sql("TABLES IN in listTablesSuitedb 'aa*'").count() === 0)
+    assert(sql("SHOW TABLES IN listTablesSuitedb 'aa*'").count() === 0)
   }
 }

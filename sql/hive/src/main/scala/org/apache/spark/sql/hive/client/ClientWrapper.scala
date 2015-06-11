@@ -289,7 +289,11 @@ private[hive] class ClientWrapper(
   }
 
   override def listTables(dbName: String, pattern: Option[String]): Seq[String] = withHiveState {
-    pattern.map(client.getTablesByPattern(dbName, _)).getOrElse(client.getAllTables(dbName))
+    if (pattern.isDefined) {
+      client.getTablesByPattern(dbName, pattern.get)
+    } else {
+      client.getAllTables(dbName)
+    }
   }
 
   /**
