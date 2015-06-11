@@ -250,8 +250,9 @@ case class ExternalSort(
 
 /**
  * :: DeveloperApi ::
- * TODO(josh): document
- * Performs a sort, spilling to disk as needed.
+ * Optimized version of [[ExternalSort]] that operates on binary data (implemented as part of
+ * Project Tungsten).
+ *
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
  */
@@ -262,7 +263,6 @@ case class UnsafeExternalSort(
     child: SparkPlan)
   extends UnaryNode {
 
-  private[this] val numFields: Int = child.schema.size
   private[this] val schema: StructType = child.schema
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -275,6 +275,7 @@ case class UnsafeExternalSort(
       val prefixComparator = new PrefixComparator {
         override def compare(prefix1: Long, prefix2: Long): Int = 0
       }
+      // TODO: do real prefix comparsion. For dev/testing purposes, this is a dummy implementation.
       def prefixComputer(row: Row): Long = 0
       new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer).sort(iterator)
     }

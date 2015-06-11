@@ -112,7 +112,7 @@ class SortMergeJoinIterator extends AbstractScalaRowIterator {
         // Iterate the right side to buffer all rows that match.
         // As the records should be ordered, exit when we meet the first record that not match.
         while (!stop && rightElement != null) {
-          rightMatches.$plus$eq(rightElement);
+          rightMatches.$plus$eq(rightElement.copy());
           fetchRight();
           stop = keyOrdering.compare(leftKey, rightKey) != 0;
         }

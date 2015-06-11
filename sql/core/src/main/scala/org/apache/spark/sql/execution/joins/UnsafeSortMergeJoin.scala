@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.joins
 
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{UnsafeExternalSort, BinaryNode, SparkPlan}
@@ -63,17 +63,17 @@ case class UnsafeSortMergeJoin(
 
     // Only sort if necessary:
     val leftOrder = requiredOrders(leftKeys)
-    val leftResults = {
+    val leftResults: RDD[Row] = {
       if (left.outputOrdering == leftOrder) {
-        left.execute().map(_.copy())
+        left.execute()
       } else {
         new UnsafeExternalSort(leftOrder, global = false, left).execute()
       }
     }
     val rightOrder = requiredOrders(rightKeys)
-    val rightResults = {
+    val rightResults: RDD[Row] = {
       if (right.outputOrdering == rightOrder) {
-        right.execute().map(_.copy())
+        right.execute()
       } else {
         new UnsafeExternalSort(rightOrder, global = false, right).execute()
       }
