@@ -653,8 +653,6 @@ def _need_python_to_sql_conversion(dataType):
     elif isinstance(dataType, MapType):
         return _need_python_to_sql_conversion(dataType.keyType) or \
             _need_python_to_sql_conversion(dataType.valueType)
-    elif isinstance(dataType, TimestampType):
-        return True
     elif isinstance(dataType, UserDefinedType):
         return True
     elif isinstance(dataType, TimestampType):
@@ -711,25 +709,17 @@ def _python_to_sql_converter(dataType):
         value_converter = _python_to_sql_converter(dataType.valueType)
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
 
-    elif isinstance(dataType, TimestampType):
-
-        def to_posix_timstamp(dt):
-            if dt.tzinfo is None:
-                return time.mktime(dt.timetuple()) + dt.microsecond / 1e6
-            else:
-                return calendar.timegm(dt.utctimetuple()) + dt.microsecond / 1e6
-        return to_posix_timstamp
-
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
+
     elif isinstance(dataType, TimestampType):
 
         def to_posix_timstamp(dt):
-            if dt.tzinfo is None:
-                return int(time.mktime(dt.timetuple()) * 1e7 + dt.microsecond * 10)
-            else:
-                return int(calendar.timegm(dt.utctimetuple()) * 1e7 + dt.microsecond * 10)
+            seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
+                       else time.mktime(dt.timetuple()))
+            return int(seconds * 1e7 + dt.microsecond * 10)
         return to_posix_timstamp
+
     else:
         raise ValueError("Unexpected type %r" % dataType)
 

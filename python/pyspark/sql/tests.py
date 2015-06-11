@@ -612,10 +612,10 @@ class SQLTests(ReusedPySparkTestCase):
         utcnow = datetime.datetime.fromtimestamp(ts, utc)
         df = self.sqlCtx.createDataFrame([(now, utcnow)])
         now1, utcnow1 = df.first()
-        # Spark SQL does not support microsecond, the error should be
+        # Pyrolite does not support microsecond, the error should be
         # less than 1 millisecond
-        self.assertTrue(now1 - now < datetime.timedelta(0.001))
-        self.assertTrue(utcnow1 - now < datetime.timedelta(0.001))
+        self.assertTrue(now - now1 < datetime.timedelta(0.001))
+        self.assertTrue(now - utcnow1 < datetime.timedelta(0.001))
 
     def test_dropna(self):
         schema = StructType([
