@@ -1096,13 +1096,13 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr>
   <td> <b>reduceByKeyAndWindow</b>(<i>func</i>, <i>invFunc</i>, <i>windowLength</i>,
   <i>slideInterval</i>, [<i>numTasks</i>]) </td>
-  <td> A more efficient version of the above <code>reduceByKeyAndWindow()</code> where the reduce
+  <td markdown="1"> A more efficient version of the above <code>reduceByKeyAndWindow()</code> where the reduce
   value of each window is calculated incrementally using the reduce values of the previous window.
   This is done by reducing the new data that enter the sliding window, and "inverse reducing" the
   old data that leave the window. An example would be that of "adding" and "subtracting" counts
   of keys as the window slides. However, it is applicable to only "invertible reduce functions",
   that is, those reduce functions which have a corresponding "inverse reduce" function (taken as
-  parameter <i>invFunc</i>. Like in <code>reduceByKeyAndWindow</code>, the number of reduce tasks
+  parameter <i>invFunc</i>). Like in <code>reduceByKeyAndWindow</code>, the number of reduce tasks
   is configurable through an optional argument. Note that [checkpointing](#checkpointing) must be
   enabled for using this operation.
 </td>
