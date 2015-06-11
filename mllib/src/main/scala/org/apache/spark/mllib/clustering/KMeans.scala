@@ -165,16 +165,10 @@ class KMeans private (
     * IllegalArgumentException.
     */
   def setInitialModel(model: KMeansModel): this.type = {
-    if (model.k == k) {
-      initialModel = Some(model)
-    } else {
-      throw new IllegalArgumentException("mismatched cluster count (model.k != k)")
-    }
+    require(model.k==k, "mismatched cluster count")
+    initialModel = Some(model)
     this
   }
-
-  /** Return the user supplied initial KMeansModel, if supplied */
-  def getInitialModel: Option[KMeansModel] = initialModel
 
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
@@ -514,10 +508,10 @@ object KMeans {
    * @param initialModel an existing set of cluster centers.
    */
   def train(
-             data: RDD[Vector],
-             k: Int,
-             maxIterations: Int,
-             initialModel: KMeansModel): KMeansModel = {
+       data: RDD[Vector],
+       k: Int,
+       maxIterations: Int,
+       initialModel: KMeansModel): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setInitialModel(initialModel)
