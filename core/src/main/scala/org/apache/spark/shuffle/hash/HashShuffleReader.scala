@@ -80,9 +80,7 @@ private[spark] class HashShuffleReader[K, C](
       }
     } else {
       require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
-
-      // Convert the Product2s to pairs since this is what downstream RDDs currently expect
-      interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
+      interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
     }
 
     // Sort the output if there is a sort ordering defined.
