@@ -27,14 +27,14 @@ class DateUtilsSuite extends SparkFunSuite {
   test("timestamp") {
     val now = new Timestamp(System.currentTimeMillis())
     now.setNanos(100)
-    val ns = DateUtils.fromJavaTimestamp(now)
+    val ns = DateTimeUtils.fromJavaTimestamp(now)
     assert(ns % 10000000L == 1)
-    assert(DateUtils.toJavaTimestamp(ns) == now)
+    assert(DateTimeUtils.toJavaTimestamp(ns) == now)
 
     List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
-      val ts = DateUtils.toJavaTimestamp(t)
-      assert(DateUtils.fromJavaTimestamp(ts) == t)
-      assert(DateUtils.toJavaTimestamp(DateUtils.fromJavaTimestamp(ts)) == ts)
+      val ts = DateTimeUtils.toJavaTimestamp(t)
+      assert(DateTimeUtils.fromJavaTimestamp(ts) == t)
+      assert(DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromJavaTimestamp(ts)) == ts)
     }
   }
 }

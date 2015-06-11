@@ -29,7 +29,6 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -313,9 +312,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writeTimestamp(ts: Long): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(
-      DateUtils.toJavaTimestamp(ts))
-    writer.addBinary(binaryNanoTime)
+    writer.addBinary(CatalystTimestampConverter.convertFromTimestamp(ts))
   }
 }
 
@@ -359,7 +356,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
       case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record(index).asInstanceOf[Long])
+      case TimestampType => writeTimestamp(record.getLong(index))
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

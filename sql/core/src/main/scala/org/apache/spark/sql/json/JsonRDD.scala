@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 private[sql] object JsonRDD extends Logging {
@@ -391,8 +391,8 @@ private[sql] object JsonRDD extends Logging {
     value match {
       // only support string as date
       case value: java.lang.String =>
-        DateUtils.millisToDays(DateUtils.stringToTime(value).getTime)
-      case value: java.sql.Date => DateUtils.fromJavaDate(value)
+        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(value).getTime)
+      case value: java.sql.Date => DateTimeUtils.fromJavaDate(value)
     }
   }
 
@@ -400,7 +400,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 10000L
       case value: java.lang.Long => value * 10000L
-      case value: java.lang.String => DateUtils.stringToTime(value).getTime * 10000L
+      case value: java.lang.String => DateTimeUtils.stringToTime(value).getTime * 10000L
     }
   }
 

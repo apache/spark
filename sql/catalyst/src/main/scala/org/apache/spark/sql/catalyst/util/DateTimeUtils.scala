@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast
 /**
  * Helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
  */
-object DateUtils {
+object DateTimeUtils {
   private val MILLIS_PER_DAY = 86400000
   private val HUNDRED_NANOS_PER_SECOND = 10000000L
 

@@ -25,7 +25,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
 
@@ -382,10 +382,10 @@ private[sql] class JDBCRDD(
           conversions(i) match {
             case BooleanConversion => mutableRow.setBoolean(i, rs.getBoolean(pos))
             case DateConversion =>
-              // DateUtils.fromJavaDate does not handle null value, so we need to check it.
+              // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
-                mutableRow.setInt(i, DateUtils.fromJavaDate(dateVal))
+                mutableRow.setInt(i, DateTimeUtils.fromJavaDate(dateVal))
               } else {
                 mutableRow.update(i, null)
               }
@@ -420,7 +420,7 @@ private[sql] class JDBCRDD(
             case TimestampConversion =>
               val t = rs.getTimestamp(pos)
               if (t != null) {
-                mutableRow.setLong(i, DateUtils.fromJavaTimestamp(t))
+                mutableRow.setLong(i, DateTimeUtils.fromJavaTimestamp(t))
               } else {
                 mutableRow.update(i, null)
               }

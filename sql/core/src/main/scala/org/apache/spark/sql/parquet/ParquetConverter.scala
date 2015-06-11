@@ -17,21 +17,16 @@
 
 package org.apache.spark.sql.parquet
 
-import java.sql.Timestamp
-import java.util.{TimeZone, Calendar}
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
-import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
-
-import jodd.datetime.JDateTime
 import org.apache.parquet.column.Dictionary
-import org.apache.parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
+import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.parquet.timestamp.NanoTime
+import org.apache.spark.sql.types._
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
@@ -268,7 +263,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    * Read a Timestamp value from a Parquet Int96Value
    */
   protected[parquet] def readTimestamp(value: Binary): Long = {
-    DateUtils.fromJavaTimestamp(CatalystTimestampConverter.convertToTimestamp(value))
+    CatalystTimestampConverter.convertToTimestamp(value)
   }
 }
 
@@ -498,69 +493,21 @@ private[parquet] object CatalystArrayConverter {
 }
 
 private[parquet] object CatalystTimestampConverter {
-  // TODO most part of this comes from Hive-0.14
-  // Hive code might have some issues, so we need to keep an eye on it.
-  // Also we use NanoTime and Int96Values from parquet-examples.
-  // We utilize jodd to convert between NanoTime and Timestamp
-  val parquetTsCalendar = new ThreadLocal[Calendar]
-  def getCalendar: Calendar = {
-    // this is a cache for the calendar instance.
-    if (parquetTsCalendar.get == null) {
-      parquetTsCalendar.set(Calendar.getInstance(TimeZone.getTimeZone("GMT")))
-    }
-    parquetTsCalendar.get
-  }
-  val NANOS_PER_SECOND: Long = 1000000000
-  val SECONDS_PER_MINUTE: Long = 60
-  val MINUTES_PER_HOUR: Long = 60
-  val NANOS_PER_MILLI: Long = 1000000
+  // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
+  val JULIAN_DAY_OF_EPOCH = 2440587.5
+  val SECONDS_PER_DAY = 60 * 60 * 24
 
-  def convertToTimestamp(value: Binary): Timestamp = {
+  def convertToTimestamp(value: Binary): Long = {
     val nt = NanoTime.fromBinary(value)
-    val timeOfDayNanos = nt.getTimeOfDayNanos
-    val julianDay = nt.getJulianDay
-    val jDateTime = new JDateTime(julianDay.toDouble)
-    val calendar = getCalendar
-    calendar.set(Calendar.YEAR, jDateTime.getYear)
-    calendar.set(Calendar.MONTH, jDateTime.getMonth - 1)
-    calendar.set(Calendar.DAY_OF_MONTH, jDateTime.getDay)
-
-    // written in command style
-    var remainder = timeOfDayNanos
-    calendar.set(
-      Calendar.HOUR_OF_DAY,
-      (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)).toInt)
-    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)
-    calendar.set(
-      Calendar.MINUTE, (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE)).toInt)
-    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE)
-    calendar.set(Calendar.SECOND, (remainder / NANOS_PER_SECOND).toInt)
-    val nanos = remainder % NANOS_PER_SECOND
-    val ts = new Timestamp(calendar.getTimeInMillis)
-    ts.setNanos(nanos.toInt)
-    ts
+    ((nt.getJulianDay - JULIAN_DAY_OF_EPOCH) * SECONDS_PER_DAY * 1e7
+      + nt.getTimeOfDayNanos / 100.0).toLong
   }
 
-  def convertFromTimestamp(ts: Timestamp): Binary = {
-    val calendar = getCalendar
-    calendar.setTime(ts)
-    val jDateTime = new JDateTime(calendar.get(Calendar.YEAR),
-      calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH))
-    // Hive-0.14 didn't set hour before get day number, while the day number should
-    // has something to do with hour, since julian day number grows at 12h GMT
-    // here we just follow what hive does.
-    val julianDay = jDateTime.getJulianDayNumber
-
-    val hour = calendar.get(Calendar.HOUR_OF_DAY)
-    val minute = calendar.get(Calendar.MINUTE)
-    val second = calendar.get(Calendar.SECOND)
-    val nanos = ts.getNanos
-    // Hive-0.14 would use hours directly, that might be wrong, since the day starts
-    // from 12h in Julian. here we just follow what hive does.
-    val nanosOfDay = nanos + second * NANOS_PER_SECOND +
-      minute * NANOS_PER_SECOND * SECONDS_PER_MINUTE +
-      hour * NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
-    NanoTime(julianDay, nanosOfDay).toBinary
+  def convertFromTimestamp(ts: Long): Binary = {
+    val julian = ts / 1e7 / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
+    val day = julian.toInt
+    val nanos = ((julian - day) * SECONDS_PER_DAY * 1e9).toLong
+    NanoTime(day, nanos).toBinary
   }
 }
 

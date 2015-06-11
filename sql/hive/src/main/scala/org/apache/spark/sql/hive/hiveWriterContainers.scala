@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 
@@ -200,7 +200,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     def convertToHiveRawString(col: String, value: Any): String = {
       val raw = String.valueOf(value)
       schema(col).dataType match {
-        case DateType => DateUtils.toString(raw.toInt)
+        case DateType => DateTimeUtils.toString(raw.toInt)
         case _: DecimalType => BigDecimal(raw).toString()
         case _ => raw
       }
