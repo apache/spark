@@ -477,7 +477,7 @@ class DataFrame(object):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        return DataFrame(self._jdf.sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
+        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
     @since(1.4)
     def randomSplit(self, weights, seed=None):
@@ -1352,6 +1352,11 @@ class DataFrameStatFunctions(object):
         return self.df.freqItems(cols, support)
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(self, col, fractions, seed=None):
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
 
 
 def _test():

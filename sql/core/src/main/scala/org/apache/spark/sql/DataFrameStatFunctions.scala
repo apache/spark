@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.UUID
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.stat._
 
@@ -162,5 +164,27 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
+  }
+
+  /**
+   * Returns a stratified sample without replacement based on the fraction given on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @return a new [[DataFrame]] that represents the stratified sample
+   *
+   * @since 1.5.0
+   */
+  def sampleBy(col: String, fractions: Map[Any, Double], seed: Long): DataFrame = {
+    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
+      s"Fractions must be in [0, 1], but got $fractions.")
+    import org.apache.spark.sql.functions.rand
+    val c = Column(col)
+    val r = rand(seed).as("rand_" + UUID.randomUUID().toString.take(8))
+    val expr = fractions.toSeq.map { case (k, v) =>
+      (c === k) && (r < v)
+    }.reduce(_ || _) || false
+    df.filter(expr)
   }
 }

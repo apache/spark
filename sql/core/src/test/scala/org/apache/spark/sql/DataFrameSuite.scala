@@ -635,12 +635,4 @@ class DataFrameSuite extends QueryTest {
     val res11 = ctx.range(-1).select("id")
     assert(res11.count == 0)
   }
-
-  test("sampleBy") {
-    val df = ctx.range(0, 100).select((col("id") % 3).as("key"))
-    val sampled = df.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
-    checkAnswer(
-      sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 4), Row(1, 9)))
-  }
 }

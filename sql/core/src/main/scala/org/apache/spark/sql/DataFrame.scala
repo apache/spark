@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.util.{Properties, UUID}
+import java.util.Properties
 
+import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -32,17 +33,18 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
 import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.sources.CreateTableUsingAsSelect
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
@@ -943,26 +945,6 @@ class DataFrame private[sql](
    */
   def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
     sample(withReplacement, fraction, Utils.random.nextLong)
-  }
-
-  /**
-   * Returns a stratified sample without replacement based on the fraction given on each stratum.
-   * @param col column that defines strata
-   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
-   *                  its fraction as zero.
-   * @param seed random seed
-   * @return a new [[DataFrame]] that represents the stratified sample
-   */
-  def sampleBy(col: String, fractions: Map[Any, Double], seed: Long): DataFrame = {
-    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
-      s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.rand
-    val c = Column(col)
-    val r = rand(seed).as("rand_" + UUID.randomUUID().toString.take(8))
-    val expr = fractions.toSeq.map { case (k, v) =>
-      (c === k) && (r < v)
-    }.reduce(_ || _) || false
-    this.filter(expr)
   }
 
   /**
