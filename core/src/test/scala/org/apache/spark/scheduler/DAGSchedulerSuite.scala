@@ -498,8 +498,8 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-        (Success, makeMapStatus("hostB", 1))))
+        (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
+        (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
     // the 2nd ResultTask failed
     complete(taskSets(1), Seq(
         (Success, 42),
@@ -509,7 +509,7 @@ class DAGSchedulerSuite
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
-    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.size))))
     // we can see both result blocks now
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
       Array("hostA", "hostB"))
@@ -525,8 +525,8 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
     // The MapOutputTracker should know about both map output locations.
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
       Array("hostA", "hostB"))
@@ -720,18 +720,18 @@ class DAGSchedulerSuite
     assert(newEpoch > oldEpoch)
     val taskSet = taskSets(0)
     // should be ignored for being too old
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA",
+      reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     // should work because it's a non-failed host
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB",
+      reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     // should be ignored for being too old
-    runEvent(CompletionEvent(
-      taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA",
+      reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
-    runEvent(CompletionEvent(
-      taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA",
+      reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
@@ -960,6 +960,50 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  test("reduce tasks should be placed locally with map output") {
+    // Create an shuffleMapRdd with 1 partition
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+    complete(taskSets(0), Seq(
+        (Success, makeMapStatus("hostA", 1))))
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
+           Array(makeBlockManagerId("hostA")))
+
+    // Reducer should run on the same host that map task ran
+    val reduceTaskSet = taskSets(1)
+    assertLocations(reduceTaskSet, Seq(Seq("hostA")))
+    complete(reduceTaskSet, Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+  }
+
+  test("reduce task locality preferences should only include machines with largest map outputs") {
+    val numMapTasks = 4
+    // Create an shuffleMapRdd with more partitions
+    val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+
+    val statuses = (1 to numMapTasks).map { i =>
+      (Success, makeMapStatus("host" + i, 1, (10*i).toByte))
+    }
+    complete(taskSets(0), statuses)
+
+    // Reducer should prefer the last 3 hosts as they have 20%, 30% and 40% of data
+    val hosts = (1 to numMapTasks).map(i => "host" + i).reverse.take(numMapTasks - 1)
+
+    val reduceTaskSet = taskSets(1)
+    assertLocations(reduceTaskSet, Seq(hosts))
+    complete(reduceTaskSet, Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -967,12 +1011,12 @@ class DAGSchedulerSuite
   private def assertLocations(taskSet: TaskSet, hosts: Seq[Seq[String]]) {
     assert(hosts.size === taskSet.tasks.size)
     for ((taskLocs, expectedLocs) <- taskSet.tasks.map(_.preferredLocations).zip(hosts)) {
-      assert(taskLocs.map(_.host) === expectedLocs)
+      assert(taskLocs.map(_.host).toSet === expectedLocs.toSet)
     }
   }
 
-  private def makeMapStatus(host: String, reduces: Int): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(2))
+  private def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)
