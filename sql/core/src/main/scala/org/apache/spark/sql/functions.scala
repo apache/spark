@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
  * @groupname window_funcs Window functions
- * @groupname string_funcs functions for DataFrames.
+ * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
  * @since 1.3.0
  */
@@ -1299,6 +1299,10 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // String functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Computes the length of a given string value
