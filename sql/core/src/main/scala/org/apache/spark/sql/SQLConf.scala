@@ -146,35 +146,44 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
+
   val COLUMN_BATCH_SIZE = intConf("spark.sql.inMemoryColumnarStorage.batchSize",
     defaultValue = Some(10000),
     doc = "Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
+
   val IN_MEMORY_PARTITION_PRUNING =
     booleanConf("spark.sql.inMemoryColumnarStorage.partitionPruning",
       defaultValue = Some(false),
       doc = "<TODO>")
+
   val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
       "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.")
+
   val DEFAULT_SIZE_IN_BYTES = longConf("spark.sql.defaultSizeInBytes", isPublic = false)
+
   val SHUFFLE_PARTITIONS = intConf("spark.sql.shuffle.partitions",
     defaultValue = Some(200),
     doc = "Configures the number of partitions to use when shuffling data for joins or " +
       "aggregations.")
+
   val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
     defaultValue = Some(false),
     doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
       " a specific query. For some queries with complicated expression this option can lead to " +
       "significant speed-ups. However, for simple queries this can actually slow down query " +
       "execution.")
+
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
     defaultValue = Some(false),
     doc = "<TDDO>")
+
   val DIALECT = stringConf("spark.sql.dialect", defaultValue = Some("sql"), doc = "<TODO>")
+
   val CASE_SENSITIVE = booleanConf("spark.sql.caseSensitive",
     defaultValue = Some(true),
     doc = "<TODO>")
@@ -185,19 +194,23 @@ private[spark] object SQLConf {
       "Spark SQL, do not differentiate between binary data and strings when writing out the " +
       "Parquet schema. This flag tells Spark SQL to interpret binary data as a string to provide " +
       "compatibility with these systems.")
+
   val PARQUET_INT96_AS_TIMESTAMP = booleanConf("spark.sql.parquet.int96AsTimestamp",
     defaultValue = Some(true),
     doc = "Some Parquet-producing systems, in particular Impala, store Timestamp into INT96. " +
       "Spark would also store Timestamp as INT96 because we need to avoid precision lost of the " +
       "nanoseconds field. This flag tells Spark SQL to interpret INT96 data as a timestamp to " +
       "provide compatibility with these systems.")
+
   val PARQUET_CACHE_METADATA = booleanConf("spark.sql.parquet.cacheMetadata",
     defaultValue = Some(true),
     doc = "Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
+
   val PARQUET_COMPRESSION = stringConf("spark.sql.parquet.compression.codec",
     defaultValue = Some("gzip"),
     doc = "Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
+
   val PARQUET_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.parquet.filterPushdown",
     defaultValue = Some(false),
     doc = "Turn on Parquet filter pushdown optimization. This feature is turned off by default" +
@@ -205,6 +218,7 @@ private[spark] object SQLConf {
       "(<a href=\"https://issues.apache.org/jira/browse/PARQUET-136\">PARQUET-136</a>). However, " +
       "if your table doesn't contain any nullable string or binary columns, it's still safe to " +
       "turn this feature on.")
+
   val PARQUET_USE_DATA_SOURCE_API = booleanConf("spark.sql.parquet.useDataSourceApi",
     defaultValue = Some(true),
     doc = "<TODO>")
@@ -220,6 +234,7 @@ private[spark] object SQLConf {
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "<TODO>")
+
   val BROADCAST_TIMEOUT = intConf("spark.sql.broadcastTimeout",
     defaultValue = Some(5 * 60),
     doc = "<TODO>")
@@ -230,14 +245,17 @@ private[spark] object SQLConf {
     defaultValue = Some(false),
     doc = "When true, performs sorts spilling to disk as needed otherwise sort each partition in" +
       " memory.")
+
   val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
     defaultValue = Some(false),
     doc = "<TODO>")
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool", isPublic = false)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     intConf("spark.sql.thriftserver.ui.retainedStatements", isPublic = false)
+
   val THRIFTSERVER_UI_SESSION_LIMIT =
     intConf("spark.sql.thriftserver.ui.retainedSessions", isPublic = false)
 
@@ -245,6 +263,7 @@ private[spark] object SQLConf {
   val DEFAULT_DATA_SOURCE_NAME = stringConf("spark.sql.sources.default",
     defaultValue = Some("org.apache.spark.sql.parquet"),
     doc = "<TODO>")
+
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters). We will split the JSON string of a schema
@@ -354,7 +373,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
   /** When true uses verifyPartitionPath to prune the path which is not exists. */
-  private[spark] def verifyPartitionPath = getConf(HIVE_VERIFY_PARTITIONPATH)
+  private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITIONPATH)
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
@@ -439,10 +458,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
-  private[spark] def partitionDiscoveryEnabled() =
+  private[spark] def partitionDiscoveryEnabled(): Boolean =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)
 
-  private[spark] def partitionColumnTypeInferenceEnabled() =
+  private[spark] def partitionColumnTypeInferenceEnabled(): Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
   // Do not use a value larger than 4000 as the default value of this property.
