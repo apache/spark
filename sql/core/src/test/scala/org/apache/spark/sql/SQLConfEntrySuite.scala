@@ -81,25 +81,6 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(e.getMessage === s"$key should be boolean, but was abc")
   }
 
-  test("floatConf") {
-    val key = "spark.sql.SQLConfEntrySuite.float"
-    val confEntry = SQLConfEntry.floatConf(key)
-    assert(conf.getConf(confEntry, 5.0F) === 5.0F)
-
-    conf.setConf(confEntry, 10.0F)
-    assert(conf.getConf(confEntry, 5.0F) === 10.0F)
-
-    conf.setRawConf(key, "20.0")
-    assert(conf.getRawConf(key, "5.0") === "20.0")
-    assert(conf.getRawConf(key) === "20.0")
-    assert(conf.getConf(confEntry, 5.0F) === 20.0F)
-
-    val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "abc")
-    }
-    assert(e.getMessage === s"$key should be float, but was abc")
-  }
-
   test("doubleConf") {
     val key = "spark.sql.SQLConfEntrySuite.double"
     val confEntry = SQLConfEntry.doubleConf(key)

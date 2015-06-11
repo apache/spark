@@ -94,20 +94,6 @@ private[spark] object SQLConf {
         }
       }, _.toString, doc, isPublic)
 
-    def floatConf(
-        key: String,
-        defaultValue: Option[Float] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Float] =
-      SQLConfEntry(key, defaultValue, { v =>
-        try {
-          v.toFloat
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be float, but was $v")
-        }
-      }, _.toString, doc, isPublic)
-
     def doubleConf(
         key: String,
         defaultValue: Option[Double] = None,
