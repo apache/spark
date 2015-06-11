@@ -445,7 +445,11 @@ class StreamingKMeans(object):
         Returns a transformed dstream object
         """
         self._validate(dstream)
-        return dstream.map(self.latestModel.predict)
+
+        def predict(ds):
+            return self.latestModel.predict(ds)
+
+        return dstream.map(predict)
 
     def predictOnValues(self, dstream):
         """
@@ -453,7 +457,11 @@ class StreamingKMeans(object):
         Returns a transformed dstream object.
         """
         self._validate(dstream)
-        return dstream.mapValues(self.latestModel.predict)
+
+        def predict(ds):
+            return self.latestModel.predict(ds)
+
+        return dstream.mapValues(predict)
 
 
 def _test():
