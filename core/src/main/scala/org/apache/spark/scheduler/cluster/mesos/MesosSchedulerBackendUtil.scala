@@ -37,14 +37,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
           .newBuilder()
           .setMode(Volume.Mode.RW)
         spec match {
-          case Array(container_path) => 
+          case Array(container_path) =>
             Some(vol.setContainerPath(container_path))
           case Array(container_path, "rw") =>
             Some(vol.setContainerPath(container_path))
           case Array(container_path, "ro") =>
             Some(vol.setContainerPath(container_path)
               .setMode(Volume.Mode.RO))
-          case Array(host_path, container_path) => 
+          case Array(host_path, container_path) =>
             Some(vol.setContainerPath(container_path)
               .setHostPath(host_path))
           case Array(host_path, container_path, "rw") =>
@@ -108,7 +108,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       image: String,
       volumes: Option[List[Volume]] = None,
       network: Option[ContainerInfo.DockerInfo.Network] = None,
-      portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None):Unit = {
+      portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None): Unit = {
 
     val docker = ContainerInfo.DockerInfo.newBuilder().setImage(image)
 

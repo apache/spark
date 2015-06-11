@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.BaseMutableRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
+/**
+ * Java can not access Projection (in package object)
+ */
+abstract class BaseProject extends Projection {}
 
 /**
  * Generates bytecode that produces a new [[Row]] object based on a fixed set of input
@@ -27,7 +32,6 @@ import org.apache.spark.sql.types._
  * generated based on the output types of the [[Expression]] to avoid boxing of primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
-  import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
@@ -38,223 +42,187 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
   // Make Mutablility optional...
   protected def create(expressions: Seq[Expression]): Projection = {
-    val tupleLength = ru.Literal(Constant(expressions.length))
-    val lengthDef = q"final val length = $tupleLength"
-
-    /* TODO: Configurable...
-    val nullFunctions =
-      q"""
-        private final val nullSet = new org.apache.spark.util.collection.BitSet(length)
-        final def setNullAt(i: Int) = nullSet.set(i)
-        final def isNullAt(i: Int) = nullSet.get(i)
-      """
-     */
-
-    val nullFunctions =
-      q"""
-        private[this] var nullBits = new Array[Boolean](${expressions.size})
-        override def setNullAt(i: Int) = { nullBits(i) = true }
-        override def isNullAt(i: Int) = nullBits(i)
-      """.children
-
-    val tupleElements = expressions.zipWithIndex.flatMap {
+    val ctx = newCodeGenContext()
+    val columns = expressions.zipWithIndex.map {
       case (e, i) =>
-        val elementName = newTermName(s"c$i")
-        val evaluatedExpression = expressionEvaluator(e)
-        val iLit = ru.Literal(Constant(i))
+        s"private ${ctx.javaType(e.dataType)} c$i = ${ctx.defaultValue(e.dataType)};\n"
+    }.mkString("\n      ")
 
-        q"""
-        var ${newTermName(s"c$i")}: ${termForType(e.dataType)} = _
+    val initColumns = expressions.zipWithIndex.map {
+      case (e, i) =>
+        val eval = e.gen(ctx)
+        s"""
         {
-          ..${evaluatedExpression.code}
-          if(${evaluatedExpression.nullTerm})
-            setNullAt($iLit)
-          else {
-            nullBits($iLit) = false
-            $elementName = ${evaluatedExpression.primitiveTerm}
+          // column$i
+          ${eval.code}
+          nullBits[$i] = ${eval.isNull};
+          if (!${eval.isNull}) {
+            c$i = ${eval.primitive};
           }
         }
-        """.children : Seq[Tree]
-    }
+        """
+    }.mkString("\n")
 
-    val accessorFailure = q"""scala.sys.error("Invalid ordinal:" + i)"""
-    val applyFunction = {
-      val cases = (0 until expressions.size).map { i =>
-        val ordinal = ru.Literal(Constant(i))
-        val elementName = newTermName(s"c$i")
-        val iLit = ru.Literal(Constant(i))
+    val getCases = (0 until expressions.size).map { i =>
+      s"case $i: return c$i;"
+    }.mkString("\n        ")
 
-        q"if(i == $ordinal) { if(isNullAt($i)) return null else return $elementName }"
+    val updateCases = expressions.zipWithIndex.map { case (e, i) =>
+      s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
+    }.mkString("\n        ")
+
+    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
+      val cases = expressions.zipWithIndex.map {
+        case (e, i) if e.dataType == dataType
+          || dataType == IntegerType && e.dataType == DateType
+          || dataType == LongType && e.dataType == TimestampType =>
+          s"case $i: return c$i;"
+        case _ => ""
+      }.mkString("\n        ")
+      if (cases.count(_ != '\n') > 0) {
+        s"""
+      @Override
+      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
+        if (isNullAt(i)) {
+          return ${ctx.defaultValue(dataType)};
+        }
+        switch (i) {
+        $cases
+        }
+        return ${ctx.defaultValue(dataType)};
+      }"""
+      } else {
+        ""
       }
-      q"override def apply(i: Int): Any = { ..$cases; $accessorFailure }"
-    }
+    }.mkString("\n")
 
-    val updateFunction = {
-      val cases = expressions.zipWithIndex.map {case (e, i) =>
-        val ordinal = ru.Literal(Constant(i))
-        val elementName = newTermName(s"c$i")
-        val iLit = ru.Literal(Constant(i))
+    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
+      val cases = expressions.zipWithIndex.map {
+        case (e, i) if e.dataType == dataType
+          || dataType == IntegerType && e.dataType == DateType
+          || dataType == LongType && e.dataType == TimestampType =>
+          s"case $i: { c$i = value; return; }"
+        case _ => ""
+      }.mkString("\n")
+      if (cases.count(_ != '\n') > 0) {
+        s"""
+      @Override
+      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
+        nullBits[i] = false;
+        switch (i) {
+        $cases
+        }
+      }"""
+      } else {
+        ""
+      }
+    }.mkString("\n")
 
-        q"""
-          if(i == $ordinal) {
-            if(value == null) {
-              setNullAt(i)
-            } else {
-              nullBits(i) = false
-              $elementName = value.asInstanceOf[${termForType(e.dataType)}]
-            }
-            return
-          }"""
-      }
-      q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
-    }
-
-    val specificAccessorFunctions = nativeTypes.map { dataType =>
-      val ifStatements = expressions.zipWithIndex.flatMap {
-        // getString(), getDate() and getTimestamp() are not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType && dataType != DateType
-            && dataType != TimestampType =>
-          val elementName = newTermName(s"c$i")
-          // TODO: The string of ifs gets pretty inefficient as the row grows in size.
-          // TODO: Optional null checks?
-          q"if(i == $i) return $elementName" :: Nil
-        case _ => Nil
-      }
-      dataType match {
-        // Row() need this interface to compile
-        case StringType =>
-          q"""
-          override def getString(i: Int): String = {
-            $accessorFailure
-          }"""
-        case DateType =>
-          q"""
-          override def getDate(i: Int): java.sql.Date = {
-            $accessorFailure
-          }"""
-        case TimestampType =>
-          q"""
-          override def getTimestamp(i: Int): java.sql.Timestamp = {
-            $accessorFailure
-          }"""
-        case other =>
-          q"""
-          override def ${accessorForType(dataType)}(i: Int): ${termForType(dataType)} = {
-            ..$ifStatements;
-            $accessorFailure
-          }"""
-      }
-    }
-
-    val specificMutatorFunctions = nativeTypes.map { dataType =>
-      val ifStatements = expressions.zipWithIndex.flatMap {
-        // setString(), setDate() and setTimestamp() are not used by expressions
-        case (e, i) if e.dataType == dataType && dataType != StringType && dataType != DateType
-            && dataType != TimestampType =>
-          val elementName = newTermName(s"c$i")
-          // TODO: The string of ifs gets pretty inefficient as the row grows in size.
-          // TODO: Optional null checks?
-          q"if(i == $i) { nullBits($i) = false; $elementName = value; return }" :: Nil
-        case _ => Nil
-      }
-      dataType match {
-        case StringType =>
-          // MutableRow() need this interface to compile
-          q"""
-          override def setString(i: Int, value: String) {
-            $accessorFailure
-          }"""
-        case DateType =>
-          q"""
-          override def setDate(i: Int, value: java.sql.Date) {
-            $accessorFailure
-          }"""
-        case TimestampType =>
-          q"""
-          override def setTimestamp(i: Int, value: java.sql.Timestamp) = {
-            $accessorFailure
-          }"""
-        case other =>
-          q"""
-          override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}) {
-            ..$ifStatements;
-            $accessorFailure
-          }"""
-      }
-    }
-
-    val hashValues = expressions.zipWithIndex.map { case (e,i) =>
-      val elementName = newTermName(s"c$i")
+    val hashValues = expressions.zipWithIndex.map { case (e, i) =>
+      val col = newTermName(s"c$i")
       val nonNull = e.dataType match {
-        case BooleanType => q"if ($elementName) 0 else 1"
-        case ByteType | ShortType | IntegerType => q"$elementName.toInt"
-        case LongType => q"($elementName ^ ($elementName >>> 32)).toInt"
-        case FloatType => q"java.lang.Float.floatToIntBits($elementName)"
+        case BooleanType => s"$col ? 0 : 1"
+        case ByteType | ShortType | IntegerType | DateType => s"$col"
+        case LongType | TimestampType => s"$col ^ ($col >>> 32)"
+        case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
-          q"{ val b = java.lang.Double.doubleToLongBits($elementName); (b ^ (b >>>32)).toInt }"
-        case _ => q"$elementName.hashCode"
+            s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
+        case _ => s"$col.hashCode()"
       }
-      q"if (isNullAt($i)) 0 else $nonNull"
+      s"isNullAt($i) ? 0 : ($nonNull)"
     }
 
-    val hashUpdates: Seq[Tree] = hashValues.map(v => q"""result = 37 * result + $v""": Tree)
+    val hashUpdates: String = hashValues.map( v =>
+      s"""
+        result *= 37; result += $v;"""
+    ).mkString("\n")
 
-    val hashCodeFunction =
-      q"""
-        override def hashCode(): Int = {
-          var result: Int = 37
-          ..$hashUpdates
-          result
-        }
+    val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
+      s"""
+          if (isNullAt($i) != row.isNullAt($i) || !isNullAt($i) && !get($i).equals(row.get($i))) {
+            return false;
+          }
       """
+    }.mkString("\n")
 
-    val columnChecks = (0 until expressions.size).map { i =>
-      val elementName = newTermName(s"c$i")
-      q"if (this.$elementName != specificType.$elementName) return false"
+    val code = s"""
+    import org.apache.spark.sql.Row;
+
+    public SpecificProjection generate($exprType[] expr) {
+      return new SpecificProjection(expr);
     }
 
-    val equalsFunction =
-      q"""
-        override def equals(other: Any): Boolean = other match {
-          case specificType: SpecificRow =>
-            ..$columnChecks
-            return true
-          case other => super.equals(other)
-        }
-      """
+    class SpecificProjection extends ${typeOf[BaseProject]} {
+      private $exprType[] expressions = null;
 
-    val allColumns = (0 until expressions.size).map { i =>
-      val iLit = ru.Literal(Constant(i))
-      q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
-    }
-
-    val copyFunction =
-      q"override def copy() = new $genericRowType(Array[Any](..$allColumns))"
-
-    val toSeqFunction =
-      q"override def toSeq: Seq[Any] = Seq(..$allColumns)"
-
-    val classBody =
-      nullFunctions ++ (
-        lengthDef +:
-        applyFunction +:
-        updateFunction +:
-        equalsFunction +:
-        hashCodeFunction +:
-        copyFunction +:
-        toSeqFunction +:
-        (tupleElements ++ specificAccessorFunctions ++ specificMutatorFunctions))
-
-    val code = q"""
-      final class SpecificRow(i: $rowType) extends $mutableRowType {
-        ..$classBody
+      public SpecificProjection($exprType[] expr) {
+        expressions = expr;
       }
 
-      new $projectionType { def apply(r: $rowType) = new SpecificRow(r) }
+      @Override
+      public Object apply(Object r) {
+        return new SpecificRow(expressions, (Row) r);
+      }
+    }
+
+    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
+
+      $columns
+
+      public SpecificRow($exprType[] expressions, Row i) {
+        $initColumns
+      }
+
+      public int size() { return ${expressions.length};}
+      private boolean[] nullBits = new boolean[${expressions.length}];
+      public void setNullAt(int i) { nullBits[i] = true; }
+      public boolean isNullAt(int i) { return nullBits[i]; }
+
+      public Object get(int i) {
+        if (isNullAt(i)) return null;
+        switch (i) {
+        $getCases
+        }
+        return null;
+      }
+      public void update(int i, Object value) {
+        if (value == null) {
+          setNullAt(i);
+          return;
+        }
+        nullBits[i] = false;
+        switch (i) {
+        $updateCases
+        }
+      }
+      $specificAccessorFunctions
+      $specificMutatorFunctions
+
+      @Override
+      public int hashCode() {
+        int result = 37;
+        $hashUpdates
+        return result;
+      }
+
+      @Override
+      public boolean equals(Object other) {
+        if (other instanceof Row) {
+          Row row = (Row) other;
+          if (row.length() != size()) return false;
+          $columnChecks
+          return true;
+        }
+        return super.equals(other);
+      }
+    }
     """
 
-    log.debug(
-      s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${toolBox.typeCheck(code)}")
-    toolBox.eval(code).asInstanceOf[Projection]
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+
+    val c = compile(code)
+    // fetch the only one method `generate(Expression[])`
+    val m = c.getDeclaredMethods()(0)
+    m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Projection]
   }
 }

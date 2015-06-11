@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
@@ -101,7 +102,7 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
 
 
   @Path("applications/{appId}/stages")
-  def getStages(@PathParam("appId") appId: String): AllStagesResource= {
+  def getStages(@PathParam("appId") appId: String): AllStagesResource = {
     uiRoot.withSparkUI(appId, None) { ui =>
       new AllStagesResource(ui)
     }
@@ -110,14 +111,14 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   @Path("applications/{appId}/{attemptId}/stages")
   def getStages(
       @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllStagesResource= {
+      @PathParam("attemptId") attemptId: String): AllStagesResource = {
     uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
       new AllStagesResource(ui)
     }
   }
 
   @Path("applications/{appId}/stages/{stageId: \\d+}")
-  def getStage(@PathParam("appId") appId: String): OneStageResource= {
+  def getStage(@PathParam("appId") appId: String): OneStageResource = {
     uiRoot.withSparkUI(appId, None) { ui =>
       new OneStageResource(ui)
     }
@@ -164,6 +165,18 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/logs")
+  def getEventLogs(
+      @PathParam("appId") appId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, None)
+  }
+
+  @Path("applications/{appId}/{attemptId}/logs")
+  def getEventLogs(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
+    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+  }
 }
 
 private[spark] object ApiRootResource {
@@ -171,7 +184,7 @@ private[spark] object ApiRootResource {
   def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
-    val holder:ServletHolder = new ServletHolder(classOf[ServletContainer])
+    val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
       "com.sun.jersey.api.core.PackagesResourceConfig")
     holder.setInitParameter("com.sun.jersey.config.property.packages",
@@ -192,6 +205,17 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+
+  /**
+   * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
+   * [[None]], event logs for all attempts of this application will be written out.
+   */
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
+    Response.serverError()
+      .entity("Event logs are only available through the history server.")
+      .status(Response.Status.SERVICE_UNAVAILABLE)
+      .build()
+  }
 
   /**
    * Get the spark UI with the given appID, and apply a function

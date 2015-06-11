@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Row, Column, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 private[sql] object StatFunctions extends Logging {
-  
+
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)
@@ -116,7 +116,10 @@ private[sql] object StatFunctions extends Logging {
       s"exceed 1e4. Currently $columnSize")
     val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
       val countsRow = new GenericMutableRow(columnSize + 1)
-      rows.foreach { row =>
+      rows.foreach { (row: Row) =>
+        // row.get(0) is column 1
+        // row.get(1) is column 2
+        // row.get(3) is the frequency
         countsRow.setLong(distinctCol2.get(row.get(1)).get + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
@@ -126,6 +129,6 @@ private[sql] object StatFunctions extends Logging {
     val headerNames = distinctCol2.map(r => StructField(r._1.toString, LongType)).toSeq
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table))
+    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

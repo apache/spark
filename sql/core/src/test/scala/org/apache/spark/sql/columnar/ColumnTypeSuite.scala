@@ -18,26 +18,24 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
-import com.esotericsoftware.kryo.{Serializer, Kryo}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import org.apache.spark.serializer.KryoRegistrator
-import org.scalatest.FunSuite
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 
-class ColumnTypeSuite extends FunSuite with Logging {
+class ColumnTypeSuite extends SparkFunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
     val checks = Map(
       INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
-      FIXED_DECIMAL(15, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 12,
+      FIXED_DECIMAL(15, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 8,
       BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -70,10 +68,10 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(BOOLEAN, true, 1)
     checkActualSize(STRING, UTF8String("hello"), 4 + "hello".getBytes("utf-8").length)
     checkActualSize(DATE, 0, 4)
-    checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
+    checkActualSize(TIMESTAMP, 0L, 8)
 
     val binary = Array.fill[Byte](4)(0: Byte)
-    checkActualSize(BINARY,  binary, 4 + 4)
+    checkActualSize(BINARY, binary, 4 + 4)
 
     val generic = Map(1 -> "a")
     checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
@@ -167,7 +165,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     val serializer = new SparkSqlSerializer(conf).newInstance()
 
     val buffer = ByteBuffer.allocate(512)
-    val obj = CustomClass(Int.MaxValue,Long.MaxValue)
+    val obj = CustomClass(Int.MaxValue, Long.MaxValue)
     val serializedObj = serializer.serialize(obj).array()
 
     GENERIC.append(serializer.serialize(obj).array(), buffer)
@@ -278,7 +276,7 @@ private[columnar] object CustomerSerializer extends Serializer[CustomClass] {
   override def read(kryo: Kryo, input: Input, aClass: Class[CustomClass]): CustomClass = {
     val a = input.readInt()
     val b = input.readLong()
-    CustomClass(a,b)
+    CustomClass(a, b)
   }
 }
 

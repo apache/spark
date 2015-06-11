@@ -20,17 +20,15 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorFactory, StructObjectInspector, ObjectInspector}
-import org.scalatest.BeforeAndAfter
-
 import scala.util.Try
+
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
@@ -59,7 +57,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
       """
-        |CREATE TEMPORARY FUNCTION udtf_count2 
+        |CREATE TEMPORARY FUNCTION udtf_count2
         |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
       """.stripMargin)
   }
@@ -417,6 +415,25 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |INSERT OVERWRITE TABLE createdtable SELECT * FROM src WHERE key = 86;
       |SELECT * FROM createdtable;
     """.stripMargin)
+
+  test("SPARK-7270: consider dynamic partition when comparing table output") {
+    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+
+    val analyzedPlan = sql(
+      """
+        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+        |SELECT 'a', 'c' from ptest
+      """.stripMargin).queryExecution.analyzed
+
+    assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      var hasCast = false
+      analyzedPlan.collect {
+        case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+      }
+      hasCast
+    }
+  }
 
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
@@ -857,15 +874,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
-    // current TestSerDe.jar is from 0.12.0
-    if (HiveShim.version == "0.12.0") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-          |WITH serdeproperties('s1'='9')
-        """.stripMargin)
-    }
     sql("DROP TABLE alter1")
   }
 
@@ -873,15 +881,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // this is a test case from mapjoin_addjar.q
     val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
-    if (HiveShim.version == "0.13.1") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """CREATE TABLE t1(a string, b string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-      sql("select * from src join t1 on src.key = t1.a")
-      sql("DROP TABLE t1")
-    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """CREATE TABLE t1(a string, b string)
+      |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
   }
 
   test("ADD FILE command") {

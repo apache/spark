@@ -206,6 +206,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
         case DateType => new MutableInt // We use INT for DATE internally
+        case TimestampType => new MutableLong  // We use Long for Timestamp internally
         case _ => new MutableAny
       }.toArray)
 
@@ -247,7 +248,16 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def setDate(ordinal: Int, value: java.sql.Date): Unit =
     setInt(ordinal, DateUtils.fromJavaDate(value))
 
-  override def setTimestamp(ordinal: Int, value: java.sql.Timestamp): Unit = update(ordinal, value)
+  override def getDate(i: Int): java.sql.Date = {
+    DateUtils.toJavaDate(values(i).asInstanceOf[MutableInt].value)
+  }
+
+  override def setTimestamp(ordinal: Int, value: java.sql.Timestamp): Unit =
+    setLong(ordinal, DateUtils.fromJavaTimestamp(value))
+
+  override def getTimestamp(i: Int): java.sql.Timestamp = {
+    DateUtils.toJavaTimestamp(values(i).asInstanceOf[MutableLong].value)
+  }
 
   override def getString(ordinal: Int): String = apply(ordinal).toString
 

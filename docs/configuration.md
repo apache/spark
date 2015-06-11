@@ -1,4 +1,4 @@
---
+---
 layout: global
 displayTitle: Spark Configuration
 title: Configuration
@@ -618,7 +618,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
-  <td>true</td>
+  <td>true (false when using Spark SQL Thrift Server)</td>
   <td>
     Whether to track references to the same object when serializing data with Kryo, which is
     necessary if your object graphs have loops and useful for efficiency if they contain multiple
@@ -679,7 +679,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td>
+    org.apache.spark.serializer.<br />JavaSerializer (org.apache.spark.serializer.<br />
+    KryoSerializer when using Spark SQL Thrift Server)
+  </td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object
@@ -1194,10 +1197,19 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
-  <td>600s</td>
+  <td>60s</td>
   <td>
     If dynamic allocation is enabled and an executor has been idle for more than this duration, 
     the executor will be removed. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code></td>
+  <td>2 * executorIdleTimeout</td>
+  <td>
+    If dynamic allocation is enabled and an executor which has cached data blocks has been idle for more than this duration,
+    the executor will be removed. For more details, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
@@ -1224,7 +1236,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>5s</td>
+  <td>1s</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration, new executors will be requested. For more detail, see this
@@ -1479,6 +1491,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+</table>
+
+#### SparkR
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.r.numRBackendThreads</code></td>
+  <td>2</td>
+  <td>
+    Number of threads used by RBackend to handle RPC calls from SparkR package.
   </td>
 </tr>
 </table>

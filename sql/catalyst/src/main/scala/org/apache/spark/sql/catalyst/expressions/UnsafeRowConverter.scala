@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -245,7 +246,7 @@ private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
   }
  
   override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
-    val value = source.get(column).asInstanceOf[java.sql.Timestamp]
+    val value = DateUtils.toJavaTimestamp(source.get(column).asInstanceOf[Long])
     val time = value.getTime()
     val nanos = value.getNanos()
 

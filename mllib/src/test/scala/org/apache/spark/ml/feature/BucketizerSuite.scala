@@ -19,15 +19,13 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
+class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.
@@ -110,7 +108,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private object BucketizerSuite extends FunSuite {
+private object BucketizerSuite extends SparkFunSuite {
   /** Brute force search for buckets.  Bucket i is defined by the range [split(i), split(i+1)). */
   def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
     require(feature >= splits.head)

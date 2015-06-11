@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.sql.{Date, Time}
+import java.sql.{Timestamp, Date, Time}
 
 import scala.collection.JavaConversions._
 
@@ -107,9 +107,12 @@ private[spark] object SerDe {
     Date.valueOf(readString(in))
   }
 
-  def readTime(in: DataInputStream): Time = {
-    val t = in.readDouble()
-    new Time((t * 1000L).toLong)
+  def readTime(in: DataInputStream): Timestamp = {
+    val seconds = in.readDouble()
+    val sec = Math.floor(seconds).toLong
+    val t = new Timestamp(sec * 1000L)
+    t.setNanos(((seconds - sec) * 1e9).toInt)
+    t
   }
 
   def readBytesArr(in: DataInputStream): Array[Array[Byte]] = {
@@ -157,9 +160,11 @@ private[spark] object SerDe {
       val keysLen = readInt(in)
       val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
 
-      val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until valuesLen).map(_ => readTypedObject(in, valuesType))
+      val values = (0 until valuesLen).map(_ => {
+        val valueType = readObjectType(in)
+        readTypedObject(in, valueType)
+      })
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()
@@ -225,6 +230,9 @@ private[spark] object SerDe {
         case "java.sql.Time" =>
           writeType(dos, "time")
           writeTime(dos, value.asInstanceOf[Time])
+        case "java.sql.Timestamp" =>
+          writeType(dos, "time")
+          writeTime(dos, value.asInstanceOf[Timestamp])
         case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
@@ -287,6 +295,9 @@ private[spark] object SerDe {
     out.writeDouble(value.getTime.toDouble / 1000.0)
   }
 
+  def writeTime(out: DataOutputStream, value: Timestamp): Unit = {
+    out.writeDouble((value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9)
+  }
 
   // NOTE: Only works for ASCII right now
   def writeString(out: DataOutputStream, value: String): Unit = {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -37,6 +37,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * The dimension of the code that you want to transform from words.
+   * @group param
    */
   final val vectorSize = new IntParam(
     this, "vectorSize", "the dimension of codes after transforming from words")
@@ -47,6 +48,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * Number of partitions for sentences of words.
+   * @group param
    */
   final val numPartitions = new IntParam(
     this, "numPartitions", "number of partitions for sentences of words")
@@ -58,6 +60,7 @@ private[feature] trait Word2VecBase extends Params
   /**
    * The minimum number of times a token must appear to be included in the word2vec model's
    * vocabulary.
+   * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
     "appear to be included in the word2vec model's vocabulary")
@@ -79,11 +82,11 @@ private[feature] trait Word2VecBase extends Params
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
  * natural language processing or machine learning process.
  */
-@AlphaComponent
+@Experimental
 final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase {
 
   def this() = this(Identifiable.randomUID("w2v"))
@@ -132,10 +135,10 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[Word2Vec]].
  */
-@AlphaComponent
+@Experimental
 class Word2VecModel private[ml] (
     override val uid: String,
     wordVectors: feature.Word2VecModel)

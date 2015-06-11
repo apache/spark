@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.param
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ParamsSuite extends FunSuite {
+class ParamsSuite extends SparkFunSuite {
 
   test("param") {
     val solver = new TestParams()
@@ -27,7 +27,7 @@ class ParamsSuite extends FunSuite {
     import solver.{maxIter, inputCol}
 
     assert(maxIter.name === "maxIter")
-    assert(maxIter.doc === "max number of iterations (>= 0)")
+    assert(maxIter.doc === "maximum number of iterations (>= 0)")
     assert(maxIter.parent === uid)
     assert(maxIter.toString === s"${uid}__maxIter")
     assert(!maxIter.isValid(-1))
@@ -36,7 +36,7 @@ class ParamsSuite extends FunSuite {
 
     solver.setMaxIter(5)
     assert(solver.explainParam(maxIter) ===
-      "maxIter: max number of iterations (>= 0) (default: 10, current: 5)")
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 5)")
 
     assert(inputCol.toString === s"${uid}__inputCol")
 
@@ -120,7 +120,7 @@ class ParamsSuite extends FunSuite {
     intercept[NoSuchElementException](solver.getInputCol)
 
     assert(solver.explainParam(maxIter) ===
-      "maxIter: max number of iterations (>= 0) (default: 10, current: 100)")
+      "maxIter: maximum number of iterations (>= 0) (default: 10, current: 100)")
     assert(solver.explainParams() ===
       Seq(inputCol, maxIter).map(solver.explainParam).mkString("\n"))
 
@@ -135,7 +135,7 @@ class ParamsSuite extends FunSuite {
     intercept[IllegalArgumentException] {
       solver.validateParams()
     }
-    solver.validateParams(ParamMap(inputCol -> "input"))
+    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
@@ -199,5 +199,25 @@ class ParamsSuite extends FunSuite {
 
     val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
+  }
+}
+
+object ParamsSuite extends SparkFunSuite {
+
+  /**
+   * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered
+   * by names; 3) param parent has the same UID as the object's UID; 4) param name is the same as
+   * the param method name.
+   */
+  def checkParams(obj: Params, expectedNumParams: Int): Unit = {
+    val params = obj.params
+    require(params.length === expectedNumParams,
+      s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
+    val paramNames = params.map(_.name)
+    require(paramNames === paramNames.sorted)
+    params.foreach { p =>
+      assert(p.parent === obj.uid)
+      assert(obj.getParam(p.name) === p)
+    }
   }
 }

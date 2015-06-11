@@ -17,21 +17,19 @@
 
 package org.apache.spark.sql.json
 
-import java.sql.Timestamp
-
 import scala.collection.Map
-import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
+import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException}
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
 
@@ -141,7 +139,7 @@ private[sql] object JsonRDD extends Logging {
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
           case ArrayType(struct: StructType, containsNull) =>
             ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
+          case struct: StructType => nullTypeToStringType(struct)
           case other: DataType => other
         }
         StructField(fieldName, newType, nullable)
@@ -155,7 +153,7 @@ private[sql] object JsonRDD extends Logging {
    * Returns the most general data type for two given data types.
    */
   private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonType(t1, t2) match {
+    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2) match {
       case Some(commonType) => commonType
       case None =>
         // t1 or t2 is a StructType, ArrayType, or an unexpected type.
@@ -216,7 +214,7 @@ private[sql] object JsonRDD extends Logging {
           case map: Map[_, _] => StructType(Nil)
           // We have an array of arrays. If those element arrays do not have the same
           // element types, we will return ArrayType[StringType].
-          case seq: Seq[_] =>  typeOfArray(seq)
+          case seq: Seq[_] => typeOfArray(seq)
           case value => typeOfPrimitiveValue(value)
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
@@ -318,7 +316,8 @@ private[sql] object JsonRDD extends Logging {
 
           parsed
         } catch {
-          case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
+          case e: JsonProcessingException =>
+            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
         }
       }
     })
@@ -397,15 +396,15 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toTimestamp(value: Any): Timestamp = {
+  private def toTimestamp(value: Any): Long = {
     value match {
-      case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
-      case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 10000L
+      case value: java.lang.Long => value * 10000L
+      case value: java.lang.String => DateUtils.stringToTime(value).getTime * 10000L
     }
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any = {
     if (value == null) {
       null
     } else {
@@ -422,7 +421,10 @@ private[sql] object JsonRDD extends Logging {
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case MapType(StringType, valueType, _) =>
           val map = value.asInstanceOf[Map[String, Any]]
-          map.mapValues(enforceCorrectType(_, valueType)).map(identity)
+          map.map {
+            case (k, v) =>
+              (UTF8String(k), enforceCorrectType(v, valueType))
+          }.map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
@@ -430,7 +432,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def asRow(json: Map[String,Any], schema: StructType): Row = {
+  private def asRow(json: Map[String, Any], schema: StructType): Row = {
     // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {

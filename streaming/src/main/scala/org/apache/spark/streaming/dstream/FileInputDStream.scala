@@ -69,7 +69,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *   processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
+class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
@@ -251,7 +251,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    val fileRDDs = files.map(file =>{
+    val fileRDDs = files.map { file =>
       val rdd = serializableConfOpt.map(_.value) match {
         case Some(config) => context.sparkContext.newAPIHadoopFile(
           file,
@@ -267,7 +267,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
           "Refer to the streaming programming guide for more details.")
       }
       rdd
-    })
+    }
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
@@ -294,7 +294,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new mutable.HashMap[Time, RDD[(K,V)]] ()
+    generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
     batchTimeToSelectedFiles =
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()

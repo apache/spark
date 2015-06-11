@@ -429,7 +429,6 @@ public final class BytesToBytesMap {
         long valueBaseOffset,
         int valueLengthBytes) {
       assert (!isDefined) : "Can only set value once for a key";
-      isDefined = true;
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
       if (size == MAX_CAPACITY) {

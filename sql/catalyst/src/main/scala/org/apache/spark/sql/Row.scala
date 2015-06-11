@@ -58,6 +58,9 @@ object Row {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
   }
+
+  /** Returns an empty row. */
+  val empty = apply()
 }
 
 
@@ -260,7 +263,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = DateUtils.toJavaDate(getInt(i))
+  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.types._
 
-class ColumnStatsSuite extends FunSuite {
+class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
   testColumnStats(classOf[ShortColumnStats], SHORT, Row(Short.MaxValue, Short.MinValue, 0))
   testColumnStats(classOf[IntColumnStats], INT, Row(Int.MaxValue, Int.MinValue, 0))
@@ -32,7 +31,7 @@ class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[FixedDecimalColumnStats], FIXED_DECIMAL(15, 10), Row(null, null, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
   testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(Long.MaxValue, Long.MinValue, 0))
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
