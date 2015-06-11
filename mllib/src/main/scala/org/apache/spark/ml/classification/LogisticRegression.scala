@@ -124,10 +124,14 @@ class LogisticRegression(override val uid: String)
   }
 
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
-    val instances = extractLabeledPoints(dataset).map {
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    train(extractLabeledPoints(dataset), handlePersistence)
+  }
+
+  protected[spark] def train(input: RDD[LabeledPoint], handlePersistence: Boolean): LogisticRegressionModel = {
+    val instances = input.map {
       case LabeledPoint(label: Double, features: Vector) => (label, features)
     }
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = instances.treeAggregate(

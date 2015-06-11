@@ -420,21 +420,10 @@ class LogisticRegressionWithLBFGS
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())
-        // Convert our input into a DataFrame
-        val sqlContext = new SQLContext(input.context)
-        import sqlContext.implicits._
-        val df = input.toDF()
-        // Determine if we should cache the DF
+        // Determine if we should cache the input
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
-        if (handlePersistence) {
-          df.persist(StorageLevel.MEMORY_AND_DISK)
-        }
         // Train our model
-        val mlLogisticRegresionModel = lr.train(df)
-        // unpersist if we persisted
-        if (handlePersistence) {
-          df.unpersist()
-        }
+        val mlLogisticRegresionModel = lr.train(input, handlePersistence)
         // convert the model
         val weights = mlLogisticRegresionModel.weights match {
           case x: DenseVector => x
