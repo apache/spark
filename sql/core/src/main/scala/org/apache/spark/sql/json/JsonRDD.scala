@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
 
 private[sql] object JsonRDD extends Logging {
 
@@ -317,7 +319,7 @@ private[sql] object JsonRDD extends Logging {
           parsed
         } catch {
           case e: JsonProcessingException =>
-            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
+            Map(columnNameOfCorruptRecords -> UTF8String.fromString(record)) :: Nil
         }
       }
     })
@@ -409,7 +411,7 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case StringType => UTF8String(toString(value))
+        case StringType => UTF8String.fromString(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
         case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
@@ -423,7 +425,7 @@ private[sql] object JsonRDD extends Logging {
           val map = value.asInstanceOf[Map[String, Any]]
           map.map {
             case (k, v) =>
-              (UTF8String(k), enforceCorrectType(v, valueType))
+              (UTF8String.fromString(k), enforceCorrectType(v, valueType))
           }.map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)

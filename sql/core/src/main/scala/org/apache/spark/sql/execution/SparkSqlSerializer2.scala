@@ -28,6 +28,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in
@@ -434,7 +435,7 @@ private[sql] object SparkSqlSerializer2 {
                 val length = in.readInt()
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
-                mutableRow.update(i, UTF8String(bytes))
+                mutableRow.update(i, UTF8String.fromBytes(bytes))
               }
 
             case BinaryType =>

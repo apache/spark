@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.bitset;
 
 import junit.framework.Assert;
-import org.apache.spark.unsafe.bitset.BitSet;
 import org.junit.Test;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
