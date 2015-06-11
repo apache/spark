@@ -315,7 +315,8 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
   ignore("thrift generated parquet schema") {
     // Test for SPARK-4520 -- ensure that thrift generated parquet schema is generated
     // as expected from attributes
-    testSchemaInference[(Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
+    testSchemaInference[(
+      Array[Byte], Array[Byte], Array[Byte], Seq[Int], Map[Array[Byte], Seq[Int]])](
       "thrift generated parquet schema",
       """
         |message root {
