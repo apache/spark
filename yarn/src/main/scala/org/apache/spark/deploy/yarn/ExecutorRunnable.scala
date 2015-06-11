@@ -300,11 +300,17 @@ class ExecutorRunnable(
     // Add log urls
     sys.env.get("SPARK_USER").foreach { user =>
       val containerId = ConverterUtils.toString(container.getId)
+      val nodeAddress = container.getNodeId.toString
       val address = container.getNodeHttpAddress
       val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
 
       env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
       env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
+
+      if (yarnConf.getBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, false)) {
+        env("SPARK_LOG_URL_AGGREGATED_LOGS") =
+          s"logPage?containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$user"
+      }
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }

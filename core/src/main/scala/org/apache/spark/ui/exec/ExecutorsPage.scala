@@ -20,6 +20,8 @@ package org.apache.spark.ui.exec
 import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.Logging
+
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
@@ -48,9 +50,10 @@ private[ui] case class ExecutorSummaryInfo(
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
-  extends WebUIPage("") {
+  extends WebUIPage("") with Logging {
   private val listener = parent.listener
   private val isHistoryUI = parent.isHistoryUI
+  private val aggregationLogPrefix = "aggregated_"
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
@@ -60,7 +63,11 @@ private[ui] class ExecutorsPage(
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield
       ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
-    val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
+    val aggregatedLogsExist = execInfo.filter(
+      _.executorLogs.filter(_._1.startsWith(aggregationLogPrefix)).nonEmpty).nonEmpty
+    val nonAggregatedLogsExist = execInfo.filter(
+      _.executorLogs.filter(!_._1.startsWith(aggregationLogPrefix)).nonEmpty).nonEmpty
+    val logsExist = aggregatedLogsExist || nonAggregatedLogsExist
 
     val execTable =
       <table class={UIUtils.TABLE_CLASS_STRIPED}>
@@ -85,11 +92,13 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
-          {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
+          {if ((!isHistoryUI && nonAggregatedLogsExist) || (isHistoryUI && logsExist))
+            <th class="sorttable_nosort">Logs</th> else Seq.empty
+          }
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_, logsExist))}
+          {execInfoSorted.map(execRow(_, aggregatedLogsExist, nonAggregatedLogsExist))}
         </tbody>
       </table>
 
@@ -101,11 +110,6 @@ private[ui] class ExecutorsPage(
               {Utils.bytesToString(memUsed)} Used
               ({Utils.bytesToString(maxMem)} Total) </li>
             <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
-            {
-              if (isHistoryUI) {
-                <li><a href="logPage">Aggregated Logs</a></li>
-              }
-            }
           </ul>
         </div>
       </div>
@@ -119,7 +123,9 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
+  private def execRow(info: ExecutorSummary,
+      aggregatedLogsExist: Boolean,
+      nonAggregatedLogsExist: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -151,16 +157,30 @@ private[ui] class ExecutorsPage(
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
       {
-        if (logsExist) {
+        if (isHistoryUI && aggregatedLogsExist) {
           <td>
             {
-              info.executorLogs.map { case (logName, logUrl) =>
-                <div>
-                  <a href={logUrl}>
-                    {logName}
-                  </a>
-                </div>
+              info.executorLogs.filter(_._1.startsWith(aggregationLogPrefix)).map {
+                case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>
+                      {logName.substring(aggregationLogPrefix.length)}
+                    </a>
+                  </div>
               }
+            }
+          </td>
+        } else if (nonAggregatedLogsExist) {
+          <td>
+            {
+              info.executorLogs.filter(!_._1.startsWith(aggregationLogPrefix)).map {
+                case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>
+                      {logName}
+                    </a>
+                  </div>
+                }
             }
           </td>
         }

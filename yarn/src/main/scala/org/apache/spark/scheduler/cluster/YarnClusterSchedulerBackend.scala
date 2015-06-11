@@ -112,12 +112,29 @@ private[spark] class YarnClusterSchedulerBackend(
             YarnConfiguration.YARN_HTTP_POLICY_DEFAULT
           )
           val user = Utils.getCurrentUserName()
+          val nodeAddress = report.getNodeId.toString
           val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
           val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
+          val aggregatedLogsUrl =
+            s"logPage?containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$user"
           logDebug(s"Base URL for logs: $baseUrl")
-          driverLogs = Some(Map(
-            "stderr" -> s"$baseUrl/stderr?start=-4096",
-            "stdout" -> s"$baseUrl/stdout?start=-4096"))
+          logDebug(s"Aggregated logs URL: $aggregatedLogsUrl")
+
+          driverLogs = Some(
+            Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
+
+          driverLogs = {
+            if (yarnConf.getBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, false)) {
+              Some(Map(
+                "stderr" -> s"$baseUrl/stderr?start=-4096",
+                "stdout" -> s"$baseUrl/stdout?start=-4096",
+                "aggregated_logs" -> aggregatedLogsUrl))
+            } else {
+              Some(Map(
+                "stderr" -> s"$baseUrl/stderr?start=-4096",
+                "stdout" -> s"$baseUrl/stdout?start=-4096"))
+            }
+          }
         }
       }
     } catch {

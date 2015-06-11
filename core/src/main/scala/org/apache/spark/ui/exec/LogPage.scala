@@ -20,7 +20,9 @@ package org.apache.spark.ui.exec
 import java.io.File
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -32,35 +34,35 @@ private[ui] class LogPage(
     parent: ExecutorsTab)
   extends WebUIPage("logPage") with Logging {
 
-  def renderLog(request: HttpServletRequest): String = {
-    val defaultBytes = 100 * 1024
-    val appId = parent.appId
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
-
-    val logPath = s"/tmp/$appId.log"
-
-    val (logText, startByte, endByte, logLength) = getLog(logPath, offset, byteLength)
-    val pre = s"==== Bytes $startByte-$endByte of $logLength of $logPath ====\n"
-    pre + logText
-  }
-
-
   def render(request: HttpServletRequest): Seq[Node] = {
     val defaultBytes = 100 * 1024
     val appId = parent.appId
+    val containerId = Option(request.getParameter("containerId"))
+    val nodeAddress = Option(request.getParameter("nodeAddress"))
+    val appOwner = Option(request.getParameter("appOwner"))
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
-    val logPath = s"/tmp/$appId.log"
+    if (!(containerId.isDefined && nodeAddress.isDefined && appOwner.isDefined)) {
+      throw new Exception("Request must specify appId, containerId and appOwner!")
+    }
 
-    val (logText, startByte, endByte, logLength) = getLog(logPath, offset, byteLength)
+    val logPath = s"/tmp/${appId}_${containerId.get}.log"
+
+    val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(parent.conf)
+    val yarnConf = new YarnConfiguration(hadoopConfiguration)
+
+
+
+    val (logText, startByte, endByte, logLength) = getLog(
+      logPath, appId, containerId.get, nodeAddress.get, appOwner.get, offset, byteLength)
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
       if (startByte > 0) {
-        <a href={"?appId=%s&offset=%s&byteLength=%s"
-          .format(appId, math.max(startByte - byteLength, 0), byteLength)}>
+        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&offset=%s&byteLength=%s"
+          .format(containerId.get, nodeAddress.get, appOwner.get,
+            math.max(startByte - byteLength, 0), byteLength)}>
           <button type="button" class="btn btn-default">
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
@@ -73,8 +75,8 @@ private[ui] class LogPage(
 
     val nextButton =
       if (endByte < logLength) {
-        <a href={"?appId=%s&offset=%s&byteLength=%s".
-          format(appId, endByte, byteLength)}>
+        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&offset=%s&byteLength=%s"
+          .format(containerId.get, nodeAddress.get, appOwner.get, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
             Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
           </button>
@@ -99,20 +101,25 @@ private[ui] class LogPage(
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, "Aggregated log page for " + appId)
+    UIUtils.basicSparkPage(content, "Log page for " + appId)
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */
   private def getLog(
     filePath: String,
+    appId: String,
+    containerId: String,
+    nodeAddress: String,
+    appOwner: String,
     offsetOption: Option[Long],
     byteLength: Int
   ): (String, Long, Long, Long) = {
     try {
       var file = new File(filePath)
       if (!file.exists()) {
-        (s"yarn logs -applicationId ${parent.appId}"  #> new File(filePath)) !
-          ProcessLogger(line => logInfo("ProcessLogger: " + line))
+        val cmd = s"yarn logs -applicationId $appId -containerId $containerId -nodeAddress " +
+          s"$nodeAddress -appOwner $appOwner"
+        cmd #> new File(filePath) ! ProcessLogger(line => logInfo("ProcessLogger: " + line))
         file = new File(filePath)
       }
 
