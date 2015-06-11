@@ -60,7 +60,7 @@ public class UTF8StringSuite {
     Assert.assertTrue(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hell")));
     Assert.assertFalse(UTF8String.fromString("hello").startsWith(UTF8String.fromString("ell")));
     Assert.assertFalse(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hellooo")));
-    Assert.assertTrue(UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千")));
+    Assert.assertTrue(UTF8String.fromString("数据砖头").startsWith(UTF8String.fromString("数据")));
     Assert.assertFalse(UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("千")));
     Assert.assertFalse(
       UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千世界好")));
@@ -74,7 +74,7 @@ public class UTF8StringSuite {
     Assert.assertTrue(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世界")));
     Assert.assertFalse(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世")));
     Assert.assertFalse(
-      UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("我的大千世界")));
+      UTF8String.fromString("数据砖头").endsWith(UTF8String.fromString("我的数据砖头")));
   }
 
   @Test
@@ -84,10 +84,10 @@ public class UTF8StringSuite {
     Assert.assertEquals(
       UTF8String.fromString("hello").substring(1, 3), UTF8String.fromString("el"));
     Assert.assertEquals(
-      UTF8String.fromString("大千世界").substring(0, 1), UTF8String.fromString("大"));
+      UTF8String.fromString("数据砖头").substring(0, 1), UTF8String.fromString("数"));
     Assert.assertEquals(
-      UTF8String.fromString("大千世界").substring(1, 3), UTF8String.fromString("千世"));
+      UTF8String.fromString("数据砖头").substring(1, 3), UTF8String.fromString("据砖"));
     Assert.assertEquals(
-      UTF8String.fromString("大千世界").substring(3, 5), UTF8String.fromString("界"));
+      UTF8String.fromString("数据砖头").substring(3, 5), UTF8String.fromString("头"));
   }
 }
