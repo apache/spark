@@ -161,10 +161,10 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("appendBias") {
-    val sv = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
+    val sv = Vectors.sparse(4, Seq((0, 1.0), (2, 3.0)))
     val sv1 = appendBias(sv).asInstanceOf[SparseVector]
-    assert(sv1.size === 4)
-    assert(sv1.indices === Array(0, 2, 3))
+    assert(sv1.size === 5)
+    assert(sv1.indices === Array(0, 2, 4))
     assert(sv1.values === Array(1.0, 3.0, 1.0))
 
     val dv = Vectors.dense(1.0, 0.0, 3.0)
