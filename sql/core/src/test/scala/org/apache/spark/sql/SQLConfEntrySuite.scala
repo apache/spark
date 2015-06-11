@@ -132,30 +132,4 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getRawConf(key) === "abcde")
     assert(conf.getConf(confEntry, "abc") === "abcde")
   }
-
-  test("seqConf") {
-    val key = "spark.sql.SQLConfEntrySuite.seq"
-    val confEntry = SQLConfEntry.seqConf("spark.sql.SQLConfEntrySuite.seq", { v =>
-      try {
-        v.toInt
-      } catch {
-        case _: NumberFormatException =>
-          throw new IllegalArgumentException(s"items of $key should be int, but was $v")
-      }
-    })
-    assert(conf.getConf(confEntry, Seq(1, 2, 3)) == Seq(1, 2, 3))
-
-    conf.setConf(confEntry, Seq(1, 2, 3, 4))
-    assert(conf.getConf(confEntry, Seq(1, 2, 3)) === Seq(1, 2, 3, 4))
-
-    conf.setRawConf(key, "1,2,3,4,5")
-    assert(conf.getRawConf(key, "1,2,3") === "1,2,3,4,5")
-    assert(conf.getRawConf(key) === "1,2,3,4,5")
-    assert(conf.getConf(confEntry, Seq(1, 2, 3)) === Seq(1, 2, 3, 4, 5))
-
-    val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "a,b,c")
-    }
-    assert(e.getMessage === s"items of $key should be int, but was a")
-  }
 }

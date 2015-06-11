@@ -138,17 +138,6 @@ private[spark] object SQLConf {
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[String] =
       SQLConfEntry(key, defaultValue, v => v, v => v, doc, isPublic)
-
-    def seqConf[T](
-        key: String,
-        valueConverter: String => T,
-        defaultValue: Option[Seq[T]] = None,
-        doc: String = "",
-        isPublic: Boolean = true):
-      SQLConfEntry[Seq[T]] = {
-      SQLConfEntry(
-        key, defaultValue, _.split(",").map(valueConverter), _.mkString(","), doc, isPublic)
-    }
   }
 
   import SQLConfEntry._
