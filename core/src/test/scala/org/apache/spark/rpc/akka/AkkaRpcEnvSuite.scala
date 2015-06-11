@@ -17,15 +17,12 @@
 
 package org.apache.spark.rpc.akka
 
-import java.util.concurrent.TimeoutException
-
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Success, Failure}
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Actor, ActorRef, Props, Address}
+import akka.actor.{ActorSystem, Actor, Props}
 import akka.pattern.ask
 
 import org.apache.spark.rpc._
