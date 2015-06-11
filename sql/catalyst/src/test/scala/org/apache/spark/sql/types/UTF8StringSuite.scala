@@ -24,7 +24,6 @@ import org.apache.spark.unsafe.types.UTF8String
 class UTF8StringSuite extends SparkFunSuite {
   test("basic") {
     def check(str: String, len: Int) {
-
       assert(UTF8String.fromString(str).length === len)
       assert(UTF8String.fromBytes(str.getBytes("utf8")).length() === len)
 

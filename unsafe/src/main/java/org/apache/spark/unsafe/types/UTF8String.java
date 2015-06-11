@@ -136,12 +136,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public boolean startsWith(final UTF8String prefix) {
     final byte[] b = prefix.getBytes();
     // TODO: Avoid copying.
-    return b.length > bytes.length && Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b);
+    return b.length <= bytes.length && Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b);
   }
 
   public boolean endsWith(final UTF8String suffix) {
     final byte[] b = suffix.getBytes();
-    return b.length > bytes.length &&
+    return b.length <= bytes.length &&
       Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b);
   }
 
