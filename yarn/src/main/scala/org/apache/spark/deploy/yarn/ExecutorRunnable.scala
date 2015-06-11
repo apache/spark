@@ -308,8 +308,10 @@ class ExecutorRunnable(
       env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
 
       if (yarnConf.getBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, false)) {
-        env("SPARK_LOG_URL_AGGREGATED_LOGS") =
+        val aggregatedLogBaseUrl =
           s"logPage?containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$user"
+        env("SPARK_LOG_URL_AGGREGATED_STDERR") = s"$aggregatedLogBaseUrl&logType=stderr"
+        env("SPARK_LOG_URL_AGGREGATED_STDOUT") = s"$aggregatedLogBaseUrl&logType=stdout"
       }
     }
 

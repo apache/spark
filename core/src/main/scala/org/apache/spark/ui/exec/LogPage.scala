@@ -17,18 +17,20 @@
 
 package org.apache.spark.ui.exec
 
-import java.io.File
+import java.io.DataInputStream
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.hadoop.fs.{FileContext, Path}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat.LogKey
+import org.apache.hadoop.yarn.logaggregation.{AggregatedLogFormat, LogAggregationUtils}
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 import scala.xml.Node
-import scala.sys.process._
-
 
 private[ui] class LogPage(
     parent: ExecutorsTab)
@@ -40,28 +42,24 @@ private[ui] class LogPage(
     val containerId = Option(request.getParameter("containerId"))
     val nodeAddress = Option(request.getParameter("nodeAddress"))
     val appOwner = Option(request.getParameter("appOwner"))
+    val logType = Option(request.getParameter("logType"))
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
-    if (!(containerId.isDefined && nodeAddress.isDefined && appOwner.isDefined)) {
-      throw new Exception("Request must specify appId, containerId and appOwner!")
+    if (!(containerId.isDefined && nodeAddress.isDefined && appOwner.isDefined &&
+      logType.isDefined)) {
+      throw new Exception("Request must specify appId, containerId, appOwner and logType!")
     }
 
-    val logPath = s"/tmp/${appId}_${containerId.get}.log"
-
-    val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(parent.conf)
-    val yarnConf = new YarnConfiguration(hadoopConfiguration)
-
-
-
     val (logText, startByte, endByte, logLength) = getLog(
-      logPath, appId, containerId.get, nodeAddress.get, appOwner.get, offset, byteLength)
+      appId, containerId.get, nodeAddress.get, appOwner.get, logType.get, offset, byteLength)
+
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
       if (startByte > 0) {
-        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&offset=%s&byteLength=%s"
-          .format(containerId.get, nodeAddress.get, appOwner.get,
+        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&logType=%s&offset=%s&byteLength=%s"
+          .format(containerId.get, nodeAddress.get, appOwner.get, logType.get,
             math.max(startByte - byteLength, 0), byteLength)}>
           <button type="button" class="btn btn-default">
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
@@ -75,8 +73,9 @@ private[ui] class LogPage(
 
     val nextButton =
       if (endByte < logLength) {
-        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&offset=%s&byteLength=%s"
-          .format(containerId.get, nodeAddress.get, appOwner.get, endByte, byteLength)}>
+        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&logType=%s&offset=%s&byteLength=%s"
+          .format(containerId.get, nodeAddress.get, appOwner.get, logType.get,
+            endByte, byteLength)}>
           <button type="button" class="btn btn-default">
             Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
           </button>
@@ -104,45 +103,115 @@ private[ui] class LogPage(
     UIUtils.basicSparkPage(content, "Log page for " + appId)
   }
 
-  /** Get the part of the log files given the offset and desired length of bytes */
+  /** Get the part of the aggregated log file given the offset and desired length of bytes */
   private def getLog(
-    filePath: String,
-    appId: String,
-    containerId: String,
-    nodeAddress: String,
-    appOwner: String,
-    offsetOption: Option[Long],
-    byteLength: Int
-  ): (String, Long, Long, Long) = {
+      appId: String,
+      containerId: String,
+      nodeAddress: String,
+      appOwner: String,
+      logType: String,
+      offsetOption: Option[Long],
+      byteLength: Int
+    ): (String, Long, Long, Long) = {
+    val yarnConf = new YarnConfiguration(
+      SparkHadoopUtil.get.newConfiguration(parent.conf))
+    var reader: AggregatedLogFormat.LogReader = null
+
     try {
-      var file = new File(filePath)
-      if (!file.exists()) {
-        val cmd = s"yarn logs -applicationId $appId -containerId $containerId -nodeAddress " +
-          s"$nodeAddress -appOwner $appOwner"
-        cmd #> new File(filePath) ! ProcessLogger(line => logInfo("ProcessLogger: " + line))
-        file = new File(filePath)
+      val filePath = getFilePath(yarnConf, appId, containerId, nodeAddress, appOwner)
+      reader = new AggregatedLogFormat.LogReader(yarnConf, filePath)
+      var key = new LogKey()
+      var inputStream = reader.next(key)
+      while (inputStream != null && !key.toString.equals(containerId)) {
+        key = new LogKey()
+        inputStream = reader.next(key)
       }
 
-      val offset = offsetOption.getOrElse(file.length - byteLength)
+      var fileType = inputStream.readUTF()
+      var fileLen = inputStream.readUTF().toLong
+      while (fileType != logType) {
+        skip(inputStream, fileLen)
+        fileType = inputStream.readUTF()
+        fileLen = inputStream.readUTF().toLong
+      }
+
+      val offset = offsetOption.getOrElse(fileLen - byteLength)
       val startIndex = {
         if (offset < 0) {
           0L
-        } else if (offset > file.length) {
-          file.length
+        } else if (offset > fileLen) {
+          fileLen
         } else {
           offset
         }
       }
-      val endIndex = math.min(startIndex + byteLength, file.length)
+      val endIndex = math.min(startIndex + byteLength, fileLen)
       logDebug(s"Getting log from $startIndex to $endIndex")
-      val logText = Utils.offsetBytes(Seq(file), startIndex, endIndex)
-      logDebug(s"Got log of length ${logText.length} bytes")
-      (logText, startIndex, endIndex, file.length)
+
+      if (skip(inputStream, startIndex) == startIndex) {
+        val buf = new Array[Byte]((endIndex - startIndex).toInt)
+        inputStream.readFully(buf)
+        val logText = new String(buf)
+        logDebug(s"Got log of length ${logText.length} bytes")
+        (logText, startIndex, endIndex, fileLen)
+      } else {
+        (s"Failed to read the log from offset $startIndex.", 0, 0, 0)
+      }
     } catch {
       case e: Exception =>
-        logError(s"Error getting log $filePath ", e)
-        ("The log does not exist. Please make sure log aggregation is enabled in Yarn mode", 0, 0, 0)
+        logError("Error getting log ", e)
+        ("The log does not exist. Please make sure log aggregation is enabled and finished", 0, 0, 0)
+    } finally {
+      if (reader != null) {
+        reader.close()
+      }
     }
   }
 
+  private def skip(
+      inputStream: DataInputStream,
+      n: Long
+    ) : Long = {
+    var totalSkiped = 0L
+    while (totalSkiped < n) {
+      val skipped = inputStream.skip(n - totalSkiped)
+      if (skipped <= 0) {
+        return totalSkiped
+      }
+      totalSkiped += skipped
+    }
+    totalSkiped
+  }
+
+  private def getFilePath(
+      yarnConf: YarnConfiguration,
+      appId: String,
+      containerId: String,
+      nodeAddress: String,
+      appOwner: String
+    ): Path = {
+    val remoteRootLogDir = new Path(yarnConf.get(
+      YarnConfiguration.NM_REMOTE_APP_LOG_DIR, YarnConfiguration.DEFAULT_NM_REMOTE_APP_LOG_DIR))
+    val suffix = yarnConf.get(
+      YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,
+      YarnConfiguration.DEFAULT_NM_REMOTE_APP_LOG_DIR_SUFFIX)
+
+    val remoteLogDir = new Path(remoteRootLogDir, appOwner)
+    val remoteLogSuffixedDir = if (suffix.isEmpty) remoteLogDir else new Path(remoteLogDir, suffix)
+    val remoteAppLogDir = new Path(remoteLogSuffixedDir, appId)
+    val qualifiedLogDir = FileContext.getFileContext(yarnConf).makeQualified(remoteAppLogDir)
+
+    val files = FileContext.getFileContext(qualifiedLogDir.toUri, yarnConf)
+      .listStatus(remoteAppLogDir)
+
+    while (files.hasNext) {
+      val thisFile = files.next
+      val fileName = thisFile.getPath.getName
+      val nodeString = nodeAddress.replace(":", "_")
+      if (fileName.contains(nodeString) && !fileName.endsWith(".tmp")) {
+        return thisFile.getPath
+      }
+    }
+    null
+  }
 }
