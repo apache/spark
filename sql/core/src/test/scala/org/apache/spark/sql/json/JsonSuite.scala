@@ -91,11 +91,13 @@ class JsonSuite extends QueryTest with TestJsonData {
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
         enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(3601000), enforceCorrectType(ISO8601Time1, DateType))
+    checkTypePromotion(DateTimeUtils.millisToDays(3601000),
+      enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
         enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(DateTimeUtils.millisToDays(10801000), enforceCorrectType(ISO8601Time2, DateType))
+    checkTypePromotion(DateTimeUtils.millisToDays(10801000),
+      enforceCorrectType(ISO8601Time2, DateType))
   }
 
   test("Get compatible type") {
