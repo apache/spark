@@ -115,6 +115,7 @@ object FunctionRegistry {
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
     expression[Pi]("pi"),
+    expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Rint]("rint"),
     expression[Signum]("signum"),

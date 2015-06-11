@@ -109,4 +109,18 @@ class DataFrameFunctionsSuite extends QueryTest {
       testData2.select(bitwiseNOT($"a")),
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
+
+  test("log2 functions test") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.select(log2("b") + log2("a")),
+      Row(1))
+
+    checkAnswer(
+      ctx.sql("SELECT LOG2(8)"),
+      Row(3))
+    checkAnswer(
+      ctx.sql("SELECT LOG2(null)"),
+      Row(null))
+  }
 }
