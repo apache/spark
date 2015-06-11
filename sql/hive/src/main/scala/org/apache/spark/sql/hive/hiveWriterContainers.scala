@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.text.NumberFormat
 import java.util.Date
 
+import org.apache.spark.unsafe.types.DateUtils
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -34,7 +36,6 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 

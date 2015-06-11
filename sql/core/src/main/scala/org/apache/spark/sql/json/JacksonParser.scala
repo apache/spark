@@ -25,9 +25,10 @@ import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
+
 
 private[sql] object JacksonParser {
   def apply(
@@ -54,7 +55,7 @@ private[sql] object JacksonParser {
         convertField(factory, parser, schema)
 
       case (VALUE_STRING, StringType) =>
-        UTF8String(parser.getText)
+        UTF8String.fromString(parser.getText)
 
       case (VALUE_STRING, _) if parser.getTextLength < 1 =>
         // guard the non string type
@@ -74,7 +75,7 @@ private[sql] object JacksonParser {
         val generator = factory.createGenerator(writer, JsonEncoding.UTF8)
         generator.copyCurrentStructure(parser)
         generator.close()
-        UTF8String(writer.toByteArray)
+        UTF8String.fromBytes(writer.toByteArray)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, FloatType) =>
         parser.getFloatValue
@@ -152,7 +153,8 @@ private[sql] object JacksonParser {
       valueType: DataType): Map[UTF8String, Any] = {
     val builder = Map.newBuilder[UTF8String, Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      builder += UTF8String(parser.getCurrentName) -> convertField(factory, parser, valueType)
+      builder +=
+        UTF8String.fromString(parser.getCurrentName) -> convertField(factory, parser, valueType)
     }
 
     builder.result()
@@ -180,7 +182,7 @@ private[sql] object JacksonParser {
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
         require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String(record))
+        row.update(corruptIndex, UTF8String.fromString(record))
       }
 
       Seq(row)

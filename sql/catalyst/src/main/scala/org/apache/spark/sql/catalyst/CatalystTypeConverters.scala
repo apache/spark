@@ -26,8 +26,8 @@ import javax.annotation.Nullable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
@@ -257,7 +257,7 @@ object CatalystTypeConverters {
 
   private object StringConverter extends CatalystTypeConverter[Any, String, Any] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
-      case str: String => UTF8String(str)
+      case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
     }
     override def toScala(catalystValue: Any): String = catalystValue match {
