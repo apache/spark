@@ -189,7 +189,7 @@ class HiveDataFrameWindowSuite extends QueryTest {
       df.select(
         $"key",
         last("value").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(1, Long.MaxValue))
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 0))
           .equalTo("2")
           .as("last_v"),
         avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))

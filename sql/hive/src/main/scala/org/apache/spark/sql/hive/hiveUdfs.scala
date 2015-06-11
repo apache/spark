@@ -76,11 +76,12 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
       // Wrap a pivotting window function in a Window Expression.
       FunctionRegistry.getWindowFunctionInfo(name.toLowerCase) match {
         case info: WindowFunctionInfo if info.isPivotResult =>
-          // Wrap Implied Order.
           val expr = function match {
+            // Wrap Implied Order.
             case gu: HiveGenericUdaf if (FunctionRegistry.isRankingFunction(name.toLowerCase)) =>
               HiveRankImpliedOrderSpec(gu.copy(pivot = true))
-            case gu: HiveGenericUdaf if (info.isPivotResult) =>
+            // Add pivot flag to udaf
+            case gu: HiveGenericUdaf =>
               gu.copy(pivot = true)
           }
 
