@@ -1097,7 +1097,6 @@ class DAGScheduler(
                 {
                   newlyRunnable += shuffleStage
                 }
-                val newlyRunnableWithJob = newlyRunnable.map{x => x -> activeJobForStage(x)}
                 waitingStages --= newlyRunnable
                 runningStages ++= newlyRunnable
                 for {
