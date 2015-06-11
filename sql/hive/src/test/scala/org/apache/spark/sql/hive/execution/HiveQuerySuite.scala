@@ -1092,6 +1092,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       }.toSet
     conf.clear()
 
+    val expectedConfs = conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+      s"$key\tdefault: $defaultValue\t$doc"
+    }
+    assertResult(expectedConfs)(sql("SET -v").collect().map(_(0)))
+
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
@@ -1102,15 +1107,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
-    }
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET -v"))
     }
 
     // "SET key"
