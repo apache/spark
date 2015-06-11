@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.trees.LeafNode
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -115,6 +115,8 @@ case class Alias(child: Expression, name: String)(
   override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
 
   override def eval(input: Row): Any = child.eval(input)
+
+  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable

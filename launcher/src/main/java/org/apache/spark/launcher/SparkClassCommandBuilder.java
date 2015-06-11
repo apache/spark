@@ -93,6 +93,9 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         toolsDir.getAbsolutePath(), className);
 
       javaOptsKeys.add("SPARK_JAVA_OPTS");
+    } else {
+      javaOptsKeys.add("SPARK_JAVA_OPTS");
+      memKey = "SPARK_DRIVER_MEMORY";
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);

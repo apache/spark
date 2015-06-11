@@ -22,6 +22,7 @@ import random
 if sys.version >= '3':
     basestring = unicode = str
     long = int
+    from functools import reduce
 else:
     from itertools import imap as map
 
@@ -503,36 +504,52 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def join(self, other, joinExprs=None, joinType=None):
+    def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: a string for join column name, or a join expression (Column).
-            If joinExprs is a string indicating the name of the join column,
-            the column must exist on both sides, and this performs an inner equi-join.
-        :param joinType: str, default 'inner'.
+        :param on: a string for join column name, a list of column names,
+            , a join expression (Column) or a list of Columns.
+            If `on` is a string or a list of string indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an inner equi-join.
+        :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
+        >>> cond = [df.name == df3.name, df.age == df3.age]
+        >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
+        [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]
+
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
+
+        >>> df.join(df4, ['name', 'age']).select(df.name, df.age).collect()
+        [Row(name=u'Bob', age=5)]
         """
 
-        if joinExprs is None:
+        if on is not None and not isinstance(on, list):
+            on = [on]
+
+        if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-        elif isinstance(joinExprs, basestring):
-            jdf = self._jdf.join(other._jdf, joinExprs)
+
+        if isinstance(on[0], basestring):
+            jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
-            assert isinstance(joinExprs, Column), "joinExprs should be Column"
-            if joinType is None:
-                jdf = self._jdf.join(other._jdf, joinExprs._jc)
+            assert isinstance(on[0], Column), "on should be Column or list of Column"
+            if len(on) > 1:
+                on = reduce(lambda x, y: x.__and__(y), on)
             else:
-                assert isinstance(joinType, basestring), "joinType should be basestring"
-                jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
+                on = on[0]
+            if how is None:
+                jdf = self._jdf.join(other._jdf, on._jc, "inner")
+            else:
+                assert isinstance(how, basestring), "how should be basestring"
+                jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -616,7 +633,19 @@ class DataFrame(object):
         |    min|  2|
         |    max|  5|
         +-------+---+
+        >>> df.describe(['age', 'name']).show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |   mean|3.5| null|
+        | stddev|1.5| null|
+        |    min|  2|Alice|
+        |    max|  5|  Bob|
+        +-------+---+-----+
         """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -717,7 +746,7 @@ class DataFrame(object):
         This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
+        [Row((age * 2)=4, 'abs(age)=2), Row((age * 2)=10, 'abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]
@@ -897,8 +926,7 @@ class DataFrame(object):
     @since("1.3.1")
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
-
-        This is an alias for ``na.drop()``.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
 
         :param how: 'any' or 'all'.
             If 'any', drop a row if it contains any nulls.
@@ -907,13 +935,6 @@ class DataFrame(object):
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
         :param subset: optional list of column names to consider.
-
-        >>> df4.dropna().show()
-        +---+------+-----+
-        |age|height| name|
-        +---+------+-----+
-        | 10|    80|Alice|
-        +---+------+-----+
 
         >>> df4.na.drop().show()
         +---+------+-----+
@@ -940,6 +961,7 @@ class DataFrame(object):
     @since("1.3.1")
     def fillna(self, value, subset=None):
         """Replace null values, alias for ``na.fill()``.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
         :param value: int, long, float, string, or dict.
             Value to replace null values with.
@@ -951,7 +973,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.fillna(50).show()
+        >>> df4.na.fill(50).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
@@ -960,16 +982,6 @@ class DataFrame(object):
         | 50|    50|  Tom|
         | 50|    50| null|
         +---+------+-----+
-
-        >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        +---+------+-------+
-        |age|height|   name|
-        +---+------+-------+
-        | 10|    80|  Alice|
-        |  5|  null|    Bob|
-        | 50|  null|    Tom|
-        | 50|  null|unknown|
-        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
@@ -1002,6 +1014,8 @@ class DataFrame(object):
     @since(1.4)
     def replace(self, to_replace, value, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
+        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
+        aliases of each other.
 
         :param to_replace: int, long, float, string, or list.
             Value to be replaced.
@@ -1017,7 +1031,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.replace(10, 20).show()
+        >>> df4.na.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
@@ -1027,7 +1041,7 @@ class DataFrame(object):
         |null|  null| null|
         +----+------+-----+
 
-        >>> df4.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
+        >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
@@ -1078,9 +1092,9 @@ class DataFrame(object):
     @since(1.4)
     def corr(self, col1, col2, method=None):
         """
-        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
-        supports the Pearson Correlation Coefficient.
-        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
+        Calculates the correlation of two columns of a DataFrame as a double value.
+        Currently only supports the Pearson Correlation Coefficient.
+        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
         :param col1: The name of the first column
         :param col2: The name of the second column
@@ -1189,15 +1203,30 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, colName):
+    def drop(self, col):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param colName: string, name of the column to drop.
+        :param col: a string name of the column to drop, or a
+            :class:`Column` to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.drop(df.age).collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
+        [Row(age=5, height=85, name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
+        [Row(age=5, name=u'Bob', height=85)]
         """
-        jdf = self._jdf.drop(colName)
+        if isinstance(col, basestring):
+            jdf = self._jdf.drop(col)
+        elif isinstance(col, Column):
+            jdf = self._jdf.drop(col._jc)
+        else:
+            raise TypeError("col should be a string or a Column")
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
@@ -1214,7 +1243,10 @@ class DataFrame(object):
         import pandas as pd
         return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
+    ##########################################################################################
     # Pandas compatibility
+    ##########################################################################################
+
     groupby = groupBy
     drop_duplicates = dropDuplicates
 
@@ -1234,6 +1266,8 @@ def _to_scala_map(sc, jm):
 
 class DataFrameNaFunctions(object):
     """Functionality for working with missing data in :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):
@@ -1249,9 +1283,16 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
+    def replace(self, to_replace, value, subset=None):
+        return self.df.replace(to_replace, value, subset)
+
+    replace.__doc__ = DataFrame.replace.__doc__
+
 
 class DataFrameStatFunctions(object):
     """Functionality for statistic functions with :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):
@@ -1291,6 +1332,8 @@ def _test():
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
+    globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
+                                   Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
                                   Row(name='Bob', age=5, height=None),
                                   Row(name='Tom', age=None, height=None),

@@ -25,17 +25,19 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 case class BigData(s: String)
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
 
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+  import ctx.sql
+
   def rddIdOf(tableName: String): Int = {
-    val executedPlan = table(tableName).queryExecution.executedPlan
+    val executedPlan = ctx.table(tableName).queryExecution.executedPlan
     executedPlan.collect {
       case InMemoryColumnarTableScan(_, _, relation) =>
         relation.cachedColumnBuffers.id
@@ -45,47 +47,47 @@ class CachedTableSuite extends QueryTest {
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    ctx.sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
   }
 
   test("cache temp table") {
     testData.select('key).registerTempTable("tempTable")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
-    cacheTable("tempTable")
+    ctx.cacheTable("tempTable")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
-    uncacheTable("tempTable")
+    ctx.uncacheTable("tempTable")
   }
 
   test("unpersist an uncached table will not raise exception") {
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = false)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == ctx.cacheManager.lookupCachedData(testData))
     testData.persist()
-    assert(None != cacheManager.lookupCachedData(testData))
+    assert(None != ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = false)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == ctx.cacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {
     sql("CACHE TABLE tempTable AS SELECT key FROM testData")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
-    uncacheTable("tempTable")
+    ctx.uncacheTable("tempTable")
   }
 
   test("uncaching temp table") {
     testData.select('key).registerTempTable("tempTable1")
     testData.select('key).registerTempTable("tempTable2")
-    cacheTable("tempTable1")
+    ctx.cacheTable("tempTable1")
 
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
     assertCached(sql("SELECT COUNT(*) FROM tempTable2"))
 
     // Is this valid?
-    uncacheTable("tempTable2")
+    ctx.uncacheTable("tempTable2")
 
     // Should this be cached?
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
@@ -93,103 +95,103 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
       .registerTempTable("bigData")
-    table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
-    assert(table("bigData").count() === 200000L)
-    table("bigData").unpersist(blocking = true)
+    ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
+    assert(ctx.table("bigData").count() === 200000L)
+    ctx.table("bigData").unpersist(blocking = true)
   }
 
   test("calling .cache() should use in-memory columnar caching") {
-    table("testData").cache()
-    assertCached(table("testData"))
-    table("testData").unpersist(blocking = true)
+    ctx.table("testData").cache()
+    assertCached(ctx.table("testData"))
+    ctx.table("testData").unpersist(blocking = true)
   }
 
   test("calling .unpersist() should drop in-memory columnar cache") {
-    table("testData").cache()
-    table("testData").count()
-    table("testData").unpersist(blocking = true)
-    assertCached(table("testData"), 0)
+    ctx.table("testData").cache()
+    ctx.table("testData").count()
+    ctx.table("testData").unpersist(blocking = true)
+    assertCached(ctx.table("testData"), 0)
   }
 
   test("isCached") {
-    cacheTable("testData")
+    ctx.cacheTable("testData")
 
-    assertCached(table("testData"))
-    assert(table("testData").queryExecution.withCachedData match {
+    assertCached(ctx.table("testData"))
+    assert(ctx.table("testData").queryExecution.withCachedData match {
       case _: InMemoryRelation => true
       case _ => false
     })
 
-    uncacheTable("testData")
-    assert(!isCached("testData"))
-    assert(table("testData").queryExecution.withCachedData match {
+    ctx.uncacheTable("testData")
+    assert(!ctx.isCached("testData"))
+    assert(ctx.table("testData").queryExecution.withCachedData match {
       case _: InMemoryRelation => false
       case _ => true
     })
   }
 
   test("SPARK-1669: cacheTable should be idempotent") {
-    assume(!table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
+    assume(!ctx.table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
 
-    cacheTable("testData")
-    assertCached(table("testData"))
+    ctx.cacheTable("testData")
+    assertCached(ctx.table("testData"))
 
     assertResult(1, "InMemoryRelation not found, testData should have been cached") {
-      table("testData").queryExecution.withCachedData.collect {
+      ctx.table("testData").queryExecution.withCachedData.collect {
         case r: InMemoryRelation => r
       }.size
     }
 
-    cacheTable("testData")
+    ctx.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
-      table("testData").queryExecution.withCachedData.collect {
+      ctx.table("testData").queryExecution.withCachedData.collect {
         case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
       }.size
     }
 
-    uncacheTable("testData")
+    ctx.uncacheTable("testData")
   }
 
   test("read from cached table and uncache") {
-    cacheTable("testData")
-    checkAnswer(table("testData"), testData.collect().toSeq)
-    assertCached(table("testData"))
+    ctx.cacheTable("testData")
+    checkAnswer(ctx.table("testData"), testData.collect().toSeq)
+    assertCached(ctx.table("testData"))
 
-    uncacheTable("testData")
-    checkAnswer(table("testData"), testData.collect().toSeq)
-    assertCached(table("testData"), 0)
+    ctx.uncacheTable("testData")
+    checkAnswer(ctx.table("testData"), testData.collect().toSeq)
+    assertCached(ctx.table("testData"), 0)
   }
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      uncacheTable("testData")
+      ctx.uncacheTable("testData")
     }
   }
 
   test("SELECT star from cached table") {
     sql("SELECT * FROM testData").registerTempTable("selectStar")
-    cacheTable("selectStar")
+    ctx.cacheTable("selectStar")
     checkAnswer(
       sql("SELECT * FROM selectStar WHERE key = 1"),
       Seq(Row(1, "1")))
-    uncacheTable("selectStar")
+    ctx.uncacheTable("selectStar")
   }
 
   test("Self-join cached") {
     val unCachedAnswer =
       sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
-    cacheTable("testData")
+    ctx.cacheTable("testData")
     checkAnswer(
       sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
       unCachedAnswer.toSeq)
-    uncacheTable("testData")
+    ctx.uncacheTable("testData")
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
     sql("CACHE TABLE testData")
-    assertCached(table("testData"))
+    assertCached(ctx.table("testData"))
 
     val rddId = rddIdOf("testData")
     assert(
@@ -197,7 +199,7 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     sql("UNCACHE TABLE testData")
-    assert(!isCached("testData"), "Table 'testData' should not be cached")
+    assert(!ctx.isCached("testData"), "Table 'testData' should not be cached")
 
     eventually(timeout(10 seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
@@ -206,14 +208,14 @@ class CachedTableSuite extends QueryTest {
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
     sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
-    assertCached(table("testCacheTable"))
+    assertCached(ctx.table("testCacheTable"))
 
     val rddId = rddIdOf("testCacheTable")
     assert(
       isMaterialized(rddId),
       "Eagerly cached in-memory table should have already been materialized")
 
-    uncacheTable("testCacheTable")
+    ctx.uncacheTable("testCacheTable")
     eventually(timeout(10 seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
@@ -221,14 +223,14 @@ class CachedTableSuite extends QueryTest {
 
   test("CACHE TABLE tableName AS SELECT ...") {
     sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
-    assertCached(table("testCacheTable"))
+    assertCached(ctx.table("testCacheTable"))
 
     val rddId = rddIdOf("testCacheTable")
     assert(
       isMaterialized(rddId),
       "Eagerly cached in-memory table should have already been materialized")
 
-    uncacheTable("testCacheTable")
+    ctx.uncacheTable("testCacheTable")
     eventually(timeout(10 seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
@@ -236,7 +238,7 @@ class CachedTableSuite extends QueryTest {
 
   test("CACHE LAZY TABLE tableName") {
     sql("CACHE LAZY TABLE testData")
-    assertCached(table("testData"))
+    assertCached(ctx.table("testData"))
 
     val rddId = rddIdOf("testData")
     assert(
@@ -248,7 +250,7 @@ class CachedTableSuite extends QueryTest {
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
 
-    uncacheTable("testData")
+    ctx.uncacheTable("testData")
     eventually(timeout(10 seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
@@ -256,7 +258,7 @@ class CachedTableSuite extends QueryTest {
 
   test("InMemoryRelation statistics") {
     sql("CACHE TABLE testData")
-    table("testData").queryExecution.withCachedData.collect {
+    ctx.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
         assert(cached.statistics.sizeInBytes === actualSizeInBytes)
@@ -265,38 +267,38 @@ class CachedTableSuite extends QueryTest {
 
   test("Drops temporary table") {
     testData.select('key).registerTempTable("t1")
-    table("t1")
-    dropTempTable("t1")
-    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
+    ctx.table("t1")
+    ctx.dropTempTable("t1")
+    assert(intercept[RuntimeException](ctx.table("t1")).getMessage.startsWith("Table Not Found"))
   }
 
   test("Drops cached temporary table") {
     testData.select('key).registerTempTable("t1")
     testData.select('key).registerTempTable("t2")
-    cacheTable("t1")
+    ctx.cacheTable("t1")
 
-    assert(isCached("t1"))
-    assert(isCached("t2"))
+    assert(ctx.isCached("t1"))
+    assert(ctx.isCached("t2"))
 
-    dropTempTable("t1")
-    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
-    assert(!isCached("t2"))
+    ctx.dropTempTable("t1")
+    assert(intercept[RuntimeException](ctx.table("t1")).getMessage.startsWith("Table Not Found"))
+    assert(!ctx.isCached("t2"))
   }
 
   test("Clear all cache") {
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
-    cacheTable("t1")
-    cacheTable("t2")
-    clearCache()
-    assert(cacheManager.isEmpty)
+    ctx.cacheTable("t1")
+    ctx.cacheTable("t2")
+    ctx.clearCache()
+    assert(ctx.cacheManager.isEmpty)
 
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
-    cacheTable("t1")
-    cacheTable("t2")
+    ctx.cacheTable("t1")
+    ctx.cacheTable("t2")
     sql("Clear CACHE")
-    assert(cacheManager.isEmpty)
+    assert(ctx.cacheManager.isEmpty)
   }
 
   test("Clear accumulators when uncacheTable to prevent memory leaking") {
@@ -305,8 +307,8 @@ class CachedTableSuite extends QueryTest {
 
     Accumulators.synchronized {
       val accsSize = Accumulators.originals.size
-      cacheTable("t1")
-      cacheTable("t2")
+      ctx.cacheTable("t1")
+      ctx.cacheTable("t2")
       assert((accsSize + 2) == Accumulators.originals.size)
     }
 
@@ -317,8 +319,8 @@ class CachedTableSuite extends QueryTest {
 
     Accumulators.synchronized {
       val accsSize = Accumulators.originals.size
-      uncacheTable("t1")
-      uncacheTable("t2")
+      ctx.uncacheTable("t1")
+      ctx.uncacheTable("t2")
       assert((accsSize - 2) == Accumulators.originals.size)
     }
   }

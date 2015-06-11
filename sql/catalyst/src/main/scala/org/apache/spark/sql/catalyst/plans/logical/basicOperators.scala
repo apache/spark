@@ -226,7 +226,7 @@ case class Window(
  * @param child       Child operator
  */
 case class Expand(
-    projections: Seq[GroupExpression],
+    projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def statistics: Statistics = {
@@ -339,6 +339,9 @@ case class Sample(
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * Returns a new logical plan that dedups input rows.
+ */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }

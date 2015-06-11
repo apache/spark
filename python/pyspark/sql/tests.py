@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import time
 import datetime
 
 import py4j
@@ -45,6 +46,20 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.window import Window
+
+
+class UTC(datetime.tzinfo):
+    """UTC"""
+    ZERO = datetime.timedelta(0)
+
+    def utcoffset(self, dt):
+        return self.ZERO
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return self.ZERO
 
 
 class ExamplePointUDT(UserDefinedType):
@@ -131,6 +146,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
         self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
         self.assertEqual(self.sqlCtx.range(0, 1 << 40, 1 << 39).count(), 2)
+        self.assertEqual(self.sqlCtx.range(-2).count(), 0)
+        self.assertEqual(self.sqlCtx.range(3).count(), 3)
 
     def test_explode(self):
         from pyspark.sql.functions import explode
@@ -585,6 +602,23 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, df.filter(df.time == time).count())
         self.assertEqual(0, df.filter(df.date > date).count())
         self.assertEqual(0, df.filter(df.time > time).count())
+
+    def test_time_with_timezone(self):
+        day = datetime.date.today()
+        now = datetime.datetime.now()
+        ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
+        # class in __main__ is not serializable
+        from pyspark.sql.tests import UTC
+        utc = UTC()
+        utcnow = datetime.datetime.fromtimestamp(ts, utc)
+        df = self.sqlCtx.createDataFrame([(day, now, utcnow)])
+        day1, now1, utcnow1 = df.first()
+        # Pyrolite serialize java.sql.Date as datetime, will be fixed in new version
+        self.assertEqual(day1.date(), day)
+        # Pyrolite does not support microsecond, the error should be
+        # less than 1 millisecond
+        self.assertTrue(now - now1 < datetime.timedelta(0.001))
+        self.assertTrue(now - utcnow1 < datetime.timedelta(0.001))
 
     def test_dropna(self):
         schema = StructType([

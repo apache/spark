@@ -435,8 +435,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           // partition values.
           userDefinedPartitionColumns.map { partitionSchema =>
             val spec = discoverPartitions()
+            val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+              val literals = values.toSeq.zip(partitionColumnTypes).map {
                 case (value, dataType) => Literal.create(value, dataType)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
@@ -490,9 +491,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
+    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
+      typeInference)
   }
 
   /**

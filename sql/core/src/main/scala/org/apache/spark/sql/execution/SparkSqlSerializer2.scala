@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution
 import java.io._
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.serializer._
 import org.apache.spark.Logging
+import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, MutableRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in
@@ -304,11 +304,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val timestamp = row.getAs[java.sql.Timestamp](i)
-                val time = timestamp.getTime
-                val nanos = timestamp.getNanos
-                out.writeLong(time - (nanos / 1000000)) // Write the milliseconds value.
-                out.writeInt(nanos)                     // Write the nanoseconds part.
+                out.writeLong(row.getAs[Long](i))
               }
 
             case StringType =>
@@ -429,11 +425,7 @@ private[sql] object SparkSqlSerializer2 {
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
-                val time = in.readLong() // Read the milliseconds value.
-                val nanos = in.readInt() // Read the nanoseconds part.
-                val timestamp = new Timestamp(time)
-                timestamp.setNanos(nanos)
-                mutableRow.update(i, timestamp)
+                mutableRow.update(i, in.readLong())
               }
 
             case StringType =>
@@ -443,7 +435,7 @@ private[sql] object SparkSqlSerializer2 {
                 val length = in.readInt()
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
-                mutableRow.update(i, UTF8String(bytes))
+                mutableRow.update(i, UTF8String.fromBytes(bytes))
               }
 
             case BinaryType =>
