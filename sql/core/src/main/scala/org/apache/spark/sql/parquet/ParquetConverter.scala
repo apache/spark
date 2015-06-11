@@ -28,11 +28,10 @@ import org.apache.parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Co
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.parquet.timestamp.NanoTime
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that

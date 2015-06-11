@@ -26,9 +26,8 @@ import javax.annotation.Nullable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.

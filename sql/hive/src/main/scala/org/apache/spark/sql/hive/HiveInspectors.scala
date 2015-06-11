@@ -25,10 +25,9 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._

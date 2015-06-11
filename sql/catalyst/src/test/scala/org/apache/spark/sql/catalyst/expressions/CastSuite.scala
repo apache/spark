@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.DateUtils
 
 /**
  * Test suite for data type casting expression [[Cast]].

@@ -29,9 +29,8 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{DateUtils, UTF8String}
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
