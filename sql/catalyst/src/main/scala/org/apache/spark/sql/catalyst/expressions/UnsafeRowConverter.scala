@@ -244,7 +244,7 @@ private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
     // So we need to store it at the variable-length section.
     16
   }
- 
+
   override def write(source: Row, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
     val value = DateUtils.toJavaTimestamp(source.get(column).asInstanceOf[Long])
     val time = value.getTime()

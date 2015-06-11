@@ -74,7 +74,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.getString(1) should be ("Hello")
     unsafeRow.getString(2) should be ("World")
   }
- 
+
   test("basic conversion with primitive, string, date and timestamp types") {
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
     val converter = new UnsafeRowConverter(fieldTypes)
@@ -100,7 +100,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.getDate(2) should be (Date.valueOf("1970-01-01"))
     unsafeRow.getTimestamp(3) should be (Timestamp.valueOf("2015-05-08 08:10:25"))
   }
- 
+
   test("null handling") {
     val fieldTypes: Array[DataType] = Array(
       NullType,
