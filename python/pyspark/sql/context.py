@@ -351,6 +351,8 @@ class SQLContext(object):
             data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):
+            if not isinstance(data, list):
+                data = list(data)
             try:
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
