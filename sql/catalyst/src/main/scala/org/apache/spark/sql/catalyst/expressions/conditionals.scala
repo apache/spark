@@ -261,7 +261,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
           ${cond.code}
           if (${keyEval.isNull} && ${cond.isNull} ||
             !${keyEval.isNull} && !${cond.isNull}
-             && ${ctx.equalFunc(key.dataType)(keyEval.primitive, cond.primitive)}) {
+             && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};

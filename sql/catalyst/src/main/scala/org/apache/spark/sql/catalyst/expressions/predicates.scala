@@ -250,13 +250,11 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) =>
-        defineCodeGen (ctx, ev, (c1, c3) => s"$c1 $symbol $c3")
-      case DateType | TimestampType =>
-        defineCodeGen (ctx, ev, (c1, c3) => s"$c1 $symbol $c3")
-      case _ =>
-        defineCodeGen (ctx, ev, (c1, c2) => s"$c1.compare($c2) $symbol 0")
+    if (ctx.isPrimitiveType(left.dataType)) {
+      // faster version
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
 
@@ -277,8 +275,9 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
+    defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
 
@@ -304,7 +303,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
         boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||

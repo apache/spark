@@ -93,8 +93,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.primitive = ctx.defaultValue(dataType)
-      ""
+      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
     } else {
       dataType match {
         case BooleanType =>

@@ -142,7 +142,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != 0)
+      buildCast[Decimal](_, _ != Decimal(0))
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -455,7 +455,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (BooleanType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
       case (dt: DecimalType, BooleanType) =>
-        defineCodeGen(ctx, ev, c => s"$c.isZero()")
+        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
       case (dt: NumericType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c != 0")
 
