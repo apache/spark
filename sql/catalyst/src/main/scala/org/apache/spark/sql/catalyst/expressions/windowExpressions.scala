@@ -68,7 +68,8 @@ case class WindowSpecDefinition(
   override def children: Seq[Expression] = partitionSpec ++ orderSpec
 
   override lazy val resolved: Boolean =
-    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+    childrenResolved && checkInputDataTypes().isSuccess &&
+      frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
 
   override def toString: String = simpleString
