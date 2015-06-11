@@ -173,6 +173,7 @@ class CodeGenContext {
    * Generate code for compare expression in Java
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
+    // Use signum() to keep any small difference bwteen float/double
     case FloatType | DoubleType => s"(int)java.lang.Math.signum($c1 - $c2)"
     case dt: DataType if isPrimitiveType(dt) => s"(int)($c1 - $c2)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"

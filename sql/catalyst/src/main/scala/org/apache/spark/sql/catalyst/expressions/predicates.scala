@@ -252,13 +252,9 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     if (ctx.isPrimitiveType(left.dataType)) {
       // faster version
-      defineCodeGen(ctx, ev, {
-        (c1, c2) => s"$c1 $symbol $c2"
-      })
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
     } else {
-      defineCodeGen(ctx, ev, {
-        (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0"
-      })
+      defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
 
@@ -279,6 +275,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }

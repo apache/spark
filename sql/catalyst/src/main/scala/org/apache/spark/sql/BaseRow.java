@@ -166,7 +166,7 @@ public abstract class BaseRow implements Row {
         return false;
       }
       for (int i = 0; i < n; i ++) {
-        if (isNullAt(i) != row.isNullAt(i) || !isNullAt(i) && !get(i).equals(row.get(i))) {
+        if (isNullAt(i) != row.isNullAt(i) || (!isNullAt(i) && !get(i).equals(row.get(i)))) {
           return false;
         }
       }

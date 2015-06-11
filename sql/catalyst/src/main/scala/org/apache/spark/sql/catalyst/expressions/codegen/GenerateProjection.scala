@@ -139,7 +139,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
       s"""
         if (nullBits[$i] != row.nullBits[$i] ||
-          !nullBits[$i] && !(${ctx.genEqual(e.dataType, s"c$i", s"row.c$i")})) {
+          (!nullBits[$i] && !(${ctx.genEqual(e.dataType, s"c$i", s"row.c$i")}))) {
           return false;
         }
       """

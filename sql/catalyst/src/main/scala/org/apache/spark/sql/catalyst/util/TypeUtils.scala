@@ -54,7 +54,6 @@ object TypeUtils {
   def getOrdering(t: DataType): Ordering[Any] =
     t.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
 
-
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
     for (i <- 0 until x.length; if i < y.length) {
       val res = x(i).compareTo(y(i))
