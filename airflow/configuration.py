@@ -11,6 +11,7 @@ defaults = {
         'unit_test_mode': False,
         'parallelism': 32,
         'load_examples': True,
+        'plugins_folder': None,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -63,6 +64,9 @@ parallelism = 32
 # get started, but you probably want to set this to False in a production
 # environment
 load_examples = True
+
+# Where your Airflow plugins are stored
+{AIRFLOW_HOME}/plugins
 
 
 [webserver]

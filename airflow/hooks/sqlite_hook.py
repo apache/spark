@@ -97,6 +97,7 @@ class SqliteHook(BaseHook):
     def get_pandas_df(self, sql):
         """
         Executes the sql and returns a pandas dataframe
+
         >>> h = SqliteHook()
         >>> sql = "SELECT * FROM test_table WHERE i=1 LIMIT 1;"
         >>> h.get_pandas_df(sql)
