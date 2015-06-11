@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.types.IntegerType
+
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -213,7 +215,7 @@ object FunctionRegistry {
         case IntegerLiteral(buckets) :: Nil =>
           WindowFunction.ntile(buckets)
         case _ =>
-          throw new AnalysisException("Invalid number of arguments for function ntile")
+          throw new AnalysisException(s"Invalid arguments for function ntile: $args")
       }
     }
     ("ntile", f)
@@ -239,12 +241,21 @@ object FunctionRegistry {
     args match {
       case Seq(e: Expression) =>
         (e, 1, null)
-      case Seq(e: Expression, IntegerLiteral(offset)) =>
+      case Seq(e: Expression, ExtractInteger(offset)) =>
         (e, offset, null)
-      case Seq(e: Expression, IntegerLiteral(offset), d: Expression) =>
+      case Seq(e: Expression, ExtractInteger(offset), d: Expression) =>
         (e, offset, d)
       case _ =>
-        throw new AnalysisException(s"Invalid number of arguments for function $name")
+        println(args)
+        throw new AnalysisException(s"Invalid arguments for function $name: $args")
+    }
+  }
+
+  object ExtractInteger {
+    def unapply(e: Expression): Option[Integer] = {
+      if (e.foldable && e.dataType == IntegerType) {
+        Some(e.eval(EmptyRow).asInstanceOf[Integer])
+      } else None
     }
   }
 }

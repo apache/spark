@@ -408,7 +408,7 @@ object WindowFunction {
   def percentRank(spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {
     val rankMinusOne = Subtract(rank(spec), Literal(1))
     val countMinusOne = Subtract(count(spec), Literal(1))
-    ComposedWindowFunction(Divide(rankMinusOne, countMinusOne))
+    ComposedWindowFunction(Coalesce(Divide(rankMinusOne, countMinusOne) :: Literal(0.0) :: Nil))
   }
 
   def cumeDist(spec: WindowSpec = WindowSpecDefinition.empty): ComposedWindowFunction = {

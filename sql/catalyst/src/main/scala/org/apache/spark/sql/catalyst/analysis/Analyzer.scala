@@ -737,13 +737,16 @@ class Analyzer(
 
       // Now, we extract regular expressions from expressionsWithWindowFunctions
       // by using extractExpr.
+      val seenWindowAggregates = new ArrayBuffer[AggregateExpression]
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
           // Add the children of an aggregate expression to the expression list.
           case we @ WindowExpression(agg: AggregateExpression,
                   spec: WindowSpecDefinition, _, _) =>
             val newAggChildren = agg.children.map(extractExpr(_))
-            we.copy(windowFunction = agg.withNewChildren(newAggChildren),
+            val newAgg = agg.withNewChildren(newAggChildren)
+            seenWindowAggregates += newAgg
+            we.copy(windowFunction = newAgg,
                    windowSpec = extractSpecExpressions(spec))
           // Lead/Lag functions window function are have no aggregating operator. The function
           // itself is added to the expression list.
@@ -755,6 +758,12 @@ class Analyzer(
                       if (l == h) =>
             we.copy(windowFunction = extractExpr(e),
                    windowSpec = extractSpecExpressions(spec))
+          // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
+          // we need to extract SUM(x).
+          case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
+            val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
+            extractedExprBuffer += withName
+            withName.toAttribute
         }.asInstanceOf[NamedExpression]
       }
 
