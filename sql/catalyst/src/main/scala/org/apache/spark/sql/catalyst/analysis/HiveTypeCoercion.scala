@@ -91,6 +91,7 @@ trait HiveTypeCoercion {
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
+    IfCoercion ::
     Division ::
     PropagateTypes ::
     ExpectedInputConversion ::
@@ -649,6 +650,27 @@ trait HiveTypeCoercion {
           }.reduce(_ ++ _)
           CaseKeyWhen(Cast(c.key, commonType), castedBranches)
         }.getOrElse(c)
+    }
+  }
+
+  /**
+   * Coerces the type of different branches of If statement to a common type.
+   */
+  object IfCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Find tightest common type for If, if the true value and false value have different types.
+      case i @ If(pred, left, right) if left.dataType != right.dataType =>
+        findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
+          val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
+          val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
+          i.makeCopy(Array(pred, newLeft, newRight))
+        }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
+
+      // Convert If(null literal, _, _) into boolean type.
+      // In the optimizer, we should short-circuit this directly into false value.
+      case i @ If(pred, left, right) if pred.dataType == NullType =>
+        println("fireing this rule")
+        i.makeCopy(Array(Literal.create(null, BooleanType), left, right))
     }
   }
 
