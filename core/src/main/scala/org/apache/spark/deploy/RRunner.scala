@@ -71,9 +71,15 @@ object RRunner {
         val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
-        // The SparkR package distributed as an archive resource should be pointed to
-        // by a symbol link "sparkr" in the current directory.
-        val rPackageDir = new File("sparkr").getAbsolutePath
+        val rPackageDir =
+          if (System.getProperty("spark.master") == "yarn-cluster") {
+            // The SparkR package distributed as an archive resource should be pointed to
+            // by a symbol link "sparkr" in the current directory.
+            new File("sparkr").getAbsolutePath
+          } else {
+            val sparkHome = System.getenv("SPARK_HOME")
+            Seq(sparkHome, "R", "lib").mkString(File.separator)
+          }
         env.put("SPARKR_PACKAGE_DIR", rPackageDir)
         env.put("R_PROFILE_USER",
           Seq(rPackageDir, "SparkR", "profile", "general.R").mkString(File.separator))
