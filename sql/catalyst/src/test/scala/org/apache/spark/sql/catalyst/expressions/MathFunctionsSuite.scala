@@ -205,7 +205,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("binary log") {
-    val f =  (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
+    val f = (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
     val domain = (1 to 20).map(v => (v * 0.1, v * 0.2))
 
     domain.foreach { case (v1, v2) =>
