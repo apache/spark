@@ -237,7 +237,7 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = ${f(eval.primitive)};
-     }
+      }
     """
   }
 }
