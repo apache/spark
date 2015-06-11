@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
+import org.apache.parquet.Preconditions
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.sql.parquet.timestamp.NanoTime
 import org.apache.spark.sql.types._
 
 /**
@@ -493,21 +496,23 @@ private[parquet] object CatalystArrayConverter {
 }
 
 private[parquet] object CatalystTimestampConverter {
-  // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
-  val JULIAN_DAY_OF_EPOCH = 2440587.5
-  val SECONDS_PER_DAY = 60 * 60 * 24
-
   def convertToTimestamp(value: Binary): Long = {
-    val nt = NanoTime.fromBinary(value)
-    ((nt.getJulianDay - JULIAN_DAY_OF_EPOCH) * SECONDS_PER_DAY * 1e7
-      + nt.getTimeOfDayNanos / 100.0).toLong
+    Preconditions.checkArgument(bytes.length() == 12, "Must be 12 bytes")
+    val buf = value.toByteBuffer
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    val timeOfDayNanos = buf.getLong
+    val julianDay = buf.getInt
+    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
   }
 
   def convertFromTimestamp(ts: Long): Binary = {
-    val julian = ts / 1e7 / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    val day = julian.toInt
-    val nanos = ((julian - day) * SECONDS_PER_DAY * 1e9).toLong
-    NanoTime(day, nanos).toBinary
+    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
+    val buf = ByteBuffer.allocate(12)
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    buf.flip()
+    Binary.fromByteBuffer(buf)
   }
 }
 

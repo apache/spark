@@ -22,9 +22,9 @@ import java.sql.Timestamp
 import org.apache.spark.SparkFunSuite
 
 
-class DateUtilsSuite extends SparkFunSuite {
+class DateTimeUtilsSuite extends SparkFunSuite {
 
-  test("timestamp") {
+  test("timestamp and 100ns") {
     val now = new Timestamp(System.currentTimeMillis())
     now.setNanos(100)
     val ns = DateTimeUtils.fromJavaTimestamp(now)
@@ -36,5 +36,17 @@ class DateUtilsSuite extends SparkFunSuite {
       assert(DateTimeUtils.fromJavaTimestamp(ts) == t)
       assert(DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromJavaTimestamp(ts)) == ts)
     }
+  }
+
+  test("100ns and julian day") {
+    val (d, ns) = DateTimeUtils.toJulianDay(0)
+    assert(d == 2440587)
+    assert(ns == DateTimeUtils.SECONDS_PER_DAY / 2 * DateTimeUtils.NANOS_PER_SECOND)
+    assert(DateTimeUtils.fromJulianDay(d, ns) == 0L)
+
+    val t = new Timestamp(61394778610000L) // (2015, 6, 11, 10, 10, 10, 100)
+    val (d1, ns1) = DateTimeUtils.toJulianDay(DateTimeUtils.fromJavaTimestamp(t))
+    val t2 = DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromJulianDay(d1, ns1))
+    assert(t.equals(t2))
   }
 }

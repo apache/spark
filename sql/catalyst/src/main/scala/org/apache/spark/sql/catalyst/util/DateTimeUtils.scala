@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
- * Helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
+ * Helper function to convert between Int value of days since epoch and java.sql.Date,
+ * also convert Long value of 100 nanoseconds and java.sql.Timestamp
  */
 object DateTimeUtils {
-  private val MILLIS_PER_DAY = 86400000
-  private val HUNDRED_NANOS_PER_SECOND = 10000000L
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+
+  // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
+  final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
+  final val SECONDS_PER_DAY = 60 * 60 * 24L
+  final val HUNDRED_NANOS_PER_SECOND = 1000L * 1000L * 10L
+  final val NANOS_PER_SECOND = HUNDRED_NANOS_PER_SECOND * 100
+
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val LOCAL_TIMEZONE = new ThreadLocal[TimeZone] {
@@ -116,5 +123,28 @@ object DateTimeUtils {
     } else {
       0L
     }
+  }
+
+  /**
+   * Return the number of 100ns (hundred of nanoseconds) since epoch from julian day
+   * and nanoseconds in a day
+   */
+  def fromJulianDay(day: Int, nanoseconds: Long): Long = {
+    // use integer to avoid rounding errors
+    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY - SECONDS_PER_DAY / 2
+    seconds * HUNDRED_NANOS_PER_SECOND + nanoseconds / 100L
+  }
+
+  /**
+   * Return julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
+   * @param num100ns
+   * @return
+   */
+  def toJulianDay(num100ns: Long): (Int, Long) = {
+    val seconds = num100ns / HUNDRED_NANOS_PER_SECOND + SECONDS_PER_DAY / 2
+    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
+    val secondsInDay = seconds % SECONDS_PER_DAY
+    val nanos = (num100ns % HUNDRED_NANOS_PER_SECOND) * 100L
+    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
   }
 }
