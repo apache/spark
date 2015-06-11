@@ -21,12 +21,12 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import scala.Function1;
-import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
@@ -97,7 +97,7 @@ final class UnsafeExternalRowSorter {
         );
       }
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
-      return new AbstractIterator<Row>() {
+      return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
         private final UnsafeRow row = new UnsafeRow();
