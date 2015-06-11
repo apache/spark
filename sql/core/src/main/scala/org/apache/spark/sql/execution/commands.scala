@@ -85,14 +85,14 @@ case class SetCommand(
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
       if (value.toInt < 1) {
         val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
           "determining the number of reducers is not supported."
         throw new IllegalArgumentException(msg)
       } else {
         sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
+        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS.key}=$value"))
       }
 
     // Configures a single property.
@@ -110,8 +110,8 @@ case class SetCommand(
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
+          s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS.key}=${sqlContext.conf.numShufflePartitions}"))
 
     // Queries a single property.
     case Some((key, None)) =>

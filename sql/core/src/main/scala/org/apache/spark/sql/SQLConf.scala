@@ -39,8 +39,12 @@ private[spark] object SQLConf {
 
     def defaultValueString: String = defaultValue.map(stringConverter).getOrElse("<undefined>")
 
-    override def toString: String =
-      s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc, isPublic = $isPublic)"
+    override def toString: String = {
+      // Fail tests that use `SQLConfEntry` as a string.
+      throw new IllegalStateException("Force to fail tests")
+      // s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc,
+      // isPublic = $isPublic)"
+    }
   }
 
   private[sql] object SQLConfEntry {
