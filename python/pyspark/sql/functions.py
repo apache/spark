@@ -231,6 +231,7 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.4)
 def bin(col):
     """Returns the string representation of the binary value of the given column.
