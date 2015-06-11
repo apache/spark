@@ -100,11 +100,17 @@ case class SetCommand(
       sqlContext.setConf(key, value)
       Seq(Row(s"$key=$value"))
 
-    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
-    // Notice that different from Hive, here "SET -v" is an alias of "SET".
     // (In Hive, "SET" returns all changed properties while "SET -v" returns all properties.)
-    case Some(("-v", None)) | None =>
+    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
+    case None =>
       sqlContext.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+
+    // Queries all properties along with their default values and docs that are defined in the
+    // SQLConf of the sqlContext.
+    case Some(("-v", None)) =>
+      sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+        Row(s"$key\tdefault: $defaultValue\t$doc")
+      }
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
@@ -252,28 +258,5 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     }
 
     rows
-  }
-}
-
-/**
- * TODO
- *
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case object ConfCommand extends RunnableCommand {
-
-  // The result of SHOW TABLES has two columns, tableName and isTemporary.
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("key", StringType, false) ::
-        StructField("default", StringType, false) ::
-        StructField("meaning", StringType, false) :: Nil)
-
-    schema.toAttributes
-  }
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.conf.getAllDefinedConfs.map { case (k, d, v) => Row(k, d, v) }
   }
 }
