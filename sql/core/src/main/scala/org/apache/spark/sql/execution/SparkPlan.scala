@@ -58,6 +58,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
+  // Use to judge whether need shuffle
+  var meetPartitions: Set[Partitioning] = Set.empty
+
   /** Overridden make copy also propogates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): this.type = {
     SparkPlan.currentContext.set(sqlContext)
