@@ -44,25 +44,32 @@ class UTF8StringSuite extends SparkFunSuite {
   test("contains") {
     assert(UTF8String.fromString("hello").contains(UTF8String.fromString("ello")))
     assert(!UTF8String.fromString("hello").contains(UTF8String.fromString("vello")))
+    assert(!UTF8String.fromString("hello").contains(UTF8String.fromString("hellooo")))
     assert(UTF8String.fromString("大千世界").contains(UTF8String.fromString("千世")))
     assert(!UTF8String.fromString("大千世界").contains(UTF8String.fromString("世千")))
+    assert(!UTF8String.fromString("大千世界").contains(UTF8String.fromString("大千世界好")))
   }
 
   test("prefix") {
     assert(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hell")))
     assert(!UTF8String.fromString("hello").startsWith(UTF8String.fromString("ell")))
+    assert(!UTF8String.fromString("hello").startsWith(UTF8String.fromString("hellooo")))
     assert(UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千")))
     assert(!UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("千")))
+    assert(!UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千世界好")))
   }
 
   test("suffix") {
     assert(UTF8String.fromString("hello").endsWith(UTF8String.fromString("ello")))
     assert(!UTF8String.fromString("hello").endsWith(UTF8String.fromString("ellov")))
+    assert(!UTF8String.fromString("hello").endsWith(UTF8String.fromString("hhhello")))
     assert(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世界")))
     assert(!UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世")))
+    assert(!UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("我的大千世界")))
   }
 
   test("slice") {
+    assert(UTF8String.fromString("hello").slice(0, 0) == UTF8String.fromString(""))
     assert(UTF8String.fromString("hello").slice(1, 3) == UTF8String.fromString("el"))
     assert(UTF8String.fromString("大千世界").slice(0, 1) == UTF8String.fromString("大"))
     assert(UTF8String.fromString("大千世界").slice(1, 3) == UTF8String.fromString("千世"))
