@@ -1083,7 +1083,7 @@ object functions {
   def log(columnName: String): Column = log(Column(columnName))
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1091,7 +1091,7 @@ object functions {
   def log10(e: Column): Column = Log10(e.expr)
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1122,6 +1122,22 @@ object functions {
    * @since 1.5.0
    */
   def pi(): Column = Pi()
+
+  /**
+   * Computes the logarithm of the given column in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(expr: Column): Column = Log2(expr.expr)
+
+  /**
+   * Computes the logarithm of the given value in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
