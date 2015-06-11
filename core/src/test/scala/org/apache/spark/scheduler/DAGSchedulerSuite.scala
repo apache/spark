@@ -563,7 +563,13 @@ class DAGSchedulerSuite
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1))
+    val jobId = submit(reduceRdd, Array(0, 1))
+    println(s"late fetch failure: jobId = $jobId")
+    println(s"late fetch failure: jobToStages = ${scheduler.jobIdToStageIds}")
+    println(s"late fetch failure: jobToActiveJob = ${scheduler.jobIdToActiveJob}")
+    println(s"late fetch failure: waitingStages = ${scheduler.waitingStages}")
+    println(s"late fetch failure: runningStages = ${scheduler.runningStages}")
+    println(s"late fetch failure: failedStages = ${scheduler.failedStages}")
 
     val mapStageId = 0
     def countSubmittedMapStageAttempts(): Int = {
@@ -574,6 +580,11 @@ class DAGSchedulerSuite
     assert(countSubmittedMapStageAttempts() === 1)
 
     println("late fetch failure: taskSets = " + taskSets)
+    println(s"late fetch failure: jobToStages = ${scheduler.jobIdToStageIds}")
+    println(s"late fetch failure: jobToActiveJob = ${scheduler.jobIdToActiveJob}")
+    println(s"late fetch failure: waitingStages = ${scheduler.waitingStages}")
+    println(s"late fetch failure: runningStages = ${scheduler.runningStages}")
+    println(s"late fetch failure: failedStages = ${scheduler.failedStages}")
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
@@ -582,6 +593,13 @@ class DAGSchedulerSuite
       Array("hostA", "hostB"))
 
     println("late fetch failure: taskSets = " + taskSets)
+    println("late fetch failure: submittedStages = " + sparkListener.submittedStageInfos)
+    println(s"late fetch failure: jobToStages = ${scheduler.jobIdToStageIds}")
+    println(s"late fetch failure: jobToActiveJob = ${scheduler.jobIdToActiveJob}")
+    println(s"late fetch failure: waitingStages = ${scheduler.waitingStages}")
+    println(s"late fetch failure: runningStages = ${scheduler.runningStages}")
+    println(s"late fetch failure: failedStages = ${scheduler.failedStages}")
+
     // The first result task fails, with a fetch failure for the output from the first mapper.
     runEvent(CompletionEvent(
       taskSets(1).tasks(0),

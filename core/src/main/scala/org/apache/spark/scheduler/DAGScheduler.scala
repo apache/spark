@@ -835,6 +835,7 @@ class DAGScheduler(
     stage.pendingTasks.clear()
 
     // First figure out the indexes of partition ids to compute.
+    println(s"finding partitions to compute for $stage")
     val partitionsToCompute: Seq[Int] = {
       stage match {
         case stage: ShuffleMapStage =>
@@ -928,6 +929,7 @@ class DAGScheduler(
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
+      println(debugString)
     }
   }
 
@@ -1083,7 +1085,8 @@ class DAGScheduler(
                 {
                   newlyRunnable += shuffleStage
                 }
-                println(s"newly runnable stages = $newlyRunnable")
+                val newlyRunnableWithJob = newlyRunnable.map{x => x -> activeJobForStage(x)}
+                println(s"newly runnable stages = $newlyRunnableWithJob")
                 waitingStages --= newlyRunnable
                 runningStages ++= newlyRunnable
                 for {
