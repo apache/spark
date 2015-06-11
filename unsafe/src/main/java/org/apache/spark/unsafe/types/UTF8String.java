@@ -56,7 +56,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Updates the UTF8String with String.
    */
   public UTF8String set(final String str) {
-    bytes = str.getBytes();
+    try {
+      bytes = str.getBytes("utf-8");
+    } catch (UnsupportedEncodingException e) {
+      // Turn the exception into unchecked so we can find out about it at runtime, but
+      // don't need to add lots of boilerplate code everywhere.
+      PlatformDependent.throwException(e);
+    }
     return this;
   }
 
