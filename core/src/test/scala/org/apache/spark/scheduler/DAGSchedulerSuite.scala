@@ -88,6 +88,7 @@ class DAGSchedulerSuite
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
+      println(s"submitting taskSet $taskSet.  taskSets = $taskSets")
     }
     override def cancelTasks(stageId: Int, interruptThread: Boolean) {
       cancelledStages += stageId

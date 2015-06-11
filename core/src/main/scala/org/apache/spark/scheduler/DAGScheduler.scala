@@ -1046,6 +1046,7 @@ class DAGScheduler(
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
               markStageAsFinished(shuffleStage)
+              println(s"marking $shuffleStage as finished")
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
@@ -1072,6 +1073,7 @@ class DAGScheduler(
                       .map(_._2).mkString(", "))
                 submitStage(shuffleStage)
               } else {
+                println(s"looking for newly runnable stage")
                 val newlyRunnable = new ArrayBuffer[Stage]
                 for (shuffleStage <- waitingStages) {
                   logInfo("Missing parents for " + shuffleStage + ": " +
@@ -1081,6 +1083,7 @@ class DAGScheduler(
                 {
                   newlyRunnable += shuffleStage
                 }
+                println(s"newly runnable stages = $newlyRunnable")
                 waitingStages --= newlyRunnable
                 runningStages ++= newlyRunnable
                 for {
