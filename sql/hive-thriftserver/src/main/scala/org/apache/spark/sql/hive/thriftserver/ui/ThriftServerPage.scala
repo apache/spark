@@ -44,13 +44,23 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       <h4>
         {listener.onlineSessionNum} session(s) are online,
         running {listener.totalRunning} SQL statement(s)
-      </h4> ++
-      generateSessionStatsTable(true) ++
-      <br/> ++
-      <h4>
-        {listener.sessionList.size - listener.onlineSessionNum} session(s) are offline
-      </h4> ++
-      generateSessionStatsTable(false) ++
+      </h4>
+      <div>
+        {generateSessionStatsTable(true)}
+      </div>
+      <br/>
+      <div>
+        <span class="expand-additional-metrics">
+          <span class="expand-additional-metrics-arrow arrow-closed"></span>
+          <a>offline session(s)</a>
+        </span>
+        <div class="additional-metrics collapsed">
+          <h4>
+            {listener.sessionList.size - listener.onlineSessionNum} session(s) are offline
+          </h4>
+          {generateSessionStatsTable(false)}
+        </div>
+      </div>
       <br/> ++
       generateSQLStatsTable()
     UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
