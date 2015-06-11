@@ -128,5 +128,17 @@ class DataFrameFunctionsSuite extends QueryTest {
       })
   }
 
+  test("log2 functions test") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.select(log2("b") + log2("a")),
+      Row(1))
 
+    checkAnswer(
+      ctx.sql("SELECT LOG2(8)"),
+      Row(3))
+    checkAnswer(
+      ctx.sql("SELECT LOG2(null)"),
+      Row(null))
+  }
 }
