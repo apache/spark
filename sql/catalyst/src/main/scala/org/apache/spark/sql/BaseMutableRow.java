@@ -65,4 +65,14 @@ public abstract class BaseMutableRow extends BaseRow implements MutableRow {
   public void setString(int ordinal, String value) {
     throw new UnsupportedOperationException();
   }
+
+  @Override
+  public void setDate(int ordinal, java.sql.Date value) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void setTimestamp(int ordinal, java.sql.Timestamp value) {
+    throw new UnsupportedOperationException();
+  }
 }
