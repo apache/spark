@@ -25,6 +25,8 @@ import scala.language.postfixOps
 import akka.actor.{ActorSystem, Actor, Props}
 import akka.pattern.ask
 
+import com.typesafe.config.{ConfigValueFactory, ConfigFactory}
+
 import org.apache.spark.rpc._
 import org.apache.spark.{SecurityManager, SparkConf}
 
@@ -65,7 +67,9 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
       }
     }
 
-    val system = ActorSystem("EchoSystem")
+    val akkaConf = ConfigFactory.empty().withValue("akka.log-dead-letters",
+      ConfigValueFactory.fromAnyRef("off"))
+    val system = ActorSystem("EchoSystem", akkaConf)
     val echoActor = system.actorOf(Props(new EchoActor(0)), name = "echo")
     val sleepyActor = system.actorOf(Props(new EchoActor(50)), name = "sleepy")
 
