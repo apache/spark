@@ -100,7 +100,6 @@ class LinearRegressionModelBase(LinearModel):
         Predict the value of the dependent variable given a vector x
         containing values for the independent variables.
         """
-        print(self.weights)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -644,20 +643,25 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
         dstream.foreachRDD(update)
 
     def predictOn(self, dstream):
-        """Make predictions on a dstream.
+        """Make predictions on a dstream of Vectors.
 
         Returns a transformed dstream object.
         """
+        def predict(ds):
+            return self._model.predict(ds)
+
         self._validate_dstream(dstream)
-        return dstream.map(self._model.predict)
+        return dstream.map(predict)
 
     def predictOnValues(self, dstream):
-        """Make predictions on a keyed dstream.
+        """Make predictions on a keyed dstream where the values are Vectors.
 
         Returns a transformed dstream object.
         """
+        def predict(ds):
+            return self._model.predict(ds)
         self._validate_dstream(dstream)
-        return dstream.mapValues(self._model.predict)
+        return dstream.mapValues(predict)
 
 
 def _test():

@@ -1207,7 +1207,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
     def test_parameter_convergence(self):
         """Test that the model parameters improve with streaming data."""
         slr = StreamingLinearRegressionWithSGD(stepSize=0.2, numIterations=25)
-        slr.setInitialWeights([0.0, 0.0])
+        slr.setInitialWeights([0.0])
 
         # Create ten batches with 100 sample points in each.
         batches = []
@@ -1216,11 +1216,11 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
             batches.append(sc.parallelize(batch))
 
+        model_weights = []
         input_stream = self.ssc.queueStream(batches)
         input_stream.foreachRDD(
-            lambda x: models.append(slr.latestModel.weights[0]))
+            lambda x: model_weights.append(slr.latestModel.weights[0]))
         t = time()
-        model_weights = []
         slr.trainOn(input_stream)
         self.ssc.start()
         self._ssc_wait(t, 10, 0.01)
@@ -1257,6 +1257,37 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for batch in samples:
             true, predicted = zip(*batch)
             self.assertTrue(mean(abs(array(true) - array(predicted))) < 0.1)
+
+    def test_train_prediction(self):
+        """Test that error on test data improves as model is trained."""
+        slr = StreamingLinearRegressionWithSGD(stepSize=0.2, numIterations=25)
+        slr.setInitialWeights([0.0])
+
+        # Create ten batches with 100 sample points in each.
+        batches = []
+        for i in range(10):
+            batch = LinearDataGenerator.generateLinearInput(
+                0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
+            batches.append(sc.parallelize(batch))
+
+        predict_batches = [
+            b.map(lambda lp: (lp.label, lp.features)) for b in batches]
+        mean_absolute_errors = []
+
+        def func(rdd):
+            true, predicted = zip(*rdd.collect())
+            mean_absolute_errors.append(mean(abs(true) - abs(predicted)))
+
+        model_weights = []
+        input_stream = self.ssc.queueStream(batches)
+        output_stream = self.ssc.queueStream(predict_batches)
+        t = time()
+        slr.trainOn(input_stream)
+        output_stream = slr.predictOnValues(output_stream)
+        output_stream.foreachRDD(func)
+        self.ssc.start()
+        self._ssc_wait(t, 10, 0.01)
+        self.assertTrue(mean_absolute_errors[1] - mean_absolute_errors[-1] > 2)
 
 
 if __name__ == "__main__":
