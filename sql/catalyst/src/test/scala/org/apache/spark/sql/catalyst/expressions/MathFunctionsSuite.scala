@@ -18,9 +18,24 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  /**
+   * Used for testing leaf math expressions.
+   *
+   * @param e expression
+   * @param c The constants in scala.math
+   * @tparam T Generic type for primitives
+   */
+  private def testLeaf[T](
+      e: () => Expression,
+      c: T): Unit = {
+    checkEvaluation(e(), c, EmptyRow)
+    checkEvaluation(e(), c, create_row(null))
+  }
 
   /**
    * Used for testing unary math expressions.
@@ -74,6 +89,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("e") {
+    testLeaf(EulerNumber, math.E)
+  }
+
+  test("pi") {
+    testLeaf(Pi, math.Pi)
   }
 
   test("sin") {
@@ -167,6 +190,25 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("bin") {
     testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
+
+    val row = create_row(null, 12L, 123L, 1234L, -123L)
+    val l1 = 'a.long.at(0)
+    val l2 = 'a.long.at(1)
+    val l3 = 'a.long.at(2)
+    val l4 = 'a.long.at(3)
+    val l5 = 'a.long.at(4)
+
+    checkEvaluation(Bin(l1), null, row)
+    checkEvaluation(Bin(l2), java.lang.Long.toBinaryString(12), row)
+    checkEvaluation(Bin(l3), java.lang.Long.toBinaryString(123), row)
+    checkEvaluation(Bin(l4), java.lang.Long.toBinaryString(1234), row)
+    checkEvaluation(Bin(l5), java.lang.Long.toBinaryString(-123), row)
+  }
+
+  test("log2") {
+    def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
+    testUnary(Log2, f, (0 to 20).map(_ * 0.1))
+    testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
   }
 
   test("pow") {

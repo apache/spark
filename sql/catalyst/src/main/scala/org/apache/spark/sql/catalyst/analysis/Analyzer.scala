@@ -172,8 +172,8 @@ class Analyzer(
      * expressions which equal GroupBy expressions with Literal(null), if those expressions
      * are not set for this grouping set (according to the bit mask).
      */
-    private[this] def expand(g: GroupingSets): Seq[GroupExpression] = {
-      val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
+    private[this] def expand(g: GroupingSets): Seq[Seq[Expression]] = {
+      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
 
       g.bitmasks.foreach { bitmask =>
         // get the non selected grouping attributes according to the bit mask
@@ -194,7 +194,7 @@ class Analyzer(
             Literal.create(bitmask, IntegerType)
         })
 
-        result += GroupExpression(substitution)
+        result += substitution
       }
 
       result.toSeq

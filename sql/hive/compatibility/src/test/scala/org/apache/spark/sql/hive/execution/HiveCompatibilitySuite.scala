@@ -252,7 +252,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_dyn_part14.*", // These work alone but fail when run with other tests...
 
     // the answer is sensitive for jdk version
-    "udf_java_method"
+    "udf_java_method",
+
+    // Spark SQL use Long for TimestampType, lose the precision under 100ns
+    "timestamp_1",
+    "timestamp_2"
   )
 
   /**
@@ -795,8 +799,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
-    "timestamp_1",
-    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
     "timestamp_lazy",

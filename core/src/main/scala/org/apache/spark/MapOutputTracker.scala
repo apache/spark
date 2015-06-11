@@ -21,7 +21,7 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, Map}
+import scala.collection.mutable.{HashMap, HashSet, Map}
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -282,6 +282,53 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
+  }
+
+  /**
+   * Return a list of locations that each have fraction of map output greater than the specified
+   * threshold.
+   *
+   * @param shuffleId id of the shuffle
+   * @param reducerId id of the reduce task
+   * @param numReducers total number of reducers in the shuffle
+   * @param fractionThreshold fraction of total map output size that a location must have
+   *                          for it to be considered large.
+   *
+   * This method is not thread-safe.
+   */
+  def getLocationsWithLargestOutputs(
+      shuffleId: Int,
+      reducerId: Int,
+      numReducers: Int,
+      fractionThreshold: Double)
+    : Option[Array[BlockManagerId]] = {
+
+    if (mapStatuses.contains(shuffleId)) {
+      val statuses = mapStatuses(shuffleId)
+      if (statuses.nonEmpty) {
+        // HashMap to add up sizes of all blocks at the same location
+        val locs = new HashMap[BlockManagerId, Long]
+        var totalOutputSize = 0L
+        var mapIdx = 0
+        while (mapIdx < statuses.length) {
+          val status = statuses(mapIdx)
+          val blockSize = status.getSizeForBlock(reducerId)
+          if (blockSize > 0) {
+            locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
+            totalOutputSize += blockSize
+          }
+          mapIdx = mapIdx + 1
+        }
+        val topLocs = locs.filter { case (loc, size) =>
+          size.toDouble / totalOutputSize >= fractionThreshold
+        }
+        // Return if we have any locations which satisfy the required threshold
+        if (topLocs.nonEmpty) {
+          return Some(topLocs.map(_._1).toArray)
+        }
+      }
+    }
+    None
   }
 
   def incrementEpoch() {

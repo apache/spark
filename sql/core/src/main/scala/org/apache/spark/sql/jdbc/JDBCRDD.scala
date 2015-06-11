@@ -385,7 +385,7 @@ private[sql] class JDBCRDD(
               // DateUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
-                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+                mutableRow.setInt(i, DateUtils.fromJavaDate(dateVal))
               } else {
                 mutableRow.update(i, null)
               }
@@ -417,7 +417,13 @@ private[sql] class JDBCRDD(
             case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
             case StringConversion => mutableRow.setString(i, rs.getString(pos))
-            case TimestampConversion => mutableRow.update(i, rs.getTimestamp(pos))
+            case TimestampConversion =>
+              val t = rs.getTimestamp(pos)
+              if (t != null) {
+                mutableRow.setLong(i, DateUtils.fromJavaTimestamp(t))
+              } else {
+                mutableRow.update(i, null)
+              }
             case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
             case BinaryLongConversion => {
               val bytes = rs.getBytes(pos)

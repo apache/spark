@@ -34,6 +34,7 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 __all__ = [
     'array',
     'approxCountDistinct',
+    'bin',
     'coalesce',
     'countDistinct',
     'explode',
@@ -136,7 +137,6 @@ _functions_1_4 = {
                  'measured in radians.',
 
     'bitwiseNOT': 'Computes bitwise not.',
-    'bin': 'Computes the binary format of the given value.',
 }
 
 # math functions that take two arguments as input
@@ -228,6 +228,17 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+    return Column(jc)
+
+@since(1.4)
+def bin(col):
+    """Returns the string representation of the binary value of the given column.
+
+    >>> df.select(bin(df.age).alias('c')).collect()
+    [Row(c=u'10'), Row(c=u'101')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
 
 

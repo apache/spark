@@ -203,6 +203,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
         case DateType => new MutableInt // We use INT for DATE internally
+        case TimestampType => new MutableLong  // We use Long for Timestamp internally
         case _ => new MutableAny
       }.toArray)
 
