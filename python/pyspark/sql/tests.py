@@ -604,14 +604,17 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(0, df.filter(df.time > time).count())
 
     def test_time_with_timezone(self):
+        day = datetime.date.today()
         now = datetime.datetime.now()
         ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
         # class in __main__ is not serializable
         from pyspark.sql.tests import UTC
         utc = UTC()
         utcnow = datetime.datetime.fromtimestamp(ts, utc)
-        df = self.sqlCtx.createDataFrame([(now, utcnow)])
-        now1, utcnow1 = df.first()
+        df = self.sqlCtx.createDataFrame([(day, now, utcnow)])
+        day1, now1, utcnow1 = df.first()
+        # Pyrolite serialize java.sql.Date as datetime, will be fixed in new version
+        self.assertEqual(day1.date(), day)
         # Pyrolite does not support microsecond, the error should be
         # less than 1 millisecond
         self.assertTrue(now - now1 < datetime.timedelta(0.001))
