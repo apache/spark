@@ -182,6 +182,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return bytes.length - b.length;
   }
 
+  public int compare(final UTF8String other) {
+    return compareTo(other);
+  }
+
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {

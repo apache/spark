@@ -251,11 +251,8 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case StringType =>
-        defineCodeGen (ctx, ev, (c1, c2) => s"$c1.compareTo($c2) $symbol 0")
+      case dt: NumericType if ctx.isNativeType(dt) =>
+        defineCodeGen (ctx, ev, (c1, c3) => s"$c1 $symbol $c3")
       case DateType | TimestampType =>
         defineCodeGen (ctx, ev, (c1, c3) => s"$c1 $symbol $c3")
       case _ =>
