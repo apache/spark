@@ -71,46 +71,46 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
     }.mkString("\n        ")
 
-    val specificAccessorFunctions = ctx.nativeTypes.map { dt =>
-      val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dt || dt == IntegerType && e.dataType == DateType =>
-          s"case $i: return c$i;"
-        case _ => ""
+    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
+      val cases = expressions.zipWithIndex.flatMap {
+        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
+          List(s"case $i: return c$i;")
+        case _ => Nil
       }.mkString("\n        ")
-      if (cases.count(_ != '\n') > 0) {
+      if (cases.length > 0) {
         s"""
       @Override
-      public ${ctx.javaType(dt)} ${ctx.accessorForType(dt)}(int i) {
+      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
         if (isNullAt(i)) {
-          return ${ctx.defaultValue(dt)};
+          return ${ctx.defaultValue(dataType)};
         }
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i
-          + " in ${ctx.accessorForType(dt)}");
+          + " in ${ctx.accessorForType(dataType)}");
       }"""
       } else {
         ""
       }
     }.mkString("\n")
 
-    val specificMutatorFunctions = ctx.nativeTypes.map { dt =>
-      val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dt || dt == IntegerType && e.dataType == DateType =>
-          s"case $i: { c$i = value; return; }"
-        case _ => ""
+    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
+      val cases = expressions.zipWithIndex.flatMap {
+        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
+          List(s"case $i: { c$i = value; return; }")
+        case _ => Nil
       }.mkString("\n        ")
-      if (cases.count(_ != '\n') > 0) {
+      if (cases.length > 0) {
         s"""
       @Override
-      public void ${ctx.mutatorForType(dt)}(int i, ${ctx.javaType(dt)} value) {
+      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
         nullBits[i] = false;
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i +
-          " in ${ctx.accessorForType(dt)}");
+          " in ${ctx.mutatorForType(dataType)}");
       }"""
       } else {
         ""
@@ -122,7 +122,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"
-        case LongType => s"$col ^ ($col >>> 32)"
+        case LongType | TimestampType => s"$col ^ ($col >>> 32)"
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
@@ -137,16 +137,13 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     ).mkString("\n")
 
     val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
-      if (ctx.isNativeType(e.dataType)) {
-        s"""if (nullBits[$i] != row.nullBits[$i] || !nullBits[$i] && c$i != row.c$i) {
-            return false;
-          }"""
-      } else {
-        s"""if (nullBits[$i] != row.nullBits[$i] || !nullBits[$i] && !get($i).equals(row.get($i))) {
-            return false;
-          }"""
-      }
-    }.mkString("\n          ")
+      s"""
+        if (nullBits[$i] != row.nullBits[$i] ||
+          (!nullBits[$i] && !(${ctx.genEqual(e.dataType, s"c$i", s"row.c$i")}))) {
+          return false;
+        }
+      """
+    }.mkString("\n")
 
     val code = s"""
     import org.apache.spark.sql.Row;
@@ -212,8 +209,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       public boolean equals(Object other) {
         if (other instanceof SpecificRow) {
           SpecificRow row = (SpecificRow) other;
-          int sz = size();
-          if (row.length() != sz) return false;
           $columnChecks
           return true;
         }

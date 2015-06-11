@@ -15,52 +15,26 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql.catalyst.util
 
-.graph {
-  font: 10px sans-serif;
-}
+import java.sql.Timestamp
 
-.axis path, .axis line {
-  fill: none;
-  stroke: gray;
-  shape-rendering: crispEdges;
-}
+import org.apache.spark.SparkFunSuite
 
-.axis text {
-  fill: gray;
-}
 
-.tooltip-inner {
-  max-width: 500px !important; /* Make sure we only have one line tooltip */
-}
+class DateUtilsSuite extends SparkFunSuite {
 
-.line {
-  fill: none;
-  stroke: #0088cc;
-  stroke-width: 1.5px;
-}
+  test("timestamp") {
+    val now = new Timestamp(System.currentTimeMillis())
+    now.setNanos(100)
+    val ns = DateUtils.fromJavaTimestamp(now)
+    assert(ns % 10000000L == 1)
+    assert(DateUtils.toJavaTimestamp(ns) == now)
 
-.bar rect {
-  fill: #0088cc;
-  shape-rendering: crispEdges;
-}
-
-.bar rect:hover {
-  fill: #00c2ff;
-}
-
-.timeline {
-  width: 500px;
-}
-
-.histogram {
-  width: auto;
-}
-
-span.expand-input-rate {
-  cursor: pointer;
-}
-
-tr.batch-table-cell-highlight > td {
-  background-color: #D6FFE4 !important;
+    List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
+      val ts = DateUtils.toJavaTimestamp(t)
+      assert(DateUtils.fromJavaTimestamp(ts) == t)
+      assert(DateUtils.toJavaTimestamp(DateUtils.fromJavaTimestamp(ts)) == ts)
+    }
+  }
 }

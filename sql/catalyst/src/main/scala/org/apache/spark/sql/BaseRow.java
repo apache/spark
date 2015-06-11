@@ -19,6 +19,7 @@ package org.apache.spark.sql;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 
 import scala.collection.Seq;
@@ -104,6 +105,11 @@ public abstract class BaseRow implements Row {
   }
 
   @Override
+  public Timestamp getTimestamp(int i) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public <T> Seq<T> getSeq(int i) {
     throw new UnsupportedOperationException();
   }
@@ -160,7 +166,7 @@ public abstract class BaseRow implements Row {
         return false;
       }
       for (int i = 0; i < n; i ++) {
-        if (isNullAt(i) != row.isNullAt(i) || !isNullAt(i) && !get(i).equals(row.get(i))) {
+        if (isNullAt(i) != row.isNullAt(i) || (!isNullAt(i) && !get(i).equals(row.get(i)))) {
           return false;
         }
       }

@@ -21,7 +21,6 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DateType, BinaryType, DecimalType, NumericType}
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
@@ -55,43 +54,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
       val evalA = order.child.gen(ctx)
       val evalB = order.child.gen(ctx)
       val asc = order.direction == Ascending
-      val compare = order.child.dataType match {
-        case BinaryType =>
-          s"""
-            {
-              byte[] x = ${if (asc) evalA.primitive else evalB.primitive};
-              byte[] y = ${if (!asc) evalB.primitive else evalA.primitive};
-              int d = org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary(x, y);
-              if (d != 0) {
-                return d;
-              }
-            }"""
-        case dt: NumericType if !dt.isInstanceOf[DecimalType] =>
-          s"""
-            if (${evalA.primitive} != ${evalB.primitive}) {
-              if (${evalA.primitive} > ${evalB.primitive}) {
-                return ${if (asc) "1" else "-1"};
-              } else {
-                return ${if (asc) "-1" else "1"};
-              }
-            }"""
-        case DateType =>
-          s"""
-            if (${evalA.primitive} != ${evalB.primitive}) {
-              if (${evalA.primitive} > ${evalB.primitive}) {
-                return ${if (asc) "1" else "-1"};
-              } else {
-                return ${if (asc) "-1" else "1"};
-              }
-            }"""
-        case _ =>
-          s"""
-            int comp = ${evalA.primitive}.compare(${evalB.primitive});
-            if (comp != 0) {
-              return ${if (asc) "comp" else "-comp"};
-            }"""
-      }
-
       s"""
           i = $a;
           ${evalA.code}
@@ -104,7 +66,10 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
           } else if (${evalB.isNull}) {
             return ${if (order.direction == Ascending) "1" else "-1"};
           } else {
-            $compare
+            int comp = ${ctx.genComp(order.child.dataType, evalA.primitive, evalB.primitive)};
+            if (comp != 0) {
+              return ${if (asc) "comp" else "-comp"};
+            }
           }
       """
     }.mkString("\n")

@@ -360,6 +360,24 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("specifying the column list for CTAS") {
+    Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
+
+    sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    checkAnswer(
+      sql("SELECT a, b from gen__tmp"),
+      sql("select key, value from mytable1").collect())
+    sql("DROP TABLE gen__tmp")
+
+    sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
+    checkAnswer(
+      sql("SELECT a, b from gen__tmp"),
+      sql("select cast(key as double), cast(value as double) from mytable1").collect())
+    sql("DROP TABLE gen__tmp")
+
+    sql("drop table mytable1")
+  }
+
   test("command substitution") {
     sql("set tbl=src")
     checkAnswer(

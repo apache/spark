@@ -22,6 +22,7 @@ import java.util.regex.Pattern
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
@@ -227,6 +228,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+
   override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
@@ -276,7 +278,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           ba.slice(st, end)
         case s: UTF8String =>
           val (st, end) = slicePos(start, length, () => s.length())
-          s.slice(st, end)
+          s.substring(st, end)
       }
     }
   }
@@ -287,3 +289,30 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     case _ => s"SUBSTR($str, $pos, $len)"
   }
 }
+
+object Substring {
+  def apply(str: Expression, pos: Expression): Substring = {
+    apply(str, pos, Literal(Integer.MAX_VALUE))
+  }
+}
+
+/**
+ * A function that return the length of the given string expression.
+ */
+case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = IntegerType
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: Row): Any = {
+    val string = child.eval(input)
+    if (string == null) null else string.asInstanceOf[UTF8String].length
+  }
+
+  override def toString: String = s"length($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).length()")
+  }
+}
+
+
