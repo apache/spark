@@ -233,24 +233,12 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
     val eval = child.gen(ctx)
     // reuse the previous isNull
     ev.isNull = eval.isNull
-    child match {
-      case Literal(null, _) =>
-        // If the child expression value is null constantly, then the current node
-        // will be assigned with default value.
-        // TODO how about the contant Not Null? leave it for further improvement
-        eval.code +
-        s"""
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-        """
-      case _ =>
-        eval.code +
-        s"""
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            ${ev.primitive} = ${f(eval.primitive)};
-          }
-        """
-    }
+    eval.code + s"""
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = ${f(eval.primitive)};
+     }
+    """
   }
 }
 
