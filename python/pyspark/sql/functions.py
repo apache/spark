@@ -230,6 +230,7 @@ def approxCountDistinct(col, rsd=None):
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
     return Column(jc)
 
+
 @since(1.4)
 def bin(col):
     """Returns the string representation of the binary value of the given column.
