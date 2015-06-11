@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Test suite for [[GBTClassifier]].
  */
-class GBTClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import GBTClassifierSuite.compareAPIs
 
@@ -128,7 +127,7 @@ private object GBTClassifierSuite {
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)

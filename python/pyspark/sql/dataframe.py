@@ -22,6 +22,7 @@ import random
 if sys.version >= '3':
     basestring = unicode = str
     long = int
+    from functools import reduce
 else:
     from itertools import imap as map
 
@@ -29,9 +30,11 @@ from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.types import *
+from pyspark.sql import since
 from pyspark.sql.types import _create_cls, _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "SchemaRDD", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -42,7 +45,7 @@ class DataFrame(object):
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
     and can be created using various functions in :class:`SQLContext`::
 
-        people = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -54,11 +57,15 @@ class DataFrame(object):
     A more concrete example::
 
         # To create DataFrame using SQLContext
-        people = sqlContext.parquetFile("...")
-        department = sqlContext.parquetFile("...")
+        people = sqlContext.read.parquet("...")
+        department = sqlContext.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
+
+    .. note:: Experimental
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jdf, sql_ctx):
@@ -70,6 +77,7 @@ class DataFrame(object):
         self._lazy_rdd = None
 
     @property
+    @since(1.3)
     def rdd(self):
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
         """
@@ -87,18 +95,21 @@ class DataFrame(object):
         return self._lazy_rdd
 
     @property
+    @since("1.3.1")
     def na(self):
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
         """
         return DataFrameNaFunctions(self)
 
     @property
+    @since(1.4)
     def stat(self):
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
         """
         return DataFrameStatFunctions(self)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def toJSON(self, use_unicode=True):
         """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
@@ -113,19 +124,12 @@ class DataFrame(object):
     def saveAsParquetFile(self, path):
         """Saves the contents as a Parquet file, preserving the schema.
 
-        Files that are written out using this method can be read back in as
-        a :class:`DataFrame` using :func:`SQLContext.parquetFile`.
-
-        >>> import tempfile, shutil
-        >>> parquetFile = tempfile.mkdtemp()
-        >>> shutil.rmtree(parquetFile)
-        >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlContext.parquetFile(parquetFile)
-        >>> sorted(df2.collect()) == sorted(df.collect())
-        True
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.parquet` instead.
         """
+        warnings.warn("saveAsParquetFile is deprecated. Use write.parquet() instead.")
         self._jdf.saveAsParquetFile(path)
 
+    @since(1.3)
     def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
@@ -140,81 +144,49 @@ class DataFrame(object):
         self._jdf.registerTempTable(name)
 
     def registerAsTable(self, name):
-        """DEPRECATED: use :func:`registerTempTable` instead"""
-        warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
+        """
+        .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.
+        """
+        warnings.warn("Use registerTempTable instead of registerAsTable.")
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this :class:`DataFrame` into the specified table.
 
-        Optionally overwriting any existing data.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.insertInto` instead.
         """
-        self._jdf.insertInto(tableName, overwrite)
-
-    def _java_save_mode(self, mode):
-        """Returns the Java save mode based on the Python save mode represented by a string.
-        """
-        jSaveMode = self._sc._jvm.org.apache.spark.sql.SaveMode
-        jmode = jSaveMode.ErrorIfExists
-        mode = mode.lower()
-        if mode == "append":
-            jmode = jSaveMode.Append
-        elif mode == "overwrite":
-            jmode = jSaveMode.Overwrite
-        elif mode == "ignore":
-            jmode = jSaveMode.Ignore
-        elif mode == "error":
-            pass
-        else:
-            raise ValueError(
-                "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
-        return jmode
+        warnings.warn("insertInto is deprecated. Use write.insertInto() instead.")
+        self.write.insertInto(tableName, overwrite)
 
     def saveAsTable(self, tableName, source=None, mode="error", **options):
         """Saves the contents of this :class:`DataFrame` to a data source as a table.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the saveAsTable operation when
-        table already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.saveAsTable` instead.
         """
-        if source is None:
-            source = self.sql_ctx.getConf("spark.sql.sources.default",
-                                          "org.apache.spark.sql.parquet")
-        jmode = self._java_save_mode(mode)
-        self._jdf.saveAsTable(tableName, source, jmode, options)
+        warnings.warn("insertInto is deprecated. Use write.saveAsTable() instead.")
+        self.write.saveAsTable(tableName, source, mode, **options)
 
+    @since(1.3)
     def save(self, path=None, source=None, mode="error", **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Additionally, mode is used to specify the behavior of the save operation when
-        data already exists in the data source. There are four modes:
-
-        * `append`: Append contents of this :class:`DataFrame` to existing data.
-        * `overwrite`: Overwrite existing data.
-        * `error`: Throw an exception if data already exists.
-        * `ignore`: Silently ignore this operation if data already exists.
+        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.save` instead.
         """
-        if path is not None:
-            options["path"] = path
-        if source is None:
-            source = self.sql_ctx.getConf("spark.sql.sources.default",
-                                          "org.apache.spark.sql.parquet")
-        jmode = self._java_save_mode(mode)
-        self._jdf.save(source, jmode, options)
+        warnings.warn("insertInto is deprecated. Use write.save() instead.")
+        return self.write.save(path, source, mode, **options)
 
     @property
+    @since(1.4)
+    def write(self):
+        """
+        Interface for saving the content of the :class:`DataFrame` out into external storage.
+
+        :return: :class:`DataFrameWriter`
+        """
+        return DataFrameWriter(self)
+
+    @property
+    @since(1.3)
     def schema(self):
         """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
 
@@ -225,6 +197,7 @@ class DataFrame(object):
             self._schema = _parse_datatype_json_string(self._jdf.schema().json())
         return self._schema
 
+    @since(1.3)
     def printSchema(self):
         """Prints out the schema in the tree format.
 
@@ -236,6 +209,7 @@ class DataFrame(object):
         """
         print(self._jdf.schema().treeString())
 
+    @since(1.3)
     def explain(self, extended=False):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
@@ -261,12 +235,14 @@ class DataFrame(object):
         else:
             print(self._jdf.queryExecution().executedPlan().toString())
 
+    @since(1.3)
     def isLocal(self):
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).
         """
         return self._jdf.isLocal()
 
+    @since(1.3)
     def show(self, n=20):
         """Prints the first ``n`` rows to the console.
 
@@ -285,6 +261,7 @@ class DataFrame(object):
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
+    @since(1.3)
     def count(self):
         """Returns the number of rows in this :class:`DataFrame`.
 
@@ -294,6 +271,7 @@ class DataFrame(object):
         return int(self._jdf.count())
 
     @ignore_unicode_prefix
+    @since(1.3)
     def collect(self):
         """Returns all the records as a list of :class:`Row`.
 
@@ -307,6 +285,7 @@ class DataFrame(object):
         return [cls(r) for r in rs]
 
     @ignore_unicode_prefix
+    @since(1.3)
     def limit(self, num):
         """Limits the result count to the number specified.
 
@@ -319,6 +298,7 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def take(self, num):
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
@@ -328,6 +308,7 @@ class DataFrame(object):
         return self.limit(num).collect()
 
     @ignore_unicode_prefix
+    @since(1.3)
     def map(self, f):
         """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
 
@@ -339,6 +320,7 @@ class DataFrame(object):
         return self.rdd.map(f)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def flatMap(self, f):
         """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
         and then flattening the results.
@@ -350,6 +332,7 @@ class DataFrame(object):
         """
         return self.rdd.flatMap(f)
 
+    @since(1.3)
     def mapPartitions(self, f, preservesPartitioning=False):
         """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
 
@@ -362,6 +345,7 @@ class DataFrame(object):
         """
         return self.rdd.mapPartitions(f, preservesPartitioning)
 
+    @since(1.3)
     def foreach(self, f):
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
 
@@ -373,6 +357,7 @@ class DataFrame(object):
         """
         return self.rdd.foreach(f)
 
+    @since(1.3)
     def foreachPartition(self, f):
         """Applies the ``f`` function to each partition of this :class:`DataFrame`.
 
@@ -385,6 +370,7 @@ class DataFrame(object):
         """
         return self.rdd.foreachPartition(f)
 
+    @since(1.3)
     def cache(self):
         """ Persists with the default storage level (C{MEMORY_ONLY_SER}).
         """
@@ -392,6 +378,7 @@ class DataFrame(object):
         self._jdf.cache()
         return self
 
+    @since(1.3)
     def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         """Sets the storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
@@ -403,6 +390,7 @@ class DataFrame(object):
         self._jdf.persist(javaStorageLevel)
         return self
 
+    @since(1.3)
     def unpersist(self, blocking=True):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
@@ -411,10 +399,22 @@ class DataFrame(object):
         self._jdf.unpersist(blocking)
         return self
 
-    # def coalesce(self, numPartitions, shuffle=False):
-    #     rdd = self._jdf.coalesce(numPartitions, shuffle, None)
-    #     return DataFrame(rdd, self.sql_ctx)
+    @since(1.4)
+    def coalesce(self, numPartitions):
+        """
+        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        Similar to coalesce defined on an :class:`RDD`, this operation results in a
+        narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
+        there will not be a shuffle, instead each of the 100 new partitions will
+        claim 10 of the current partitions.
+
+        >>> df.coalesce(1).rdd.getNumPartitions()
+        1
+        """
+        return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
+
+    @since(1.3)
     def repartition(self, numPartitions):
         """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
 
@@ -423,6 +423,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
+    @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
@@ -431,6 +432,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
+    @since(1.3)
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
@@ -442,6 +444,7 @@ class DataFrame(object):
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
+    @since(1.4)
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
@@ -464,6 +467,7 @@ class DataFrame(object):
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
+    @since(1.3)
     def dtypes(self):
         """Returns all column names and their data types as a list.
 
@@ -474,6 +478,7 @@ class DataFrame(object):
 
     @property
     @ignore_unicode_prefix
+    @since(1.3)
     def columns(self):
         """Returns all column names as a list.
 
@@ -483,6 +488,7 @@ class DataFrame(object):
         return [f.name for f in self.schema.fields]
 
     @ignore_unicode_prefix
+    @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
 
@@ -497,39 +503,57 @@ class DataFrame(object):
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
-    def join(self, other, joinExprs=None, joinType=None):
+    @since(1.3)
+    def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: a string for join column name, or a join expression (Column).
-            If joinExprs is a string indicating the name of the join column,
-            the column must exist on both sides, and this performs an inner equi-join.
-        :param joinType: str, default 'inner'.
+        :param on: a string for join column name, a list of column names,
+            , a join expression (Column) or a list of Columns.
+            If `on` is a string or a list of string indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an inner equi-join.
+        :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
+        >>> cond = [df.name == df3.name, df.age == df3.age]
+        >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
+        [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]
+
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
+
+        >>> df.join(df4, ['name', 'age']).select(df.name, df.age).collect()
+        [Row(name=u'Bob', age=5)]
         """
 
-        if joinExprs is None:
+        if on is not None and not isinstance(on, list):
+            on = [on]
+
+        if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-        elif isinstance(joinExprs, basestring):
-            jdf = self._jdf.join(other._jdf, joinExprs)
+
+        if isinstance(on[0], basestring):
+            jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
-            assert isinstance(joinExprs, Column), "joinExprs should be Column"
-            if joinType is None:
-                jdf = self._jdf.join(other._jdf, joinExprs._jc)
+            assert isinstance(on[0], Column), "on should be Column or list of Column"
+            if len(on) > 1:
+                on = reduce(lambda x, y: x.__and__(y), on)
             else:
-                assert isinstance(joinType, basestring), "joinType should be basestring"
-                jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
+                on = on[0]
+            if how is None:
+                jdf = self._jdf.join(other._jdf, on._jc, "inner")
+            else:
+                assert isinstance(how, basestring), "how should be basestring"
+                jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def sort(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
@@ -589,11 +613,15 @@ class DataFrame(object):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
 
+    @since("1.3.1")
     def describe(self, *cols):
         """Computes statistics for numeric columns.
 
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical columns.
+
+        .. note:: This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe().show()
         +-------+---+
@@ -605,15 +633,30 @@ class DataFrame(object):
         |    min|  2|
         |    max|  5|
         +-------+---+
+        >>> df.describe(['age', 'name']).show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |   mean|3.5| null|
+        | stddev|1.5| null|
+        |    min|  2|Alice|
+        |    max|  5|  Bob|
+        +-------+---+-----+
         """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def head(self, n=None):
-        """
-        Returns the first ``n`` rows as a list of :class:`Row`,
-        or the first :class:`Row` if ``n`` is ``None.``
+        """Returns the first ``n`` rows.
+
+        :param n: int, default 1. Number of rows to return.
+        :return: If n is greater than 1, return a list of :class:`Row`.
+            If n is 1, return a single Row.
 
         >>> df.head()
         Row(age=2, name=u'Alice')
@@ -626,6 +669,7 @@ class DataFrame(object):
         return self.take(n)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def first(self):
         """Returns the first row as a :class:`Row`.
 
@@ -635,6 +679,7 @@ class DataFrame(object):
         return self.head()
 
     @ignore_unicode_prefix
+    @since(1.3)
     def __getitem__(self, item):
         """Returns the column as a :class:`Column`.
 
@@ -662,6 +707,7 @@ class DataFrame(object):
         else:
             raise TypeError("unexpected item type: %s" % type(item))
 
+    @since(1.3)
     def __getattr__(self, name):
         """Returns the :class:`Column` denoted by ``name``.
 
@@ -675,6 +721,7 @@ class DataFrame(object):
         return Column(jc)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def select(self, *cols):
         """Projects a set of expressions and returns a new :class:`DataFrame`.
 
@@ -692,13 +739,14 @@ class DataFrame(object):
         jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(1.3)
     def selectExpr(self, *expr):
         """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
 
         This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
+        [Row((age * 2)=4, 'abs(age)=2), Row((age * 2)=10, 'abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]
@@ -706,6 +754,7 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def filter(self, condition):
         """Filters rows using the given condition.
 
@@ -735,6 +784,7 @@ class DataFrame(object):
     where = filter
 
     @ignore_unicode_prefix
+    @since(1.3)
     def groupBy(self, *cols):
         """Groups the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedData`
@@ -754,10 +804,55 @@ class DataFrame(object):
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
-        jdf = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jdf, self.sql_ctx)
+        return GroupedData(jgd, self.sql_ctx)
 
+    @since(1.4)
+    def rollup(self, *cols):
+        """
+        Create a multi-dimensional rollup for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.rollup('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+        """
+        jgd = self._jdf.rollup(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
+
+    @since(1.4)
+    def cube(self, *cols):
+        """
+        Create a multi-dimensional cube for the current :class:`DataFrame` using
+        the specified columns, so we can run aggregation on them.
+
+        >>> df.cube('name', df.age).count().show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | null|   2|    1|
+        |Alice|null|    1|
+        |  Bob|   5|    1|
+        |  Bob|null|    1|
+        | null|   5|    1|
+        | null|null|    2|
+        |Alice|   2|    1|
+        +-----+----+-----+
+        """
+        jgd = self._jdf.cube(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
+
+    @since(1.3)
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy.agg()``).
@@ -770,6 +865,7 @@ class DataFrame(object):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(1.3)
     def unionAll(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
@@ -778,6 +874,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
 
+    @since(1.3)
     def intersect(self, other):
         """ Return a new :class:`DataFrame` containing rows only in
         both this frame and another frame.
@@ -786,6 +883,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
+    @since(1.3)
     def subtract(self, other):
         """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
@@ -794,6 +892,7 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
+    @since(1.4)
     def dropDuplicates(self, subset=None):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
@@ -824,10 +923,10 @@ class DataFrame(object):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since("1.3.1")
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
-
-        This is an alias for ``na.drop()``.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
 
         :param how: 'any' or 'all'.
             If 'any', drop a row if it contains any nulls.
@@ -836,13 +935,6 @@ class DataFrame(object):
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
         :param subset: optional list of column names to consider.
-
-        >>> df4.dropna().show()
-        +---+------+-----+
-        |age|height| name|
-        +---+------+-----+
-        | 10|    80|Alice|
-        +---+------+-----+
 
         >>> df4.na.drop().show()
         +---+------+-----+
@@ -866,8 +958,10 @@ class DataFrame(object):
 
         return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sql_ctx)
 
+    @since("1.3.1")
     def fillna(self, value, subset=None):
         """Replace null values, alias for ``na.fill()``.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
         :param value: int, long, float, string, or dict.
             Value to replace null values with.
@@ -879,7 +973,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.fillna(50).show()
+        >>> df4.na.fill(50).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
@@ -888,16 +982,6 @@ class DataFrame(object):
         | 50|    50|  Tom|
         | 50|    50| null|
         +---+------+-----+
-
-        >>> df4.fillna({'age': 50, 'name': 'unknown'}).show()
-        +---+------+-------+
-        |age|height|   name|
-        +---+------+-------+
-        | 10|    80|  Alice|
-        |  5|  null|    Bob|
-        | 50|  null|    Tom|
-        | 50|  null|unknown|
-        +---+------+-------+
 
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
@@ -927,8 +1011,11 @@ class DataFrame(object):
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
+    @since(1.4)
     def replace(self, to_replace, value, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
+        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
+        aliases of each other.
 
         :param to_replace: int, long, float, string, or list.
             Value to be replaced.
@@ -944,7 +1031,7 @@ class DataFrame(object):
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
-        >>> df4.replace(10, 20).show()
+        >>> df4.na.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
@@ -954,7 +1041,7 @@ class DataFrame(object):
         |null|  null| null|
         +----+------+-----+
 
-        >>> df4.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
+        >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
@@ -1002,11 +1089,12 @@ class DataFrame(object):
         return DataFrame(
             self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
 
+    @since(1.4)
     def corr(self, col1, col2, method=None):
         """
-        Calculates the correlation of two columns of a DataFrame as a double value. Currently only
-        supports the Pearson Correlation Coefficient.
-        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases.
+        Calculates the correlation of two columns of a DataFrame as a double value.
+        Currently only supports the Pearson Correlation Coefficient.
+        :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
         :param col1: The name of the first column
         :param col2: The name of the second column
@@ -1023,6 +1111,7 @@ class DataFrame(object):
                              "coefficient is supported.")
         return self._jdf.stat().corr(col1, col2, method)
 
+    @since(1.4)
     def cov(self, col1, col2):
         """
         Calculate the sample covariance for the given columns, specified by their names, as a
@@ -1037,6 +1126,7 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
+    @since(1.4)
     def crosstab(self, col1, col2):
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
@@ -1058,12 +1148,16 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
+    @since(1.4)
     def freqItems(self, cols, support=None):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        .. note::  This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1079,6 +1173,7 @@ class DataFrame(object):
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.3)
     def withColumn(self, colName, col):
         """Returns a new :class:`DataFrame` by adding a column.
 
@@ -1091,6 +1186,7 @@ class DataFrame(object):
         return self.select('*', col.alias(colName))
 
     @ignore_unicode_prefix
+    @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
 
@@ -1105,18 +1201,35 @@ class DataFrame(object):
                 for c in self.columns]
         return self.select(*cols)
 
+    @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, colName):
+    def drop(self, col):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param colName: string, name of the column to drop.
+        :param col: a string name of the column to drop, or a
+            :class:`Column` to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.drop(df.age).collect()
+        [Row(name=u'Alice'), Row(name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
+        [Row(age=5, height=85, name=u'Bob')]
+
+        >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
+        [Row(age=5, name=u'Bob', height=85)]
         """
-        jdf = self._jdf.drop(colName)
+        if isinstance(col, basestring):
+            jdf = self._jdf.drop(col)
+        elif isinstance(col, Column):
+            jdf = self._jdf.drop(col._jc)
+        else:
+            raise TypeError("col should be a string or a Column")
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(1.3)
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
@@ -1130,7 +1243,10 @@ class DataFrame(object):
         import pandas as pd
         return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
+    ##########################################################################################
     # Pandas compatibility
+    ##########################################################################################
+
     groupby = groupBy
     drop_duplicates = dropDuplicates
 
@@ -1150,6 +1266,8 @@ def _to_scala_map(sc, jm):
 
 class DataFrameNaFunctions(object):
     """Functionality for working with missing data in :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):
@@ -1165,9 +1283,16 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
+    def replace(self, to_replace, value, subset=None):
+        return self.df.replace(to_replace, value, subset)
+
+    replace.__doc__ = DataFrame.replace.__doc__
+
 
 class DataFrameStatFunctions(object):
     """Functionality for statistic functions with :class:`DataFrame`.
+
+    .. versionadded:: 1.4
     """
 
     def __init__(self, df):
@@ -1207,6 +1332,8 @@ def _test():
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
+    globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
+                                   Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
                                   Row(name='Bob', age=5, height=None),
                                   Row(name='Tom', age=None, height=None),

@@ -118,7 +118,7 @@ case class GeneratedAggregate(
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
       case cs @ CombineSum(expr) =>
-        val calcType = expr.dataType
+        val calcType =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               DecimalType.Unlimited
@@ -129,7 +129,7 @@ case class GeneratedAggregate(
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
         val initialValue = Literal.create(null, calcType)
 
-        // Coalasce avoids double calculation...
+        // Coalesce avoids double calculation...
         // but really, common sub expression elimination would be better....
         val zero = Cast(Literal(0), calcType)
         // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
@@ -138,15 +138,15 @@ case class GeneratedAggregate(
           case UnscaledValue(e) => e
           case _ => expr
         }
-        // partial sum result can be null only when no input rows present 
+        // partial sum result can be null only when no input rows present
         val updateFunction = If(
           IsNotNull(actualExpr),
           Coalesce(
             Add(
-              Coalesce(currentSum :: zero :: Nil), 
+              Coalesce(currentSum :: zero :: Nil),
               Cast(expr, calcType)) :: currentSum :: zero :: Nil),
           currentSum)
-          
+
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
@@ -155,7 +155,7 @@ case class GeneratedAggregate(
           }
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
-        
+
       case m @ Max(expr) =>
         val currentMax = AttributeReference("currentMax", expr.dataType, nullable = true)()
         val initialValue = Literal.create(null, expr.dataType)

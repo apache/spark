@@ -18,11 +18,15 @@
 package org.apache.spark.network.netty
 
 import org.apache.spark.network.BlockDataManager
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.mockito.Mockito.mock
 import org.scalatest._
 
-class NettyBlockTransferServiceSuite extends FunSuite with BeforeAndAfterEach with ShouldMatchers {
+class NettyBlockTransferServiceSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with ShouldMatchers {
+
   private var service0: NettyBlockTransferService = _
   private var service1: NettyBlockTransferService = _
 

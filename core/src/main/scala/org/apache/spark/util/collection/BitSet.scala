@@ -161,7 +161,7 @@ class BitSet(numBits: Int) extends Serializable {
     override def hasNext: Boolean = ind >= 0
     override def next(): Int = {
       val tmp = ind
-      ind  = nextSetBit(ind + 1)
+      ind = nextSetBit(ind + 1)
       tmp
     }
   }

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.json
 
 import java.io.ByteArrayOutputStream
-import java.sql.Timestamp
 
 import scala.collection.Map
 
@@ -65,10 +64,10 @@ private[sql] object JacksonParser {
         DateUtils.millisToDays(DateUtils.stringToTime(parser.getText).getTime)
 
       case (VALUE_STRING, TimestampType) =>
-        new Timestamp(DateUtils.stringToTime(parser.getText).getTime)
+        DateUtils.stringToTime(parser.getText).getTime * 10000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        new Timestamp(parser.getLongValue)
+        parser.getLongValue * 10000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
@@ -150,10 +149,10 @@ private[sql] object JacksonParser {
   private def convertMap(
       factory: JsonFactory,
       parser: JsonParser,
-      valueType: DataType): Map[String, Any] = {
-    val builder = Map.newBuilder[String, Any]
+      valueType: DataType): Map[UTF8String, Any] = {
+    val builder = Map.newBuilder[UTF8String, Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      builder += parser.getCurrentName -> convertField(factory, parser, valueType)
+      builder += UTF8String(parser.getCurrentName) -> convertField(factory, parser, valueType)
     }
 
     builder.result()
@@ -181,7 +180,7 @@ private[sql] object JacksonParser {
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
         require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, record)
+        row.update(corruptIndex, UTF8String(record))
       }
 
       Seq(row)

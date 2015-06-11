@@ -309,7 +309,7 @@ private[spark] object UIUtils extends Logging {
       started: Int,
       completed: Int,
       failed: Int,
-      skipped:Int,
+      skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)

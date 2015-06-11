@@ -292,6 +292,11 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
+    def startTime(self):
+        """Return the epoch time when the Spark Context was started."""
+        return self._jsc.startTime()
+
+    @property
     def defaultParallelism(self):
         """
         Default level of parallelism to use when not given by user (e.g. for
@@ -318,6 +323,32 @@ class SparkContext(object):
             self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
+
+    def range(self, start, end=None, step=1, numSlices=None):
+        """
+        Create a new RDD of int containing elements from `start` to `end`
+        (exclusive), increased by `step` every element. Can be called the same
+        way as python's built-in range() function. If called with a single argument,
+        the argument is interpreted as `end`, and `start` is set to 0.
+
+        :param start: the start value
+        :param end: the end value (exclusive)
+        :param step: the incremental step (default: 1)
+        :param numSlices: the number of partitions of the new RDD
+        :return: An RDD of int
+
+        >>> sc.range(5).collect()
+        [0, 1, 2, 3, 4]
+        >>> sc.range(2, 4).collect()
+        [2, 3]
+        >>> sc.range(1, 7, 2).collect()
+        [1, 3, 5]
+        """
+        if end is None:
+            end = start
+            start = 0
+
+        return self.parallelize(xrange(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """

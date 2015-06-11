@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -40,7 +40,7 @@ import org.apache.spark.sql.hive.test.TestHive
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -273,7 +273,7 @@ abstract class HiveComparisonTest
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
-          case (queryString, i)  =>
+          case (queryString, i) =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
             new File(answerCache, cachedAnswerName)
         }
@@ -304,7 +304,7 @@ abstract class HiveComparisonTest
             // other DDL has not been executed yet.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
-              case ((queryString, i), hiveQuery, cachedAnswerFile)=>
+              case ((queryString, i), hiveQuery, cachedAnswerFile) =>
                 try {
                   // Hooks often break the harness and don't really affect our test anyway, don't
                   // even try running them.

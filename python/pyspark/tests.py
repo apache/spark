@@ -444,6 +444,11 @@ class AddFileTests(PySparkTestCase):
 
 class RDDTests(ReusedPySparkTestCase):
 
+    def test_range(self):
+        self.assertEqual(self.sc.range(1, 1).count(), 0)
+        self.assertEqual(self.sc.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sc.range(0, 1 << 40, 1 << 39).count(), 2)
+
     def test_id(self):
         rdd = self.sc.parallelize(range(10))
         id = rdd.id()
@@ -1803,6 +1808,10 @@ class ContextTests(unittest.TestCase):
             self.assertEqual([], tracker.getActiveStageIds())
 
             sc.stop()
+
+    def test_startTime(self):
+        with SparkContext() as sc:
+            self.assertGreater(sc.startTime, 0)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

@@ -70,8 +70,7 @@ private[spark] class MetricsSystem private (
     securityMgr: SecurityManager)
   extends Logging {
 
-  private[this] val confFile = conf.get("spark.metrics.conf", null)
-  private[this] val metricsConfig = new MetricsConfig(Option(confFile))
+  private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
   private val sources = new mutable.ArrayBuffer[Source]

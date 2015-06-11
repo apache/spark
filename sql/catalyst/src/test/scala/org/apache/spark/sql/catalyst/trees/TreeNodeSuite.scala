@@ -19,21 +19,24 @@ package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
-  def children: Seq[Expression] = optKey.toSeq
-  def nullable: Boolean = true
-  def dataType: NullType = NullType
+  override def children: Seq[Expression] = optKey.toSeq
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
   override lazy val resolved = true
-  type EvaluatedType = Any
-  def eval(input: Row): Any = null.asInstanceOf[Any]
+  override def eval(input: Row): Any = null.asInstanceOf[Any]
 }
 
-class TreeNodeSuite extends FunSuite {
+case class ComplexPlan(exprs: Seq[Seq[Expression]])
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  override def output: Seq[Attribute] = Nil
+}
+
+class TreeNodeSuite extends SparkFunSuite {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))
@@ -92,7 +95,7 @@ class TreeNodeSuite extends FunSuite {
   test("transform works on nodes with Option children") {
     val dummy1 = Dummy(Some(Literal.create("1", StringType)))
     val dummy2 = Dummy(None)
-    val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
+    val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
 
     var actual = dummy1 transformDown toZero
     assert(actual === Dummy(Some(Literal(0))))
@@ -105,7 +108,7 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("preserves origin") {
-    CurrentOrigin.setPosition(1,1)
+    CurrentOrigin.setPosition(1, 1)
     val add = Add(Literal(1), Literal(1))
     CurrentOrigin.reset()
 
@@ -221,5 +224,14 @@ class TreeNodeSuite extends FunSuite {
       val expected = None
       assert(expected === actual)
     }
+  }
+
+  test("transformExpressions on nested expression sequence") {
+    val plan = ComplexPlan(Seq(Seq(Literal(1)), Seq(Literal(2))))
+    val actual = plan.transformExpressions {
+      case Literal(value, _) => Literal(value.toString)
+    }
+    val expected = ComplexPlan(Seq(Seq(Literal("1")), Seq(Literal("2"))))
+    assert(expected === actual)
   }
 }

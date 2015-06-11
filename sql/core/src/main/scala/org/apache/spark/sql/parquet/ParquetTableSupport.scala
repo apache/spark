@@ -20,15 +20,16 @@ package org.apache.spark.sql.parquet
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
-import parquet.column.ParquetProperties
-import parquet.hadoop.ParquetOutputFormat
-import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.hadoop.api.{ReadSupport, WriteSupport}
-import parquet.io.api._
-import parquet.schema.MessageType
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.api.{ReadSupport, WriteSupport}
+import org.apache.parquet.io.api._
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -129,7 +130,7 @@ private[parquet] object RowReadSupport {
 }
 
 /**
- * A `parquet.hadoop.api.WriteSupport` for Row ojects.
+ * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
@@ -204,7 +205,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
         case ShortType => writer.addInteger(value.asInstanceOf[Short])
         case LongType => writer.addLong(value.asInstanceOf[Long])
-        case TimestampType => writeTimestamp(value.asInstanceOf[java.sql.Timestamp])
+        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
         case ByteType => writer.addInteger(value.asInstanceOf[Byte])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
@@ -311,8 +312,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
-  private[parquet] def writeTimestamp(ts: java.sql.Timestamp): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(ts)
+  private[parquet] def writeTimestamp(ts: Long): Unit = {
+    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(
+      DateUtils.toJavaTimestamp(ts))
     writer.addBinary(binaryNanoTime)
   }
 }
@@ -357,7 +359,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
       case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record(index).asInstanceOf[java.sql.Timestamp])
+      case TimestampType => writeTimestamp(record(index).asInstanceOf[Long])
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

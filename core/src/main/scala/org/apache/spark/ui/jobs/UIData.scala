@@ -22,6 +22,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.util.collection.OpenHashSet
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 private[spark] object UIData {
@@ -63,7 +64,7 @@ private[spark] object UIData {
     /* Stages */
     var numActiveStages: Int = 0,
     // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
-    var completedStageIndices: OpenHashSet[Int] = new OpenHashSet[Int](),
+    var completedStageIndices: mutable.HashSet[Int] = new mutable.HashSet[Int](),
     var numSkippedStages: Int = 0,
     var numFailedStages: Int = 0
   )

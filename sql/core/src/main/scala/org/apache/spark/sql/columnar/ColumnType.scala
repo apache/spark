@@ -18,7 +18,6 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -355,22 +354,20 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
   }
 }
 
-private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
-  override def extract(buffer: ByteBuffer): Timestamp = {
-    val timestamp = new Timestamp(buffer.getLong())
-    timestamp.setNanos(buffer.getInt())
-    timestamp
+private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
+  override def extract(buffer: ByteBuffer): Long = {
+    buffer.getLong
   }
 
-  override def append(v: Timestamp, buffer: ByteBuffer): Unit = {
-    buffer.putLong(v.getTime).putInt(v.getNanos)
+  override def append(v: Long, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v)
   }
 
-  override def getField(row: Row, ordinal: Int): Timestamp = {
-    row(ordinal).asInstanceOf[Timestamp]
+  override def getField(row: Row, ordinal: Int): Long = {
+    row(ordinal).asInstanceOf[Long]
   }
 
-  override def setField(row: MutableRow, ordinal: Int, value: Timestamp): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
     row(ordinal) = value
   }
 }

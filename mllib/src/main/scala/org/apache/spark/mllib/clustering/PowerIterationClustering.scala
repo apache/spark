@@ -121,7 +121,7 @@ class PowerIterationClustering private[clustering] (
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
   /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
-   *  initMode: "random"}. 
+   *  initMode: "random"}.
    */
   def this() = this(k = 2, maxIterations = 100, initMode = "random")
 
@@ -243,7 +243,7 @@ object PowerIterationClustering extends Logging {
 
   /**
    * Generates random vertex properties (v0) to start power iteration.
-   * 
+   *
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing a random vector
    *         with unit 1-norm
@@ -266,7 +266,7 @@ object PowerIterationClustering extends Logging {
    * Generates the degree vector as the vertex properties (v0) to start power iteration.
    * It is not exactly the node degrees but just the normalized sum similarities. Call it
    * as degree vector because it is used in the PIC paper.
-   * 
+   *
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing the degree vector
    */
@@ -276,7 +276,7 @@ object PowerIterationClustering extends Logging {
     val v0 = g.vertices.mapValues(_ / sum)
     GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
   }
- 
+
   /**
    * Runs power iteration.
    * @param g input graph with edges representing the normalized affinity matrix (W) and vertices
