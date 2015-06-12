@@ -113,4 +113,23 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "abcde")
     assert(conf.getConf(confEntry, "abc") === "abcde")
   }
+
+  test("enumConf") {
+    val key = "spark.sql.SQLConfEntrySuite.enum"
+    val confEntry = SQLConfEntry.enumConf(key, v => v, Set("a", "b", "c"), defaultValue = Some("a"))
+    assert(conf.getConf(confEntry) === "a")
+
+    conf.setConf(confEntry, "b")
+    assert(conf.getConf(confEntry) === "b")
+
+    conf.setConfString(key, "c")
+    assert(conf.getConfString(key, "a") === "c")
+    assert(conf.getConfString(key) === "c")
+    assert(conf.getConf(confEntry) === "c")
+
+    val e = intercept[IllegalArgumentException] {
+      conf.setConfString(key, "d")
+    }
+    assert(e.getMessage === s"The value of $key should be one of a, b, c, but was d")
+  }
 }
