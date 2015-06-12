@@ -271,13 +271,16 @@ private[spark] object SQLConf {
     doc = "<TODO>")
 
   // This is only used for the thriftserver
-  val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool", isPublic = false)
+  val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
+    doc = "Set a Fair Scheduler pool for a JDBC client session")
 
-  val THRIFTSERVER_UI_STATEMENT_LIMIT =
-    intConf("spark.sql.thriftserver.ui.retainedStatements", isPublic = false)
+  val THRIFTSERVER_UI_STATEMENT_LIMIT = intConf("spark.sql.thriftserver.ui.retainedStatements",
+    defaultValue = Some(200),
+    doc = "<TODO>")
 
-  val THRIFTSERVER_UI_SESSION_LIMIT =
-    intConf("spark.sql.thriftserver.ui.retainedSessions", isPublic = false)
+  val THRIFTSERVER_UI_SESSION_LIMIT = intConf("spark.sql.thriftserver.ui.retainedSessions",
+    defaultValue = Some(200),
+    doc = "<TODO>")
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = stringConf("spark.sql.sources.default",
@@ -529,7 +532,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`.
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * desired one.
    */
   def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")

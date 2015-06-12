@@ -153,9 +153,9 @@ object HiveThriftServer2 extends Logging {
     val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     val retainedStatements =
-      conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT, 200)
+      conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
     val retainedSessions =
-      conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT, 200)
+      conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     var totalRunning = 0
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
