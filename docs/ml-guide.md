@@ -194,33 +194,64 @@ The following code illustrates how to load a sample dataset and use logistic reg
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.mllib.util.MLUtils
 
-// Load training and test data and cache it.
+// Load training data
 val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 
-val lor = new LogisticRegression()
+val lr = new LogisticRegression()
   .setRegParam(0.3)
   .setElasticNetParam(0.8)
   .setTol(1e-6)
 
 // Fit the model
-val lorModel = lor.fit(training)
+val lrModel = lr.fit(training)
 
 // Print the weights and intercept for logistic regression.
-println(s"Weights: ${lorModel.weights} Intercept: ${lorModel.intercept}")
+println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
 
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+The following code illustrates how to load a sample dataset and use logistic regression with elastic net regularization to fit a model.
 
 {% highlight java %}
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.classification.LogisticRegressionModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
 
+public class LogisticRegressionWithElasticNetExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf()
+      .setAppName("Logistic Regression with Elastic Net Example");
+
+    SparkContext sc = new SparkContext(conf);
+    SQLContext sql = new SQLContext(sc);
+    String path = "sample_libsvm_data.txt";
+
+    // Load training data
+    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
+
+    // Fit the model
+    LogisticRegression lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
+      .setThreshold(0.6)
+      .setProbabilityCol("myProbability");
+    LogisticRegressionModel lrModel = lr.fit(training);
+  }
+}
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
-
+The following code illustrates how to load a sample dataset and use logistic regression with elastic net regularization to fit a model.
 
 {% highlight python %}
 
