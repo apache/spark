@@ -992,7 +992,8 @@ cleanedDStream = wordCounts.transform(lambda rdd: rdd.join(spamInfoRDD).filter(.
 </div>
 
 Note that the supplied function gets called in every batch interval. This allows you to do
-time-varying RDD operations
+time-varying RDD operations, that is, RDD operations, number of partitions, broadcast variables,
+etc. can be changed between batches.
 
 #### Window Operations
 {:.no_toc}
