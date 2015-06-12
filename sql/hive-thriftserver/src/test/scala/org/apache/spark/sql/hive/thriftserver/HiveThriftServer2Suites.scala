@@ -113,8 +113,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) ===
-        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 
@@ -263,12 +263,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         queries.map(statement.execute)
         val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
-        assert("spark.sql.shuffle.partitions=291" === rs1.getString(1))
+        assert("spark.sql.shuffle.partitions" === rs1.getString(1))
+        assert("291" === rs1.getString(2))
         rs1.close()
 
         val rs2 = statement.executeQuery("SET hive.cli.print.header")
         rs2.next()
-        assert("hive.cli.print.header=true" === rs2.getString(1))
+        assert("hive.cli.print.header" === rs2.getString(1))
+        assert("true" === rs2.getString(2))
         rs2.close()
       },
 
@@ -404,8 +406,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) ===
-        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 }

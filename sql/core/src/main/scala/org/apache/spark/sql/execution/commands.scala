@@ -77,9 +77,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommand(
-    kv: Option[(String, Option[String])])
-  extends RunnableCommand with Logging {
+case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
     val schema = StructType(
