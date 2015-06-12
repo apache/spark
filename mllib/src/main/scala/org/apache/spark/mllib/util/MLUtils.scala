@@ -290,7 +290,7 @@ object MLUtils {
         outputValues(inputValuesLength) = 1.0
         outputIndices(inputValuesLength) = dim
         Vectors.sparse(dim + 1, outputIndices, outputValues)
-      case _ => throw new IllegalArgumentException("Do not support vector type " + vector.getClass)
+      case _ => throw new IllegalArgumentException(s"Do not support vector type ${vector.getClass}")
     }
   }
 
