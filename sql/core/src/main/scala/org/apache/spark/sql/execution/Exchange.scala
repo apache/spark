@@ -92,7 +92,7 @@ case class Exchange(
       } else if (serializeMapOutputs && serializer.supportsRelocationOfSerializedObjects) {
         // SPARK-4550 extended sort-based shuffle to serialize individual records prior to sorting
         // them. This optimization is guarded by a feature-flag and is only applied in cases where
-        // shuffle dependency does not specify an ordering and the record serializer has certain
+        // shuffle dependency does not specify an aggregator and the record serializer has certain
         // properties. If this optimization is enabled, we can safely avoid the copy.
         //
         // This optimization also applies to UnsafeShuffleManager (added in SPARK-7081).
