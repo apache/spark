@@ -54,8 +54,8 @@ private[streaming] trait ReceivedBlockHandler {
  * that stores the metadata related to storage of blocks using
  * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
  */
-private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId,
-      numRecords: Option[Long])
+private[streaming] case class BlockManagerBasedStoreResult(
+      blockId: StreamBlockId, numRecords: Option[Long])
   extends ReceivedBlockStoreResult
 
 
@@ -68,23 +68,21 @@ private[streaming] class BlockManagerBasedBlockHandler(
   extends ReceivedBlockHandler with Logging {
 
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+
     var numRecords = None: Option[Long]
 
     val putResult: Seq[(BlockId, BlockStatus)] = block match {
       case ArrayBufferBlock(arrayBuffer) =>
-        val countIterator = new CountingIterator(arrayBuffer.iterator)
-        val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
+        numRecords = Some(arrayBuffer.size.toLong)
+        blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel,
           tellMaster = true)
-        numRecords = Some(countIterator.count)
-        putResult
       case IteratorBlock(iterator) =>
         val countIterator = new CountingIterator(iterator)
         val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
           tellMaster = true)
-        numRecords = Some(countIterator.count)
+        numRecords = countIterator.count
         putResult
       case ByteBufferBlock(byteBuffer) =>
-        numRecords = Some(1)
         blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
@@ -171,17 +169,14 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Serialize the block so that it can be inserted into both
     val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>
-        val countIterator = new CountingIterator(arrayBuffer.iterator)
-        val serializedBlock = blockManager.dataSerialize(blockId, countIterator)
-        numRecords = Some(countIterator.count)
-        serializedBlock
+      numRecords = Some(arrayBuffer.size.toLong)
+      blockManager.dataSerialize(blockId, arrayBuffer.iterator)
       case IteratorBlock(iterator) =>
         val countIterator = new CountingIterator(iterator)
         val serializedBlock = blockManager.dataSerialize(blockId, countIterator)
-        numRecords = Some(countIterator.count)
+        numRecords = countIterator.count
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
-        numRecords = Some(1)
         byteBuffer
       case _ =>
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
@@ -228,11 +223,18 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
  * A utility that will wrap the Iterator to get the count
  */
 private class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
-   var count = 0
+   private var _count = 0
+
+   private def isFullyConsumed: Boolean = !iterator.hasNext
+
    def hasNext(): Boolean = iterator.hasNext
-   def isFullyConsumed: Boolean = !iterator.hasNext
+
+   def count(): Option[Long] = {
+     if (isFullyConsumed) Some(_count) else None
+   }
+
    def next(): T = {
-    count += 1
+    _count += 1
     iterator.next()
    }
 }
