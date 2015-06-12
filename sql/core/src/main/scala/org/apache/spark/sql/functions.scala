@@ -990,6 +990,56 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * Adds a number of days to startDate, given values for startDate and days
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_add(startDate: Column, days: Column): Column = DateAdd(startDate.expr, days.expr)
+
+  /**
+   * Adds a number of days to startDate, given column names for startDate and days
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_add(startDate: String, days: String): Column = date_add(Column(startDate), Column(days))
+
+  /**
+   * Subtracts a number of days to startDate, given values for startDate and days
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(startDate: Column, days: Column): Column = DateSub(startDate.expr, days.expr)
+
+  /**
+   * Subtracts a number of days to startDate, given column names for startDate and days
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(startDate: String, days: String): Column = date_sub(Column(startDate), Column(days))
+
+  /**
+   * Returns the number of days from startDate to endDate, given values for startDate and days.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def datediff(startDate: Column, endDate: Column): Column = DateDiff(startDate.expr, endDate.expr)
+
+  /**
+   * Returns the number of days from startDate to endDate, given column names for startDate and
+   * days.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def datediff(startDate: String, endDate: String): Column =
+    datediff(Column(startDate), Column(endDate))
+
+  /**
    * Returns the double value that is closer than any other to e, the base of the natural
    * logarithms.
    *
