@@ -68,7 +68,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      hiveContext.catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
+      hiveContext.catalog.lookupRelation(Seq(tableName)).statistics().sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
@@ -121,7 +121,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
   test("estimates the size of a test MetastoreRelation") {
     val df = sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-      mr.statistics.sizeInBytes
+      mr.statistics().sizeInBytes
     }
     assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
@@ -141,7 +141,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
       // Assert src has a size smaller than the threshold.
       val sizes = df.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
+        case r if ct.runtimeClass.isAssignableFrom(r.getClass) =>
+          r.statistics().sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold
         && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold,
@@ -197,7 +198,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     val sizes = df.queryExecution.analyzed.collect {
       case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass
         .isAssignableFrom(r.getClass) =>
-        r.statistics.sizeInBytes
+        r.statistics().sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold
       && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold,

@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -76,14 +76,9 @@ private[sql] case class InMemoryRelation(
   // Statistics propagation contracts:
   // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
   // 2. Only propagate statistics when `_statistics` is non-null
-  private def statisticsToBePropagated = if (_statistics == null) {
-    val updatedStats = statistics
-    if (_statistics == null) null else updatedStats
-  } else {
-    _statistics
-  }
+  private def statisticsToBePropagated = _statistics
 
-  override def statistics: Statistics = {
+  override def statistics(conf: CatalystConf): Statistics = {
     if (_statistics == null) {
       if (batchStats.value.isEmpty) {
         // Underlying columnar RDD hasn't been materialized, no useful statistics information

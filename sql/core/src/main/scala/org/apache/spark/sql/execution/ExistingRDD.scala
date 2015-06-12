@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
@@ -86,7 +86,8 @@ private[sql] case class LogicalRDD(
     case _ => false
   }
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient
+  override def statistics(conf: CatalystConf): Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
@@ -128,7 +129,8 @@ case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sql
     case _ => false
   }
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient
+  override def statistics(conf: CatalystConf): Statistics = Statistics(
     // TODO: Improve the statistics estimation.
     // This is made small enough so it can be broadcasted.
     sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1

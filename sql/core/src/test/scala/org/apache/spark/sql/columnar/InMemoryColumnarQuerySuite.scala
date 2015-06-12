@@ -28,6 +28,9 @@ import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+    // Make sure the tables are loaded.
+  TestData
+
   setupTestData()
 
   test("simple columnar query") {
@@ -43,7 +46,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       .toDF().registerTempTable("sizeTst")
     sqlContext.cacheTable("sizeTst")
     assert(
-      sqlContext.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
+      sqlContext.table("sizeTst").queryExecution.analyzed.statistics().sizeInBytes >
         sqlContext.conf.autoBroadcastJoinThreshold)
   }
 

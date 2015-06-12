@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -56,8 +55,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
       case BroadcastHint(p) => Some(p)
-      case p if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-        p.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold => Some(p)
+      case p if conf.autoBroadcastJoinThreshold > 0 &&
+        p.statistics(conf).sizeInBytes <= conf.autoBroadcastJoinThreshold => Some(p)
       case _ => None
     }
   }
@@ -111,7 +110,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+          if (right.statistics(conf).sizeInBytes <= left.statistics(conf).sizeInBytes) {
             joins.BuildRight
           } else {
             joins.BuildLeft
@@ -250,7 +249,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+          if (right.statistics(conf).sizeInBytes <= left.statistics(conf).sizeInBytes) {
             joins.BuildRight
           } else {
             joins.BuildLeft

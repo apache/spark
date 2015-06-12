@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -45,7 +46,8 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
     case _ => false
   }
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient
+  override def statistics(conf: CatalystConf): Statistics = Statistics(
     sizeInBytes = BigInt(relation.sizeInBytes)
   )
 
