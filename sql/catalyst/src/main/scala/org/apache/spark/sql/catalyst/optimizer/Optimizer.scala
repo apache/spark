@@ -82,7 +82,7 @@ object UnionPushDown extends Rule[LogicalPlan] {
    * This method relies on the fact that the output attributes of a union are always equal
    * to the left child's output.
    */
-  private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+  private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
     }
@@ -505,7 +505,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
         grandChild))
   }
 
-  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
+  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
