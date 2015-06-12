@@ -26,7 +26,8 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s1 = 'a.string.at(0)
     val s2 = 'a.binary.at(0)
     checkEvaluation(Md5(s1), "902fbdd2b1df0c4f70b4a5d23525e932", create_row("ABC"))
-    checkEvaluation(Md5(s2), "6ac1e56bc78f031059be7be854522c4c", create_row(Array[Byte](1,2,3,4,5,6)))
+    checkEvaluation(Md5(s2), "6ac1e56bc78f031059be7be854522c4c",
+      create_row(Array[Byte](1, 2, 3, 4, 5, 6)))
   }
 
 }

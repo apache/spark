@@ -1340,14 +1340,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Calculates an MD5 128-bit checksum for the string or binary
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
    * @group misc_funcs
    * @since 1.5.0
    */
   def md5(e: Column): Column = Md5(e.expr)
 
   /**
-   * Calculates an MD5 128-bit checksum for the string or binary
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
    * @group misc_funcs
    * @since 1.5.0
    */

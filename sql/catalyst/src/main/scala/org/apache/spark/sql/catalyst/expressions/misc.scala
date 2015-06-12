@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.security.MessageDigest
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.{BinaryType, StringType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -27,13 +28,18 @@ import org.apache.spark.unsafe.types.UTF8String
  * A function that calculates an MD5 128-bit checksum for the string or binary.
  * Defined for String and Binary types.
  */
-case class Md5(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class Md5(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = StringType
 
-  override def expectedChildTypes: Seq[DataType] =
-    if (child.dataType == BinaryType) Seq(BinaryType) else Seq(StringType)
+  override def checkInputDataTypes(): TypeCheckResult =
+    if (child.dataType == StringType || child.dataType == BinaryType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"types error in ${this.getClass.getSimpleName} " +
+          s"get (${child.dataType}, expect StringType or BinaryType).")
+    }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -48,5 +54,5 @@ case class Md5(child: Expression)
     }
   }
 
-  override def toString: String = s"md5($child)"
+  override def toString: String = s"MD5($child)"
 }
