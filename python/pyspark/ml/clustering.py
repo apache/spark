@@ -49,8 +49,10 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     >>> len(centers)
     2
     >>> transformed = model.transform(df)
-    >>> transformed.columns
-    [u'features', u'prediction']
+    >>> (transformed.columns)[0] == 'features'
+    True
+    >>> (transformed.columns)[1] == 'prediction'
+    True
     >>> rows = sorted(transformed.collect(), key = lambda r: r[0])
     >>> rows[0].prediction == rows[1].prediction
     True
