@@ -404,26 +404,26 @@ class Analyzer(
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, a, groupingRelation)
+        // Find sort attributes that are projected away so we can temporarily add them back in.
+        val (resolvedOrdering, unresolved) = resolveAndFindMissing(ordering, a, groupingRelation)
 
-        val addForAlias = new ArrayBuffer[NamedExpression]()
-        val aliasedOrdering = resolvedOrdering.zipWithIndex.map {
-          case (o, i) => {
-            o transform {
-              case agg: AggregateExpression =>
-                val aliasName = agg.nodeName + i
-                val alias = Alias(agg, aliasName)()
-                addForAlias += alias
-                alias.toAttribute
-            }
-          }.asInstanceOf[SortOrder]
-        }
+        // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
+        // Sort.
+        val (aliasedAggregateList, withAggsRemoved) = resolvedOrdering.map {
+          case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
+            val aliased = Alias(aggOrdering.child, "_aggOrdering")()
+            (aliased :: Nil, aggOrdering.copy(child = aliased.toAttribute))
 
-        if ((missing ++ addForAlias).nonEmpty) {
+          case other => (Nil, other)
+        }.unzip
+
+        val missing = unresolved ++ aliasedAggregateList.flatten
+
+        if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
-            Sort(aliasedOrdering, global,
-              Aggregate(grouping, aggs ++ missing ++ addForAlias, child)))
+            Sort(withAggsRemoved, global,
+              Aggregate(grouping, aggs ++ missing, child)))
         } else {
           s // Nothing we can do here. Return original plan.
         }
