@@ -59,7 +59,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   val origin: Origin = CurrentOrigin.get
 
-  /** Returns a Seq of the children of this node */
+  /**
+   * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
+   */
   def children: Seq[BaseType]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
