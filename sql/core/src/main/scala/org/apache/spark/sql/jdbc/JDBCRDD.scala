@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Data corresponding to one partition of a JDBCRDD.

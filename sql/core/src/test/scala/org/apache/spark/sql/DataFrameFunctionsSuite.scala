@@ -110,20 +110,20 @@ class DataFrameFunctionsSuite extends QueryTest {
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
 
-  test("log") {
-    val df = Seq[(Integer, Integer)]((123, null)).toDF("a", "b")
+  test("if function") {
+    val df = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
-      df.select(org.apache.spark.sql.functions.log("a"),
-      org.apache.spark.sql.functions.log(2.0, "a"),
-      org.apache.spark.sql.functions.log("b")),
-      Row(math.log(123), math.log(123) / math.log(2), null))
-
-    checkAnswer(
-      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
-      Row(math.log(123), math.log(123) / math.log(2), null))
+      df.selectExpr("if(a = 1, 'one', 'not_one')", "if(b = 1, 'one', 'not_one')"),
+      Row("one", "not_one"))
   }
 
-  test("length") {
+  test("nvl function") {
+    checkAnswer(
+      ctx.sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
+      Row("x", "y", null))
+  }
+
+  test("string length function") {
     checkAnswer(
       nullStrings.select(strlen($"s"), strlen("s")),
       nullStrings.collect().toSeq.map { r =>
@@ -139,19 +139,5 @@ class DataFrameFunctionsSuite extends QueryTest {
         val l = if (v == null) null else v.length
         Row(l)
       })
-  }
-
-  test("log2 functions test") {
-    val df = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      df.select(log2("b") + log2("a")),
-      Row(1))
-
-    checkAnswer(
-      ctx.sql("SELECT LOG2(8)"),
-      Row(3))
-    checkAnswer(
-      ctx.sql("SELECT LOG2(null)"),
-      Row(null))
   }
 }

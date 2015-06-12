@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.parquet.timestamp.NanoTime
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
@@ -222,7 +223,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
     updateField(fieldIndex, value.getBytes)
 
   protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
-    updateField(fieldIndex, UTF8String(value))
+    updateField(fieldIndex, UTF8String.fromBytes(value))
 
   protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, readTimestamp(value))
@@ -423,7 +424,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
     current.update(fieldIndex, value.getBytes)
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit =
-    current.update(fieldIndex, UTF8String(value))
+    current.update(fieldIndex, UTF8String.fromBytes(value))
 
   override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
     current.setLong(fieldIndex, readTimestamp(value))
@@ -719,7 +720,7 @@ private[parquet] class CatalystNativeArrayConverter(
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Array[Byte]): Unit = {
     checkGrowBuffer()
-    buffer(elements) = UTF8String(value).asInstanceOf[NativeType]
+    buffer(elements) = UTF8String.fromBytes(value).asInstanceOf[NativeType]
     elements += 1
   }
 

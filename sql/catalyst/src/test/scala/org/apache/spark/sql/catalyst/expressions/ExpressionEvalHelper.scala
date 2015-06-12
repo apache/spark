@@ -23,6 +23,8 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -39,6 +41,7 @@ trait ExpressionEvalHelper {
     checkEvaluationWithoutCodegen(expression, expected, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, expected, inputRow)
     checkEvaluationWithGeneratedProjection(expression, expected, inputRow)
+    checkEvaluationWithOptimization(expression, expected, inputRow)
   }
 
   protected def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
@@ -120,6 +123,15 @@ trait ExpressionEvalHelper {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
+  }
+
+  protected def checkEvaluationWithOptimization(
+      expression: Expression,
+      expected: Any,
+      inputRow: Row = EmptyRow): Unit = {
+    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
+    val optimizedPlan = DefaultOptimizer.execute(plan)
+    checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
   protected def checkDoubleEvaluation(
