@@ -22,7 +22,7 @@ import java.util.concurrent.{TimeUnit, ConcurrentLinkedQueue}
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.util.{Utils, ThreadUtils, SystemClock}
+import org.apache.spark.util.{SystemClock, ThreadUtils, Utils}
 
 private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkListener {
   import ExecutorBlacklistTracker._
