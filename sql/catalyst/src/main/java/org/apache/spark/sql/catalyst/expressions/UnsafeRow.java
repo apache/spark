@@ -26,7 +26,7 @@ import java.util.Set;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
@@ -334,7 +334,7 @@ public final class UnsafeRow extends BaseMutableRow {
 
 
   @Override
-  public Row copy() {
+  public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
 

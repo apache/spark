@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.runtimeMirror
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.types._
@@ -96,7 +96,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
 
     override def compressedSize: Int = _compressedSize
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
       val actualSize = columnType.actualSize(row, ordinal)
       _uncompressedSize += actualSize
@@ -217,7 +217,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     // to store dictionary element count.
     private var dictionarySize = 4
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = columnType.getField(row, ordinal)
 
       if (!overflow) {
@@ -310,7 +310,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   class Encoder extends compression.Encoder[BooleanType.type] {
     private var _uncompressedSize = 0
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       _uncompressedSize += BOOLEAN.defaultSize
     }
 
@@ -404,7 +404,7 @@ private[sql] case object IntDelta extends CompressionScheme {
 
     private var prevValue: Int = _
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = row.getInt(ordinal)
       val delta = value - prevValue
 
@@ -484,7 +484,7 @@ private[sql] case object LongDelta extends CompressionScheme {
 
     private var prevValue: Long = _
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       val value = row.getLong(ordinal)
       val delta = value - prevValue
 

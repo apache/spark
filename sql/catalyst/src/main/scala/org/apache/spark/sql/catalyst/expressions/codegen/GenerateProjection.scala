@@ -27,8 +27,8 @@ import org.apache.spark.sql.types._
 abstract class BaseProject extends Projection {}
 
 /**
- * Generates bytecode that produces a new [[Row]] object based on a fixed set of input
- * [[Expression Expressions]] and a given input [[Row]].  The returned [[Row]] object is custom
+ * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
+ * [[Expression Expressions]] and a given input [[InternalRow]].  The returned [[InternalRow]] object is custom
  * generated based on the output types of the [[Expression]] to avoid boxing of primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
@@ -142,7 +142,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n")
 
     val code = s"""
-    import org.apache.spark.sql.Row;
+    import org.apache.spark.sql.InternalRow;
 
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
@@ -157,7 +157,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (Row) r);
+        return new SpecificRow(expressions, (InternalRow) r);
       }
     }
 
@@ -165,7 +165,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       $columns
 
-      public SpecificRow($exprType[] expressions, Row i) {
+      public SpecificRow($exprType[] expressions, InternalRow i) {
         $initColumns
       }
 
@@ -203,9 +203,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public boolean equals(Object other) {
-        if (other instanceof Row) {
-          Row row = (Row) other;
-          if (row.length() != size()) return false;
+        if (other instanceof SpecificRow) {
+          SpecificRow row = (SpecificRow) other;
           $columnChecks
           return true;
         }

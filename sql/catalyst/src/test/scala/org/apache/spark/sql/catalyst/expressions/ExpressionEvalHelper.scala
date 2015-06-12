@@ -30,25 +30,25 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, Ge
 trait ExpressionEvalHelper {
   self: SparkFunSuite =>
 
-  protected def create_row(values: Any*): Row = {
+  protected def create_row(values: Any*): InternalRow = {
     new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
   }
 
   protected def checkEvaluation(
-      expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
+      expression: Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     checkEvaluationWithoutCodegen(expression, expected, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, expected, inputRow)
     checkEvaluationWithGeneratedProjection(expression, expected, inputRow)
   }
 
-  protected def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
+  protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
     expression.eval(inputRow)
   }
 
   protected def checkEvaluationWithoutCodegen(
       expression: Expression,
       expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
@@ -63,7 +63,7 @@ trait ExpressionEvalHelper {
   protected def checkEvaluationWithGeneratedMutableProjection(
       expression: Expression,
       expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = try {
       GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
@@ -89,7 +89,7 @@ trait ExpressionEvalHelper {
   protected def checkEvaluationWithGeneratedProjection(
       expression: Expression,
       expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
     val ctx = GenerateProjection.newCodeGenContext()
     lazy val evaluated = expression.gen(ctx)
 
@@ -125,7 +125,7 @@ trait ExpressionEvalHelper {
   protected def checkDoubleEvaluation(
       expression: Expression,
       expected: Spread[Double],
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }

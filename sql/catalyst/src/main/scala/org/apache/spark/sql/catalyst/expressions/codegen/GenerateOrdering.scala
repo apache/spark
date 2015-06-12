@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.{BinaryType, NumericType}
  * Inherits some default implementation for Java from `Ordering[Row]`
  */
 @Private
-class BaseOrdering extends Ordering[Row] {
-  def compare(a: Row, b: Row): Int = {
+class BaseOrdering extends Ordering[InternalRow] {
+  def compare(a: InternalRow, b: InternalRow): Int = {
     throw new UnsupportedOperationException
   }
 }
@@ -37,7 +37,7 @@ class BaseOrdering extends Ordering[Row] {
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] with Logging {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
@@ -46,7 +46,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[Row] = {
+  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
     val a = newTermName("a")
     val b = newTermName("b")
     val ctx = newCodeGenContext()
@@ -106,7 +106,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
     }.mkString("\n")
 
     val code = s"""
-      import org.apache.spark.sql.Row;
+      import org.apache.spark.sql.InternalRow;
 
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
@@ -121,8 +121,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] wit
         }
 
         @Override
-        public int compare(Row a, Row b) {
-          Row i = null;  // Holds current row being evaluated.
+        public int compare(InternalRow a, InternalRow b) {
+          InternalRow i = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }

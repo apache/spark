@@ -61,13 +61,14 @@ case class BroadcastNestedLoopJoin(
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation =
-      sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+      sparkContext.broadcast(broadcast.execute().map(_.copy())
+        .collect().toIndexedSeq)
 
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
-      val matchedRows = new CompactBuffer[Row]
+      val matchedRows = new CompactBuffer[InternalRow]
       // TODO: Use Spark's BitSet.
       val includedBroadcastTuples =
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
@@ -118,8 +119,8 @@ case class BroadcastNestedLoopJoin(
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
     /** Rows from broadcasted joined with nulls. */
-    val broadcastRowsWithNulls: Seq[Row] = {
-      val buf: CompactBuffer[Row] = new CompactBuffer()
+    val broadcastRowsWithNulls: Seq[InternalRow] = {
+      val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
       val rel = broadcastedRelation.value
       while (i < rel.length) {

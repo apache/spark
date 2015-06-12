@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.InternalRow
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
 import org.apache.spark.sql.types.AtomicType
 
@@ -66,7 +66,7 @@ private[sql] trait CompressibleColumnBuilder[T <: AtomicType]
     encoder.compressionRatio < 0.8
   }
 
-  private def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+  private def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
     var i = 0
     while (i < compressionEncoders.length) {
       compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
@@ -74,7 +74,7 @@ private[sql] trait CompressibleColumnBuilder[T <: AtomicType]
     }
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
+  abstract override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
     super.appendFrom(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       gatherCompressibilityStats(row, ordinal)

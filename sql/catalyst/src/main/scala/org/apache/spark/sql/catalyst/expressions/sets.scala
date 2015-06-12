@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -57,7 +57,7 @@ case class NewSet(elementType: DataType) extends LeafExpression {
 
   override def dataType: OpenHashSetUDT = new OpenHashSetUDT(elementType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     new OpenHashSet[Any]()
   }
 
@@ -87,7 +87,7 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
 
   override def dataType: OpenHashSetUDT = set.dataType.asInstanceOf[OpenHashSetUDT]
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val itemEval = item.eval(input)
     val setEval = set.eval(input).asInstanceOf[OpenHashSet[Any]]
 
@@ -137,7 +137,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
   override def symbol: String = "++="
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input).asInstanceOf[OpenHashSet[Any]]
     if(leftEval != null) {
       val rightEval = right.eval(input).asInstanceOf[OpenHashSet[Any]]
@@ -183,7 +183,7 @@ case class CountSet(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = LongType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val childEval = child.eval(input).asInstanceOf[OpenHashSet[Any]]
     if (childEval != null) {
       childEval.size.toLong

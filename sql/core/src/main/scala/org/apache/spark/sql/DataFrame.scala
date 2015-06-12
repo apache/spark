@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
-import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -33,7 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -1014,7 +1013,8 @@ class DataFrame private[sql](
     val names = schema.toAttributes.map(_.name)
 
     val rowFunction =
-      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
+      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema)
+        .asInstanceOf[InternalRow]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
@@ -1040,8 +1040,9 @@ class DataFrame private[sql](
     val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable) }
     val names = attributes.map(_.name)
 
-    def rowFunction(row: Row): TraversableOnce[Row] = {
-      f(row(0).asInstanceOf[A]).map(o => Row(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+    def rowFunction(row: Row): TraversableOnce[InternalRow] = {
+      f(row(0).asInstanceOf[A]).map(o =>
+        InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -1203,7 +1204,7 @@ class DataFrame private[sql](
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
-    val ret: Seq[Row] = if (outputCols.nonEmpty) {
+    val ret: Seq[InternalRow] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
@@ -1212,11 +1213,11 @@ class DataFrame private[sql](
 
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map {
-        case (aggregation, (statistic, _)) => Row(statistic :: aggregation.toList: _*)
+        case (aggregation, (statistic, _)) => InternalRow(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => Row(name) }
+      statistics.map { case (name, _) => InternalRow(name) }
     }
 
     // All columns are string type

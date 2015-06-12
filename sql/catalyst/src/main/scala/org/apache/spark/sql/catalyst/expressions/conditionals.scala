@@ -42,7 +42,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def dataType: DataType = trueValue.dataType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     if (true == predicate.eval(input)) {
       trueValue.eval(input)
     } else {
@@ -137,7 +137,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
   }
 
   /** Written in imperative fashion for performance considerations. */
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val len = branchesArr.length
     var i = 0
     // If all branches fail and an elseVal is not provided, the whole statement
@@ -229,7 +229,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 
   /** Written in imperative fashion for performance considerations. */
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluatedKey = key.eval(input)
     val len = branchesArr.length
     var i = 0

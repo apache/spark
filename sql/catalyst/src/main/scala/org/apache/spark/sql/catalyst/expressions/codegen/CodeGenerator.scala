@@ -32,7 +32,7 @@ class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
 class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
 
 /**
- * Java source for evaluating an [[Expression]] given a [[Row]] of input.
+ * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
@@ -171,13 +171,13 @@ class CodeGenContext {
   }
 
   /**
-   * List of data types that have special accessors and setters in [[Row]].
+   * List of data types that have special accessors and setters in [[InternalRow]].
    */
   val nativeTypes =
     Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType)
 
   /**
-   * Returns true if the data type has a special accessor and setter in [[Row]].
+   * Returns true if the data type has a special accessor and setter in [[InternalRow]].
    */
   def isNativeType(dt: DataType): Boolean = nativeTypes.contains(dt)
 }

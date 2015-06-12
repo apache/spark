@@ -29,7 +29,7 @@ class ExpressionOptimizationSuite extends SparkFunSuite with ExpressionEvalHelpe
   override def checkEvaluation(
       expression: Expression,
       expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
     val optimizedPlan = DefaultOptimizer.execute(plan)
     super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)

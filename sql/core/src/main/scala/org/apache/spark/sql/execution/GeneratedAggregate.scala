@@ -66,7 +66,7 @@ case class GeneratedAggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
@@ -273,7 +273,7 @@ case class GeneratedAggregate(
       if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
-        var currentRow: Row = null
+        var currentRow: InternalRow = null
         updateProjection.target(buffer)
 
         while (iter.hasNext) {
@@ -295,19 +295,19 @@ case class GeneratedAggregate(
         )
 
         while (iter.hasNext) {
-          val currentRow: Row = iter.next()
-          val groupKey: Row = groupProjection(currentRow)
+          val currentRow: InternalRow = iter.next()
+          val groupKey: InternalRow = groupProjection(currentRow)
           val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 
-        new Iterator[Row] {
+        new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
 
           def hasNext: Boolean = mapIterator.hasNext
 
-          def next(): Row = {
+          def next(): InternalRow = {
             val entry = mapIterator.next()
             val result = resultProjection(joinedRow(entry.key, entry.value))
             if (hasNext) {
@@ -326,9 +326,9 @@ case class GeneratedAggregate(
         if (unsafeEnabled) {
           log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
         }
-        val buffers = new java.util.HashMap[Row, MutableRow]()
+        val buffers = new java.util.HashMap[InternalRow, MutableRow]()
 
-        var currentRow: Row = null
+        var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
           val currentGroup = groupProjection(currentRow)
@@ -342,13 +342,13 @@ case class GeneratedAggregate(
           updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
         }
 
-        new Iterator[Row] {
+        new Iterator[InternalRow] {
           private[this] val resultIterator = buffers.entrySet.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
 
           def hasNext: Boolean = resultIterator.hasNext
 
-          def next(): Row = {
+          def next(): InternalRow = {
             val currentGroup = resultIterator.next()
             resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
           }

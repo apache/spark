@@ -405,14 +405,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from struct") {
     val struct = Literal.create(
-      Row("123", "abc", "", null),
+      InternalRow("123", "abc", "", null),
       StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true),
         StructField("d", StringType, nullable = true))))
     val struct_notNull = Literal.create(
-      Row("123", "abc", ""),
+      InternalRow("123", "abc", ""),
       StructType(Seq(
         StructField("a", StringType, nullable = false),
         StructField("b", StringType, nullable = false),
@@ -425,7 +425,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("c", IntegerType, nullable = true),
         StructField("d", IntegerType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Row(123, null, null, null))
+      checkEvaluation(ret, InternalRow(123, null, null, null))
     }
     {
       val ret = cast(struct, StructType(Seq(
@@ -442,7 +442,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("c", BooleanType, nullable = true),
         StructField("d", BooleanType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Row(true, true, false, null))
+      checkEvaluation(ret, InternalRow(true, true, false, null))
     }
     {
       val ret = cast(struct, StructType(Seq(
@@ -459,7 +459,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Row(123, null, null))
+      checkEvaluation(ret, InternalRow(123, null, null))
     }
     {
       val ret = cast(struct_notNull, StructType(Seq(
@@ -474,7 +474,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Row(true, true, false))
+      checkEvaluation(ret, InternalRow(true, true, false))
     }
     {
       val ret = cast(struct_notNull, StructType(Seq(
@@ -482,7 +482,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
       assert(ret.resolved === true)
-      checkEvaluation(ret, Row(true, true, false))
+      checkEvaluation(ret, InternalRow(true, true, false))
     }
 
     {
@@ -500,10 +500,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("complex casting") {
     val complex = Literal.create(
-      Row(
+      InternalRow(
         Seq("123", "abc", ""),
         Map("a" -> "123", "b" -> "abc", "c" -> ""),
-        Row(0)),
+        InternalRow(0)),
       StructType(Seq(
         StructField("a",
           ArrayType(StringType, containsNull = false), nullable = true),
@@ -523,10 +523,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("l", LongType, nullable = true)))))))
 
     assert(ret.resolved === true)
-    checkEvaluation(ret, Row(
+    checkEvaluation(ret, InternalRow(
       Seq(123, null, null),
       Map("a" -> true, "b" -> true, "c" -> false),
-      Row(0L)))
+      InternalRow(0L)))
   }
 
 }

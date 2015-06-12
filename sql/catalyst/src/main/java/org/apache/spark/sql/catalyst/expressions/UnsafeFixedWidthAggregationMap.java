@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Arrays;
 import java.util.Iterator;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.InternalRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -107,7 +107,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
-      Row emptyAggregationBuffer,
+      InternalRow emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
       TaskMemoryManager memoryManager,
@@ -125,7 +125,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Convert a Java object row into an UnsafeRow, allocating it into a new long array.
    */
-  private static long[] convertToUnsafeRow(Row javaRow, StructType schema) {
+  private static long[] convertToUnsafeRow(InternalRow javaRow, StructType schema) {
     final UnsafeRowConverter converter = new UnsafeRowConverter(schema);
     final long[] unsafeRow = new long[converter.getSizeRequirement(javaRow)];
     final long writtenLength =
@@ -138,7 +138,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * Return the aggregation buffer for the current group. For efficiency, all calls to this method
    * return the same object.
    */
-  public UnsafeRow getAggregationBuffer(Row groupingKey) {
+  public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
     final int groupingKeySize = groupingKeyToUnsafeRowConverter.getSizeRequirement(groupingKey);
     // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
     if (groupingKeySize > groupingKeyConversionScratchSpace.length) {

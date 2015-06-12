@@ -28,7 +28,7 @@ case class Dummy(optKey: Option[Expression]) extends Expression {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
-  override def eval(input: Row): Any = null.asInstanceOf[Any]
+  override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
 }
 
 class TreeNodeSuite extends SparkFunSuite {

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{UTF8String, DataType, StructType, AtomicType}
+import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UTF8String}
 
 /**
- * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
+ * An extended interface to [[InternalRow]] that allows the values for each column to be updated.  Setting
  * a value through a primitive function implicitly marks that column as not null.
  */
-trait MutableRow extends Row {
+trait MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit
 
   def update(ordinal: Int, value: Any)
@@ -36,13 +36,12 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  // TODO(davies): add setDate() and setDecimal()
 }
 
 /**
  * A row with no data.  Calling any methods will result in an error.  Can be used as a placeholder.
  */
-object EmptyRow extends Row {
+object EmptyRow extends InternalRow {
   override def apply(i: Int): Any = throw new UnsupportedOperationException
   override def toSeq: Seq[Any] = Seq.empty
   override def length: Int = 0
@@ -56,7 +55,7 @@ object EmptyRow extends Row {
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
   override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-  override def copy(): Row = this
+  override def copy(): InternalRow = this
 }
 
 /**
@@ -64,7 +63,7 @@ object EmptyRow extends Row {
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[sql] val values: Array[Any]) extends Row {
+class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -153,7 +152,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def equals(o: Any): Boolean = o match {
-    case other: Row =>
+    case other: InternalRow =>
       if (values.length != other.length) {
         return false
       }
@@ -173,7 +172,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     case _ => false
   }
 
-  override def copy(): Row = this
+  override def copy(): InternalRow = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -204,15 +203,15 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
 
   override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
-  override def copy(): Row = new GenericRow(values.clone())
+  override def copy(): InternalRow = new GenericRow(values.clone())
 }
 
 
-class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
+class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
-  def compare(a: Row, b: Row): Int = {
+  def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
     while (i < ordering.size) {
       val order = ordering(i)

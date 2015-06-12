@@ -39,10 +39,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 import org.apache.spark.util.Utils
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
@@ -60,7 +59,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
 private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val recordWriter: RecordWriter[Void, Row] = {
+  private val recordWriter: RecordWriter[Void, InternalRow] = {
     val conf = context.getConfiguration
     val outputFormat = {
       // When appending new Parquet files to an existing Parquet file directory, to avoid
@@ -93,7 +92,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         }
       }
 
-      new ParquetOutputFormat[Row]() {
+      new ParquetOutputFormat[InternalRow]() {
         // Here we override `getDefaultWorkFile` for two reasons:
         //
         //  1. To allow appending.  We need to generate output file name based on the max available
@@ -112,7 +111,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
     outputFormat.getRecordWriter(context)
   }
 
-  override def write(row: Row): Unit = recordWriter.write(null, row)
+  override def write(row: Row): Unit = recordWriter.write(null, row.asInstanceOf[InternalRow])
 
   override def close(): Unit = recordWriter.close(context)
 }
@@ -286,7 +285,7 @@ private[sql] class ParquetRelation2(
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
         inputFormatClass = classOf[FilteringParquetRowInputFormat],
         keyClass = classOf[Void],
-        valueClass = classOf[Row]) {
+        valueClass = classOf[InternalRow]) {
 
         val cacheMetadata = useMetadataCache
 
@@ -331,7 +330,7 @@ private[sql] class ParquetRelation2(
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.values
+      }.values.map(_.asInstanceOf[Row])
     }
   }
 

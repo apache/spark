@@ -86,7 +86,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     case _ => false
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: InternalRow): Any = value
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     // change the isNull and primitive to consts, to inline them
@@ -139,9 +139,9 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
 
-  def update(expression: Expression, input: Row): Unit = {
+  def update(expression: Expression, input: InternalRow): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: InternalRow): Any = value
 }

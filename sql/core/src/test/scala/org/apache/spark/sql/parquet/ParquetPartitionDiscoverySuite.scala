@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.sources.PartitioningUtils._
 import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext}
+import org.apache.spark.sql._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -114,7 +114,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         StructType(Seq(
           StructField("a", IntegerType),
           StructField("b", StringType))),
-        Seq(Partition(Row(10, "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+        Seq(Partition(InternalRow(10, UTF8String("hello")), "hdfs://host:9000/path/a=10/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
@@ -124,8 +124,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(10, UTF8String("20")), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(10.5, UTF8String("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/_temporary",
@@ -143,8 +144,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(10.5, "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(10, UTF8String("20")), "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(10.5, UTF8String("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
@@ -154,8 +156,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", IntegerType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, "20"), s"hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+          Partition(InternalRow(10, UTF8String("20")), s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(null, UTF8String("hello")),
+            s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
@@ -165,8 +168,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
-          Partition(Row(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+          Partition(InternalRow(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(InternalRow(10.5, null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 
     check(Seq(
       s"hdfs://host:9000/path1",
@@ -185,7 +188,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         StructType(Seq(
           StructField("a", StringType),
           StructField("b", StringType))),
-        Seq(Partition(Row("10", "hello"), "hdfs://host:9000/path/a=10/b=hello"))))
+        Seq(Partition(InternalRow(UTF8String("10"), UTF8String("hello")),
+          "hdfs://host:9000/path/a=10/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/a=10/b=20",
@@ -195,8 +199,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(UTF8String("10"), UTF8String("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(UTF8String("10.5"), UTF8String("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       "hdfs://host:9000/path/_temporary",
@@ -214,8 +220,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), "hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row("10.5", "hello"), "hdfs://host:9000/path/a=10.5/b=hello"))))
+          Partition(InternalRow(UTF8String("10"), UTF8String("20")),
+            "hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(UTF8String("10.5"), UTF8String("hello")),
+            "hdfs://host:9000/path/a=10.5/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=20",
@@ -225,8 +233,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", "20"), s"hdfs://host:9000/path/a=10/b=20"),
-          Partition(Row(null, "hello"), s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
+          Partition(InternalRow(UTF8String("10"), UTF8String("20")),
+            s"hdfs://host:9000/path/a=10/b=20"),
+          Partition(InternalRow(null, UTF8String("hello")),
+            s"hdfs://host:9000/path/a=$defaultPartitionName/b=hello"))))
 
     check(Seq(
       s"hdfs://host:9000/path/a=10/b=$defaultPartitionName",
@@ -236,8 +246,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           StructField("a", StringType),
           StructField("b", StringType))),
         Seq(
-          Partition(Row("10", null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
-          Partition(Row("10.5", null), s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
+          Partition(InternalRow(UTF8String("10"), null),
+            s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(InternalRow(UTF8String("10.5"), null),
+            s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 
     check(Seq(
       s"hdfs://host:9000/path1",

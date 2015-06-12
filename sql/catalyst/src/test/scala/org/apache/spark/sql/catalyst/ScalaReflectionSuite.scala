@@ -21,7 +21,7 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.InternalRow
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -257,7 +257,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
     assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
   }
@@ -267,8 +267,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
     val dataType = schemaFor[OptionalData].dataType
-    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      Row(1, 1, 1, 1, 1, 1, true))
+    val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      InternalRow(1, 1, 1, 1, 1, 1, true))
     assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
   }
 
