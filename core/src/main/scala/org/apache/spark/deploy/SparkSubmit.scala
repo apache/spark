@@ -361,6 +361,8 @@ object SparkSubmit {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in yarn mode.")
       }
       val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
+
+      // Assigns a symbol link name "sparkr" to the shipped package.
       args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
     }
 
