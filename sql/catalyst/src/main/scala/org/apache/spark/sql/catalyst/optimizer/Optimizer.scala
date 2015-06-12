@@ -44,6 +44,7 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       ColumnPruning,
+      LimitPushDown,
       ProjectCollapsing,
       CombineLimits,
       NullPropagation,

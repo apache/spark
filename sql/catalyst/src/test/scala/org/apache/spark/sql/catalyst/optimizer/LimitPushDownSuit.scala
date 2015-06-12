@@ -17,6 +17,56 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-class LimitPushDownSuit {
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 
+class LimitPushDownSuit extends PlanTest {
+
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Limit PushDown", FixedPoint(10),
+        LimitPushDown,
+        CombineLimits,
+        ConstantFolding,
+        BooleanSimplification) :: Nil
+  }
+
+  val testRelation = LocalRelation('a.int)
+
+  test("push down limit when the child is project on limit") {
+    val originalQuery =
+      testRelation
+        .limit(10)
+        .select('a)
+        .limit(2)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .limit(2)
+        .select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("push down limit when the child is project on sort") {
+    val originalQuery =
+      testRelation
+        .sortBy(SortOrder('a, Ascending))
+        .select('a)
+        .limit(2)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .sortBy(SortOrder('a, Ascending))
+        .limit(2)
+        .select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
