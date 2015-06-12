@@ -35,7 +35,8 @@ import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
-import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
+import org.apache.ivy.plugins.repository.file.FileRepository
+import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -736,7 +737,7 @@ private[spark] object SparkSubmitUtils {
 
   /** Path of the local Maven cache. */
   private[spark] def m2Path: File = new File(System.getProperty("user.home"),
-    ".m2" + File.separator + "repository" + File.separator)
+    ".m2" + File.separator + "repository")
 
   /**
    * Extracts maven coordinates from a comma-delimited string
@@ -756,12 +757,13 @@ private[spark] object SparkSubmitUtils {
     localM2.setName("local-m2-cache")
     cr.add(localM2)
 
-    val localIvy = new IBiblioResolver
-    localIvy.setRoot(new File(ivySettings.getDefaultIvyUserDir,
-      "local" + File.separator).toURI.toString)
+    val localIvy = new FileSystemResolver
+    val localIvyRoot = new File(ivySettings.getDefaultIvyUserDir, "local")
+    localIvy.setLocal(true)
+    localIvy.setRepository(new FileRepository(localIvyRoot))
     val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
       "[artifact](-[classifier]).[ext]").mkString(File.separator)
-    localIvy.setPattern(ivyPattern)
+    localIvy.addIvyPattern(localIvyRoot.getAbsolutePath + File.separator + ivyPattern)
     localIvy.setName("local-ivy-cache")
     cr.add(localIvy)
 
