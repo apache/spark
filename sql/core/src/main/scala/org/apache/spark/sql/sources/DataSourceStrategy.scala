@@ -313,8 +313,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.relation.needConversion) {
-      if (output.length != rdd.first().size) {
-        throw new Exception(s"${output} ${rdd.first()} $relation ${relation.schema}")
+      if (rdd.take(1).length > 0 && output.length != rdd.first().size) {
+        throw new Exception(s"${relation.relation.getClass} ${output} ${rdd.first()} $relation ${relation.schema}")
       }
       execution.RDDConversions.rowToRowRdd(rdd.asInstanceOf[RDD[Row]], output.map(_.dataType))
     } else {

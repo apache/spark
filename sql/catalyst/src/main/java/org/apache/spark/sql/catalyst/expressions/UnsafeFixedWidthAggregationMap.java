@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Arrays;
 import java.util.Iterator;
 
-import org.apache.spark.sql.InternalRow;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;

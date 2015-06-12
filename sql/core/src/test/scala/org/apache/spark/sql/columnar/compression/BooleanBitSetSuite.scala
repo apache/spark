@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar.compression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.columnar.{BOOLEAN, NoopColumnStats}

@@ -25,8 +25,7 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
-
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 

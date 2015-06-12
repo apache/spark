@@ -19,15 +19,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{catalyst, Row}
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
  */
 @Private
-class BaseOrdering extends Ordering[InternalRow] {
-  def compare(a: InternalRow, b: InternalRow): Int = {
+class BaseOrdering extends Ordering[catalyst.InternalRow] {
+  def compare(a: catalyst.InternalRow, b: catalyst.InternalRow): Int = {
     throw new UnsupportedOperationException
   }
 }
@@ -36,7 +36,7 @@ class BaseOrdering extends Ordering[InternalRow] {
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[catalyst.InternalRow]] with Logging {
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
@@ -45,7 +45,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
+  protected def create(ordering: Seq[SortOrder]): Ordering[catalyst.InternalRow] = {
     val a = newTermName("a")
     val b = newTermName("b")
     val ctx = newCodeGenContext()
@@ -75,7 +75,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     }.mkString("\n")
 
     val code = s"""
-      import org.apache.spark.sql.InternalRow;
+      import org.apache.spark.sql.catalyst.InternalRow;
 
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);

@@ -128,7 +128,7 @@ trait ExpressionEvalHelper {
   protected def checkEvaluationWithOptimization(
       expression: Expression,
       expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+      inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
     val optimizedPlan = DefaultOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)

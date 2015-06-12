@@ -19,8 +19,7 @@ package org.apache.spark.sql.columnar
 
 import scala.collection.immutable.HashSet
 import scala.util.Random
-
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types.{DataType, Decimal, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String

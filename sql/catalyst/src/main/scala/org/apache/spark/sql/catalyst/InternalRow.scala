@@ -1,5 +1,6 @@
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 
 /**

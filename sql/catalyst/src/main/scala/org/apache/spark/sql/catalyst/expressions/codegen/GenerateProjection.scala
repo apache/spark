@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
+import org.apache.spark.sql.{catalyst, BaseMutableRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -27,8 +27,8 @@ import org.apache.spark.sql.types._
 abstract class BaseProject extends Projection {}
 
 /**
- * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
- * [[Expression Expressions]] and a given input [[InternalRow]].  The returned [[InternalRow]] object is custom
+ * Generates bytecode that produces a new [[catalyst.InternalRow]] object based on a fixed set of input
+ * [[Expression Expressions]] and a given input [[catalyst.InternalRow]].  The returned [[catalyst.InternalRow]] object is custom
  * generated based on the output types of the [[Expression]] to avoid boxing of primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
@@ -146,7 +146,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n")
 
     val code = s"""
-    import org.apache.spark.sql.InternalRow;
+    import org.apache.spark.sql.catalyst.InternalRow;
 
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);

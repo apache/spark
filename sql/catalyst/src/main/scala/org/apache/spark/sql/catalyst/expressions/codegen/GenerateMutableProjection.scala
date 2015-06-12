@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions._
 
 // MutableProjection is not accessible in Java
@@ -24,7 +25,7 @@ abstract class BaseMutableProjection extends MutableProjection {}
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * input [[catalyst.InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
 
@@ -47,7 +48,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         """
     }.mkString("\n")
     val code = s"""
-      import org.apache.spark.sql.InternalRow;
+      import org.apache.spark.sql.catalyst.InternalRow;
 
       public SpecificProjection generate($exprType[] expr) {
         return new SpecificProjection(expr);

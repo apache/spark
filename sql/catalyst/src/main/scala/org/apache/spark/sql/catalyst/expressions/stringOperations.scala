@@ -303,7 +303,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   override def dataType: DataType = IntegerType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
     if (string == null) null else string.asInstanceOf[UTF8String].length
   }
@@ -314,5 +314,3 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
     defineCodeGen(ctx, ev, c => s"($c).length()")
   }
 }
-
-

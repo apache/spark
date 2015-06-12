@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String

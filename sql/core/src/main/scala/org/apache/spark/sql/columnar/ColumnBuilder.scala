@@ -18,8 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
-
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.columnar.ColumnBuilder._
 import org.apache.spark.sql.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 import org.apache.spark.sql.types._

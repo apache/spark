@@ -26,7 +26,7 @@ import java.util.Set;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
-import org.apache.spark.sql.InternalRow;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;

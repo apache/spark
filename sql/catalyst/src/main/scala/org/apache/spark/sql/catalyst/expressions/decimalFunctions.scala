@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
@@ -28,7 +29,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = child.nullable
   override def toString: String = s"UnscaledValue($child)"
 
-  override def eval(input: InternalRow): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val childResult = child.eval(input)
     if (childResult == null) {
       null
@@ -50,7 +51,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def nullable: Boolean = child.nullable
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  override def eval(input: InternalRow): Decimal = {
+  override def eval(input: catalyst.InternalRow): Decimal = {
     val childResult = child.eval(input)
     if (childResult == null) {
       null

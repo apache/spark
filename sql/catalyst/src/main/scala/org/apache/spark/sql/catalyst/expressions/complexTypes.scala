@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.types._
 
 
@@ -41,7 +42,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     children.map(_.eval(input))
   }
 
@@ -69,7 +70,7 @@ case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     InternalRow(children.map(_.eval(input)): _*)
   }
 }

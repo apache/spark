@@ -27,7 +27,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.{InternalRow, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -284,7 +284,8 @@ object CatalystTypeConverters {
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
       else DateUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
-    override def toScalaImpl(row: Row, column: Int): Timestamp = toScala(row.getLong(column))
+    override def toScalaImpl(row: InternalRow, column: Int): Timestamp =
+      toScala(row.getLong(column))
   }
 
   private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {

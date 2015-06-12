@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
 import org.apache.spark.sql.types.AtomicType
 

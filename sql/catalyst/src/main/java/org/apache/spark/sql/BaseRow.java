@@ -25,6 +25,7 @@ import java.util.List;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.StructType;
 
