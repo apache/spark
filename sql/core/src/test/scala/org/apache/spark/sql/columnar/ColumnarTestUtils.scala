@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.Timestamp
-
 import scala.collection.immutable.HashSet
 import scala.util.Random
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{UTF8String, DataType, Decimal, AtomicType}
+import org.apache.spark.sql.types.{AtomicType, DataType, Decimal}
+import org.apache.spark.sql.types.{DataType, Decimal, AtomicType}
+import org.apache.spark.unsafe.types.UTF8String
+
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int): GenericMutableRow = {
@@ -48,14 +49,11 @@ object ColumnarTestUtils {
       case FLOAT => Random.nextFloat()
       case DOUBLE => Random.nextDouble()
       case FIXED_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
-      case STRING => UTF8String(Random.nextString(Random.nextInt(32)))
+      case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BOOLEAN => Random.nextBoolean()
       case BINARY => randomBytes(Random.nextInt(32))
       case DATE => Random.nextInt()
-      case TIMESTAMP =>
-        val timestamp = new Timestamp(Random.nextLong())
-        timestamp.setNanos(Random.nextInt(999999999))
-        timestamp
+      case TIMESTAMP => Random.nextLong()
       case _ =>
         // Using a random one-element map instead of an arbitrary object
         Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))

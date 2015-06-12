@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -203,6 +204,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
         case BooleanType => new MutableBoolean
         case LongType => new MutableLong
         case DateType => new MutableInt // We use INT for DATE internally
+        case TimestampType => new MutableLong  // We use Long for Timestamp internally
         case _ => new MutableAny
       }.toArray)
 
@@ -239,7 +241,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     }
   }
 
-  override def setString(ordinal: Int, value: String): Unit = update(ordinal, UTF8String(value))
+  override def setString(ordinal: Int, value: String): Unit =
+    update(ordinal, UTF8String.fromString(value))
 
   override def getString(ordinal: Int): String = apply(ordinal).toString
 

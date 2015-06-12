@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
@@ -234,22 +233,7 @@ private[sql] class StringColumnStats extends ColumnStats {
 
 private[sql] class DateColumnStats extends IntColumnStats
 
-private[sql] class TimestampColumnStats extends ColumnStats {
-  protected var upper: Timestamp = null
-  protected var lower: Timestamp = null
-
-  override def gatherStats(row: Row, ordinal: Int): Unit = {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[Timestamp]
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += TIMESTAMP.defaultSize
-    }
-  }
-
-  override def collectedStatistics: Row = Row(lower, upper, nullCount, count, sizeInBytes)
-}
+private[sql] class TimestampColumnStats extends LongColumnStats
 
 private[sql] class BinaryColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int): Unit = {

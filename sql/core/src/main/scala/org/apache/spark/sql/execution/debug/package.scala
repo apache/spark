@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.unsafe.types.UTF8String
 
 import scala.collection.mutable.HashSet
 
@@ -170,6 +171,8 @@ package object debug {
       case (_: Short, ShortType) =>
       case (_: Boolean, BooleanType) =>
       case (_: Double, DoubleType) =>
+      case (_: Int, DateType) =>
+      case (_: Long, TimestampType) =>
       case (v, udt: UserDefinedType[_]) => typeCheck(v, udt.sqlType)
 
       case (d, t) => sys.error(s"Invalid data found: got $d (${d.getClass}) expected $t")

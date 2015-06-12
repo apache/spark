@@ -262,7 +262,7 @@ private[spark] object SQLConf {
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = booleanConf("spark.sql.planner.externalSort",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, performs sorts spilling to disk as needed otherwise sort each partition in" +
       " memory.")
 

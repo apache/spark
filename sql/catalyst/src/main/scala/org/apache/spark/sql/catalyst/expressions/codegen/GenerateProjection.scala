@@ -72,12 +72,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n        ")
 
     val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
-      val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
-          s"case $i: return c$i;"
-        case _ => ""
+      val cases = expressions.zipWithIndex.flatMap {
+        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
+          List(s"case $i: return c$i;")
+        case _ => Nil
       }.mkString("\n        ")
-      if (cases.count(_ != '\n') > 0) {
+      if (cases.length > 0) {
         s"""
       @Override
       public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
@@ -87,7 +87,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         switch (i) {
         $cases
         }
-        return ${ctx.defaultValue(dataType)};
+        throw new IllegalArgumentException("Invalid index: " + i
+          + " in ${ctx.accessorForType(dataType)}");
       }"""
       } else {
         ""
@@ -95,12 +96,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n")
 
     val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
-      val cases = expressions.zipWithIndex.map {
-        case (e, i) if e.dataType == dataType =>
-          s"case $i: { c$i = value; return; }"
-        case _ => ""
-      }.mkString("\n")
-      if (cases.count(_ != '\n') > 0) {
+      val cases = expressions.zipWithIndex.flatMap {
+        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
+          List(s"case $i: { c$i = value; return; }")
+        case _ => Nil
+      }.mkString("\n        ")
+      if (cases.length > 0) {
         s"""
       @Override
       public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
@@ -108,6 +109,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         switch (i) {
         $cases
         }
+        throw new IllegalArgumentException("Invalid index: " + i +
+          " in ${ctx.mutatorForType(dataType)}");
       }"""
       } else {
         ""
@@ -119,7 +122,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"
-        case LongType => s"$col ^ ($col >>> 32)"
+        case LongType | TimestampType => s"$col ^ ($col >>> 32)"
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
@@ -135,9 +138,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val columnChecks = expressions.zipWithIndex.map { case (e, i) =>
       s"""
-          if (isNullAt($i) != row.isNullAt($i) || !isNullAt($i) && !get($i).equals(row.get($i))) {
-            return false;
-          }
+        if (nullBits[$i] != row.nullBits[$i] ||
+          (!nullBits[$i] && !(${ctx.genEqual(e.dataType, s"c$i", s"row.c$i")}))) {
+          return false;
+        }
       """
     }.mkString("\n")
 
@@ -170,7 +174,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       public int size() { return ${expressions.length};}
-      private boolean[] nullBits = new boolean[${expressions.length}];
+      protected boolean[] nullBits = new boolean[${expressions.length}];
       public void setNullAt(int i) { nullBits[i] = true; }
       public boolean isNullAt(int i) { return nullBits[i]; }
 
@@ -203,9 +207,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
       @Override
       public boolean equals(Object other) {
-        if (other instanceof Row) {
-          Row row = (Row) other;
-          if (row.length() != size()) return false;
+        if (other instanceof SpecificRow) {
+          SpecificRow row = (SpecificRow) other;
           $columnChecks
           return true;
         }

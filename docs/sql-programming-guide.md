@@ -1479,7 +1479,7 @@ expressed in HiveQL.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc);
+HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc.sc);
 
 sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
 sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
