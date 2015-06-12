@@ -45,7 +45,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     loadFactor: Double)
   extends Serializable {
 
-  require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
+  require(initialCapacity <= (1 << 30), "Can't make capacity bigger than 2^30 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
   require(loadFactor < 1.0, "Load factor must be less than 1.0")
   require(loadFactor > 0.0, "Load factor must be greater than 0.0")
@@ -223,7 +223,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    */
   private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
     val newCapacity = _capacity * 2
-    require(newCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
+    require(newCapacity <= (1 << 30), "Can't make capacity bigger than 2^30 elements")
     allocateFunc(newCapacity)
     val newBitset = new BitSet(newCapacity)
     val newData = new Array[T](newCapacity)
@@ -279,7 +279,7 @@ object OpenHashSet {
 
   val INVALID_POS = -1
   val NONEXISTENCE_MASK = 0x80000000
-  val POSITION_MASK = 0x1FFFFFFF
+  val POSITION_MASK = 0x7FFFFFFF
 
   /**
    * A set of specialized hash function implementation to avoid boxing hash code computation
