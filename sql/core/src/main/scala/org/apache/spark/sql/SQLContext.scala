@@ -155,7 +155,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
         val dialect = conf.dialect
         // reset the sql dialect
-        conf.unsetConf(SQLConf.DIALECT.key)
+        conf.unsetConf(SQLConf.DIALECT)
         // throw out the exception, and the default sql dialect will take effect for next query.
         throw new DialectException(
           s"""Instantiating dialect '$dialect' failed.

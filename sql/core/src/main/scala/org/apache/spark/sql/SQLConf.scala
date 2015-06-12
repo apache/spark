@@ -529,8 +529,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   def getConfString(key: String): String = {
     Option(settings.get(key)).
       orElse {
-      // Try to use the default value
-      Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+        // Try to use the default value
+        Option(sqlConfEntries.get(key)).map(_.defaultValueString)
       }.
       getOrElse(throw new NoSuchElementException(key))
   }
@@ -584,11 +584,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     }.toSeq
   }
 
-  private[spark] def unsetConf(key: String) {
+  private[spark] def unsetConf(key: String): Unit = {
     settings -= key
   }
 
-  private[spark] def clear() {
+  private[spark] def unsetConf(entry: SQLConfEntry[_]): Unit = {
+    settings -= entry.key
+  }
+
+  private[spark] def clear(): Unit = {
     settings.clear()
   }
 }
