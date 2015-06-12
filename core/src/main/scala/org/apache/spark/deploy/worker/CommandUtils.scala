@@ -91,12 +91,6 @@ object CommandUtils extends Logging {
     if (securityMgr.isAuthenticationEnabled) {
       newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
     }
-    // filter out auth secret from java opts
-    val javaOpts = if (securityMgr.isAuthenticationEnabled) {
-      command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF))
-    } else {
-      command.javaOpts
-    }
 
     Command(
       command.mainClass,
@@ -104,7 +98,7 @@ object CommandUtils extends Logging {
       newEnvironment,
       command.classPathEntries ++ classPath,
       Seq[String](), // library path already captured in environment variable
-      javaOpts)
+      command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
