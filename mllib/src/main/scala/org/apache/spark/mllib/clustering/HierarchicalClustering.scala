@@ -48,7 +48,7 @@ object HierarchicalClustering extends Logging {
 }
 
 /**
- * This is a divisive hierarchical clustering algorithm based on bi-sect k-means algorithm.
+ * This is a divisive hierarchical clustering algorithm based on bisect k-means algorithm.
  *
  * The main idea of this algorithm is based on "A comparison of document clustering techniques",
  * M. Steinbach, G. Karypis and V. Kumar. Workshop on Text Mining, KDD, 2000.
@@ -139,7 +139,7 @@ class HierarchicalClustering private (
     while (clusters.size < maxAllNodesInTree && noMoreDividable == false) {
       log.info(s"${sc.appName} starts step ${step}")
 
-      // enough to be clustered if the number of divided clusters is equal to 0
+      // can be clustered if the number of divided clusters is equal to 0
       val divided = getDividedClusters(data, leafClusters)
       if (divided.size == 0) {
         noMoreDividable = true
@@ -367,7 +367,7 @@ class HierarchicalClustering private (
   }
 
   /**
-   * Gets the initial centers for bi-sect k-means
+   * Gets the initial centers for bisect k-means
    */
   private[clustering]
   def initChildrenCenter(clusters: Map[Long, BV[Double]]): Map[Long, BV[Double]] = {
@@ -400,7 +400,7 @@ class HierarchicalClustering private (
     // if there is no index in the Map
     if (!treeMap.contains(rootIndex)) return None
 
-    // build a cluster tree if the queue is empty or until the number of leaves clusters is enough
+    // build a cluster tree if the queue is empty or until the number of leaf clusters is enough
     var numLeavesClusters = 1
     val root = treeMap(rootIndex)
     var leavesQueue = Map(rootIndex -> root)
@@ -578,7 +578,7 @@ class ClusterTree private (
   def setLocalHeight(height: Double) = (this.localHeight = height)
 
   /**
-   * Converts to a adjacency list
+   * Converts to an adjacency list
    *
    * @return List[(fromNodeId, toNodeId, distance)]
    */
@@ -601,7 +601,6 @@ class ClusterTree private (
   /**
    * Converts to a linkage matrix
    * Returned data format is fit for scipy's dendrogram function
-   * SEE ALSO: scipy.cluster.hierarchy.dendrogram
    *
    * @return List[(node1, node2, distance, tree size)]
    */
