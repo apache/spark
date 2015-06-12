@@ -34,8 +34,8 @@ case class Aggregator[K, V, C] (
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
-  // When spilling is enabled sorting will happen externally, but not necessarily with an 
-  // ExternalSorter. 
+  // When spilling is enabled sorting will happen externally, but not necessarily with an
+  // ExternalSorter.
   private val isSpillEnabled = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
 
   @deprecated("use combineValuesByKey with TaskContext argument", "0.9.0")

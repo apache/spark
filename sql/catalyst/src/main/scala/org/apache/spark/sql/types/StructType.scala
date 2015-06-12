@@ -265,7 +265,7 @@ object StructType {
       case _ =>
         throw new SparkException(s"Failed to merge incompatible data types $left and $right")
     }
-  
+
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
     import scala.collection.breakOut
     fields.map(s => (s.name, s))(breakOut)

@@ -21,8 +21,10 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
@@ -110,10 +112,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
-    case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
-    case TimestampType => buildCast[Timestamp](_, t => UTF8String(timestampToString(t)))
-    case _ => buildCast[Any](_, o => UTF8String(o.toString))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateUtils.toString(d)))
+    case TimestampType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampToString(DateUtils.toJavaTimestamp(t))))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
   // BinaryConverter
@@ -126,7 +129,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case StringType =>
       buildCast[UTF8String](_, _.length() != 0)
     case TimestampType =>
-      buildCast[Timestamp](_, t => t.getTime() != 0 || t.getNanos() != 0)
+      buildCast[Long](_, t => t != 0)
     case DateType =>
       // Hive would return null when cast from date to boolean
       buildCast[Int](_, d => null)
@@ -139,7 +142,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != 0)
+      buildCast[Decimal](_, _ != Decimal(0))
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -157,20 +160,21 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         if (periodIdx != -1 && n.length() - periodIdx > 9) {
           n = n.substring(0, periodIdx + 10)
         }
-        try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
+        try DateUtils.fromJavaTimestamp(Timestamp.valueOf(n))
+        catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0)))
+      buildCast[Boolean](_, b => (if (b) 1L else 0))
     case LongType =>
-      buildCast[Long](_, l => new Timestamp(l))
+      buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
-      buildCast[Int](_, i => new Timestamp(i))
+      buildCast[Int](_, i => longToTimestamp(i.toLong))
     case ShortType =>
-      buildCast[Short](_, s => new Timestamp(s))
+      buildCast[Short](_, s => longToTimestamp(s.toLong))
     case ByteType =>
-      buildCast[Byte](_, b => new Timestamp(b))
+      buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => new Timestamp(DateUtils.toJavaDate(d).getTime))
+      buildCast[Int](_, d => DateUtils.toMillisSinceEpoch(d) * 10000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -190,25 +194,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       })
   }
 
-  private[this] def decimalToTimestamp(d: Decimal) = {
-    val seconds = Math.floor(d.toDouble).toLong
-    val bd = (d.toBigDecimal - seconds) * 1000000000
-    val nanos = bd.intValue()
-
-    val millis = seconds * 1000
-    val t = new Timestamp(millis)
-
-    // remaining fractional portion as nanos
-    t.setNanos(nanos)
-    t
+  private[this] def decimalToTimestamp(d: Decimal): Long = {
+    (d.toBigDecimal * 10000000L).longValue()
   }
 
-  // Timestamp to long, converting milliseconds to seconds
-  private[this] def timestampToLong(ts: Timestamp) = Math.floor(ts.getTime / 1000.0).toLong
-
-  private[this] def timestampToDouble(ts: Timestamp) = {
-    // First part is the seconds since the beginning of time, followed by nanosecs.
-    Math.floor(ts.getTime / 1000.0).toLong + ts.getNanos.toDouble / 1000000000
+  // converting milliseconds to 100ns
+  private[this] def longToTimestamp(t: Long): Long = t * 10000L
+  // converting 100ns to seconds
+  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 10000000L).toLong
+  // converting 100ns to seconds in double
+  private[this] def timestampToDouble(ts: Long): Double = {
+    ts / 10000000.0
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention
@@ -233,7 +229,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Timestamp](_, t => DateUtils.millisToDays(t.getTime))
+      buildCast[Long](_, t => DateUtils.millisToDays(t / 10000L))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception,
     // so we can return null
@@ -252,7 +248,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t))
+      buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
@@ -268,7 +264,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toInt)
+      buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
@@ -284,7 +280,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toShort)
+      buildCast[Long](_, t => timestampToLong(t).toShort)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
@@ -300,7 +296,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToLong(t).toByte)
+      buildCast[Long](_, t => timestampToLong(t).toByte)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
@@ -333,7 +329,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
-      buildCast[Timestamp](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
+      buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case DecimalType() =>
       b => changePrecision(b.asInstanceOf[Decimal].clone(), target)
     case LongType =>
@@ -357,7 +353,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToDouble(t))
+      buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
   }
@@ -373,7 +369,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Timestamp](_, t => timestampToDouble(t).toFloat)
+      buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
@@ -432,6 +428,47 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   override def eval(input: Row): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    // TODO(cg): Add support for more data types.
+    (child.dataType, dataType) match {
+
+      case (BinaryType, StringType) =>
+        defineCodeGen (ctx, ev, c =>
+          s"new ${ctx.stringType}().set($c)")
+      case (DateType, StringType) =>
+        defineCodeGen(ctx, ev, c =>
+          s"""new ${ctx.stringType}().set(
+                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
+      // Special handling required for timestamps in hive test cases since the toString function
+      // does not match the expected output.
+      case (TimestampType, StringType) =>
+        super.genCode(ctx, ev)
+      case (_, StringType) =>
+        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().set(String.valueOf($c))")
+
+      // fallback for DecimalType, this must be before other numeric types
+      case (_, dt: DecimalType) =>
+        super.genCode(ctx, ev)
+
+      case (BooleanType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
+      case (dt: DecimalType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
+      case (dt: NumericType, BooleanType) =>
+        defineCodeGen(ctx, ev, c => s"$c != 0")
+
+      case (_: DecimalType, IntegerType) =>
+        defineCodeGen(ctx, ev, c => s"($c).toInt()")
+      case (_: DecimalType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+      case (_: NumericType, dt: NumericType) =>
+        defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
+
+      case other =>
+        super.genCode(ctx, ev)
+    }
   }
 }
 

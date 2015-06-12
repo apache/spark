@@ -24,7 +24,7 @@
   old <- getOption("defaultPackages")
   options(defaultPackages = c(old, "SparkR"))
 
-  sc <- SparkR::sparkR.init(Sys.getenv("MASTER", unset = ""))
+  sc <- SparkR::sparkR.init()
   assign("sc", sc, envir=.GlobalEnv)
   sqlContext <- SparkR::sparkRSQL.init(sc)
   assign("sqlContext", sqlContext, envir=.GlobalEnv)

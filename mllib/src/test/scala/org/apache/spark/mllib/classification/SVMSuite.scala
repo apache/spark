@@ -21,9 +21,8 @@ import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -62,7 +61,7 @@ object SVMSuite {
 
 }
 
-class SVMSuite extends FunSuite with MLlibTestSparkContext {
+class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
@@ -229,7 +228,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
+class SVMClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

@@ -103,7 +103,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
             sqlContext.conf.useCompression,
             sqlContext.conf.columnBatchSize,
             storageLevel,
-            query.queryExecution.executedPlan,
+            sqlContext.executePlan(query.logicalPlan).executedPlan,
             tableName))
     }
   }

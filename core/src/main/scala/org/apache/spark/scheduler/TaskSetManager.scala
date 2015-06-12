@@ -46,7 +46,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *
  * @param sched           the TaskSchedulerImpl associated with the TaskSetManager
  * @param taskSet         the TaskSet to manage scheduling for
- * @param maxTaskFailures if any particular task fails more than this number of times, the entire
+ * @param maxTaskFailures if any particular task fails this number of times, the entire
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
@@ -861,9 +861,9 @@ private[spark] class TaskSetManager(
       case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
       case _ => null
     }
-    
+
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)  
+      conf.getTimeAsMs(localityWaitKey, defaultWait)
     } else {
       0L
     }

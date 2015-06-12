@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.json
 
-import java.sql.Timestamp
-
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
@@ -32,6 +30,8 @@ import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
 
 private[sql] object JsonRDD extends Logging {
 
@@ -155,7 +155,7 @@ private[sql] object JsonRDD extends Logging {
    * Returns the most general data type for two given data types.
    */
   private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonType(t1, t2) match {
+    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2) match {
       case Some(commonType) => commonType
       case None =>
         // t1 or t2 is a StructType, ArrayType, or an unexpected type.
@@ -319,7 +319,7 @@ private[sql] object JsonRDD extends Logging {
           parsed
         } catch {
           case e: JsonProcessingException =>
-            Map(columnNameOfCorruptRecords -> UTF8String(record)) :: Nil
+            Map(columnNameOfCorruptRecords -> UTF8String.fromString(record)) :: Nil
         }
       }
     })
@@ -398,11 +398,11 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toTimestamp(value: Any): Timestamp = {
+  private def toTimestamp(value: Any): Long = {
     value match {
-      case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
-      case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => toTimestamp(DateUtils.stringToTime(value).getTime)
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong * 10000L
+      case value: java.lang.Long => value * 10000L
+      case value: java.lang.String => DateUtils.stringToTime(value).getTime * 10000L
     }
   }
 
@@ -411,7 +411,7 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case StringType => UTF8String(toString(value))
+        case StringType => UTF8String.fromString(toString(value))
         case _ if value == null || value == "" => null // guard the non string type
         case IntegerType => value.asInstanceOf[IntegerType.InternalType]
         case LongType => toLong(value)
@@ -425,7 +425,7 @@ private[sql] object JsonRDD extends Logging {
           val map = value.asInstanceOf[Map[String, Any]]
           map.map {
             case (k, v) =>
-              (UTF8String(k), enforceCorrectType(v, valueType))
+              (UTF8String.fromString(k), enforceCorrectType(v, valueType))
           }.map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
         case DateType => toDate(value)

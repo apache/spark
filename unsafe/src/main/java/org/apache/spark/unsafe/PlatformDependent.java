@@ -25,8 +25,7 @@ public final class PlatformDependent {
 
   /**
    * Facade in front of {@link sun.misc.Unsafe}, used to avoid directly exposing Unsafe outside of
-   * this package. This also lets us aovid accidental use of deprecated methods or methods that
-   * aren't present in Java 6.
+   * this package. This also lets us avoid accidental use of deprecated methods.
    */
   public static final class UNSAFE {
 
