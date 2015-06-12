@@ -645,12 +645,20 @@ class SQLQuerySuite extends QueryTest {
       .queryExecution.analyzed
   }
 
-  test("test script transform") {
+  test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(100000 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
-      .queryExecution.toRdd.count())
+        .queryExecution.toRdd.count())
+  }
+
+  test("test script transform for stderr") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(0 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
+        .queryExecution.toRdd.count())
   }
 
   test("window function: udaf with aggregate expressin") {
