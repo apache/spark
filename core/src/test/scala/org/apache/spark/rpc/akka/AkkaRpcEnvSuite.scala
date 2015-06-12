@@ -22,13 +22,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Actor, Props}
+import akka.actor.{Actor, ActorSystem, Props}
 import akka.pattern.ask
 
-import com.typesafe.config.{ConfigValueFactory, ConfigFactory}
+import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 
-import org.apache.spark.rpc._
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.rpc._
 
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 

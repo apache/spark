@@ -17,16 +17,16 @@
 
 package org.apache.spark.util
 
+import scala.collection.JavaConversions.mapAsJavaMap
+
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
 
 import com.typesafe.config.ConfigFactory
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
-
-import scala.collection.JavaConversions.mapAsJavaMap
+import org.apache.spark.rpc.RpcTimeout
 
 /**
  * Various utility classes for working with Akka.
