@@ -29,7 +29,9 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -204,7 +206,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
         case ShortType => writer.addInteger(value.asInstanceOf[Short])
         case LongType => writer.addLong(value.asInstanceOf[Long])
-        case TimestampType => writeTimestamp(value.asInstanceOf[java.sql.Timestamp])
+        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
         case ByteType => writer.addInteger(value.asInstanceOf[Byte])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
@@ -311,8 +313,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
-  private[parquet] def writeTimestamp(ts: java.sql.Timestamp): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(ts)
+  private[parquet] def writeTimestamp(ts: Long): Unit = {
+    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(
+      DateUtils.toJavaTimestamp(ts))
     writer.addBinary(binaryNanoTime)
   }
 }
@@ -357,7 +360,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
       case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record(index).asInstanceOf[java.sql.Timestamp])
+      case TimestampType => writeTimestamp(record(index).asInstanceOf[Long])
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

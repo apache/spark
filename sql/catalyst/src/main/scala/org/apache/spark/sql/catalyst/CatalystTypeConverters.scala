@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.sql.Date
+import java.sql.{Timestamp, Date}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.{InternalRow, Row}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
@@ -59,6 +60,7 @@ object CatalystTypeConverters {
       case structType: StructType => StructConverter(structType)
       case StringType => StringConverter
       case DateType => DateConverter
+      case TimestampType => TimestampConverter
       case dt: DecimalType => BigDecimalConverter
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -258,7 +260,7 @@ object CatalystTypeConverters {
 
   private object StringConverter extends CatalystTypeConverter[Any, String, Any] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
-      case str: String => UTF8String(str)
+      case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
     }
     override def toScala(catalystValue: Any): String = catalystValue match {
@@ -274,6 +276,15 @@ object CatalystTypeConverters {
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: InternalRow, column: Int): Date = toScala(row.getInt(column))
+  }
+
+  private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
+    override def toCatalystImpl(scalaValue: Timestamp): Long =
+      DateUtils.fromJavaTimestamp(scalaValue)
+    override def toScala(catalystValue: Any): Timestamp =
+      if (catalystValue == null) null
+      else DateUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
+    override def toScalaImpl(row: Row, column: Int): Timestamp = toScala(row.getLong(column))
   }
 
   private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
@@ -370,6 +381,7 @@ object CatalystTypeConverters {
   def convertToCatalyst(a: Any): Any = a match {
     case s: String => StringConverter.toCatalyst(s)
     case d: Date => DateConverter.toCatalyst(d)
+    case t: Timestamp => TimestampConverter.toCatalyst(t)
     case d: BigDecimal => BigDecimalConverter.toCatalyst(d)
     case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
     case seq: Seq[Any] => seq.map(convertToCatalyst)

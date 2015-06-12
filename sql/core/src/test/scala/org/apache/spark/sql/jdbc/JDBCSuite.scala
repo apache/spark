@@ -326,7 +326,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543543)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543500)
   }
 
   test("test DATE types") {

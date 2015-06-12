@@ -30,7 +30,7 @@ import org.apache.spark.sql.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 

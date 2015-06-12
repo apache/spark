@@ -18,7 +18,6 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -26,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
@@ -321,7 +321,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    UTF8String(stringBytes)
+    UTF8String.fromBytes(stringBytes)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {
@@ -355,22 +355,20 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
   }
 }
 
-private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
-  override def extract(buffer: ByteBuffer): Timestamp = {
-    val timestamp = new Timestamp(buffer.getLong())
-    timestamp.setNanos(buffer.getInt())
-    timestamp
+private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
+  override def extract(buffer: ByteBuffer): Long = {
+    buffer.getLong
   }
 
-  override def append(v: Timestamp, buffer: ByteBuffer): Unit = {
-    buffer.putLong(v.getTime).putInt(v.getNanos)
+  override def append(v: Long, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v)
   }
 
-  override def getField(row: Row, ordinal: Int): Timestamp = {
-    row(ordinal).asInstanceOf[Timestamp]
+  override def getField(row: Row, ordinal: Int): Long = {
+    row(ordinal).asInstanceOf[Long]
   }
 
-  override def setField(row: MutableRow, ordinal: Int, value: Timestamp): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: Long): Unit = {
     row(ordinal) = value
   }
 }

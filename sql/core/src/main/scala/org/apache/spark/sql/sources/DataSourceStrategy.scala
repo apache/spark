@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{StringType, StructType, UTF8String}
+import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
 import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**

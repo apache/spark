@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UTF8String}
+import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An extended interface to [[InternalRow]] that allows the values for each column to be updated.  Setting
@@ -196,7 +197,9 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
   override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String) { values(ordinal) = UTF8String(value)}
+  override def setString(ordinal: Int, value: String) {
+    values(ordinal) = UTF8String.fromString(value)
+  }
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
   override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }

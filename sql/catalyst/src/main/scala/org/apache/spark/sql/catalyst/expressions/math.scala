@@ -161,6 +161,23 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
 case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 
+case class Log2(child: Expression)
+  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
+        if (Double.valueOf(${ev.primitive}).isNaN()) {
+          ${ev.isNull} = true;
+        }
+      }
+    """
+  }
+}
+
 case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
 
 case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")

@@ -118,7 +118,7 @@ case class GeneratedAggregate(
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
       case cs @ CombineSum(expr) =>
-        val calcType = expr.dataType
+        val calcType =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               DecimalType.Unlimited
@@ -129,7 +129,7 @@ case class GeneratedAggregate(
         val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
         val initialValue = Literal.create(null, calcType)
 
-        // Coalasce avoids double calculation...
+        // Coalesce avoids double calculation...
         // but really, common sub expression elimination would be better....
         val zero = Cast(Literal(0), calcType)
         // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
@@ -214,18 +214,18 @@ case class GeneratedAggregate(
       }.toMap
 
     val namedGroups = groupingExpressions.zipWithIndex.map {
-      case (ne: NamedExpression, _) => (ne, ne)
-      case (e, i) => (e, Alias(e, s"GroupingExpr$i")())
+      case (ne: NamedExpression, _) => (ne, ne.toAttribute)
+      case (e, i) => (e, Alias(e, s"GroupingExpr$i")().toAttribute)
     }
-
-    val groupMap: Map[Expression, Attribute] =
-      namedGroups.map { case (k, v) => k -> v.toAttribute}.toMap
 
     // The set of expressions that produce the final output given the aggregation buffer and the
     // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
       case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
-      case e: Expression if groupMap.contains(e) => groupMap(e)
+      case e: Expression =>
+        namedGroups.collectFirst {
+          case (expr, attr) if expr semanticEquals e => attr
+        }.getOrElse(e)
     })
 
     val aggregationBufferSchema: StructType = StructType.fromAttributes(computationSchema)
@@ -265,7 +265,7 @@ case class GeneratedAggregate(
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
-          (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
+          namedGroups.map(_._2) ++ computationSchema)
       log.info(s"Result Projection: ${resultExpressions.mkString(",")}")
 
       val joinedRow = new JoinedRow3

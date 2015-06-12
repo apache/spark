@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.{Accumulator, Logging => SparkLogging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -35,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.{Accumulator, Logging => SparkLogging}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -148,6 +149,7 @@ object EvaluatePython {
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
     case (date: Int, DateType) => DateUtils.toJavaDate(date)
+    case (t: Long, TimestampType) => DateUtils.toJavaTimestamp(t)
     case (s: UTF8String, StringType) => s.toString
 
     // Pyrolite can handle Timestamp and Decimal
@@ -186,10 +188,12 @@ object EvaluatePython {
       }): Row
 
     case (c: java.util.Calendar, DateType) =>
-      DateUtils.fromJavaDate(new java.sql.Date(c.getTime().getTime()))
+      DateUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
 
     case (c: java.util.Calendar, TimestampType) =>
-      new java.sql.Timestamp(c.getTime().getTime())
+      c.getTimeInMillis * 10000L
+    case (t: java.sql.Timestamp, TimestampType) =>
+      DateUtils.fromJavaTimestamp(t)
 
     case (_, udt: UserDefinedType[_]) =>
       fromJava(obj, udt.sqlType)
@@ -201,8 +205,10 @@ object EvaluatePython {
     case (c: Long, IntegerType) => c.toInt
     case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
-    case (c: String, StringType) => UTF8String(c)
-    case (c, StringType) if !c.isInstanceOf[String] => UTF8String(c.toString)
+    case (c: String, StringType) => UTF8String.fromString(c)
+    case (c, StringType) =>
+      // If we get here, c is not a string. Call toString on it.
+      UTF8String.fromString(c.toString)
 
     case (c, _) => c
   }

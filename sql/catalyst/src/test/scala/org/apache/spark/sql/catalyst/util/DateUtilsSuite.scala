@@ -15,23 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.catalyst.util
+
+import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
 
-/**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
- */
-class ExpressionOptimizationSuite extends SparkFunSuite with ExpressionEvalHelper {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: InternalRow = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
+class DateUtilsSuite extends SparkFunSuite {
+
+  test("timestamp") {
+    val now = new Timestamp(System.currentTimeMillis())
+    now.setNanos(100)
+    val ns = DateUtils.fromJavaTimestamp(now)
+    assert(ns % 10000000L == 1)
+    assert(DateUtils.toJavaTimestamp(ns) == now)
+
+    List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
+      val ts = DateUtils.toJavaTimestamp(t)
+      assert(DateUtils.fromJavaTimestamp(ts) == t)
+      assert(DateUtils.toJavaTimestamp(DateUtils.fromJavaTimestamp(ts)) == ts)
+    }
   }
 }
