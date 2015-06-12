@@ -44,8 +44,8 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
     private val pair: Parser[LogicalPlan] =
       (key ~ ("=".r ~> value).?).? ^^ {
-        case None => SetCommand(None, output)
-        case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)), output)
+        case None => SetCommand(None)
+        case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)))
       }
 
     def apply(input: String): LogicalPlan = parseAll(pair, input) match {

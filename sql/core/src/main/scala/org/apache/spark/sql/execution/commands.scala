@@ -76,53 +76,86 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
  */
 @DeveloperApi
 case class SetCommand(
-    kv: Option[(String, Option[String])],
-    override val output: Seq[Attribute])
+    kv: Option[(String, Option[String])])
   extends RunnableCommand with Logging {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = kv match {
+  private def keyValueOutput: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("key", StringType, false) ::
+        StructField("value", StringType, false) :: Nil)
+    schema.toAttributes
+  }
+
+  private val (_output, runFunc): (Seq[Attribute], SQLContext => Seq[Row]) = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
-      if (value.toInt < 1) {
-        val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
-          "determining the number of reducers is not supported."
-        throw new IllegalArgumentException(msg)
-      } else {
-        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS.key}=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        if (value.toInt < 1) {
+          val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
+            "determining the number of reducers is not supported."
+          throw new IllegalArgumentException(msg)
+        } else {
+          sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
+        }
       }
+      (keyValueOutput, runFunc)
 
     // Configures a single property.
     case Some((key, Some(value))) =>
-      sqlContext.setConf(key, value)
-      Seq(Row(s"$key=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.setConf(key, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
 
     // (In Hive, "SET" returns all changed properties while "SET -v" returns all properties.)
     // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
     case None =>
-      sqlContext.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+      }
+      (keyValueOutput, runFunc)
 
     // Queries all properties along with their default values and docs that are defined in the
     // SQLConf of the sqlContext.
     case Some(("-v", None)) =>
-      sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
-        Row(s"$key\tdefault: $defaultValue\t$doc")
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+          Row(key, defaultValue, doc)
+        }
       }
+      val schema = StructType(
+        StructField("key", StringType, false) ::
+          StructField("default", StringType, false) ::
+          StructField("meaning", StringType, false) :: Nil)
+      (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS.key}=${sqlContext.conf.numShufflePartitions}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, sqlContext.conf.numShufflePartitions.toString))
+      }
+      (keyValueOutput, runFunc)
 
     // Queries a single property.
     case Some((key, None)) =>
-      Seq(Row(s"$key=${sqlContext.getConf(key, "<undefined>")}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        Seq(Row(key, sqlContext.getConf(key, "<undefined>")))
+      }
+      (keyValueOutput, runFunc)
   }
+
+  override val output: Seq[Attribute] = _output
+
+  override def run(sqlContext: SQLContext): Seq[Row] = runFunc(sqlContext)
+
 }
 
 /**

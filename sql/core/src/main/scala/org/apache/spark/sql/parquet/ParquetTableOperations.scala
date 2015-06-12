@@ -114,8 +114,8 @@ private[sql] case class ParquetTableScan(
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.set(
-      SQLConf.PARQUET_CACHE_METADATA,
-      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true"))
+      SQLConf.PARQUET_CACHE_METADATA.key,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA.key, "true"))
 
     // Use task side metadata in parquet
     conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true);
