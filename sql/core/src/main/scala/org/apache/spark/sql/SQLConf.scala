@@ -29,6 +29,22 @@ private[spark] object SQLConf {
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, SQLConfEntry[_]]())
 
+  /**
+   * An entry contains all meta information for a configuration.
+   *
+   * @param key the key for the configuration
+   * @param defaultValue the default value for the configuration
+   * @param valueConverter how to convert a string to the value. It should throw an exception if the
+   *                       string does not have the required format.
+   * @param stringConverter how to convert a value to a string that the user can use it as a valid
+   *                        string value. It's usually `toString`. But sometimes, a custom converter
+   *                        is necessary. E.g., if T is List[String], `a, b, c` is better than
+   *                        `List(a, b, c)`.
+   * @param doc the document for the configuration
+   * @param isPublic if this configuration is public to the user. If it's `false`, this
+   *                 configuration is only used internally and we should not expose it to the user.
+   * @tparam T the value type
+   */
   private[sql] class SQLConfEntry[T] private(
       val key: String,
       val defaultValue: Option[T],
@@ -40,10 +56,7 @@ private[spark] object SQLConf {
     def defaultValueString: String = defaultValue.map(stringConverter).getOrElse("<undefined>")
 
     override def toString: String = {
-      // Fail tests that use `SQLConfEntry` as a string.
-      throw new IllegalStateException("Force to fail tests")
-      // s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc,
-      // isPublic = $isPublic)"
+      s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc, isPublic = $isPublic)"
     }
   }
 
