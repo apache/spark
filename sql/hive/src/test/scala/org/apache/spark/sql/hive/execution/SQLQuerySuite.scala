@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.Span
-import org.scalatest.time.Millis
-
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -636,21 +632,17 @@ class SQLQuerySuite extends QueryTest {
   test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
-    failAfter(Span(20000, Millis)) {
-      assert(100000 ===
-        sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
-          .queryExecution.toRdd.count())
-    }
+    assert(100000 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
+        .queryExecution.toRdd.count())
   }
 
   test("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
-    failAfter(Span(20000, Millis)) {
-      assert(0 ===
-        sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
-          .queryExecution.toRdd.count())
-    }
+    assert(0 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
+        .queryExecution.toRdd.count())
   }
 
   test("window function: udaf with aggregate expressin") {
