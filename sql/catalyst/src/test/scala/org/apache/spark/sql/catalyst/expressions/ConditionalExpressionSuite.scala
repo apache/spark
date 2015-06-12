@@ -19,10 +19,51 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{IntegerType, BooleanType}
+import org.apache.spark.sql.types._
 
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  test("if") {
+    val testcases = Seq[(java.lang.Boolean, Integer, Integer, Integer)](
+      (true, 1, 2, 1),
+      (false, 1, 2, 2),
+      (null, 1, 2, 2),
+      (true, null, 2, null),
+      (false, 1, null, null),
+      (null, null, 2, 2),
+      (null, 1, null, null)
+    )
+
+    // dataType must match T.
+    def testIf(convert: (Integer => Any), dataType: DataType): Unit = {
+      for ((predicate, trueValue, falseValue, expected) <- testcases) {
+        val trueValueConverted = if (trueValue == null) null else convert(trueValue)
+        val falseValueConverted = if (falseValue == null) null else convert(falseValue)
+        val expectedConverted = if (expected == null) null else convert(expected)
+
+        checkEvaluation(
+          If(Literal.create(predicate, BooleanType),
+            Literal.create(trueValueConverted, dataType),
+            Literal.create(falseValueConverted, dataType)),
+          expectedConverted)
+      }
+    }
+
+    testIf(_ == 1, BooleanType)
+    testIf(_.toShort, ShortType)
+    testIf(identity, IntegerType)
+    testIf(_.toLong, LongType)
+
+    testIf(_.toFloat, FloatType)
+    testIf(_.toDouble, DoubleType)
+    testIf(Decimal(_), DecimalType.Unlimited)
+
+    testIf(identity, DateType)
+    testIf(_.toLong, TimestampType)
+
+    testIf(_.toString, StringType)
+  }
 
   test("case when") {
     val row = create_row(null, false, true, "a", "b", "c")
