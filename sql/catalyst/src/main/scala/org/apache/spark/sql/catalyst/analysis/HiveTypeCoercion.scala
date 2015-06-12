@@ -68,27 +68,14 @@ object HiveTypeCoercion {
   }
 
   /**
-   * Implicit promote the AtomicType to StringType if
-   * one of the data type in (dt1, dt2) is StringType, and the other is not either
-   * BooleanType or BinaryType, the TightestCommonType should be StringType
-   * eg: 1. CaseWhenLike  case when ... then dt1 else dt2 end
-   *     2. Coalesce(null, dt1, dt2)
+   * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
+   * [[findTightestCommonTypeToString]] to find the TightestCommonType.
    */
-  private def promoteToStringType(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
-    case (t1: StringType, t2: AtomicType) if (t2 != BinaryType && t2 != BooleanType) =>
-        Some(StringType)
-
-    case (t1: AtomicType, t2: StringType) if (t1 != BinaryType && t1 != BooleanType) =>
-        Some(StringType)
-
-    case _ => None
-  }
-
   private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case None => None
       case Some(d) =>
-        findTightestCommonTypeOfTwo(d, c).orElse(promoteToStringType(d, c))
+        findTightestCommonTypeOfTwo(d, c).orElse(findTightestCommonTypeToString(d, c))
     })
   }
 
