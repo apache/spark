@@ -39,8 +39,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val resuableProjection = buildProjection()
-    iter.map(resuableProjection)
+    val reusableProjection = buildProjection()
+    iter.map(reusableProjection)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
