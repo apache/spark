@@ -237,13 +237,14 @@ public class LogisticRegressionWithElasticNetExample {
     // Load training data
     DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
 
-    // Fit the model
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(0.3)
       .setElasticNetParam(0.8)
       .setThreshold(0.6)
       .setProbabilityCol("myProbability");
+
+    // Fit the model      
     LogisticRegressionModel lrModel = lr.fit(training);
   }
 }
