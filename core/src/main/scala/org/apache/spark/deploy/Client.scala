@@ -38,6 +38,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, Utils}
  */
 private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   extends Actor with ActorLogReceive with Logging {
+  import ClientActor._
 
   private val masterActors = driverArgs.masters.map { m =>
     context.actorSelection(Master.toAkkaUrl(m, AkkaUtils.protocol(context.system)))
@@ -55,33 +56,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
         //       truncate filesystem paths similar to what YARN does. For now, we just require
         //       people call `addJar` assuming the jar is in the same directory.
-        val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
-
-        val classPathConf = "spark.driver.extraClassPath"
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
-          cp.split(java.io.File.pathSeparator)
-        }
-
-        val libraryPathConf = "spark.driver.extraLibraryPath"
-        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
-          cp.split(java.io.File.pathSeparator)
-        }
-
-        val extraJavaOptsConf = "spark.driver.extraJavaOptions"
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
-          .map(Utils.splitCommandString).getOrElse(Seq.empty)
-        val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-        val javaOpts = sparkJavaOpts ++ extraJavaOpts
-        val command = new Command(mainClass,
-          Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
-          sys.env, classPathEntries, libraryPathEntries, javaOpts)
-
-        val driverDescription = new DriverDescription(
-          driverArgs.jarUrl,
-          driverArgs.memory,
-          driverArgs.cores,
-          driverArgs.supervise,
-          command)
+        val driverDescription = buildDriverDescription(driverArgs, conf)
 
         // This assumes only one Master is active at a time
         for (masterActor <- masterActors) {
@@ -171,6 +146,42 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           System.exit(-1)
         }
       }
+  }
+}
+
+private object ClientActor {
+
+  // Exposed for testing
+  private def buildDriverDescription(driverArgs: ClientArguments,
+                                     conf: SparkConf): DriverDescription = {
+    val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
+
+    val classPathConf = "spark.driver.extraClassPath"
+    val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+
+    val libraryPathConf = "spark.driver.extraLibraryPath"
+    val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+
+    val extraJavaOptsConf = "spark.driver.extraJavaOptions"
+    val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+      .map(Utils.splitCommandString).getOrElse(Seq.empty)
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isNotClusterAuthSecretConf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val command = new Command(mainClass,
+      Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
+      sys.env, classPathEntries, libraryPathEntries, javaOpts)
+
+    new DriverDescription(
+      driverArgs.jarUrl,
+      driverArgs.memory,
+      driverArgs.cores,
+      driverArgs.supervise,
+      command,
+      if (conf.authOn) conf.getClusterAuthSecret else None)
   }
 }
 

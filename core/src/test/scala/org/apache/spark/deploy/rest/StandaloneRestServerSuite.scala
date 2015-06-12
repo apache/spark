@@ -15,28 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.deploy.rest
 
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SecurityManager}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.DriverDescription
 
-class ClientSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
-
-  val buildDriverDesc = PrivateMethod[DriverDescription]('buildDriverDescription)
-  val driverArgs = new ClientArguments(Array(
-    "launch",
-    "spark://someHost:8080",
-    "http://someHost:8000/foo.jar",
-    "org.SomeClass"))
+/**
+ * Tests for the Standalone REST server.
+ */
+class StandaloneRestServerSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Auth secret shouldn't appear in the command") {
-    val conf = new SparkConf
+    val servlet = new StandaloneSubmitRequestServlet(null , "", null)
+    val buildDriverDesc = PrivateMethod[DriverDescription]('buildDriverDescription)
+    val request = new CreateSubmissionRequest
+    request.clientSparkVersion = "1.2.3"
+    request.appResource = "honey-walnut-cherry.jar"
+    request.mainClass = "org.apache.spark.examples.SparkPie"
+    request.appArgs = Array("two slices", "a hint of cinnamon")
+    val conf = new SparkConf(false)
+    conf.set("spark.app.name", "SparkPie")
+    request.sparkProperties = conf.getAll.toMap
+    request.validate()
+
     // set secret
     conf.set(SecurityManager.CLUSTER_AUTH_SECRET_CONF, "This is the secret sauce")
 
     // auth is not set
-    var driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    request.sparkProperties = conf.getAll.toMap
+    var driverDesc = servlet invokePrivate buildDriverDesc(request)
     assert(driverDesc.appSecret === None)
     assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_CONF)))
@@ -45,7 +54,8 @@ class ClientSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
 
     // auth is set to false
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "false")
-    driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    request.sparkProperties = conf.getAll.toMap
+    driverDesc = servlet invokePrivate buildDriverDesc(request)
     assert(driverDesc.appSecret === None)
     assert(driverDesc.command.javaOpts.contains(
       "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=false"))
@@ -54,37 +64,12 @@ class ClientSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
 
     // auth is set to true
     conf.set(SecurityManager.CLUSTER_AUTH_CONF, "true")
-    driverDesc = ClientActor invokePrivate buildDriverDesc(driverArgs, conf)
+    request.sparkProperties = conf.getAll.toMap
+    driverDesc = servlet invokePrivate buildDriverDesc(request)
     assert(driverDesc.appSecret === Some("This is the secret sauce"))
     assert(driverDesc.command.javaOpts.contains(
       "-D" + SecurityManager.CLUSTER_AUTH_CONF + "=true"))
     assert(!driverDesc.command.javaOpts.exists(
       _.startsWith("-D" + SecurityManager.CLUSTER_AUTH_SECRET_CONF)))
-  }
-
-  test("correctly validates driver jar URL's") {
-    ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
-    ClientArguments.isValidJarUrl("https://someHost:8080/foo.jar") should be (true)
-
-    // file scheme with authority and path is valid.
-    ClientArguments.isValidJarUrl("file://somehost/path/to/a/jarFile.jar") should be (true)
-
-    // file scheme without path is not valid.
-    // In this case, jarFile.jar is recognized as authority.
-    ClientArguments.isValidJarUrl("file://jarFile.jar") should be (false)
-
-    // file scheme without authority but with triple slash is valid.
-    ClientArguments.isValidJarUrl("file:///some/path/to/a/jarFile.jar") should be (true)
-    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo.jar") should be (true)
-
-    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo") should be (false)
-    ClientArguments.isValidJarUrl("/missing/a/protocol/jarfile.jar") should be (false)
-    ClientArguments.isValidJarUrl("not-even-a-path.jar") should be (false)
-
-    // This URI doesn't have authority and path.
-    ClientArguments.isValidJarUrl("hdfs:someHost:1234/jarfile.jar") should be (false)
-
-    // Invalid syntax.
-    ClientArguments.isValidJarUrl("hdfs:") should be (false)
   }
 }

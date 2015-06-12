@@ -146,6 +146,8 @@ private[deploy] class ExecutorRunner(
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)
 
+      // send app secret to executor via stdin if needed
+      Utils.pipeOutAppSecretIfNeeded(process, appDesc.appSecret, conf)
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
