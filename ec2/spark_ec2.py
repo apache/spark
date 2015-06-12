@@ -83,7 +83,7 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
-    "1.4.0": "0.5.0",
+    "1.4.0": "0.6.4",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
