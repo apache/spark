@@ -3,6 +3,10 @@ Installation
 Setting up the sandbox from the :doc:`start` section was easy, now
 working towards a production grade environment is a bit more work.
 
+Note that Airflow is only
+tested under Python 2.7.* as many of our dependencies don't support
+python3 (as of 2015-06).
+
 Extra Packages
 ''''''''''''''
 The ``airflow`` PyPI basic package only installs what's needed to get started.

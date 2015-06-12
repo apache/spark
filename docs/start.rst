@@ -1,6 +1,8 @@
 Quick Start
 '''''''''''
-The installation is quick and straightforward.
+The installation is quick and straightforward. Note that Airflow is only
+tested under Python 2.7.* as many of our dependencies don't support
+python3 (as of 2015-06).
 
 .. code-block:: bash
 
