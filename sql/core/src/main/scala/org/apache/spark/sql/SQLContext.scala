@@ -86,7 +86,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setRawConf(key, value)
+  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -94,7 +94,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = conf.getRawConf(key)
+  def getConf(key: String): String = conf.getConfString(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -103,7 +103,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getRawConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).

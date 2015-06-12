@@ -469,11 +469,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /** Set Spark SQL configuration properties. */
   def setConf(props: Properties): Unit = settings.synchronized {
-    props.foreach { case (k, v) => setRawConf(k, v) }
+    props.foreach { case (k, v) => setConfString(k, v) }
   }
 
   /** Set the given Spark SQL configuration property using a `string` value. */
-  def setRawConf(key: String, value: String): Unit = {
+  def setConfString(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
     val entry = sqlConfEntries.get(key)
@@ -493,7 +493,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
-  def getRawConf(key: String): String = {
+  def getConfString(key: String): String = {
     Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
@@ -520,7 +520,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * Return the `string` value of Spark SQL configuration property for the given key. If the key is
    * not set yet, return `defaultValue`.
    */
-  def getRawConf(key: String, defaultValue: String): String = {
+  def getConfString(key: String, defaultValue: String): String = {
     val entry = sqlConfEntries.get(key)
     if (entry != null && defaultValue != "<undefined>") {
       // Only verify configs in the SQLConf object

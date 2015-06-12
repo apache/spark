@@ -32,13 +32,13 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConf(confEntry, 10)
     assert(conf.getConf(confEntry, 5) === 10)
 
-    conf.setRawConf(key, "20")
-    assert(conf.getRawConf(key, "5") === "20")
-    assert(conf.getRawConf(key) === "20")
+    conf.setConfString(key, "20")
+    assert(conf.getConfString(key, "5") === "20")
+    assert(conf.getConfString(key) === "20")
     assert(conf.getConf(confEntry, 5) === 20)
 
     val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "abc")
+      conf.setConfString(key, "abc")
     }
     assert(e.getMessage === s"$key should be int, but was abc")
   }
@@ -51,13 +51,13 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConf(confEntry, 10L)
     assert(conf.getConf(confEntry, 5L) === 10L)
 
-    conf.setRawConf(key, "20")
-    assert(conf.getRawConf(key, "5") === "20")
-    assert(conf.getRawConf(key) === "20")
+    conf.setConfString(key, "20")
+    assert(conf.getConfString(key, "5") === "20")
+    assert(conf.getConfString(key) === "20")
     assert(conf.getConf(confEntry, 5L) === 20L)
 
     val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "abc")
+      conf.setConfString(key, "abc")
     }
     assert(e.getMessage === s"$key should be long, but was abc")
   }
@@ -70,13 +70,13 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConf(confEntry, true)
     assert(conf.getConf(confEntry, false) === true)
 
-    conf.setRawConf(key, "true")
-    assert(conf.getRawConf(key, "false") === "true")
-    assert(conf.getRawConf(key) === "true")
+    conf.setConfString(key, "true")
+    assert(conf.getConfString(key, "false") === "true")
+    assert(conf.getConfString(key) === "true")
     assert(conf.getConf(confEntry, false) === true)
 
     val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "abc")
+      conf.setConfString(key, "abc")
     }
     assert(e.getMessage === s"$key should be boolean, but was abc")
   }
@@ -89,13 +89,13 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConf(confEntry, 10.0)
     assert(conf.getConf(confEntry, 5.0) === 10.0)
 
-    conf.setRawConf(key, "20.0")
-    assert(conf.getRawConf(key, "5.0") === "20.0")
-    assert(conf.getRawConf(key) === "20.0")
+    conf.setConfString(key, "20.0")
+    assert(conf.getConfString(key, "5.0") === "20.0")
+    assert(conf.getConfString(key) === "20.0")
     assert(conf.getConf(confEntry, 5.0) === 20.0)
 
     val e = intercept[IllegalArgumentException] {
-      conf.setRawConf(key, "abc")
+      conf.setConfString(key, "abc")
     }
     assert(e.getMessage === s"$key should be double, but was abc")
   }
@@ -108,9 +108,9 @@ class SQLConfEntrySuite extends SparkFunSuite {
     conf.setConf(confEntry, "abcd")
     assert(conf.getConf(confEntry, "abc") === "abcd")
 
-    conf.setRawConf(key, "abcde")
-    assert(conf.getRawConf(key, "abc") === "abcde")
-    assert(conf.getRawConf(key) === "abcde")
+    conf.setConfString(key, "abcde")
+    assert(conf.getConfString(key, "abc") === "abcde")
+    assert(conf.getConfString(key) === "abcde")
     assert(conf.getConf(confEntry, "abc") === "abcde")
   }
 }
