@@ -113,7 +113,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
 {
   SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
-  SBT_MAVEN_TEST_ARGS=("unsafe/test")
+  SBT_MAVEN_TEST_ARGS=("bagel/test")
 
   echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
 
