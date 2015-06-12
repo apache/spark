@@ -81,11 +81,7 @@ case class Exchange(
       shuffleManager.isInstanceOf[UnsafeShuffleManager]
     val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
     val serializeMapOutputs = conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true)
-    if (newOrdering.nonEmpty) {
-      // If a new ordering is required, then records will be sorted with Spark's `ExternalSorter`,
-      // which requires a defensive copy.
-      true
-    } else if (sortBasedShuffleOn) {
+    if (sortBasedShuffleOn) {
       val bypassIsSupported = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
       if (bypassIsSupported && partitioner.numPartitions <= bypassMergeThreshold) {
         // If we're using the original SortShuffleManager and the number of output partitions is
