@@ -110,12 +110,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
-      val wrappedInputStream = new BufferReleasingInputStream(inputStream.get, iterator)
+      // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
+      val wrappedInputStream = inputStream.get.asInstanceOf[BufferReleasingInputStream]
       verify(mockBuf, times(0)).release()
+      verify(wrappedInputStream.delegate, times(0)).close()
       wrappedInputStream.close()
       verify(mockBuf, times(1)).release()
+      verify(wrappedInputStream.delegate, times(1)).close()
       wrappedInputStream.close() // close should be idempotent
       verify(mockBuf, times(1)).release()
+      verify(wrappedInputStream.delegate, times(1)).close()
     }
 
     // 3 local blocks, and 2 remote blocks

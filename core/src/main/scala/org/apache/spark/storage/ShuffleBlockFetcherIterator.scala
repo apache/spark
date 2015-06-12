@@ -314,9 +314,12 @@ final class ShuffleBlockFetcherIterator(
   }
 }
 
-/** Helper class that ensures a ManagerBuffer is released upon InputStream.close() */
+/**
+ * Helper class that ensures a ManagedBuffer is release upon InputStream.close()
+ * Note: the delegate parameter is private[storage] to make it available to tests.
+ */
 private class BufferReleasingInputStream(
-    delegate: InputStream,
+    private[storage] val delegate: InputStream,
     iterator: ShuffleBlockFetcherIterator)
   extends InputStream {
   private var closed = false
