@@ -261,8 +261,8 @@ object Logarithm {
 
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
-  def base = left
-  def value = right
+  def base: Expression = left
+  def value: Expression = right
   override def eval(input: Row): Any = {
     val evalE2 = value.eval(input)
     if (evalE2 == null) {
