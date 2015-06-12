@@ -348,7 +348,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val locations = scheduleReceivers(receivers, executors)
       val tempRDD =
         if (locations(0) != null) {
-          val roundRobinReceivers = (0 to (receivers.length - 1)).map(i =>
+          val roundRobinReceivers = (0 until receivers.length).map(i =>
             (receivers(i), locations(i)))
           ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
         } else {
