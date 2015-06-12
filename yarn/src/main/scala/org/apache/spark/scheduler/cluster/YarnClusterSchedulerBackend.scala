@@ -117,9 +117,6 @@ private[spark] class YarnClusterSchedulerBackend(
           val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
           logDebug(s"Base URL for logs: $baseUrl")
 
-          driverLogs = Some(
-            Map("stderr" -> s"$baseUrl/stderr?start=0", "stdout" -> s"$baseUrl/stdout?start=0"))
-
           driverLogs = {
             if (yarnConf.getBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, false)) {
               val aggregatedLogBaseUrl =

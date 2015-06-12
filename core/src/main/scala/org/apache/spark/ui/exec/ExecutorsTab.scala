@@ -30,6 +30,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   val listener = parent.executorsListener
   val sc = parent.sc
   val conf = parent.conf
+  val appId = parent.appId
   val isHistoryUI = parent.isHistoryUI
   val threadDumpEnabled =
     sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
@@ -39,8 +40,6 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   if (threadDumpEnabled) {
     attachPage(new ExecutorThreadDumpPage(this))
   }
-
-  def appId = parent.appId
 }
 
 /**

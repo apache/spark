@@ -23,8 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import org.apache.hadoop.fs.{FileContext, Path}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat.LogKey
-import org.apache.hadoop.yarn.logaggregation.{AggregatedLogFormat, LogAggregationUtils}
-import org.apache.hadoop.yarn.util.ConverterUtils
+import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -32,35 +31,34 @@ import org.apache.spark.util.Utils
 
 import scala.xml.Node
 
-private[ui] class LogPage(
-    parent: ExecutorsTab)
-  extends WebUIPage("logPage") with Logging {
+private[ui] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") with Logging {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val defaultBytes = 100 * 1024
     val appId = parent.appId
-    val containerId = Option(request.getParameter("containerId"))
-    val nodeAddress = Option(request.getParameter("nodeAddress"))
-    val appOwner = Option(request.getParameter("appOwner"))
-    val logType = Option(request.getParameter("logType"))
+    val containerId = Option(request.getParameter("containerId")).getOrElse("")
+    val nodeAddress = Option(request.getParameter("nodeAddress")).getOrElse("")
+    val appOwner = Option(request.getParameter("appOwner")).getOrElse("")
+    val logType = Option(request.getParameter("logType")).getOrElse("")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).
+      getOrElse(defaultBytes)
 
-    if (!(containerId.isDefined && nodeAddress.isDefined && appOwner.isDefined &&
-      logType.isDefined)) {
+    if (containerId.isEmpty || nodeAddress.isEmpty || appOwner.isEmpty || logType.isEmpty) {
       throw new Exception("Request must specify appId, containerId, appOwner and logType!")
     }
 
     val (logText, startByte, endByte, logLength) = getLog(
-      appId, containerId.get, nodeAddress.get, appOwner.get, logType.get, offset, byteLength)
+      appId, containerId, nodeAddress, appOwner, logType, offset, byteLength)
+    val params = s"containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$appOwner" +
+      s"&logType=$logType"
 
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
       if (startByte > 0) {
-        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(containerId.get, nodeAddress.get, appOwner.get, logType.get,
-            math.max(startByte - byteLength, 0), byteLength)}>
+        <a href={"?%s&offset=%s&byteLength=%s"
+          .format(params, math.max(startByte - byteLength, 0), byteLength)}>
           <button type="button" class="btn btn-default">
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
@@ -73,9 +71,8 @@ private[ui] class LogPage(
 
     val nextButton =
       if (endByte < logLength) {
-        <a href={"?containerId=%s&nodeAddress=%s&appOwner=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(containerId.get, nodeAddress.get, appOwner.get, logType.get,
-            endByte, byteLength)}>
+        <a href={"?%s&offset=%s&byteLength=%s"
+          .format(params, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
             Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
           </button>
@@ -100,7 +97,7 @@ private[ui] class LogPage(
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, "Log page for " + appId)
+    UIUtils.basicSparkPage(content, s"Log page for $appId/$containerId")
   }
 
   /** Get the part of the aggregated log file given the offset and desired length of bytes */
@@ -118,7 +115,7 @@ private[ui] class LogPage(
     var reader: AggregatedLogFormat.LogReader = null
 
     try {
-      val filePath = getFilePath(yarnConf, appId, containerId, nodeAddress, appOwner)
+      val filePath = getFilePath(yarnConf, appId, nodeAddress, appOwner)
       reader = new AggregatedLogFormat.LogReader(yarnConf, filePath)
       var key = new LogKey()
       var inputStream = reader.next(key)
@@ -168,25 +165,21 @@ private[ui] class LogPage(
     }
   }
 
-  private def skip(
-      inputStream: DataInputStream,
-      n: Long
-    ) : Long = {
-    var totalSkiped = 0L
-    while (totalSkiped < n) {
-      val skipped = inputStream.skip(n - totalSkiped)
-      if (skipped <= 0) {
-        return totalSkiped
+  private def skip(inputStream: DataInputStream, n: Long): Long = {
+    var totalSkipped = 0L
+    while (totalSkipped < n) {
+      val currSkipped = inputStream.skip(n - totalSkipped)
+      if (currSkipped <= 0) {
+        return totalSkipped
       }
-      totalSkiped += skipped
+      totalSkipped += currSkipped
     }
-    totalSkiped
+    totalSkipped
   }
 
   private def getFilePath(
       yarnConf: YarnConfiguration,
       appId: String,
-      containerId: String,
       nodeAddress: String,
       appOwner: String
     ): Path = {

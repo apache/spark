@@ -20,8 +20,6 @@ package org.apache.spark.ui.exec
 import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.Logging
-
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
@@ -50,10 +48,10 @@ private[ui] case class ExecutorSummaryInfo(
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
-  extends WebUIPage("") with Logging {
+  extends WebUIPage("") {
   private val listener = parent.listener
   private val isHistoryUI = parent.isHistoryUI
-  private val aggregationLogPrefix = "aggregated_"
+  private val aggregatedLogPrefix = "aggregated_"
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
@@ -64,9 +62,9 @@ private[ui] class ExecutorsPage(
       ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
     val aggregatedLogsExist = execInfo.filter(
-      _.executorLogs.filter(_._1.startsWith(aggregationLogPrefix)).nonEmpty).nonEmpty
+      _.executorLogs.filter(_._1.startsWith(aggregatedLogPrefix)).nonEmpty).nonEmpty
     val nonAggregatedLogsExist = execInfo.filter(
-      _.executorLogs.filter(!_._1.startsWith(aggregationLogPrefix)).nonEmpty).nonEmpty
+      _.executorLogs.filter(!_._1.startsWith(aggregatedLogPrefix)).nonEmpty).nonEmpty
     val logsExist = aggregatedLogsExist || nonAggregatedLogsExist
 
     val execTable =
@@ -123,7 +121,8 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary,
+  private def execRow(
+      info: ExecutorSummary,
       aggregatedLogsExist: Boolean,
       nonAggregatedLogsExist: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
@@ -160,11 +159,11 @@ private[ui] class ExecutorsPage(
         if (isHistoryUI && aggregatedLogsExist) {
           <td>
             {
-              info.executorLogs.filter(_._1.startsWith(aggregationLogPrefix)).map {
+              info.executorLogs.filter(_._1.startsWith(aggregatedLogPrefix)).map {
                 case (logName, logUrl) =>
                   <div>
                     <a href={logUrl}>
-                      {logName.substring(aggregationLogPrefix.length)}
+                      {logName.substring(aggregatedLogPrefix.length)}
                     </a>
                   </div>
               }
@@ -173,7 +172,7 @@ private[ui] class ExecutorsPage(
         } else if (nonAggregatedLogsExist) {
           <td>
             {
-              info.executorLogs.filter(!_._1.startsWith(aggregationLogPrefix)).map {
+              info.executorLogs.filter(!_._1.startsWith(aggregatedLogPrefix)).map {
                 case (logName, logUrl) =>
                   <div>
                     <a href={logUrl}>
