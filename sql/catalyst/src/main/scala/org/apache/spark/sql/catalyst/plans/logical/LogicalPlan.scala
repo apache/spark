@@ -90,7 +90,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     val input = children.flatMap(_.output)
     productIterator.map {
       // Children are checked using sameResult above.
-      case tn: TreeNode[_] if childrenSet contains tn => null
+      case tn: TreeNode[_] if containsChild(tn) => null
       case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
       case s: Option[_] => s.map {
         case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
