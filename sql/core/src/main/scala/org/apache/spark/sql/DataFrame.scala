@@ -175,17 +175,27 @@ class DataFrame private[sql](
     val sb = new StringBuilder
     val data = take(numRows)
     val numCols = schema.fieldNames.length
+    val primitive: Seq[Boolean] = schema.map(f => f.dataType.isPrimitive)
 
+    // For array values, replace ArrayBuffer, with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.map { cell =>
-        val str = if (cell == null) "null" else cell.toString
+      row.toSeq.zipWithIndex.map { cell =>
+        val str = {
+          if (cell._1 == null) "null"
+          else if (!primitive(cell._2) && cell._1.toString.last == ')') {
+            '[' + cell._1.toString.drop(cell._1.toString.indexOf('(') + 1).dropRight(1) + ']'
+          }
+          else cell._1.toString
+        }
         if (str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
     }
 
+    // Initialise the width of each column to a minimum value of '3'
+    val colWidths = Array.fill(numCols)(3)
+
     // Compute the width of each column
-    val colWidths = Array.fill(numCols)(0)
     for (row <- rows) {
       for ((cell, i) <- row.zipWithIndex) {
         colWidths(i) = math.max(colWidths(i), cell.length)
@@ -197,7 +207,7 @@ class DataFrame private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      StringUtils.leftPad(cell.toString, colWidths(i))
+      StringUtils.leftPad(cell, colWidths(i))
     }.addString(sb, "|", "|", "|\n")
 
     sb.append(sep)
@@ -210,6 +220,12 @@ class DataFrame private[sql](
     }
 
     sb.append(sep)
+
+    // For Data that has more than N(numRows) records
+    if (take(numRows + 1).length > numRows) {
+      sb.append("only showing the top " + numRows.toString + " rows\n")
+    }
+
     sb.toString()
   }
 
