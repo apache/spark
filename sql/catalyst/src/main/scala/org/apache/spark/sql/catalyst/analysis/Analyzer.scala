@@ -409,12 +409,12 @@ class Analyzer(
 
         // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
         // Sort.
-        val (aliasedAggregateList, withAggsRemoved) = resolvedOrdering.map {
+        val (withAggsRemoved, aliasedAggregateList) = resolvedOrdering.map {
           case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
             val aliased = Alias(aggOrdering.child, "_aggOrdering")()
-            (aliased :: Nil, aggOrdering.copy(child = aliased.toAttribute))
+            (aggOrdering.copy(child = aliased.toAttribute), aliased :: Nil)
 
-          case other => (Nil, other)
+          case other => (other, Nil)
         }.unzip
 
         val missing = unresolved ++ aliasedAggregateList.flatten
