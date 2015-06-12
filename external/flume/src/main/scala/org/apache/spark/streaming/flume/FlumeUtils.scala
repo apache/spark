@@ -18,10 +18,16 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
+import java.io.{DataOutputStream, ByteArrayOutputStream}
+import java.util.{List => JList, Map => JMap}
 
+import scala.collection.JavaConversions._
+
+import org.apache.spark.api.java.function.PairFunction
+import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 
@@ -234,5 +240,73 @@ object FlumeUtils {
       parallelism: Int
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createPollingStream(jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
+  }
+}
+
+/**
+ * This is a helper class that wraps the methods in FlumeUtils into more Python-friendly class and
+ * function so that it can be easily instantiated and called from Python's FlumeUtils.
+ */
+private class FlumeUtilsPythonHelper {
+
+  def createStream(
+      jssc: JavaStreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel,
+      enableDecompression: Boolean
+    ): JavaPairDStream[Array[Byte], Array[Byte]] = {
+    val dstream = FlumeUtils.createStream(jssc, hostname, port, storageLevel, enableDecompression)
+    FlumeUtilsPythonHelper.toDStreamForPython(dstream)
+  }
+
+  def createPollingStream(
+      jssc: JavaStreamingContext,
+      hosts: JList[String],
+      ports: JList[Int],
+      storageLevel: StorageLevel,
+      maxBatchSize: Int,
+      parallelism: Int
+    ): JavaPairDStream[Array[Byte], Array[Byte]] = {
+    assert(hosts.length == ports.length)
+    val addresses = hosts.zip(ports).map {
+      case (host, port) => new InetSocketAddress(host, port)
+    }
+    val dstream = FlumeUtils.createPollingStream(
+      jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
+    FlumeUtilsPythonHelper.toDStreamForPython(dstream)
+  }
+
+}
+
+private object FlumeUtilsPythonHelper {
+
+  private def stringMapToByteArray(map: JMap[CharSequence, CharSequence]): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream()
+    val output = new DataOutputStream(byteStream)
+    try {
+      output.writeInt(map.size)
+      map.foreach { kv =>
+        PythonRDD.writeUTF(kv._1.toString, output)
+        PythonRDD.writeUTF(kv._2.toString, output)
+      }
+      byteStream.toByteArray
+    }
+    finally {
+      output.close()
+    }
+  }
+
+  private def toDStreamForPython(dstream: JavaReceiverInputDStream[SparkFlumeEvent]):
+    JavaPairDStream[Array[Byte], Array[Byte]] = {
+    dstream.mapToPair(new PairFunction[SparkFlumeEvent, Array[Byte], Array[Byte]] {
+      override def call(sparkEvent: SparkFlumeEvent): (Array[Byte], Array[Byte]) = {
+        val event = sparkEvent.event
+        val byteBuffer = event.getBody
+        val body = new Array[Byte](byteBuffer.remaining())
+        byteBuffer.get(body)
+        (stringMapToByteArray(event.getHeaders), body)
+      }
+    })
   }
 }

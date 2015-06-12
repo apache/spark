@@ -43,8 +43,8 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
@@ -349,7 +349,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-kafka-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {

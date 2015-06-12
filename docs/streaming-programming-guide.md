@@ -683,7 +683,7 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, *only* Kafka is available in the Python API. We will add more advanced sources in the Python API in future.
+out of these sources, *only* Kafka and Flume are available in the Python API. We will add more advanced sources in the Python API in future.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
