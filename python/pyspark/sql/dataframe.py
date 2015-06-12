@@ -459,7 +459,7 @@ class DataFrame(object):
 
         >>> from pyspark.sql.functions import col
         >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
-        >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0L)
+        >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
         |key|count|
