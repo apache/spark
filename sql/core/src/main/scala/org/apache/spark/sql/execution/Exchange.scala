@@ -31,16 +31,6 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.util.MutablePair
 
-object Exchange {
-  /**
-   * Returns true when the ordering expressions are a subset of the key.
-   * if true, ShuffledRDD can use `setKeyOrdering(orderingKey)` to sort within [[Exchange]].
-   */
-  def canSortWithShuffle(partitioning: Partitioning, desiredOrdering: Seq[SortOrder]): Boolean = {
-    desiredOrdering.map(_.child).toSet.subsetOf(partitioning.keyExpressions.toSet)
-  }
-}
-
 /**
  * :: DeveloperApi ::
  * Performs a shuffle that will result in the desired `newPartitioning`.  Optionally sorts each
@@ -143,7 +133,6 @@ case class Exchange(
   private def getSerializer(
       keySchema: Array[DataType],
       valueSchema: Array[DataType],
-      hasKeyOrdering: Boolean,
       numPartitions: Int): Serializer = {
     // It is true when there is no field that needs to be write out.
     // For now, we will not use SparkSqlSerializer2 when noField is true.
@@ -159,7 +148,7 @@ case class Exchange(
 
     val serializer = if (useSqlSerializer2) {
       logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(keySchema, valueSchema, hasKeyOrdering)
+      new SparkSqlSerializer2(keySchema, valueSchema)
     } else {
       logInfo("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
@@ -173,7 +162,7 @@ case class Exchange(
       case HashPartitioning(expressions, numPartitions) =>
         val keySchema = expressions.map(_.dataType).toArray
         val valueSchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(keySchema, valueSchema, newOrdering.nonEmpty, numPartitions)
+        val serializer = getSerializer(keySchema, valueSchema, numPartitions)
         val part = new HashPartitioner(numPartitions)
 
         val rdd = if (needToCopyObjectsBeforeShuffle(part, serializer)) {
@@ -189,15 +178,12 @@ case class Exchange(
           }
         }
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
-        if (newOrdering.nonEmpty) {
-          shuffled.setKeyOrdering(keyOrdering)
-        }
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
         val keySchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(keySchema, null, newOrdering.nonEmpty, numPartitions)
+        val serializer = getSerializer(keySchema, null, numPartitions)
 
         val childRdd = child.execute()
         val part: Partitioner = {
@@ -222,15 +208,12 @@ case class Exchange(
         }
 
         val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
-        if (newOrdering.nonEmpty) {
-          shuffled.setKeyOrdering(keyOrdering)
-        }
         shuffled.setSerializer(serializer)
         shuffled.map(_._1)
 
       case SinglePartition =>
         val valueSchema = child.output.map(_.dataType).toArray
-        val serializer = getSerializer(null, valueSchema, hasKeyOrdering = false, 1)
+        val serializer = getSerializer(null, valueSchema, numPartitions = 1)
         val partitioner = new HashPartitioner(1)
 
         val rdd = if (needToCopyObjectsBeforeShuffle(partitioner, serializer)) {
@@ -306,29 +289,24 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child: SparkPlan): SparkPlan = {
         val needSort = rowOrdering.nonEmpty && child.outputOrdering != rowOrdering
         val needsShuffle = child.outputPartitioning != partitioning
-        val canSortWithShuffle = Exchange.canSortWithShuffle(partitioning, rowOrdering)
 
-        if (needSort && needsShuffle && canSortWithShuffle) {
-          Exchange(partitioning, rowOrdering, child)
+        val withShuffle = if (needsShuffle) {
+          Exchange(partitioning, Nil, child)
         } else {
-          val withShuffle = if (needsShuffle) {
-            Exchange(partitioning, Nil, child)
-          } else {
-            child
-          }
-
-          val withSort = if (needSort) {
-            if (sqlContext.conf.externalSortEnabled) {
-              ExternalSort(rowOrdering, global = false, withShuffle)
-            } else {
-              Sort(rowOrdering, global = false, withShuffle)
-            }
-          } else {
-            withShuffle
-          }
-
-          withSort
+          child
         }
+
+        val withSort = if (needSort) {
+          if (sqlContext.conf.externalSortEnabled) {
+            ExternalSort(rowOrdering, global = false, withShuffle)
+          } else {
+            Sort(rowOrdering, global = false, withShuffle)
+          }
+        } else {
+          withShuffle
+        }
+
+        withSort
       }
 
       if (meetsRequirements && compatible && !needsAnySort) {
