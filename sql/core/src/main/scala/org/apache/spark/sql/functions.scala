@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
+ * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
@@ -1333,6 +1334,24 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Misc functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Calculates an MD5 128-bit checksum for the string or binary
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(e: Column): Column = Md5(e.expr)
+
+  /**
+   * Calculates an MD5 128-bit checksum for the string or binary
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(columnName: String): Column = md5(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
