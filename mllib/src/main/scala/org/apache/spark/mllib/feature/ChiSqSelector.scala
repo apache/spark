@@ -19,11 +19,19 @@ package org.apache.spark.mllib.feature
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.Row
 
 /**
  * :: Experimental ::
@@ -32,7 +40,7 @@ import org.apache.spark.rdd.RDD
  * @param selectedFeatures list of indices to select (filter). Must be ordered asc
  */
 @Experimental
-class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer {
+class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
   require(isSorted(selectedFeatures), "Array has to be sorted asc")
 
@@ -97,6 +105,66 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
+  override def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
+    ChiSqSelectorModel.SaveLoadV1_0.load(sc, path)
+  }
+
+  private[feature]
+  object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    /** Model data for import/export */
+    case class Data(feature: Int)
+
+    private[feature]
+    val thisClassName = "org.apache.spark.mllib.feature.ChiSqSelectorModel"
+
+    def save(sc: SparkContext, model: ChiSqSelectorModel, path: String): Unit = {
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      // Create Parquet data.
+      val dataArray = Array.tabulate(model.selectedFeatures.length) { i =>
+        Data(model.selectedFeatures(i))
+      }
+      sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
+
+    }
+
+    def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
+      implicit val formats = DefaultFormats
+      val sqlContext = new SQLContext(sc)
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+
+      val dataFrame = sqlContext.read.parquet(Loader.dataPath(path))
+      val dataArray = dataFrame.select("feature")
+
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      Loader.checkSchema[Data](dataFrame.schema)
+
+      val features = dataArray.map {
+        case Row(feature: Int) =>
+          (feature)
+      }.collect()
+
+      return new ChiSqSelectorModel(features)
     }
   }
 }
