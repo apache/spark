@@ -169,24 +169,25 @@ class DataFrame private[sql](
 
   /**
    * Internal API for Python
-   * @param numRows Number of rows to show
+   * @param _numRows Number of rows to show
    */
-  private[sql] def showString(numRows: Int): String = {
+  private[sql] def showString(_numRows: Int): String = {
+    val numRows = _numRows.max(0)
     val sb = new StringBuilder
-    val data = take(numRows)
+    val takeResult = take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
     val numCols = schema.fieldNames.length
-    val primitive: Seq[Boolean] = schema.map(f => f.dataType.isPrimitive)
 
-    // For array values, replace ArrayBuffer, with square brackets
+    // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.zipWithIndex.map { cell =>
-        val str = {
-          if (cell._1 == null) "null"
-          else if (!primitive(cell._2) && cell._1.toString.last == ')') {
-            '[' + cell._1.toString.drop(cell._1.toString.indexOf('(') + 1).dropRight(1) + ']'
-          }
-          else cell._1.toString
+      row.toSeq.map { cell =>
+        val str = cell match {
+          case null => "null"
+          case array: Array[_] => array.mkString("[", ", ", "]")
+          case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case _ => cell.toString
         }
         if (str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
@@ -221,9 +222,10 @@ class DataFrame private[sql](
 
     sb.append(sep)
 
-    // For Data that has more than N(numRows) records
-    if (take(numRows + 1).length > numRows) {
-      sb.append("only showing the top " + numRows.toString + " rows\n")
+    // For Data that has more than "numRows" records
+    if (hasMoreData) {
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows ${rowsString}\n")
     }
 
     sb.toString()

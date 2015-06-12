@@ -76,24 +76,6 @@ abstract class DataType {
     DataType.equalsIgnoreNullability(this, other)
 
   /**
-   * Check if `this` is a primitive data type.
-   */
-  def isPrimitive: Boolean = {
-    sameType(StringType)    ||
-    sameType(FloatType)     ||
-    sameType(IntegerType)   ||
-    sameType(ByteType)      ||
-    sameType(ShortType)     ||
-    sameType(DoubleType)    ||
-    sameType(LongType)      ||
-    sameType(BinaryType)    ||
-    sameType(BooleanType)   ||
-    sameType(DateType)      ||
-    sameType(DecimalType()) ||
-    sameType(TimestampType)
-  }
-
-  /**
    * Returns the same data type but set all nullability fields are true
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
