@@ -289,7 +289,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val locations = new Array[ArrayBuffer[String]](receivers.length)
       if (!executors.isEmpty) {
         var i = 0
-        for (i <- 0 to (receivers.length - 1)) {
+        for (i <- 0 until receivers.length) {
           locations(i) = new ArrayBuffer[String]()
           if (receivers(i).preferredLocation.isDefined) {
             locations(i) += receivers(i).preferredLocation.get
@@ -297,7 +297,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
 
         var count = 0;
-        for (i <- 0 to (max(receivers.length, executors.length) - 1)) {
+        for (i <- 0 until max(receivers.length, executors.length)) {
           if (!receivers(i % receivers.length).preferredLocation.isDefined) {
             locations(i % receivers.length) += executors(count)
             count += 1;
