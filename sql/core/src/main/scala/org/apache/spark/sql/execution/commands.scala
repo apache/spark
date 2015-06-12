@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.NoSuchElementException
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -94,8 +96,9 @@ case class SetCommand(
           s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
             s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
         if (value.toInt < 1) {
-          val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
-            "determining the number of reducers is not supported."
+          val msg =
+            s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
+              "determining the number of reducers is not supported."
           throw new IllegalArgumentException(msg)
         } else {
           sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
@@ -147,7 +150,13 @@ case class SetCommand(
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sqlContext: SQLContext) => {
-        Seq(Row(key, sqlContext.getConf(key, "<undefined>")))
+        val value =
+          try {
+            sqlContext.getConf(key)
+          } catch {
+            case _: NoSuchElementException => "<undefined>"
+          }
+        Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
   }

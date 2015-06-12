@@ -527,7 +527,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /** Return the value of Spark SQL configuration property for the given key. */
   def getConfString(key: String): String = {
-    Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
+    Option(settings.get(key)).
+      orElse {
+      // Try to use the default value
+      Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+      }.
+      getOrElse(throw new NoSuchElementException(key))
   }
 
   /**
