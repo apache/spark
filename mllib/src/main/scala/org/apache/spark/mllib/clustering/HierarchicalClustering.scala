@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV, norm => breezeNorm}
+import scala.collection.{Map, mutable}
+
+import breeze.linalg.{SparseVector => BSV, Vector => BV, norm => breezeNorm}
+
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.{Logging, SparkException}
-
-import scala.collection.{Map, mutable}
 
 
 object HierarchicalClustering extends Logging {

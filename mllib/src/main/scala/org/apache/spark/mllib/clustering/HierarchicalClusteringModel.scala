@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.io.File
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+import breeze.linalg.{Vector => BV, norm => breezeNorm}
 import org.apache.commons.io.FilenameUtils
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.linalg.Vector
