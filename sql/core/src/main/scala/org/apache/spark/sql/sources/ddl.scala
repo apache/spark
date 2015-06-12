@@ -166,7 +166,7 @@ private[sql] class DDLParser(
     }
   )
 
-  protected lazy val optionName: Parser[String] = "[_a-zA-Z][a-zA-Z0-9]*".r ^^ {
+  protected lazy val optionName: Parser[String] = "[_a-zA-Z][_a-zA-Z0-9]*".r ^^ {
     case name => name
   }
 

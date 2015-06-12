@@ -152,7 +152,8 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval'
         |)
       """.stripMargin)
   }
