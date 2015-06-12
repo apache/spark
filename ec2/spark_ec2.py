@@ -70,6 +70,7 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
     "1.3.0",
     "1.3.1",
+    "1.4.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -82,6 +83,7 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
+    "1.4.0": "0.5.0",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
