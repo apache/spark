@@ -597,7 +597,7 @@ class LDAModel(JavaModelWrapper):
     ...     LabeledPoint(2, [1.0, 0.0]),
     ... ]
     >>> rdd =  sc.parallelize(data)
-    >>> model = LDA.train(rdd, 2)
+    >>> model = LDA.train(rdd, k=2)
     >>> model.vocabSize()
     2
     >>> topics = model.topicsMatrix()
@@ -625,8 +625,12 @@ class LDAModel(JavaModelWrapper):
 class LDA():
 
     @classmethod
-    def train(cls, rdd, k, seed=None):
-        model = callMLlibFunc("trainLDAModel", rdd, k, seed)
+    def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
+              topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
+        """Train a LDA model."""
+        model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
+                              docConcentration, topicConcentration, seed,
+                              checkpointInterval, optimizer)
         return LDAModel(model)
 
 

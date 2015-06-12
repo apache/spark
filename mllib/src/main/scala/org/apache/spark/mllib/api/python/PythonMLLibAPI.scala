@@ -506,11 +506,21 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib LDA.run()
    */
   def trainLDAModel(
-    data: JavaRDD[LabeledPoint],
-    k: Int,
-    seed: java.lang.Long): LDAModel = {
+      data: JavaRDD[LabeledPoint],
+      k: Int,
+      maxIterations: Int,
+      docConcentration: Double,
+      topicConcentration: Double,
+      seed: java.lang.Long,
+      checkpointInterval: Int,
+      optimizer: String): LDAModel = {
     val algo = new LDA()
         .setK(k)
+        .setMaxIterations(maxIterations)
+        .setDocConcentration(docConcentration)
+        .setTopicConcentration(topicConcentration)
+        .setCheckpointInterval(checkpointInterval)
+        .setOptimizer(optimizer)
 
     if (seed != null) algo.setSeed(seed)
 
