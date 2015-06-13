@@ -164,7 +164,6 @@ object FunctionRegistry {
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        //varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
         varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
