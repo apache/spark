@@ -131,24 +131,31 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
 
     for (int i = 0; i <= bytes.length - b.length; i++) {
-      // TODO: Avoid copying.
-      if (bytes[i] == b[0] && Arrays.equals(Arrays.copyOfRange(bytes, i, i + b.length), b)) {
+      if (bytes[i] == b[0] && startsWith(substring, i)) {
         return true;
       }
     }
     return false;
   }
 
+  private boolean startsWith(final UTF8String prefix, int offset) {
+    byte[] b = prefix.getBytes();
+    if (b.length + offset > bytes.length || offset < 0) {
+      return false;
+    }
+    int i = 0;
+    while (i < b.length && b[i] == bytes[i + offset]) {
+      i++;
+    }
+    return i == b.length;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
-    final byte[] b = prefix.getBytes();
-    // TODO: Avoid copying.
-    return b.length <= bytes.length && Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b);
+    return startsWith(prefix, 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    final byte[] b = suffix.getBytes();
-    return b.length <= bytes.length &&
-      Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b);
+    return startsWith(suffix, bytes.length - suffix.getBytes().length);
   }
 
   public UTF8String toUpperCase() {
