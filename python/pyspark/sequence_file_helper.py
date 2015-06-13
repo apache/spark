@@ -44,7 +44,6 @@ def convert_from_pandas():
         raise RuntimeError("Pandas is not available")
     pass
 
-
 def convert_from_numpy_to_python(convertable):
     if not _have_numpy:
         raise RuntimeError("Numpy is not available")
@@ -64,7 +63,6 @@ def convert_from_numpy_to_python(convertable):
     else:
         raise ValueError('Could not convert input')
 
-
 def convert_to_numpy_from_python(convertable):
     if not _have_numpy:
         raise RuntimeError("Numpy is not available")
@@ -81,15 +79,12 @@ def convert_to_numpy_from_python(convertable):
         raise ValueError('Could not convert input')
 
 
-
-
 def convert_from_numpy_tuple_to_python(convertable):
     if not _have_numpy:
         raise RuntimeError("Numpy not avaiable")
 
     if isinstance(convertable, tuple):
         return [convertable[0], convert_from_numpy_to_python(convertable[1])]
-
 
 def convert_from_pandas_to_python(convertable):
     if not _have_pandas:
@@ -105,7 +100,6 @@ def convert_from_pandas_to_python(convertable):
 
     except:
         raise ValueError('Could not convert input')
-
 
 def convert_to_pandas_from_python(convertable):
     if not _have_pandas:

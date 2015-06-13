@@ -18,16 +18,13 @@
 package org.apache.spark.api.python
 
 import java.io.{DataOutput, DataInput}
-import java.util.ArrayList
 
 import com.google.common.base.Charsets.UTF_8
 
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.{SparkContext, SparkException}
 
-import scala.collection.JavaConversions
 
 
 /**
@@ -107,7 +104,6 @@ object WriteInputFormatTestDataGenerator {
     val intPath = s"$basePath/sfint/"
     val doublePath = s"$basePath/sfdouble/"
     val arrPath = s"$basePath/sfarray/"
-    val narrPath = s"$basePath/sfnarray/"
     val mapPath = s"$basePath/sfmap/"
     val classPath = s"$basePath/sfclass/"
     val bytesPath = s"$basePath/sfbytes/"
@@ -142,22 +138,6 @@ object WriteInputFormatTestDataGenerator {
         va.set(v.map(new DoubleWritable(_)))
         (new IntWritable(k), va)
     }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, DoubleArrayWritable]](arrPath)
-
-    // Create test data for NestedDoubleArrayWritable
-    val nestedDoubleArrayData =
-      Seq((1, Array(Array(-9.9, -8.8), Array(-7.7, -6.6, -5.5), Array(-4.4, -3.3, -2.2, -1.1))),
-          (2, Array(Array(1.1, 2.2, 3.3, 4.4, 5.5), Array(6.6), Array(7.7, 8.8))))
-
-    val ndaConverter = new NestedDoubleArrayToWritableConverter
-
-    sc.parallelize(nestedDoubleArrayData, numSlices = 2)
-      .map { case (k, v) =>
-      val nested = ndaConverter.convert(v)
-      (new IntWritable(k), nested)
-      //}.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]](
-      //    narrPath)
-    }.saveAsNewAPIHadoopFile(narrPath, classOf[Int], classOf[IntWritable],
-      classOf[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]])
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
     val mapData = Seq(
