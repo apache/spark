@@ -617,3 +617,43 @@ println("PCA Mean Squared Error = " + MSE_pca)
 {% endhighlight %}
 </div>
 </div>
+
+## Significant Selector
+Idea of this transformation it safe reduce big vector that was produced by Hashing TF for example
+for reduce requirement of memory for manipulation on them. 
+
+This transformation create a model that keep only indices that has different values on fit stage.
+
+### Example
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.feature.{HashingTF, SignificantSelector}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
+
+val hashingTF = new HashingTF
+val localDocs: Seq[(Double, Array[String])] = Seq(
+  (1d, "a a b b b c d".split(" ")),
+  (0d, "a b c d a b c".split(" ")),
+  (1d, "c b a c b a a".split(" ")))
+
+val docs = sc.parallelize(localDocs, 2)
+
+val tf: RDD[LabeledPoint] = docs.map { case (label, words) => LabeledPoint(label, hashingTF.transform(words))}
+// scala> tf.first().features.size
+//  res4: Int = 1048576
+
+val transformer = new SignificantSelector().fit(tf.map(_.features))
+
+val transformed_tf = tf.map(p => p.copy(features = transformer.transform(p.features)))
+// scala> transformed_tf.first().features.size
+// res5: Int = 4
+
+// now you have smallest vector that has same features,
+// but request less memory for manipulation on DecisionTree for example
+{% endhighlight %}
+</div>
+</div>
+
