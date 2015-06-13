@@ -145,15 +145,16 @@ Notice how we pass a mix of operator specific arguments (``bash_command``) and
 an argument common to all operators (``email_on_failure``) inherited 
 from BaseOperator to the operator's constructor. This is simpler than
 passing every argument for every constructor call. Also, notice that in 
-the second call we override ``email_on_failure`` parameter with ``False``.
+the second task we override ``email_on_failure`` parameter with ``False``.
 
-The precedence rules for operator is:
+The precedence rules for a task are as follows:
 
-* Use the argument explicitly passed to the constructor
-* Look in the default_args dictonary, use the value from there if it exists
-* Use the operator's default, if any
-* If none of these are defined, Airflow raises an exception
+1.  Explicitly passed arguments
+2.  Values that exist in the ``default_args`` dictionary
+3.  The operator's default value, if one exists
 
+A task must include or inherit the arguments ``task_id`` and ``owner``,
+otherwise Airflow will raise an exception.
 
 Templating with Jinja
 ---------------------
