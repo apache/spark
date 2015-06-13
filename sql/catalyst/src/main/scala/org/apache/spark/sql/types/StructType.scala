@@ -117,21 +117,38 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Creates a new [[StructType]] by adding a new field.
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata.
    *
    * val struct = (new StructType)
-   *   .add(StructField("a", IntegerType, true))
-   *   .add(StructField("b", LongType, false))
-   *   .add(StructField("c", StringType, true))
+   *   .add("a", IntegerType)
+   *   .add("b", LongType)
+   *   .add("c", StringType)
    */
   def add(name: String, dataType: DataType): StructType = {
-    StructType(fields :+ new StructField(name, dataType, true, Metadata.empty))
+    StructType(fields :+ new StructField(name, dataType, nullable = true, Metadata.empty))
   }
 
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata.
+   *
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true)
+   *   .add("b", LongType, false)
+   *   .add("c", StringType, true)
+   */
   def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
     StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
   }
 
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, Metadata.empty)
+   *   .add("b", LongType, false, Metadata.empty)
+   *   .add("c", StringType, true, Metadata.empty)
+   * }}}
+   */
   def add(
       name: String,
       dataType: DataType,
@@ -141,7 +158,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Creates a new [[StructType]] by adding a new field.
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int")
+   *   .add("b", "long")
+   *   .add("c", "string")
+   * }}}
+   */
+  def add(name: String, dataType: String): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata where the
+   * dataType is specified as a String.
    *
    * {{{
    * val struct = (new StructType)
@@ -150,14 +183,20 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", "string", true)
    * }}}
    */
-  def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), true, Metadata.empty)
-  }
-
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
     add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
   }
 
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, Metadata.empty)
+   *   .add("b", "long", false, Metadata.empty)
+   *   .add("c", "string", true, Metadata.empty)
+   * }}}
+   */
   def add(
       name: String,
       dataType: String,
