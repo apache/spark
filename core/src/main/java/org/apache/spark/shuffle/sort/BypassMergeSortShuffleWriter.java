@@ -107,8 +107,16 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         blockManager.diskBlockManager().createTempShuffleBlock();
       final File file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
+      // Note that we purposely do not call open() on the disk writers here; DiskBlockObjectWriter
+      // will automatically open() itself if necessary. This is an optimization to avoid file
+      // creation and truncation for empty partitions; this optimization probably doesn't make sense
+      // for most realistic production workloads, but it can make a large difference when playing
+      // around with Spark SQL queries in spark-shell on toy datasets: if you performed a query over
+      // an extremely small number of records then Spark SQL's default parallelism of 200 would
+      // result in slower out-of-the-box performance due to these constant-factor overheads. This
+      // optimization speeds up local microbenchmarking and SQL unit tests.
       partitionWriters[i] =
-        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics).open();
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
     }
     // Creating the file to write to and creating a disk writer both involve interacting with
     // the disk, and can take a long time in aggregate when we open many files, so should be
@@ -143,6 +151,13 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
+        if (partitionWriters[i].fileSegment().length() == 0) {
+          // In insertAll(), we didn't create empty files for empty reduce partitions; this branch
+          // handles that case. Since we'll be skipping deletion of these files, verify that they
+          // don't exist:
+          assert(!partitionWriters[i].fileSegment().file().exists());
+          continue;
+        }
         final FileInputStream in = new FileInputStream(partitionWriters[i].fileSegment().file());
         boolean copyThrewException = true;
         try {
@@ -172,7 +187,8 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         for (BlockObjectWriter writer : partitionWriters) {
           // This method explicitly does _not_ throw exceptions:
           writer.revertPartialWritesAndClose();
-          if (!diskBlockManager.getFile(writer.blockId()).delete()) {
+          final File file = diskBlockManager.getFile(writer.blockId());
+          if (file.exists() && !file.delete()) {
             logger.error("Error while deleting file for block {}", writer.blockId());
           }
         }
