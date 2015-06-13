@@ -380,7 +380,8 @@ class StructType(DataType):
         """
         if not fields:
             fields = []
-        assert all(isinstance(f, StructField) for f in fields), "fields should be a list of StructField"
+        assert all(isinstance(f, StructField) for f in fields),\
+            "fields should be a list of StructField"
         self.fields = fields
 
     def add_field(self, data_type):
