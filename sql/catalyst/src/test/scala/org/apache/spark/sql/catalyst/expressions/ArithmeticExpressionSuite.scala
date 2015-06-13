@@ -69,6 +69,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     checkEvaluation(-c1, -1.1, row)
     checkEvaluation(c1 + c2, 3.1, row)
+    checkDoubleEvaluation(Rand(30), (0.7363714192755834 +- 0.001), row)
     checkDoubleEvaluation(c1 - c2, (-0.9 +- 0.001), row)
     checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
     checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
