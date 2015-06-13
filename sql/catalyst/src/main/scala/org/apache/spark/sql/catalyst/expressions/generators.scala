@@ -54,13 +54,13 @@ abstract class Generator extends Expression {
   def elementTypes: Seq[(DataType, Boolean)]
 
   /** Should be implemented by child classes to perform specific Generators. */
-  override def eval(input: catalyst.InternalRow): TraversableOnce[catalyst.InternalRow]
+  override def eval(input: InternalRow): TraversableOnce[InternalRow]
 
   /**
    * Notifies that there are no more rows to process, clean up code, and additional
    * rows can be made here.
    */
-  def terminate(): TraversableOnce[catalyst.InternalRow] = Nil
+  def terminate(): TraversableOnce[InternalRow] = Nil
 }
 
 /**
@@ -68,22 +68,22 @@ abstract class Generator extends Expression {
  */
 case class UserDefinedGenerator(
     elementTypes: Seq[(DataType, Boolean)],
-    function: catalyst.InternalRow => TraversableOnce[catalyst.InternalRow],
+    function: InternalRow => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator {
 
   @transient private[this] var inputRow: InterpretedProjection = _
-  @transient private[this] var convertToScala: (catalyst.InternalRow) => catalyst.InternalRow = _
+  @transient private[this] var convertToScala: (InternalRow) => InternalRow = _
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
       CatalystTypeConverters.createToScalaConverter(inputSchema)
-    }.asInstanceOf[(catalyst.InternalRow => catalyst.InternalRow)]
+    }.asInstanceOf[(InternalRow => InternalRow)]
   }
 
-  override def eval(input: catalyst.InternalRow): TraversableOnce[catalyst.InternalRow] = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     if (inputRow == null) {
       initializeConverters()
     }
@@ -109,7 +109,7 @@ case class Explode(child: Expression)
     case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
   }
 
-  override def eval(input: catalyst.InternalRow): TraversableOnce[catalyst.InternalRow] = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     child.dataType match {
       case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]

@@ -35,7 +35,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
 
-  override def eval(input: catalyst.InternalRow): Any = c
+  override def eval(input: InternalRow): Any = c
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
@@ -61,7 +61,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
@@ -104,7 +104,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = DoubleType
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -216,7 +216,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
