@@ -39,20 +39,23 @@ object DefaultOptimizer extends Optimizer {
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
     Batch("Operator Optimizations", FixedPoint(100),
+      // Operator push down
       UnionPushDown,
-      CombineFilters,
+      LimitPushDown,
+      PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       ColumnPruning,
-      LimitPushDown,
+      // Operator combine
       ProjectCollapsing,
+      CombineFilters,
       CombineLimits,
+      // Constant folding
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
-      PushPredicateThroughJoin,
       RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
@@ -111,12 +114,14 @@ object UnionPushDown extends Rule[LogicalPlan] {
 
 object LimitPushDown extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down limit when the child is project on limit
+    // Push down limit when the child is project on limit.
     case Limit(expr, Project(projectList, l: Limit)) =>
       Project(projectList, Limit(expr, l))
 
-    // Push down limit when the child is project on sort
-    case Limit(expr, Project(projectList, s: Sort)) =>
+    // Push down limit when the child is project on sort,
+    // and we cannot push down this project through sort.
+    case Limit(expr, p @ Project(projectList, s: Sort))
+      if !s.references.subsetOf(p.outputSet) =>
       Project(projectList, Limit(expr, s))
   }
 }
