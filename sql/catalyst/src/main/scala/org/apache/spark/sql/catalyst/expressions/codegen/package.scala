@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.rules
+import org.apache.spark.sql.catalyst.rules.RuleExecutor._
 import org.apache.spark.util.Utils
 
 /**
