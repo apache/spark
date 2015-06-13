@@ -54,7 +54,7 @@ from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, Str
     UserDefinedType, DoubleType
 from pyspark import shuffle
 
-from sequence_file_helper import convert_from_pandas_to_python, convert_from_numpy_to_python, \
+from sequencefile_helper import convert_from_pandas_to_python, convert_from_numpy_to_python, \
     convert_to_numpy_from_python, convert_to_pandas_from_python
 
 

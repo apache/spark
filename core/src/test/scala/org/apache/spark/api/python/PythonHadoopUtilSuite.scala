@@ -44,7 +44,6 @@ class PythonHadoopUtilSuite extends FunSuite {
   implicit def arrayDouble2ArrayDouble(i: Array[Double]) = ShouldBeClose(i)
   implicit def arrayDouble2ArrayDouble(i: ArrayList[_]) = ShouldBeClose(i)
 
-
   test("test convert array of doubles") {
 
     val in = Array(1.1, 2.2, 3.3, 4.4, 5.5)

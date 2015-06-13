@@ -17,9 +17,6 @@
 
 package org.apache.spark.api.python
 
-
-import java.util
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -28,11 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 import scala.util.{Failure, Success, Try}
 import org.apache.spark.annotation.Experimental
-
-import com.google.common.primitives.{Doubles, Longs}
-
-import java.nio.{ByteBuffer, DoubleBuffer}
-
 
 /**
  * :: Experimental ::
