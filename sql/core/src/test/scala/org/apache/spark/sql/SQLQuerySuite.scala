@@ -152,18 +152,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Seq(Row("1"), Row("2")))
   }
 
-  test("SPARK-3176 Added Parser of SQL ABS()") {
-    checkAnswer(
-      sql("SELECT ABS(-1.3)"),
-      Row(1.3))
-    checkAnswer(
-      sql("SELECT ABS(0.0)"),
-      Row(0.0))
-    checkAnswer(
-      sql("SELECT ABS(2.5)"),
-      Row(2.5))
-  }
-
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
