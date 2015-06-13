@@ -86,7 +86,6 @@ private[sql] class Serializer2SerializationStream(
 private[sql] class Serializer2DeserializationStream(
     keySchema: Array[DataType],
     valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean,
     in: InputStream)
   extends DeserializationStream with Logging  {
 
@@ -96,14 +95,9 @@ private[sql] class Serializer2DeserializationStream(
     if (schema == null) {
       () => null
     } else {
-      if (hasKeyOrdering) {
-        // We have key ordering specified in a ShuffledRDD, it is not safe to reuse a mutable row.
-        () => new GenericMutableRow(schema.length)
-      } else {
-        // It is safe to reuse the mutable row.
-        val mutableRow = new SpecificMutableRow(schema)
-        () => mutableRow
-      }
+      // It is safe to reuse the mutable row.
+      val mutableRow = new SpecificMutableRow(schema)
+      () => mutableRow
     }
   }
 
@@ -133,8 +127,7 @@ private[sql] class Serializer2DeserializationStream(
 
 private[sql] class SparkSqlSerializer2Instance(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends SerializerInstance {
 
   def serialize[T: ClassTag](t: T): ByteBuffer =
@@ -151,7 +144,7 @@ private[sql] class SparkSqlSerializer2Instance(
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new Serializer2DeserializationStream(keySchema, valueSchema, hasKeyOrdering, s)
+    new Serializer2DeserializationStream(keySchema, valueSchema, s)
   }
 }
 
@@ -164,14 +157,13 @@ private[sql] class SparkSqlSerializer2Instance(
  */
 private[sql] class SparkSqlSerializer2(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends Serializer
   with Logging
   with Serializable{
 
   def newInstance(): SerializerInstance =
-    new SparkSqlSerializer2Instance(keySchema, valueSchema, hasKeyOrdering)
+    new SparkSqlSerializer2Instance(keySchema, valueSchema)
 
   override def supportsRelocationOfSerializedObjects: Boolean = {
     // SparkSqlSerializer2 is stateless and writes no stream headers
