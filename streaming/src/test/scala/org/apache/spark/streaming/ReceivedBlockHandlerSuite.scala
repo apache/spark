@@ -56,24 +56,13 @@ class ReceivedBlockHandlerSuite
   val serializer = new KryoSerializer(conf)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
+  val blockManagerBuffer = new ArrayBuffer[BlockManager]()
 
   var rpcEnv: RpcEnv = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
+  var storageLevel: StorageLevel = null
   var tempDirectory: File = null
-  var storageLevel = StorageLevel.MEMORY_ONLY_SER
-
-  private def createBlockManager(
-      maxMem: Long,
-      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    conf.set("spark.storage.unrollMemoryThreshold", "512")
-    conf.set("spark.storage.unrollFraction", "0.4")
-    val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
-    manager.initialize("app-id")
-    manager
-  }
 
   before {
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
@@ -82,20 +71,21 @@ class ReceivedBlockHandlerSuite
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
-    blockManager = new BlockManager("bm", rpcEnv, blockManagerMaster, serializer,
-      blockManagerSize, conf, mapOutputTracker, shuffleManager,
-      new NioBlockTransferService(conf, securityMgr), securityMgr, 0)
-    blockManager.initialize("app-id")
+    storageLevel = StorageLevel.MEMORY_ONLY_SER
+    blockManager = createBlockManager(blockManagerSize, conf)
 
     tempDirectory = Utils.createTempDir()
     manualClock.setTime(0)
   }
 
   after {
-    if (blockManager != null) {
-      blockManager.stop()
-      blockManager = null
+    for ( blockManager <- blockManagerBuffer ) {
+      if (blockManager != null) {
+        blockManager.stop()
+      }
     }
+    blockManager = null
+    blockManagerBuffer.clear()
     if (blockManagerMaster != null) {
       blockManagerMaster.stop()
       blockManagerMaster = null
@@ -186,89 +176,87 @@ class ReceivedBlockHandlerSuite
     }
   }
 
-  test("BlockManagerBasedBlockHandler - count messages") {
-    // ByteBufferBlock-MEMORY_ONLY
-    testRecordcount(true, StorageLevel.MEMORY_ONLY,
-      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
-    // ArrayBufferBlock-MEMORY_ONLY
-    testRecordcount(true, StorageLevel.MEMORY_ONLY,
-      ArrayBufferBlock(ArrayBuffer.fill(25)(0)), blockManager, Some(25))
-    // ArrayBufferBlock-DISK_ONLY
-    testRecordcount(true, StorageLevel.DISK_ONLY,
-      ArrayBufferBlock(ArrayBuffer.fill(50)(0)), blockManager, Some(50))
-    // ArrayBufferBlock-MEMORY_AND_DISK
-    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
-      ArrayBufferBlock(ArrayBuffer.fill(75)(0)), blockManager, Some(75))
-    // IteratorBlock-MEMORY_ONLY
-    testRecordcount(true, StorageLevel.MEMORY_ONLY,
-      IteratorBlock((ArrayBuffer.fill(100)(0)).iterator), blockManager, Some(100))
-    // IteratorBlock-DISK_ONLY
-    testRecordcount(true, StorageLevel.DISK_ONLY,
-      IteratorBlock((ArrayBuffer.fill(125)(0)).iterator), blockManager, Some(125))
-    // IteratorBlock-MEMORY_AND_DISK
-    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
-      IteratorBlock((ArrayBuffer.fill(150)(0)).iterator), blockManager, Some(150))
+  test("Test Block - count messages") {
+    // Test count with BlockManagedBasedBlockHandler
+    testCountWithBlockManagerBasedBlockHandler(true)
+    // Test count with WriteAheadLogBasedBlockHandler
+    testCountWithBlockManagerBasedBlockHandler(false)
   }
 
-  test("WriteAheadLogBasedBlockHandler - count messages") {
-    // ByteBufferBlock-MEMORY_ONLY
-    testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
-    // ArrayBufferBlock-MEMORY_ONLY
-    testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      ArrayBufferBlock(ArrayBuffer.fill(25)(0)), blockManager, Some(25))
-    // ArrayBufferBlock-DISK_ONLY
-    testRecordcount(false, StorageLevel.DISK_ONLY,
-      ArrayBufferBlock(ArrayBuffer.fill(50)(0)), blockManager, Some(50))
-    // ArrayBufferBlock-MEMORY_AND_DISK
-    testRecordcount(false, StorageLevel.MEMORY_AND_DISK,
-      ArrayBufferBlock(ArrayBuffer.fill(75)(0)), blockManager, Some(75))
-    // IteratorBlock-MEMORY_ONLY
-    testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      IteratorBlock((ArrayBuffer.fill(100)(0)).iterator), blockManager, Some(100))
-    // IteratorBlock-DISK_ONLY
-    testRecordcount(false, StorageLevel.DISK_ONLY,
-      IteratorBlock((ArrayBuffer.fill(125)(0)).iterator), blockManager, Some(125))
-    // IteratorBlock-MEMORY_AND_DISK
-    testRecordcount(false, StorageLevel.MEMORY_AND_DISK,
-      IteratorBlock((ArrayBuffer.fill(150)(0)).iterator), blockManager, Some(150))
-  }
-
-  test("BlockManagerBasedBlockHandler-MEMORY_ONLY - isFullyConsumed") {
-    storageLevel = StorageLevel.MEMORY_ONLY
-    blockManager = createBlockManager(12000)
-    val block = List.fill(70)(new Array[Byte](100))
+  test("Test Block - isFullyConsumed") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.storage.unrollMemoryThreshold", "512")
     // spark.storage.unrollFraction set to 0.4 for BlockManager
-    // With 12000 * 0.4 = 4800 bytes of free space for unroll, there is not enough space to store
-    // this block With MEMORY_ONLY StorageLevel. BlockManager will not be able to unroll this block
+    sparkConf.set("spark.storage.unrollFraction", "0.4")
+    // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
+    blockManager = createBlockManager(12000, sparkConf)
+
+    // there is not enough space to store this block in MEMORY,
+    // But BlockManager will be able to sereliaze this block to WAL
+    // and hence count returns correct value.
+     testRecordcount(false, StorageLevel.MEMORY_ONLY,
+      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+
+    // there is not enough space to store this block in MEMORY,
+    // But BlockManager will be able to sereliaze this block to DISK
+    // and hence count returns correct value.
+    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
+      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+
+    // there is not enough space to store this block With MEMORY_ONLY StorageLevel.
+    // BlockManager will not be able to unroll this block
     // and hence it will not tryToPut this block, resulting the SparkException
+    storageLevel = StorageLevel.MEMORY_ONLY
     withBlockManagerBasedBlockHandler { handler =>
       val thrown = intercept[SparkException] {
-        val blockStoreResult = storeBlock(handler, IteratorBlock(block.iterator))
+        storeSingleBlock(handler, IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator))
       }
-      assert(thrown.getMessage ===
-        "Could not store input-1-1000 to block manager with storage level " + storageLevel)
     }
   }
 
-  test("BlockManagerBasedBlockHandler-MEMORY_AND_DISK - isFullyConsumed") {
-    blockManager = createBlockManager(12000)
-    // spark.storage.unrollFraction set to 0.4 for BlockManager
-    // With 12000 * 0.4 = 4800 bytes of free space for unroll, there is not enough space to store
-    // this block in MEMORY, But BlockManager will be able to sereliaze this block to DISK
-    // and hence count returns correct value.
-    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+  private def testCountWithBlockManagerBasedBlockHandler(isBlockManagerBasedBlockHandler: Boolean) {
+    // ByteBufferBlock-MEMORY_ONLY
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
+      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
+    // ByteBufferBlock-MEMORY_ONLY_SER
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY_SER,
+      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
+    // ArrayBufferBlock-MEMORY_ONLY
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
+      ArrayBufferBlock(ArrayBuffer.fill(25)(0)), blockManager, Some(25))
+    // ArrayBufferBlock-MEMORY_ONLY_SER
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY_SER,
+      ArrayBufferBlock(ArrayBuffer.fill(25)(0)), blockManager, Some(25))
+    // ArrayBufferBlock-DISK_ONLY
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.DISK_ONLY,
+      ArrayBufferBlock(ArrayBuffer.fill(50)(0)), blockManager, Some(50))
+    // ArrayBufferBlock-MEMORY_AND_DISK
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_AND_DISK,
+      ArrayBufferBlock(ArrayBuffer.fill(75)(0)), blockManager, Some(75))
+    // IteratorBlock-MEMORY_ONLY
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
+      IteratorBlock((ArrayBuffer.fill(100)(0)).iterator), blockManager, Some(100))
+    // IteratorBlock-MEMORY_ONLY_SER
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY_SER,
+      IteratorBlock((ArrayBuffer.fill(100)(0)).iterator), blockManager, Some(100))
+    // IteratorBlock-DISK_ONLY
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.DISK_ONLY,
+      IteratorBlock((ArrayBuffer.fill(125)(0)).iterator), blockManager, Some(125))
+    // IteratorBlock-MEMORY_AND_DISK
+    testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_AND_DISK,
+      IteratorBlock((ArrayBuffer.fill(150)(0)).iterator), blockManager, Some(150))
   }
 
-  test("WriteAheadLogBasedBlockHandler-MEMORY_ONLY - isFullyConsumed") {
-    blockManager = createBlockManager(12000)
-    // spark.storage.unrollFraction set to 0.4 for BlockManager
-    // With 12000 * 0.4 = 4800 bytes of free space for unroll, there is not enough space to store
-    // this block in MEMORY, But BlockManager will be able to sereliaze this block to WAL
-    // and hence count returns correct value.
-    testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+  private def createBlockManager(
+      maxMem: Long,
+      conf: SparkConf,
+      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
+    val transfer = new NioBlockTransferService(conf, securityMgr)
+    val manager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, maxMem, conf,
+      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    manager.initialize("app-id")
+    blockManagerBuffer += manager
+    manager
   }
 
   /**
@@ -281,24 +269,36 @@ class ReceivedBlockHandlerSuite
       bManager: BlockManager,
       expectedNumRecords: Option[Long]
       ) {
-   storageLevel = sLevel
    blockManager = bManager
-   if (isBlockManagedBasedBlockHandler) {
-      // test received block with BlockManager based handler
-      withBlockManagerBasedBlockHandler { handler =>
-        val blockStoreResult = storeBlock(handler, receivedBlock)
-        assert(blockStoreResult.numRecords === expectedNumRecords)
+   storageLevel = sLevel
+   var bId: StreamBlockId = null
+    try {
+      if (isBlockManagedBasedBlockHandler) {
+        // test received block with BlockManager based handler
+        withBlockManagerBasedBlockHandler { handler =>
+        val (blockId, blockStoreResult) = storeSingleBlock(handler, receivedBlock)
+        bId = blockId
+        assert(blockStoreResult.numRecords === expectedNumRecords,
+          "Message count not matches for a " +
+          receivedBlock.getClass.getName +
+          " being inserted using BlockManagerBasedBlockHandler with " + sLevel)
+       }
+      } else {
+        // test received block with WAL based handler
+        withWriteAheadLogBasedBlockHandler { handler =>
+        val (blockId, blockStoreResult) = storeSingleBlock(handler, receivedBlock)
+        bId = blockId
+        assert(blockStoreResult.numRecords === expectedNumRecords,
+          "Message count not matches for a " +
+          receivedBlock.getClass.getName +
+          " being inserted using WriteAheadLogBasedBlockHandler with " + sLevel)
+        }
       }
-   } else {
-      // test received block with WAL based handler
-      withWriteAheadLogBasedBlockHandler { handler =>
-        val blockStoreResult = storeBlock(handler, receivedBlock)
-        assert(blockStoreResult.numRecords === expectedNumRecords)
-      }
-   }
-   // Removing the Block Id to use same blockManager for next test
-   blockManager.removeBlock(StreamBlockId(streamId, 1000L), true)
-}
+    } finally {
+     // Removing the Block Id to use same blockManager for next test
+     blockManager.removeBlock(bId, true)
+    }
+  }
 
   /**
    * Test storing of data using different forms of ReceivedBlocks and verify that they succeeded
@@ -377,16 +377,17 @@ class ReceivedBlockHandlerSuite
     (blockIds, storeResults)
   }
 
-  /** Store block using a handler */
-  private def storeBlock(
+  /** Store single block using a handler */
+  private def storeSingleBlock(
       handler: ReceivedBlockHandler,
       block: ReceivedBlock
-    ): ReceivedBlockStoreResult = {
-    val blockId = StreamBlockId(streamId, 1000L)
+    ): (StreamBlockId, ReceivedBlockStoreResult) = {
+    val blockId = generateBlockId
     val blockStoreResult = handler.storeBlock(blockId, block)
     logDebug("Done inserting")
-    blockStoreResult
+    (blockId, blockStoreResult)
   }
+
   private def getWriteAheadLogFiles(): Seq[String] = {
     getLogFilesInDirectory(checkpointDirToLogDir(tempDirectory.toString, streamId))
   }
