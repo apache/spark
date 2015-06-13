@@ -178,7 +178,7 @@ private[hive] class SparkExecuteStatementOperation(
       hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
-      HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
+      System.out.println(parentSession.getUsername)
       val proxyUser = UserGroupInformation.createRemoteUser(parentSession.getUsername)
       val currentUser = UserGroupInformation.getCurrentUser
       SparkHadoopUtil.get.transferCredentials(currentUser, proxyUser)
@@ -192,7 +192,7 @@ private[hive] class SparkExecuteStatementOperation(
               logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
             case _ =>
           }
-
+          HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
           iter = {
             val useIncrementalCollect =
               hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
