@@ -507,6 +507,7 @@ class BackfillJob(BaseJob):
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,
+                        task_start_date=self.bf_start_date,
                         pickle_id=pickle_id)
                     ti.state = State.RUNNING
                     if key not in started:
@@ -555,12 +556,14 @@ class LocalTaskJob(BaseJob):
             force=False,
             mark_success=False,
             pickle_id=None,
+            task_start_date=None,
             *args, **kwargs):
         self.task_instance = task_instance
         self.ignore_dependencies = ignore_dependencies
         self.force = force
         self.pickle_id = pickle_id
         self.mark_success = mark_success
+        self.task_start_date = task_start_date
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
@@ -570,6 +573,7 @@ class LocalTaskJob(BaseJob):
             force=self.force,
             pickle_id=self.pickle_id,
             mark_success=self.mark_success,
+            task_start_date=self.task_start_date,
             job_id=self.id,
         )
         self.process = subprocess.Popen(['bash', '-c', command])
