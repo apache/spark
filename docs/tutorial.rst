@@ -195,18 +195,13 @@ The ``params`` hook in ``BaseOperator`` allows you to pass a dictionary of
 parameters and/or objects to your templates. Please take the time
 to understand how the parameter ``my_param`` makes it through to the template.
 
-Note that templated fields can point to files if you prefer. 
-It may be desirable for many reasons, like keeping your scripts logic
-outside of your pipeline code, getting proper code highlighting in files, 
-and just generally allowing you to organize your pipeline's logic as you
-please. 
-
-In the above example, we could have 
-had a file ``templated_command.sh``, and referenced it in the ``bash_command``
-parameter, as in
-``bash_command='templated_command.sh'`` where the file location is relative
-to the pipeline's (``tutorial.py``) location. Note that it is also possible 
-to define your ``template_searchpath`` pointing to any folder 
+Files can also be passed to the ``bash_command`` argument, like
+``bash_command='templated_command.sh'`` where the file location is relative to
+the directory containing the pipeline file (``tutorial.py`` in this case). This
+may be desirable for many reasons, like separating your script's logic and
+pipeline code, allowing for proper code highlighting in files composed in
+different languages, and general flexibility in structuring pipelines. It is
+also possible to define your ``template_searchpath`` pointing to any folder
 locations in the DAG constructor call.
 
 Setting up Dependencies
