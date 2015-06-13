@@ -19,13 +19,10 @@ package org.apache.spark.sql.columnar
 
 import scala.collection.immutable.HashSet
 import scala.util.Random
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{AtomicType, DataType, Decimal}
 import org.apache.spark.sql.types.{DataType, Decimal, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
-
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int): GenericMutableRow = {
@@ -79,9 +76,9 @@ object ColumnarTestUtils {
 
   def makeRandomRow(
       head: ColumnType[_ <: DataType, _],
-      tail: ColumnType[_ <: DataType, _]*): Row = makeRandomRow(Seq(head) ++ tail)
+      tail: ColumnType[_ <: DataType, _]*): InternalRow = makeRandomRow(Seq(head) ++ tail)
 
-  def makeRandomRow(columnTypes: Seq[ColumnType[_ <: DataType, _]]): Row = {
+  def makeRandomRow(columnTypes: Seq[ColumnType[_ <: DataType, _]]): InternalRow = {
     val row = new GenericMutableRow(columnTypes.length)
     makeRandomValues(columnTypes).zipWithIndex.foreach { case (value, index) =>
       row(index) = value

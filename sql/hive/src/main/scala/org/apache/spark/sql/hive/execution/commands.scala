@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
@@ -39,9 +39,9 @@ import org.apache.spark.util.Utils
 private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     sqlContext.asInstanceOf[HiveContext].analyze(tableName)
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 
@@ -53,7 +53,7 @@ case class DropTable(
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
@@ -70,7 +70,7 @@ case class DropTable(
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(Seq(tableName))
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 
@@ -83,7 +83,7 @@ case class AddJar(path: String) extends RunnableCommand {
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val currentClassLoader = Utils.getContextOrSparkClassLoader
 
@@ -99,18 +99,18 @@ case class AddJar(path: String) extends RunnableCommand {
     // Add jar to executors
     hiveContext.sparkContext.addJar(path)
 
-    Seq(Row(0))
+    Seq(InternalRow(0))
   }
 }
 
 private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 
@@ -123,12 +123,12 @@ case class CreateMetastoreDataSource(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
     if (hiveContext.catalog.tableExists(tableName :: Nil)) {
       if (allowExisting) {
-        return Seq.empty[Row]
+        return Seq.empty[InternalRow]
       } else {
         throw new AnalysisException(s"Table $tableName already exists.")
       }
@@ -151,7 +151,7 @@ case class CreateMetastoreDataSource(
       optionsWithPath,
       isExternal)
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 
@@ -164,7 +164,7 @@ case class CreateMetastoreDataSourceAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     var createMetastoreTable = false
     var isExternal = true
@@ -188,7 +188,7 @@ case class CreateMetastoreDataSourceAsSelect(
             s"Or, if you are using SQL CREATE TABLE, you need to drop $tableName first.")
         case SaveMode.Ignore =>
           // Since the table already exists and the save mode is Ignore, we will just return.
-          return Seq.empty[Row]
+          return Seq.empty[InternalRow]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val resolved = ResolvedDataSource(
@@ -230,7 +230,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val data = DataFrame(hiveContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
-      case Some(schema) => sqlContext.createDataFrame(data.queryExecution.toRdd, schema)
+      case Some(schema) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, schema)
       case None => data
     }
 
@@ -253,6 +253,6 @@ case class CreateMetastoreDataSourceAsSelect(
 
     // Refresh the cache of the table in the catalog.
     hiveContext.refreshTable(tableName)
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }

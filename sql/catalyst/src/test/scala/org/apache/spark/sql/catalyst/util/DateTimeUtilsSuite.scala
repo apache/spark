@@ -21,7 +21,6 @@ import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
 
-
 class DateTimeUtilsSuite extends SparkFunSuite {
 
   test("timestamp and 100ns") {

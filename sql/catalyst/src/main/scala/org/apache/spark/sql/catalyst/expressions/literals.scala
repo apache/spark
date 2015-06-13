@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -87,7 +88,7 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     case _ => false
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: catalyst.InternalRow): Any = value
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     // change the isNull and primitive to consts, to inline them
@@ -142,9 +143,9 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
 
-  def update(expression: Expression, input: Row): Unit = {
+  def update(expression: Expression, input: catalyst.InternalRow): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: catalyst.InternalRow): Any = value
 }
