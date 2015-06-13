@@ -270,7 +270,11 @@ private class DateUnsafeColumnWriter private() extends UnsafeColumnWriter {
     0
   }
 
-  override def write(source: InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setDate(column, source.getDate(column))
     0
   }
@@ -283,7 +287,11 @@ private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
     16
   }
 
-  override def write(source: InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     val value = DateUtils.toJavaTimestamp(source.get(column).asInstanceOf[Long])
     val time = value.getTime()
     val nanos = value.getNanos()
