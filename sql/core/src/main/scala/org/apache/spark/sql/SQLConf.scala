@@ -161,7 +161,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(HIVE_VERIFY_PARTITIONPATH, "true").toBoolean
 
   /** When true the planner will use the external sort, which may spill to disk. */
-  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
+  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "true").toBoolean
 
   /**
    * Sort merge join would sort the two side of join first, and then iterate both sides together

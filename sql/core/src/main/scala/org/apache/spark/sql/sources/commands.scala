@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -44,18 +44,17 @@ private[sql] case class InsertIntoDataSource(
     overwrite: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = DataFrame(sqlContext, query)
     // Apply the schema of the existing table to the new data.
-    val df = sqlContext.createDataFrame(
-      data.queryExecution.toRdd, logicalRelation.schema, needsConversion = false)
+    val df = sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
     relation.insert(df, overwrite)
 
     // Invalidate the cache.
     sqlContext.cacheManager.invalidateCache(logicalRelation)
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 
@@ -65,7 +64,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     require(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
@@ -90,7 +89,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     if (doInsertion) {
       val job = new Job(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
-      job.setOutputValueClass(classOf[Row])
+      job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       // We create a DataFrame by applying the schema of relation to the data to make sure.
@@ -103,10 +102,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
         val project = Project(
           relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
 
-        sqlContext.createDataFrame(
-          DataFrame(sqlContext, project).queryExecution.toRdd,
-          relation.schema,
-          needsConversion = false)
+        sqlContext.internalCreateDataFrame(
+          DataFrame(sqlContext, project).queryExecution.toRdd, relation.schema)
       }
 
       val partitionColumns = relation.partitionColumns.fieldNames
@@ -119,7 +116,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       }
     }
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 
   private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
@@ -141,22 +138,19 @@ private[sql] case class InsertIntoHadoopFsRelation(
       throw new SparkException("Job aborted.", cause)
     }
 
-    def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
+    def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
       // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        if (needsConversion) {
-          val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
-          while (iterator.hasNext) {
-            val row = converter(iterator.next()).asInstanceOf[Row]
-            writerContainer.outputWriterForRow(row).write(row)
-          }
+        val converter = if (needsConversion) {
+          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
         } else {
-          while (iterator.hasNext) {
-            val row = iterator.next()
-            writerContainer.outputWriterForRow(row).write(row)
-          }
+          r: InternalRow => r.asInstanceOf[Row]
+        }
+        while (iterator.hasNext) {
+          val row = converter(iterator.next())
+          writerContainer.outputWriterForRow(row).write(row)
         }
 
         writerContainer.commitTask()
@@ -210,7 +204,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       throw new SparkException("Job aborted.", cause)
     }
 
-    def writeRows(taskContext: TaskContext, iterator: Iterator[Row]): Unit = {
+    def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
       // If anything below fails, we should abort the task.
       try {
         writerContainer.executorSideSetup(taskContext)
@@ -218,20 +212,21 @@ private[sql] case class InsertIntoHadoopFsRelation(
         val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
         val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-        val partitionSchema = StructType.fromAttributes(partitionOutput)
-        val partConverter = CatalystTypeConverters.createToScalaConverter(partitionSchema)
-        val dataConverter = if (needsConversion) {
-          CatalystTypeConverters.createToScalaConverter(dataSchema)
+        val dataConverter: InternalRow => Row = if (needsConversion) {
+          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
         } else {
-          x: Row => x
+          r: InternalRow => r.asInstanceOf[Row]
         }
+        val partitionSchema = StructType.fromAttributes(partitionOutput)
+        val partConverter: InternalRow => Row =
+          CatalystTypeConverters.createToScalaConverter(partitionSchema)
+            .asInstanceOf[InternalRow => Row]
 
         while (iterator.hasNext) {
           val row = iterator.next()
-          val partitionPart = partConverter(partitionProj(row)).asInstanceOf[Row]
-          val dataPart = dataProj(row)
-          val convertedDataPart = dataConverter(dataPart).asInstanceOf[Row]
-          writerContainer.outputWriterForRow(partitionPart).write(convertedDataPart)
+          val partitionPart = partConverter(partitionProj(row))
+          val dataPart = dataConverter(dataProj(row))
+          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
         }
 
         writerContainer.commitTask()

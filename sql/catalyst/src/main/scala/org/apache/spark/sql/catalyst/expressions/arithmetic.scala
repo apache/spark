@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -29,7 +30,7 @@ abstract class UnaryArithmetic extends UnaryExpression {
   override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
@@ -124,7 +125,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   protected def checkTypesInternal(t: DataType): TypeCheckResult
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE1 = left.eval(input)
     if(evalE1 == null) {
       null
@@ -219,7 +220,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE2 = right.eval(input)
     if (evalE2 == null || evalE2 == 0) {
       null
@@ -279,7 +280,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE2 = right.eval(input)
     if (evalE2 == null || evalE2 == 0) {
       null
@@ -330,7 +331,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE1 = left.eval(input)
     val evalE2 = right.eval(input)
     if (evalE1 == null) {
@@ -382,7 +383,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private lazy val ordering = TypeUtils.getOrdering(dataType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     val evalE1 = left.eval(input)
     val evalE2 = right.eval(input)
     if (evalE1 == null) {

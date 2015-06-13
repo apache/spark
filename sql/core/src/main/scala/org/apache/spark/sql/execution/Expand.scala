@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
@@ -43,7 +42,7 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
-  protected override def doExecute(): RDD[Row] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // TODO Move out projection objects creation and transfer to
       // workers via closure. However we can't assume the Projection
@@ -51,14 +50,14 @@ case class Expand(
       // create the projections within each of the partition processing.
       val groups = projections.map(ee => newProjection(ee, child.output)).toArray
 
-      new Iterator[Row] {
-        private[this] var result: Row = _
+      new Iterator[InternalRow] {
+        private[this] var result: InternalRow = _
         private[this] var idx = -1  // -1 means the initial state
-        private[this] var input: Row = _
+        private[this] var input: InternalRow = _
 
         override final def hasNext: Boolean = (-1 < idx && idx < groups.length) || iter.hasNext
 
-        override final def next(): Row = {
+        override final def next(): InternalRow = {
           if (idx <= 0) {
             // in the initial (-1) or beginning(0) of a new input row, fetch the next input tuple
             input = iter.next()

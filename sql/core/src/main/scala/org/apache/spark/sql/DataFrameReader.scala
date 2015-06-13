@@ -245,7 +245,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(jsonRDD, 1.0, columnNameOfCorruptJsonRecord)))
       val rowRDD = JsonRDD.jsonStringToRow(jsonRDD, appliedSchema, columnNameOfCorruptJsonRecord)
-      sqlContext.createDataFrame(rowRDD, appliedSchema, needsConversion = false)
+      sqlContext.internalCreateDataFrame(rowRDD, appliedSchema)
     }
   }
 

@@ -123,7 +123,7 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
   override def isThreadSafe: Boolean = false
 
   // TODO: Finish input output types.
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     unwrap(
       FunctionRegistry.invoke(method, function, conversionHelper
         .convertIfNecessary(wrap(children.map(c => c.eval(input)), arguments, cached): _*): _*),
@@ -182,7 +182,7 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
 
   override def isThreadSafe: Boolean = false
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.
 
     var i = 0
@@ -349,7 +349,7 @@ private[hive] case class HiveWindowFunction(
 
   def nullable: Boolean = true
 
-  override def eval(input: Row): Any =
+  override def eval(input: InternalRow): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   @transient
@@ -373,7 +373,7 @@ private[hive] case class HiveWindowFunction(
     evaluator.reset(hiveEvaluatorBuffer)
   }
 
-  override def prepareInputParameters(input: Row): AnyRef = {
+  override def prepareInputParameters(input: InternalRow): AnyRef = {
     wrap(inputProjection(input), inputInspectors, new Array[AnyRef](children.length))
   }
   // Add input parameters for a single row.
@@ -516,7 +516,7 @@ private[hive] case class HiveGenericUdtf(
     field => (inspectorToDataType(field.getFieldObjectInspector), true)
   }
 
-  override def eval(input: Row): TraversableOnce[Row] = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
 
     val inputProjection = new InterpretedProjection(children)
@@ -526,23 +526,23 @@ private[hive] case class HiveGenericUdtf(
   }
 
   protected class UDTFCollector extends Collector {
-    var collected = new ArrayBuffer[Row]
+    var collected = new ArrayBuffer[InternalRow]
 
     override def collect(input: java.lang.Object) {
       // We need to clone the input here because implementations of
       // GenericUDTF reuse the same object. Luckily they are always an array, so
       // it is easy to clone.
-      collected += unwrap(input, outputInspector).asInstanceOf[Row]
+      collected += unwrap(input, outputInspector).asInstanceOf[InternalRow]
     }
 
-    def collectRows(): Seq[Row] = {
+    def collectRows(): Seq[InternalRow] = {
       val toCollect = collected
-      collected = new ArrayBuffer[Row]
+      collected = new ArrayBuffer[InternalRow]
       toCollect
     }
   }
 
-  override def terminate(): TraversableOnce[Row] = {
+  override def terminate(): TraversableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     function.close()
     collector.collectRows()
@@ -582,7 +582,7 @@ private[hive] case class HiveUdafFunction(
   private val buffer =
     function.getNewAggregationBuffer
 
-  override def eval(input: Row): Any = unwrap(function.evaluate(buffer), returnInspector)
+  override def eval(input: InternalRow): Any = unwrap(function.evaluate(buffer), returnInspector)
 
   @transient
   val inputProjection = new InterpretedProjection(exprs)
@@ -590,7 +590,7 @@ private[hive] case class HiveUdafFunction(
   @transient
   protected lazy val cached = new Array[AnyRef](exprs.length)
 
-  def update(input: Row): Unit = {
+  def update(input: InternalRow): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))
   }

@@ -49,7 +49,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == null) {
       null
@@ -121,7 +121,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) {
       null
@@ -169,7 +169,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
     if(leftEval == null) {
       null
@@ -262,7 +262,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     (start, end)
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
     val po = pos.eval(input)
     val ln = len.eval(input)
@@ -303,7 +303,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   override def dataType: DataType = IntegerType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
     if (string == null) null else string.asInstanceOf[UTF8String].length
   }
@@ -314,5 +314,3 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
     defineCodeGen(ctx, ev, c => s"($c).length()")
   }
 }
-
-
