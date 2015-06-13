@@ -21,9 +21,7 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.collection.CompactBuffer
@@ -60,29 +58,29 @@ case class SortMergeJoin(
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
     keys.map(SortOrder(_, Ascending))
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val leftResults = left.execute().map(_.copy())
     val rightResults = right.execute().map(_.copy())
 
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
-      new Iterator[Row] {
+      new Iterator[InternalRow] {
         // Mutable per row objects.
         private[this] val joinRow = new JoinedRow5
-        private[this] var leftElement: Row = _
-        private[this] var rightElement: Row = _
-        private[this] var leftKey: Row = _
-        private[this] var rightKey: Row = _
-        private[this] var rightMatches: CompactBuffer[Row] = _
+        private[this] var leftElement: InternalRow = _
+        private[this] var rightElement: InternalRow = _
+        private[this] var leftKey: InternalRow = _
+        private[this] var rightKey: InternalRow = _
+        private[this] var rightMatches: CompactBuffer[InternalRow] = _
         private[this] var rightPosition: Int = -1
         private[this] var stop: Boolean = false
-        private[this] var matchKey: Row = _
+        private[this] var matchKey: InternalRow = _
 
         // initialize iterator
         initialize()
 
         override final def hasNext: Boolean = nextMatchingPair()
 
-        override final def next(): Row = {
+        override final def next(): InternalRow = {
           if (hasNext) {
             // we are using the buffered right rows and run down left iterator
             val joinedRow = joinRow(leftElement, rightMatches(rightPosition))
@@ -145,7 +143,7 @@ case class SortMergeJoin(
                 fetchLeft()
               }
             }
-            rightMatches = new CompactBuffer[Row]()
+            rightMatches = new CompactBuffer[InternalRow]()
             if (stop) {
               stop = false
               // iterate the right side to buffer all rows that matches

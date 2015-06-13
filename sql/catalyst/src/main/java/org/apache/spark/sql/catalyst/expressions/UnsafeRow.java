@@ -30,11 +30,11 @@ import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
 import org.apache.spark.sql.catalyst.util.DateUtils;
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 
@@ -372,7 +372,7 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public Row copy() {
+  public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
 

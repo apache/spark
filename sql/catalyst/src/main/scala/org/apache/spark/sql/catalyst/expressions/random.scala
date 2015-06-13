@@ -48,7 +48,7 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 case class Rand(seed: Long) extends RDG(seed) {
-  override def eval(input: Row): Double = rng.nextDouble()
+  override def eval(input: InternalRow): Double = rng.nextDouble()
 }
 
 object Rand {
@@ -62,7 +62,7 @@ object Rand {
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
 case class Randn(seed: Long) extends RDG(seed) {
-  override def eval(input: Row): Double = rng.nextGaussian()
+  override def eval(input: InternalRow): Double = rng.nextGaussian()
 }
 
 object Randn {

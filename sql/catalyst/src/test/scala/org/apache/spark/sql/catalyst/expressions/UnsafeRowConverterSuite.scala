@@ -113,7 +113,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DoubleType)
     val converter = new UnsafeRowConverter(fieldTypes)
 
-    val rowWithAllNullColumns: Row = {
+    val rowWithAllNullColumns: InternalRow = {
       val r = new SpecificMutableRow(fieldTypes)
       for (i <- 0 to fieldTypes.length - 1) {
         r.setNullAt(i)
@@ -144,7 +144,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
     // creating an entirely null row via the converter
-    val rowWithNoNullColumns: Row = {
+    val rowWithNoNullColumns: InternalRow = {
       val r = new SpecificMutableRow(fieldTypes)
       r.setNullAt(0)
       r.setBoolean(1, false)

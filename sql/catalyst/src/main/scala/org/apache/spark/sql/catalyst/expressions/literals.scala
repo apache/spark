@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -32,7 +34,7 @@ object Literal {
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
-    case s: String => Literal(UTF8String(s), StringType)
+    case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
@@ -86,14 +88,13 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
     case _ => false
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: catalyst.InternalRow): Any = value
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.primitive = ctx.defaultValue(dataType)
-      ""
+      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
     } else {
       dataType match {
         case BooleanType =>
@@ -142,9 +143,9 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
 
-  def update(expression: Expression, input: Row): Unit = {
+  def update(expression: Expression, input: catalyst.InternalRow): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: catalyst.InternalRow): Any = value
 }

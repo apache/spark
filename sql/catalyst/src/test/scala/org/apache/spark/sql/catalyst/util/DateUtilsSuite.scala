@@ -21,7 +21,6 @@ import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
 
-
 class DateUtilsSuite extends SparkFunSuite {
 
   test("timestamp") {

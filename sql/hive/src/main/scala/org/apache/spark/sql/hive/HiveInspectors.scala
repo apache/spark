@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -242,9 +243,9 @@ private[hive] trait HiveInspectors {
   def unwrap(data: Any, oi: ObjectInspector): Any = oi match {
     case coi: ConstantObjectInspector if coi.getWritableConstantValue == null => null
     case poi: WritableConstantStringObjectInspector =>
-      UTF8String(poi.getWritableConstantValue.toString)
+      UTF8String.fromString(poi.getWritableConstantValue.toString)
     case poi: WritableConstantHiveVarcharObjectInspector =>
-      UTF8String(poi.getWritableConstantValue.getHiveVarchar.getValue)
+      UTF8String.fromString(poi.getWritableConstantValue.getHiveVarchar.getValue)
     case poi: WritableConstantHiveDecimalObjectInspector =>
       HiveShim.toCatalystDecimal(
         PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
@@ -288,13 +289,13 @@ private[hive] trait HiveInspectors {
     case pi: PrimitiveObjectInspector => pi match {
       // We think HiveVarchar is also a String
       case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
-        UTF8String(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
+        UTF8String.fromString(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
       case hvoi: HiveVarcharObjectInspector =>
-        UTF8String(hvoi.getPrimitiveJavaObject(data).getValue)
+        UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        UTF8String(x.getPrimitiveWritableObject(data).toString)
+        UTF8String.fromString(x.getPrimitiveWritableObject(data).toString)
       case x: StringObjectInspector =>
-        UTF8String(x.getPrimitiveJavaObject(data))
+        UTF8String.fromString(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
       case x: BooleanObjectInspector if x.preferWritable() => x.get(data)
       case x: FloatObjectInspector if x.preferWritable() => x.get(data)
@@ -365,7 +366,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => {
         if (o != null) {
           val struct = soi.create()
-          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row].toSeq).zipped.foreach {
+          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[InternalRow].toSeq).zipped.foreach {
             (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
           }
           struct
@@ -473,7 +474,7 @@ private[hive] trait HiveInspectors {
     }
     case x: SettableStructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Row]
+      val row = a.asInstanceOf[InternalRow]
       // 1. create the pojo (most likely) object
       val result = x.create()
       var i = 0
@@ -489,7 +490,7 @@ private[hive] trait HiveInspectors {
       result
     case x: StructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Row]
+      val row = a.asInstanceOf[InternalRow]
       val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
       var i = 0
       while (i < fieldRefs.length) {
@@ -516,7 +517,7 @@ private[hive] trait HiveInspectors {
   }
 
   def wrap(
-      row: Row,
+      row: InternalRow,
       inspectors: Seq[ObjectInspector],
       cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
