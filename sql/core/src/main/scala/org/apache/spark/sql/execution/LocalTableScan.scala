@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 /**
  * Physical plan node for scanning data from a local collection.
  */
-private[sql] case class LocalTableScan(output: Seq[Attribute], rows: Seq[InternalRow]) extends LeafNode {
+private[sql] case class LocalTableScan(
+    output: Seq[Attribute],
+    rows: Seq[InternalRow]) extends LeafNode {
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 

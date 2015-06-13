@@ -348,8 +348,8 @@ private[sql] class JDBCRDD(
   /**
    * Runs the SQL query against the JDBC driver.
    */
-  override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] = new Iterator[InternalRow]
-  {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
+    new Iterator[InternalRow] {
     var closed = false
     var finished = false
     var gotNext = false

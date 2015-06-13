@@ -74,13 +74,16 @@ case class HashOuterJoin(
   @transient private[this] lazy val leftNullRow = new GenericRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericRow(right.output.length)
   @transient private[this] lazy val boundCondition =
-    condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
+    condition.map(
+      newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
-      key: InternalRow, joinedRow: JoinedRow, rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
+      key: InternalRow,
+      joinedRow: JoinedRow,
+      rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = rightIter.collect {
@@ -99,7 +102,9 @@ case class HashOuterJoin(
   }
 
   private[this] def rightOuterIterator(
-      key: InternalRow, leftIter: Iterable[InternalRow], joinedRow: JoinedRow): Iterator[InternalRow] = {
+      key: InternalRow,
+      leftIter: Iterable[InternalRow],
+      joinedRow: JoinedRow): Iterator[InternalRow] = {
 
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
@@ -167,7 +172,8 @@ case class HashOuterJoin(
   }
 
   private[this] def buildHashTable(
-      iter: Iterator[InternalRow], keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
+      iter: Iterator[InternalRow],
+      keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
     val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]]()
     while (iter.hasNext) {
       val currentRow = iter.next()

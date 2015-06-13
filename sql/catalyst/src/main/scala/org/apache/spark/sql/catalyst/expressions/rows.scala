@@ -21,8 +21,8 @@ import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * An extended interface to [[InternalRow]] that allows the values for each column to be updated.  Setting
- * a value through a primitive function implicitly marks that column as not null.
+ * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
+ * Setting a value through a primitive function implicitly marks that column as not null.
  */
 trait MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit

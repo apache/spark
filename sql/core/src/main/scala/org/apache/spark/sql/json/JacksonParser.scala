@@ -130,7 +130,10 @@ private[sql] object JacksonParser {
    *
    * Fields in the json that are not defined in the requested schema will be dropped.
    */
-  private def convertObject(factory: JsonFactory, parser: JsonParser, schema: StructType): InternalRow = {
+  private def convertObject(
+      factory: JsonFactory,
+      parser: JsonParser,
+      schema: StructType): InternalRow = {
     val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {

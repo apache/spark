@@ -36,7 +36,8 @@ class BaseOrdering extends Ordering[catalyst.InternalRow] {
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[catalyst.InternalRow]] with Logging {
+object GenerateOrdering
+    extends CodeGenerator[Seq[SortOrder], Ordering[catalyst.InternalRow]] with Logging {
   import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =

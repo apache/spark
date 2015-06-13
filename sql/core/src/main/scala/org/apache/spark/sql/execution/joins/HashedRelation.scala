@@ -75,7 +75,8 @@ private[joins] final class GeneralHashedRelation(
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
  */
-private[joins] final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
+private[joins]
+final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
   extends HashedRelation with Externalizable {
 
   def this() = this(null) // Needed for serialization

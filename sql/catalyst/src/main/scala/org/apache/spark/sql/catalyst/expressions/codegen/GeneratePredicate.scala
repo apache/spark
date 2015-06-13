@@ -28,7 +28,7 @@ abstract class Predicate {
 }
 
 /**
- * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[catalyst.InternalRow]].
+ * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
 object GeneratePredicate extends CodeGenerator[Expression, (catalyst.InternalRow) => Boolean] {
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -49,7 +48,7 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
   /**
    * Compute the amount of space, in bytes, required to encode the given row.
    */
-  def getSizeRequirement(row: catalyst.InternalRow): Int = {
+  def getSizeRequirement(row: InternalRow): Int = {
     var fieldNumber = 0
     var variableLengthFieldSize: Int = 0
     while (fieldNumber < writers.length) {
@@ -69,7 +68,7 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    * @param baseOffset the base offset of the destination address
    * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
    */
-  def writeRow(row: catalyst.InternalRow, baseObject: Object, baseOffset: Long): Long = {
+  def writeRow(row: InternalRow, baseObject: Object, baseOffset: Long): Long = {
     unsafeRow.pointTo(baseObject, baseOffset, writers.length, null)
     var fieldNumber = 0
     var appendCursor: Int = fixedLengthSize
@@ -100,12 +99,12 @@ private abstract class UnsafeColumnWriter {
    *                     used for calculating where variable-length data should be written
    * @return the number of variable-length bytes written
    */
-  def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int
+  def write(source: InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int
 
   /**
    * Return the number of bytes that are needed to write this variable-length value.
    */
-  def getSize(source: catalyst.InternalRow, column: Int): Int
+  def getSize(source: InternalRow, column: Int): Int
 }
 
 private object UnsafeColumnWriter {
@@ -141,72 +140,108 @@ private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
-  def getSize(sourceRow: catalyst.InternalRow, column: Int): Int = 0
+  def getSize(sourceRow: InternalRow, column: Int): Int = 0
 }
 
 private class NullUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setNullAt(column)
     0
   }
 }
 
 private class BooleanUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setBoolean(column, source.getBoolean(column))
     0
   }
 }
 
 private class ByteUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setByte(column, source.getByte(column))
     0
   }
 }
 
 private class ShortUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setShort(column, source.getShort(column))
     0
   }
 }
 
 private class IntUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setInt(column, source.getInt(column))
     0
   }
 }
 
 private class LongUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setLong(column, source.getLong(column))
     0
   }
 }
 
 private class FloatUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setFloat(column, source.getFloat(column))
     0
   }
 }
 
 private class DoubleUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWriter {
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     target.setDouble(column, source.getDouble(column))
     0
   }
 }
 
 private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter {
-  def getSize(source: catalyst.InternalRow, column: Int): Int = {
+  def getSize(source: InternalRow, column: Int): Int = {
     val numBytes = source.get(column).asInstanceOf[UTF8String].getBytes.length
     8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 
-  override def write(source: catalyst.InternalRow, target: UnsafeRow, column: Int, appendCursor: Int): Int = {
+  override def write(
+      source: InternalRow,
+      target: UnsafeRow,
+      column: Int,
+      appendCursor: Int): Int = {
     val value = source.get(column).asInstanceOf[UTF8String]
     val baseObject = target.getBaseObject
     val baseOffset = target.getBaseOffset
