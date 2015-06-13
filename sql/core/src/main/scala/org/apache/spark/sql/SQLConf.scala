@@ -150,11 +150,12 @@ private[spark] object SQLConf {
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[T] =
       SQLConfEntry(key, defaultValue, v => {
-        if (!validValues.contains(v)) {
+        val _v = valueConverter(v)
+        if (!validValues.contains(_v)) {
           throw new IllegalArgumentException(
             s"The value of $key should be one of ${validValues.mkString(", ")}, but was $v")
         }
-        valueConverter(v)
+        _v
       }, _.toString, doc, isPublic)
   }
 
@@ -225,7 +226,7 @@ private[spark] object SQLConf {
     doc = "Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
 
   val PARQUET_COMPRESSION = enumConf("spark.sql.parquet.compression.codec",
-    valueConverter = v => v,
+    valueConverter = v => v.toLowerCase,
     validValues = Set("uncompressed", "snappy", "gzip", "lzo"),
     defaultValue = Some("gzip"),
     doc = "Sets the compression codec use when writing Parquet files. Acceptable values include: " +
