@@ -388,7 +388,8 @@ class StructType(DataType):
         Construct a StructType by adding new elements to it to define the schema
         >>> struct1 = StructType().add_field(StructField("f1", StringType(), True))\
                                   .add_field(StructField("f2", StringType(), True, None))
-        >>> struct2 = StructType([StructField("f1", StringType(), True), StructField("f2", StringType(), True, None)])
+        >>> struct2 = StructType([StructField("f1", StringType(), True),\
+         StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
         >>> struct1 = StructType().add_field(StructField("f1", StringType(), True))\
@@ -408,7 +409,8 @@ class StructType(DataType):
         Construct a StructType by adding new elements to it to define the schema
         >>> struct1 = StructType().add("f1", StringType(), True)\
                                   .add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True), StructField("f2", StringType(), True, None)])
+        >>> struct2 = StructType([StructField("f1", StringType(), True),\
+         StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
         >>> struct1 = StructType().add("f1", StringType(), True)\
