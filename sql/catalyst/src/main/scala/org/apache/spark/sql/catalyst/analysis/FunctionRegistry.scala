@@ -158,27 +158,24 @@ object FunctionRegistry {
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
-    // Use the companion class to find apply methods.
-    val objectClass = Class.forName(tag.runtimeClass.getName + "$")
-    val companionObj = objectClass.getDeclaredField("MODULE$").get(null)
 
-    // See if we can find an apply that accepts Seq[Expression]
-    val varargApply = Try(objectClass.getDeclaredMethod("apply", classOf[Seq[_]])).toOption
-
+    // See if we can find a constructor that accepts Seq[Expression]
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
     val builder = (expressions: Seq[Expression]) => {
-      if (varargApply.isDefined) {
+      if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
+        //varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
+        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
       } else {
-        // Otherwise, find an apply method that matches the number of arguments, and use that.
+        // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(objectClass.getDeclaredMethod("apply", params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.invoke(companionObj, expressions : _*).asInstanceOf[Expression]
+        f.newInstance(expressions : _*).asInstanceOf[Expression]
       }
     }
     (name, builder)
