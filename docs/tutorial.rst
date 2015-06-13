@@ -143,7 +143,7 @@ instatiated from an operator is called a constructor. The first argument
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
 an argument common to all operators (``email_on_failure``) inherited 
-from BaseOperator to the operators constructor. This is simpler than 
+from BaseOperator to the operator's constructor. This is simpler than
 passing every argument for every constructor call. Also, notice that in 
 the second call we override ``email_on_failure`` parameter with ``False``.
 
