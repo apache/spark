@@ -17,15 +17,17 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.reflect.io.Path
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.commons.io.FilenameUtils
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
-
-import scala.reflect.io.Path
 
 class HierarchicalClusteringModelSuite
-    extends FunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
+    extends SparkFunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
 
   test("clustering dense vectors") {
     val app = new HierarchicalClustering().setNumClusters(5).setSeed(1)
@@ -191,7 +193,7 @@ class HierarchicalClusteringModelSuite
     val sameModel = HierarchicalClusteringModel.load(sc, tmpPath)
     assert(sameModel.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
     localData.foreach { case (label, vector) =>
-        assert(model.predict(vector) === sameModel.predict(vector))
+      assert(model.predict(vector) === sameModel.predict(vector))
     }
 
     // delete the temporary directory

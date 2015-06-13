@@ -17,14 +17,15 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV, norm => breezeNorm}
+import breeze.linalg.{Vector => BV, norm => breezeNorm}
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.scalatest.FunSuite
 
 
-class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
+class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("the root index is equal to 1") {
     assert(HierarchicalClustering.ROOT_INDEX_KEY === 1)
@@ -134,10 +135,11 @@ class HierarchicalClusteringSuite extends FunSuite with MLlibTestSparkContext {
   test("should assign each data to new clusters") {
     val algo = new HierarchicalClustering
     val seed = Seq(
-      (2L, Vectors.dense(0.0, 0.0)),(2L, Vectors.dense(1.0, 1.0)),(2L, Vectors.dense(2.0, 2.0)),
-      (2L, Vectors.dense(3.0, 3.0)),(2L, Vectors.dense(4.0, 4.0)),(2L, Vectors.dense(5.0, 5.0)),
-      (3L, Vectors.dense(6.0, 6.0)),(3L, Vectors.dense(7.0, 7.0)),(3L, Vectors.dense(8.0, 8.0)),
-      (3L, Vectors.dense(9.0, 9.0)),(3L, Vectors.dense(10.0, 10.0)),(3L, Vectors.dense(11.0, 11.0))
+      (2L, Vectors.dense(0.0, 0.0)), (2L, Vectors.dense(1.0, 1.0)), (2L, Vectors.dense(2.0, 2.0)),
+      (2L, Vectors.dense(3.0, 3.0)), (2L, Vectors.dense(4.0, 4.0)), (2L, Vectors.dense(5.0, 5.0)),
+      (3L, Vectors.dense(6.0, 6.0)), (3L, Vectors.dense(7.0, 7.0)), (3L, Vectors.dense(8.0, 8.0)),
+      (3L, Vectors.dense(9.0, 9.0)), (3L, Vectors.dense(10.0, 10.0)),
+      (3L, Vectors.dense(11.0, 11.0))
     ).map { case (idx, vector) => (idx, vector.toBreeze)}
     val newClusters = Map(
       4L -> new ClusterTree(Vectors.dense(1.0, 1.0), 3, Vectors.dense(1.0, 1.0)),
