@@ -2215,7 +2215,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
 - *Transactional updates*: All updates are made transactionally so that updates are made exactly once atomically. One way to do this would be the following.
 
     - Use the batch time (available in `foreachRDD`) and the partition index of the RDD to create an identifier. This identifier uniquely identifies a blob data in the streaming application.
-    - Update external system with this blob transactionally (that is, exactly once, atomically) using the identifier. That is, if the identifier is not already committed, commit the partition data and the identifier atomically. Else, if this was already committed, skip the update.
+    - Update external system with this blob transactionally (that is, exactly once, atomically) using the identifier. That is, if the identifier is not already committed, commit the partition data and the identifier atomically. Else if this was already committed, skip the update.
 
           dstream.foreachRDD { (rdd, time) =>
             rdd.foreachPartition { partitionIterator =>
