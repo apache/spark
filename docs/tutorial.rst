@@ -124,8 +124,9 @@ We also pass the default argument dictionary that we just define.
 
 Tasks
 -----
-Tasks are generated when instantiating objects from operators. The first
-argument ``task_id`` acts as a unique identifier for the task.
+Tasks are generated when instantiating objects from operators. An object
+instatiated from an operator is called a constructor. The first argument
+``task_id`` acts as a unique identifier for the task.
 
 .. code:: python
 
