@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.mockito.Mockito._
 import org.mockito.Matchers.any
 
@@ -43,6 +44,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val task = new ResultTask[String, String](
+      UserGroupInformation.getCurrentUser.getUserName,
       0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
     intercept[RuntimeException] {
       task.run(0, 0)

@@ -19,6 +19,11 @@ package org.apache.spark.scheduler
 
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.security.{PrivilegedExceptionAction, PrivilegedAction}
+
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.token.Token
+import org.apache.spark.deploy.SparkHadoopUtil
 
 import scala.collection.mutable.HashMap
 
@@ -43,7 +48,7 @@ import org.apache.spark.util.Utils
  * @param stageId id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](val user: String, val stageId: Int, var partitionId: Int) extends Serializable {
 
   /**
    * Called by [[Executor]] to run this task.
@@ -67,7 +72,16 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       kill(interruptThread = false)
     }
     try {
-      runTask(context)
+      if(user != null && user != "") {
+        val proxyUser = UserGroupInformation.createRemoteUser(user)
+        val currentUser = UserGroupInformation.getCurrentUser()
+        SparkHadoopUtil.get.transferCredentials(currentUser, proxyUser)
+        proxyUser.doAs(new PrivilegedExceptionAction[T] {
+          def run: T = runTask(context)
+        })
+      } else {
+        runTask(context)
+      }
     } finally {
       context.markTaskCompleted()
       TaskContext.unset()

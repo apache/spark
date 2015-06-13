@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.Executors
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, UUID}
@@ -25,9 +26,11 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.TProtocolVersion
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -175,26 +178,35 @@ private[hive] class SparkExecuteStatementOperation(
       hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
-      result = hiveContext.sql(statement)
-      logDebug(result.queryExecution.toString())
-      result.queryExecution.logical match {
-        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
-          sessionToActivePool(parentSession.getSessionHandle) = value
-          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
-        case _ =>
-      }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
-      iter = {
-        val useIncrementalCollect =
-          hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-        if (useIncrementalCollect) {
-          result.rdd.toLocalIterator
-        } else {
-          result.collect().iterator
+      val proxyUser = UserGroupInformation.createRemoteUser(parentSession.getUsername)
+      val currentUser = UserGroupInformation.getCurrentUser
+      SparkHadoopUtil.get.transferCredentials(currentUser, proxyUser)
+      proxyUser.doAs(new PrivilegedExceptionAction[Unit] {
+        def run: Unit = {
+          result = hiveContext.sql(statement)
+          logDebug(result.queryExecution.toString())
+          result.queryExecution.logical match {
+            case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
+              sessionToActivePool(parentSession.getSessionHandle) = value
+              logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+            case _ =>
+          }
+
+          iter = {
+            val useIncrementalCollect =
+              hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+            if (useIncrementalCollect) {
+              result.rdd.toLocalIterator
+            } else {
+              result.collect().iterator
+            }
+          }
+          dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+          setHasResultSet(true)
         }
-      }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
-      setHasResultSet(true)
+      })
+
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.

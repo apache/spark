@@ -22,6 +22,8 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
@@ -511,6 +513,8 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    val user = UserGroupInformation.getCurrentUser.getUserName
+    properties.setProperty("user", user)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter,
       SerializationUtils.clone(properties)))
@@ -549,6 +553,8 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
+    val user = UserGroupInformation.getCurrentUser.getUserName
+    properties.setProperty("user", user)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, allowLocal = false, callSite, listener,
       SerializationUtils.clone(properties)))
@@ -885,13 +891,13 @@ class DAGScheduler(
         runningStages -= stage
         return
     }
-
+    val user = properties.getProperty("user")
     val tasks: Seq[Task[_]] = stage match {
       case stage: ShuffleMapStage =>
         partitionsToCompute.map { id =>
           val locs = getPreferredLocs(stage.rdd, id)
           val part = stage.rdd.partitions(id)
-          new ShuffleMapTask(stage.id, taskBinary, part, locs)
+          new ShuffleMapTask(user, stage.id, taskBinary, part, locs)
         }
 
       case stage: ResultStage =>
@@ -900,7 +906,7 @@ class DAGScheduler(
           val p: Int = job.partitions(id)
           val part = stage.rdd.partitions(p)
           val locs = getPreferredLocs(stage.rdd, p)
-          new ResultTask(stage.id, taskBinary, part, locs, id)
+          new ResultTask(user, stage.id, taskBinary, part, locs, id)
         }
     }
 
