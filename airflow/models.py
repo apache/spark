@@ -411,6 +411,7 @@ class TaskInstance(Base):
             local=False,
             pickle_id=None,
             raw=False,
+            task_start_date=None,
             job_id=None):
         """
         Returns a command that can be executed anywhere where airflow is
@@ -424,6 +425,8 @@ class TaskInstance(Base):
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
         local = "--local" if local else ""
+        task_start_date = \
+            "-s " + task_start_date.isoformat()  if task_start_date else ""
         raw = "--raw" if raw else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
@@ -439,6 +442,7 @@ class TaskInstance(Base):
             "{job_id} "
             "{raw} "
             "{subdir} "
+            "{task_start_date} "
         ).format(**locals())
 
     @property

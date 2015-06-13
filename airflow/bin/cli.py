@@ -100,6 +100,10 @@ def run(args):
         dag = dag_pickle.pickle
         task = dag.get_task(task_id=args.task_id)
 
+    task_start_date = None
+    if args.task_start_date:
+        task_start_date = dateutil.parser.parse(args.task_start_date)
+        task.start_date = task_start_date
     ti = TaskInstance(task, args.execution_date)
 
     if args.local:
@@ -109,6 +113,7 @@ def run(args):
             mark_success=args.mark_success,
             force=args.force,
             pickle_id=args.pickle,
+            task_start_date=task_start_date,
             ignore_dependencies=args.ignore_dependencies)
         run_job.run()
     elif args.raw:
@@ -394,6 +399,9 @@ def get_parser():
     parser_run.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    parser_run.add_argument(
+        "-s", "--task_start_date",
+        help="Override the tasks's start_date (used internally)",)
     parser_run.add_argument(
         "-m", "--mark_success", help=mark_success_help, action="store_true")
     parser_run.add_argument(
