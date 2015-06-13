@@ -161,7 +161,7 @@ Templating with Jinja
 Airflow leverages the power of 
 `Jinja Templating <http://jinja.pocoo.org/docs/dev/>`_  and provides
 the pipeline author
-with a set of builtin parameters and macros. Airflow also provides
+with a set of built-in parameters and macros. Airflow also provides
 hooks for the pipeline author to define their own parameters, macros and
 templates.
 
@@ -175,7 +175,7 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
     templated_command = """
         {% for i in range(5) %}
             echo "{{ ds }}"
-            echo "{{ macros.ds_add(ds, 7)}}"
+            echo "{{ macros.ds_add(ds, 7) }}"
             echo "{{ params.my_param }}"
         {% endfor %}
     """
@@ -188,10 +188,10 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
 
 Notice that the ``templated_command`` contains code logic in ``{% %}`` blocks,
 references parameters like ``{{ ds }}``, calls a function as in
-``{{ macros.ds_add(ds, 7)}}``, and references a user defined parameter
+``{{ macros.ds_add(ds, 7)}}``, and references a user-defined parameter
 in ``{{ params.my_param }}``.
 
-The ``params`` hook in BaseOperator allows you to pass a dictionary of 
+The ``params`` hook in ``BaseOperator`` allows you to pass a dictionary of
 parameters and/or objects to your templates. Please take the time
 to understand how the parameter ``my_param`` makes it through to the template.
 
