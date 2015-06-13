@@ -54,7 +54,9 @@ object MimaExcludes {
             excludePackage("org.apache.spark.sql.execution"),
             // NanoTime is only used inside catalyst, not needed anymore
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime")
+              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
+              ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime$")
           )
         case v if v.startsWith("1.4") =>
           Seq(
