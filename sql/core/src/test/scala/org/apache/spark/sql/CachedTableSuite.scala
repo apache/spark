@@ -94,7 +94,7 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("too big for memory") {
-    val data = "*" * 10000
+    val data = "*" * 1000
     ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
       .registerTempTable("bigData")
     ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)

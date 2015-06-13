@@ -28,7 +28,7 @@ import org.apache.parquet.io.api._
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -39,12 +39,12 @@ import org.apache.spark.unsafe.types.UTF8String
  *@param root The root group converter for the record.
  */
 private[parquet] class RowRecordMaterializer(root: CatalystConverter)
-  extends RecordMaterializer[Row] {
+  extends RecordMaterializer[InternalRow] {
 
   def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
     this(CatalystConverter.createRootConverter(parquetSchema, attributes))
 
-  override def getCurrentRecord: Row = root.getCurrentRecord
+  override def getCurrentRecord: InternalRow = root.getCurrentRecord
 
   override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
 }
@@ -52,13 +52,13 @@ private[parquet] class RowRecordMaterializer(root: CatalystConverter)
 /**
  * A `parquet.hadoop.api.ReadSupport` for Row objects.
  */
-private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
+private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logging {
 
   override def prepareForRead(
       conf: Configuration,
       stringMap: java.util.Map[String, String],
       fileSchema: MessageType,
-      readContext: ReadContext): RecordMaterializer[Row] = {
+      readContext: ReadContext): RecordMaterializer[InternalRow] = {
     log.debug(s"preparing for read with Parquet file schema $fileSchema")
     // Note: this very much imitates AvroParquet
     val parquetSchema = readContext.getRequestedSchema
@@ -133,7 +133,7 @@ private[parquet] object RowReadSupport {
 /**
  * A `parquet.hadoop.api.WriteSupport` for Row objects.
  */
-private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
+private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Array[Attribute] = null
@@ -157,7 +157,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     log.debug(s"preparing for write with schema $attributes")
   }
 
-  override def write(record: Row): Unit = {
+  override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
@@ -322,7 +322,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
 // Optimized for non-nested rows
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
-  override def write(record: Row): Unit = {
+  override def write(record: InternalRow): Unit = {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
@@ -345,7 +345,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
 
   private def consumeType(
       ctype: DataType,
-      record: Row,
+      record: InternalRow,
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(

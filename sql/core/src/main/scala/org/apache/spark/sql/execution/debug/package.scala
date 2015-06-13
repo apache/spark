@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -25,7 +26,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.{AccumulatorParam, Accumulator}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{SQLConf, SQLContext, DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
 
@@ -126,11 +127,11 @@ package object debug {
       }
     }
 
-    protected override def doExecute(): RDD[Row] = {
+    protected override def doExecute(): RDD[InternalRow] = {
       child.execute().mapPartitions { iter =>
-        new Iterator[Row] {
+        new Iterator[InternalRow] {
           def hasNext: Boolean = iter.hasNext
-          def next(): Row = {
+          def next(): InternalRow = {
             val currentRow = iter.next()
             tupleCount += 1
             var i = 0
@@ -155,7 +156,7 @@ package object debug {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
-      case (row: Row, StructType(fields)) =>
+      case (row: InternalRow, StructType(fields)) =>
         row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
       case (s: Seq[_], ArrayType(elemType, _)) =>
         s.foreach(typeCheck(_, elemType))
@@ -196,7 +197,7 @@ package object debug {
 
     def children: List[SparkPlan] = child :: Nil
 
-    protected override def doExecute(): RDD[Row] = {
+    protected override def doExecute(): RDD[InternalRow] = {
       child.execute().map { row =>
         try typeCheck(row, child.schema) catch {
           case e: Exception =>
