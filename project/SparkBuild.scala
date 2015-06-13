@@ -53,9 +53,6 @@ object BuildCommons {
   val sparkHome = buildLocation
 
   val testTempDir = s"$sparkHome/target/tmp"
-  if (!new File(testTempDir).isDirectory()) {
-    require(new File(testTempDir).mkdirs())
-  }
 }
 
 object SparkBuild extends PomBuild {
@@ -526,6 +523,13 @@ object TestSettings {
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
+    // Make sure the test temp directory exists.
+    resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
+      if (!new File(testTempDir).isDirectory()) {
+        require(new File(testTempDir).mkdirs())
+      }
+      Seq[File]()
+    },
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
