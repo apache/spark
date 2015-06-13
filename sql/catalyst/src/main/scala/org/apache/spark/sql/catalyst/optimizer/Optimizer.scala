@@ -38,21 +38,20 @@ object DefaultOptimizer extends Optimizer {
       EliminateSubQueries) ::
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
-    Batch("Operator Reordering", FixedPoint(100),
+    Batch("Operator Optimizations", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
-      PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
       ProjectCollapsing,
-      CombineLimits) ::
-    Batch("ConstantFolding", FixedPoint(100),
+      CombineLimits,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      PushPredicateThroughJoin,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -266,7 +265,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         if (newChildren.length == 0) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
-          newChildren(0)
+          newChildren.head
         } else {
           Coalesce(newChildren)
         }
@@ -280,21 +279,18 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e: MinOf => e
 
       // Put exceptional cases above if any
-      case e: BinaryArithmetic => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
-      case e: BinaryComparison => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
+      case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ BinaryArithmetic(_, Literal(null, _)) => Literal.create(null, e.dataType)
+
+      case e @ BinaryComparison(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ BinaryComparison(_, Literal(null, _)) => Literal.create(null, e.dataType)
+
       case e: StringRegexExpression => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
+
       case e: StringComparison => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)

@@ -24,10 +24,11 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{InternalRow, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -210,13 +211,15 @@ private[sql] object JDBCRDD extends Logging {
       fqTable: String,
       requiredColumns: Array[String],
       filters: Array[Filter],
-      parts: Array[Partition]): RDD[Row] = {
+      parts: Array[Partition]): RDD[InternalRow] = {
+    val dialect = JdbcDialects.get(url)
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
-      requiredColumns,
+      quotedColumns,
       filters,
       parts,
       properties)
@@ -237,7 +240,7 @@ private[sql] class JDBCRDD(
     filters: Array[Filter],
     partitions: Array[Partition],
     properties: Properties)
-  extends RDD[Row](sc, Nil) {
+  extends RDD[InternalRow](sc, Nil) {
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
@@ -345,12 +348,12 @@ private[sql] class JDBCRDD(
   /**
    * Runs the SQL query against the JDBC driver.
    */
-  override def compute(thePart: Partition, context: TaskContext): Iterator[Row] = new Iterator[Row]
-  {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
+    new Iterator[InternalRow] {
     var closed = false
     var finished = false
     var gotNext = false
-    var nextValue: Row = null
+    var nextValue: InternalRow = null
 
     context.addTaskCompletionListener{ context => close() }
     val part = thePart.asInstanceOf[JDBCPartition]
@@ -372,7 +375,7 @@ private[sql] class JDBCRDD(
     val conversions = getConversions(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
-    def getNext(): Row = {
+    def getNext(): InternalRow = {
       if (rs.next()) {
         var i = 0
         while (i < conversions.length) {
@@ -383,7 +386,7 @@ private[sql] class JDBCRDD(
               // DateUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
-                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+                mutableRow.setInt(i, DateUtils.fromJavaDate(dateVal))
               } else {
                 mutableRow.update(i, null)
               }
@@ -415,7 +418,13 @@ private[sql] class JDBCRDD(
             case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
             case StringConversion => mutableRow.setString(i, rs.getString(pos))
-            case TimestampConversion => mutableRow.update(i, rs.getTimestamp(pos))
+            case TimestampConversion =>
+              val t = rs.getTimestamp(pos)
+              if (t != null) {
+                mutableRow.setLong(i, DateUtils.fromJavaTimestamp(t))
+              } else {
+                mutableRow.update(i, null)
+              }
             case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
             case BinaryLongConversion => {
               val bytes = rs.getBytes(pos)
@@ -434,7 +443,7 @@ private[sql] class JDBCRDD(
         mutableRow
       } else {
         finished = true
-        null.asInstanceOf[Row]
+        null.asInstanceOf[InternalRow]
       }
     }
 
@@ -477,7 +486,7 @@ private[sql] class JDBCRDD(
       !finished
     }
 
-    override def next(): Row = {
+    override def next(): InternalRow = {
       if (!hasNext) {
         throw new NoSuchElementException("End of stream")
       }

@@ -28,8 +28,9 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
+import org.apache.spark.sql.catalyst.expressions.{Literal, InternalRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
@@ -45,7 +46,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       classOf[UDAFPercentile.State],
       ObjectInspectorOptions.JAVA).asInstanceOf[StructObjectInspector]
 
-    val a = unwrap(state, soi).asInstanceOf[Row]
+    val a = unwrap(state, soi).asInstanceOf[InternalRow]
     val b = wrap(a, soi).asInstanceOf[UDAFPercentile.State]
 
     val sfCounts = soi.getStructFieldRef("counts")
@@ -127,7 +128,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     }
   }
 
-  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+  def checkValues(row1: Seq[Any], row2: InternalRow): Unit = {
     row1.zip(row2.toSeq).foreach { case (r1, r2) =>
       checkValue(r1, r2)
     }
@@ -203,7 +204,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     })
 
     checkValues(row,
-      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[InternalRow])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 

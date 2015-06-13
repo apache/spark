@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -31,12 +34,12 @@ object Literal {
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
-    case s: String => Literal(UTF8String(s), StringType)
+    case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: Decimal => Literal(d, DecimalType.Unlimited)
-    case t: Timestamp => Literal(t, TimestampType)
+    case t: Timestamp => Literal(DateUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
@@ -78,16 +81,71 @@ case class Literal protected (value: Any, dataType: DataType) extends LeafExpres
 
   override def toString: String = if (value != null) value.toString else "null"
 
-  override def eval(input: Row): Any = value
+  override def equals(other: Any): Boolean = other match {
+    case o: Literal =>
+      dataType.equals(o.dataType) &&
+        (value == null && null == o.value || value != null && value.equals(o.value))
+    case _ => false
+  }
+
+  override def eval(input: catalyst.InternalRow): Any = value
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    // change the isNull and primitive to consts, to inline them
+    if (value == null) {
+      ev.isNull = "true"
+      s"final ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};"
+    } else {
+      dataType match {
+        case BooleanType =>
+          ev.isNull = "false"
+          ev.primitive = value.toString
+          ""
+        case FloatType =>
+          val v = value.asInstanceOf[Float]
+          if (v.isNaN || v.isInfinite) {
+            super.genCode(ctx, ev)
+          } else {
+            ev.isNull = "false"
+            ev.primitive = s"${value}f"
+            ""
+          }
+        case DoubleType =>
+          val v = value.asInstanceOf[Double]
+          if (v.isNaN || v.isInfinite) {
+            super.genCode(ctx, ev)
+          } else {
+            ev.isNull = "false"
+            ev.primitive = s"${value}"
+            ""
+          }
+        case ByteType | ShortType =>
+          ev.isNull = "false"
+          ev.primitive = s"(${ctx.javaType(dataType)})$value"
+          ""
+        case IntegerType | DateType =>
+          ev.isNull = "false"
+          ev.primitive = value.toString
+          ""
+        case TimestampType | LongType =>
+          ev.isNull = "false"
+          ev.primitive = s"${value}L"
+          ""
+        // eval() version may be faster for non-primitive types
+        case other =>
+          super.genCode(ctx, ev)
+      }
+    }
+  }
 }
 
 // TODO: Specialize
 case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
 
-  def update(expression: Expression, input: Row): Unit = {
+  def update(expression: Expression, input: catalyst.InternalRow): Unit = {
     value = expression.eval(input)
   }
 
-  override def eval(input: Row): Any = value
+  override def eval(input: catalyst.InternalRow): Any = value
 }

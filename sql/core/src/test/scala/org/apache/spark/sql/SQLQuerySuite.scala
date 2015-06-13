@@ -38,6 +38,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   import sqlContext.implicits._
   import sqlContext.sql
 
+  test("having clause") {
+    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")
+    checkAnswer(
+      sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
+      Row("one", 6) :: Row("three", 3) :: Nil)
+  }
+
   test("SPARK-6743: no columns from cache") {
     Seq(
       (83, 0, 38),
@@ -114,6 +121,32 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       sql("SELECT a FROM testData2 SORT BY a"),
       Seq(1, 1, 2, 2, 3, 3).map(Row(_))
     )
+  }
+
+  test("SPARK-7158 collect and take return different results") {
+    import java.util.UUID
+    import org.apache.spark.sql.types._
+
+    val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
+    // we except the id is materialized once
+    def id: () => String = () => { UUID.randomUUID().toString() }
+
+    val dfWithId = df.withColumn("id", callUDF(id, StringType))
+    // Make a new DataFrame (actually the same reference to the old one)
+    val cached = dfWithId.cache()
+    // Trigger the cache
+    val d0 = dfWithId.collect()
+    val d1 = cached.collect()
+    val d2 = cached.collect()
+
+    // Since the ID is only materialized once, then all of the records
+    // should come from the cache, not by re-computing. Otherwise, the ID
+    // will be different
+    assert(d0.map(_(0)) === d2.map(_(0)))
+    assert(d0.map(_(1)) === d2.map(_(1)))
+
+    assert(d1.map(_(0)) === d2.map(_(0)))
+    assert(d1.map(_(1)) === d2.map(_(1)))
   }
 
   test("grouping on nested fields") {
@@ -664,7 +697,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  ignore("cartesian product join") {
+  test("cartesian product join") {
     checkAnswer(
       testData3.join(testData3),
       Row(1, null, 1, null) ::

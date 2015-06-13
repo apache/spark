@@ -39,11 +39,11 @@ MLlib's FP-growth implementation takes the following (hyper-)parameters:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
+[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
 It take a `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
-[`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
+[`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.
 
 {% highlight scala %}

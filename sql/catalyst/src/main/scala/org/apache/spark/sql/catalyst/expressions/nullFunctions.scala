@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types.DataType
@@ -42,7 +44,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       this, s"Coalesce cannot have children of different types. $childTypes")
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     var i = 0
     var result: Any = null
     val childIterator = children.iterator
@@ -51,14 +53,40 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     }
     result
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    s"""
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+    """ +
+    children.map { e =>
+      val eval = e.gen(ctx)
+      s"""
+        if (${ev.isNull}) {
+          ${eval.code}
+          if (!${eval.isNull}) {
+            ${ev.isNull} = false;
+            ${ev.primitive} = ${eval.primitive};
+          }
+        }
+      """
+    }.mkString("\n")
+  }
 }
 
 case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = false
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     child.eval(input) == null
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    ev.isNull = "false"
+    ev.primitive = eval.isNull
+    eval.code
   }
 
   override def toString: String = s"IS NULL $child"
@@ -69,8 +97,15 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   override def nullable: Boolean = false
   override def toString: String = s"IS NOT NULL $child"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: catalyst.InternalRow): Any = {
     child.eval(input) != null
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    ev.isNull = "false"
+    ev.primitive = s"(!(${eval.isNull}))"
+    eval.code
   }
 }
 
@@ -84,7 +119,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
   private[this] val childrenArray = children.toArray
 
-  override def eval(input: Row): Boolean = {
+  override def eval(input: catalyst.InternalRow): Boolean = {
     var numNonNulls = 0
     var i = 0
     while (i < childrenArray.length && numNonNulls < n) {
@@ -94,5 +129,26 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       i += 1
     }
     numNonNulls >= n
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val nonnull = ctx.freshName("nonnull")
+    val code = children.map { e =>
+      val eval = e.gen(ctx)
+      s"""
+        if ($nonnull < $n) {
+          ${eval.code}
+          if (!${eval.isNull}) {
+            $nonnull += 1;
+          }
+        }
+      """
+    }.mkString("\n")
+    s"""
+      int $nonnull = 0;
+      $code
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = $nonnull >= $n;
+     """
   }
 }

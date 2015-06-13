@@ -19,7 +19,9 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DDLScanSource extends RelationProvider {
   override def createRelation(
@@ -56,26 +58,28 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
       )
     ))
 
+  override def needConversion: Boolean = false
 
   override def buildScan(): RDD[Row] = {
-    sqlContext.sparkContext.parallelize(from to to).map(e => Row(s"people$e", e * 2))
+    sqlContext.sparkContext.parallelize(from to to).map { e =>
+      InternalRow(UTF8String.fromString(s"people$e"), e * 2)
+    }
   }
 }
 
 class DDLTestSuite extends DataSourceTest {
-  import caseInsensitiveContext._
 
   before {
-      sql(
-          """
-          |CREATE TEMPORARY TABLE ddlPeople
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
-          """.stripMargin)
+    caseInsensitiveContext.sql(
+      """
+      |CREATE TEMPORARY TABLE ddlPeople
+      |USING org.apache.spark.sql.sources.DDLScanSource
+      |OPTIONS (
+      |  From '1',
+      |  To '10',
+      |  Table 'test1'
+      |)
+      """.stripMargin)
   }
 
   sqlTest(
@@ -100,7 +104,8 @@ class DDLTestSuite extends DataSourceTest {
       ))
 
   test("SPARK-7686 DescribeCommand should have correct physical plan output attributes") {
-    val attributes = sql("describe ddlPeople").queryExecution.executedPlan.output
+    val attributes = caseInsensitiveContext.sql("describe ddlPeople")
+      .queryExecution.executedPlan.output
     assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
     assert(attributes.map(_.dataType).toSet === Set(StringType))
   }

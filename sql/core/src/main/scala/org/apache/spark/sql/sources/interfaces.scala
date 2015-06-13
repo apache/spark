@@ -28,7 +28,8 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SerializableWritable
-import org.apache.spark.sql.{Row, _}
+import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.StructType
@@ -194,6 +195,8 @@ abstract class BaseRelation {
    * Whether does it need to convert the objects in Row to internal representation, for example:
    *  java.lang.String -> UTF8String
    *  java.lang.Decimal -> Decimal
+   *
+   * If `needConversion` is `false`, buildScan() should return an [[RDD]] of [[InternalRow]]
    *
    * Note: The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
@@ -435,14 +438,15 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           // partition values.
           userDefinedPartitionColumns.map { partitionSchema =>
             val spec = discoverPartitions()
+            val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(spec.partitionColumns.map(_.dataType)).map {
+              val literals = values.toSeq.zip(partitionColumnTypes).map {
                 case (value, dataType) => Literal.create(value, dataType)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
                 Cast(literal, field.dataType).eval()
               }
-              p.copy(values = Row.fromSeq(castedValues))
+              p.copy(values = InternalRow.fromSeq(castedValues))
             }
             PartitionSpec(partitionSchema, castedPartitions)
           }
@@ -490,9 +494,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
+    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME)
+    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
+      typeInference)
   }
 
   /**
@@ -576,15 +582,21 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    buildScan(inputFiles).mapPartitions { rows =>
+    val rdd = buildScan(inputFiles)
+    val converted =
+      if (needConversion) {
+        RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
+      } else {
+        rdd.map(_.asInstanceOf[InternalRow])
+      }
+    converted.mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
       }
-
       val mutableProjection = buildProjection()
-      rows.map(mutableProjection)
+      rows.map(r => mutableProjection(r).asInstanceOf[Row])
     }
   }
 
