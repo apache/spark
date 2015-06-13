@@ -122,7 +122,20 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("1100", null))
   }
 
-  test("length") {
+  test("if function") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("if(a = 1, 'one', 'not_one')", "if(b = 1, 'one', 'not_one')"),
+      Row("one", "not_one"))
+  }
+
+  test("nvl function") {
+    checkAnswer(
+      ctx.sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
+      Row("x", "y", null))
+  }
+
+  test("string length function") {
     checkAnswer(
       nullStrings.select(strlen($"s"), strlen("s")),
       nullStrings.collect().toSeq.map { r =>
@@ -138,19 +151,5 @@ class DataFrameFunctionsSuite extends QueryTest {
         val l = if (v == null) null else v.length
         Row(l)
       })
-  }
-
-  test("log2 functions test") {
-    val df = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      df.select(log2("b") + log2("a")),
-      Row(1))
-
-    checkAnswer(
-      ctx.sql("SELECT LOG2(8)"),
-      Row(3))
-    checkAnswer(
-      ctx.sql("SELECT LOG2(null)"),
-      Row(null))
   }
 }

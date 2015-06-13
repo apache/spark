@@ -84,17 +84,21 @@ object FunctionRegistry {
   type FunctionBuilder = Seq[Expression] => Expression
 
   val expressions: Map[String, FunctionBuilder] = Map(
-    // Non aggregate functions
+    // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expression[If]("if"),
+    expression[IsNull]("isnull"),
+    expression[IsNotNull]("isnotnull"),
+    expression[Coalesce]("nvl"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
     expression[Sqrt]("sqrt"),
 
-    // Math functions
+    // math functions
     expression[Acos]("acos"),
     expression[Asin]("asin"),
     expression[Atan]("atan"),
@@ -102,26 +106,30 @@ object FunctionRegistry {
     expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
+    expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Hypot]("hypot"),
-    expression[Log]("log"),
+    expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
+    expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
     expression[Log2]("log2"),
     expression[Pow]("pow"),
+    expression[Pow]("power"),
     expression[Rint]("rint"),
+    expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
-    expression[ToDegrees]("todegrees"),
-    expression[ToRadians]("toradians"),
+    expression[ToDegrees]("degrees"),
+    expression[ToRadians]("radians"),
 
     // aggregate functions
     expression[Average]("avg"),
@@ -133,10 +141,12 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[Upper]("ucase"),
     expression[Upper]("upper")
   )
 
