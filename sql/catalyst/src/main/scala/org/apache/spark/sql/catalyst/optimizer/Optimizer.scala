@@ -41,7 +41,6 @@ object DefaultOptimizer extends Optimizer {
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       UnionPushDown,
-      LimitPushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -112,20 +111,6 @@ object UnionPushDown extends Rule[LogicalPlan] {
   }
 }
 
-object LimitPushDown extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down limit when the child is project on limit.
-    case Limit(expr, Project(projectList, l: Limit)) =>
-      Project(projectList, Limit(expr, l))
-
-    // Push down limit when the child is project on sort,
-    // and we cannot push down this project through sort.
-    case Limit(expr, p @ Project(projectList, s: Sort))
-      if !s.references.subsetOf(p.outputSet) =>
-      Project(projectList, Limit(expr, s))
-  }
-}
-
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
  * transformations:
@@ -175,7 +160,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
-    // push down project if possible when the child is sort
+    // Push down project through limit, so that we may have chance to push it further.
+    case Project(projectList, Limit(exp, child)) =>
+      Limit(exp, Project(projectList, child))
+
+    // Push down project if possible when the child is sort
     case p @ Project(projectList, s @ Sort(_, _, grandChild))
       if s.references.subsetOf(p.outputSet) =>
       s.copy(child = Project(projectList, grandChild))

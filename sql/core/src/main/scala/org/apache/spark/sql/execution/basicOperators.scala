@@ -147,12 +147,18 @@ case class Limit(limit: Int, child: SparkPlan)
 
 /**
  * :: DeveloperApi ::
- * Take the first limit elements as defined by the sortOrder. This is logically equivalent to
- * having a [[Limit]] operator after a [[Sort]] operator. This could have been named TopK, but
- * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
+ * Take the first limit elements as defined by the sortOrder, and do projection if needed.
+ * This is logically equivalent to having a [[Limit]] operator after a [[Sort]] operator,
+ * or having a [[Project]] operator between them.
+ * This could have been named TopK, but Spark's top operator does the opposite in ordering
+ * so we name it TakeOrdered to avoid confusion.
  */
 @DeveloperApi
-case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) extends UnaryNode {
+case class TakeOrderedAndProject(
+    limit: Int,
+    sortOrder: Seq[SortOrder],
+    projectList: Option[Seq[NamedExpression]],
+    child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -160,17 +166,22 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
   private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
 
-  private def collectData(): Array[InternalRow] =
-    child.execute().map(_.copy()).takeOrdered(limit)(ord)
+  private val projection = projectList.map(newProjection(_, child.output))
+
+  private def collectData(): Iterator[InternalRow] = {
+    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord).toIterator
+    projection.map(data.map(_)).getOrElse(data)
+  }
 
   override def executeCollect(): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    collectData().map(converter(_).asInstanceOf[Row])
+    collectData().map(converter(_).asInstanceOf[Row]).toArray
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
+  protected override def doExecute(): RDD[InternalRow] =
+    sparkContext.makeRDD(collectData().toArray[InternalRow], 1)
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
