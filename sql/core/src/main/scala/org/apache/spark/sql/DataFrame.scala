@@ -1060,7 +1060,7 @@ class DataFrame private[sql](
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
       f(row(0).asInstanceOf[A]).map(o =>
-        catalyst.InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+        InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -1232,11 +1232,11 @@ class DataFrame private[sql](
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map {
         case (aggregation, (statistic, _)) =>
-          catalyst.InternalRow(statistic :: aggregation.toList: _*)
+          InternalRow(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => catalyst.InternalRow(name) }
+      statistics.map { case (name, _) => InternalRow(name) }
     }
 
     // All columns are string type

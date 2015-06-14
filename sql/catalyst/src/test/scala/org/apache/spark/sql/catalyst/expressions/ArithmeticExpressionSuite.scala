@@ -21,7 +21,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType}
 
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -73,6 +73,21 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
     checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
     checkDoubleEvaluation(c3 % c2, (1.1 +- 0.001), row)
+  }
+
+  test("Abs") {
+    def testAbs(convert: (Int) => Any): Unit = {
+      checkEvaluation(Abs(Literal(convert(0))), convert(0))
+      checkEvaluation(Abs(Literal(convert(1))), convert(1))
+      checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+    }
+    testAbs(_.toByte)
+    testAbs(_.toShort)
+    testAbs(identity)
+    testAbs(_.toLong)
+    testAbs(_.toFloat)
+    testAbs(_.toDouble)
+    testAbs(Decimal(_))
   }
 
   test("Divide") {

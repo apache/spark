@@ -236,6 +236,18 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
   }
 
+  test("abs") {
+    val input =
+      Seq[(java.lang.Double, java.lang.Double)]((null, null), (0.0, 0.0), (1.5, 1.5), (-2.5, 2.5))
+    checkAnswer(
+      input.toDF("key", "value").select(abs($"key").alias("a")).sort("a"),
+      input.map(pair => Row(pair._2)))
+
+    checkAnswer(
+      input.toDF("key", "value").selectExpr("abs(key) a").sort("a"),
+      input.map(pair => Row(pair._2)))
+  }
+
   test("log2") {
     val df = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
