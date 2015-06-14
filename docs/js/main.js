@@ -85,9 +85,7 @@ $(function() {
   anchors.options = {
     placement: 'left'
   };
-  anchors.add('h2');
-  anchors.add('h3');
-  anchors.add('h4');
+  anchors.add();
 
   $(window).bind('hashchange', function() {
     maybeScrollToHash();
