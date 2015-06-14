@@ -267,54 +267,16 @@ case class Pow(left: Expression, right: Expression)
 }
 
 case class Logarithm(left: Expression, right: Expression)
-  extends AbstractBinaryMathExpression[Double, Double, Double]("LOG") {
+  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
   def this(child: Expression) = {
-    this(Literal(math.E), child)
-  }
-
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
-  override def dataType: DataType = DoubleType
-
-  def base: Expression = left
-  def value: Expression = right
-
-  override def eval(input: InternalRow): Any = {
-    val evalE2 = value.eval(input)
-    if (evalE2 == null) {
-      null
-    } else {
-      val evalE1 = base.eval(input)
-      var result: Double = 0.0
-      if (evalE1 == null) {
-        result = math.log(evalE2.asInstanceOf[Double]) / math.log(10.0)
-      } else {
-        result = math.log(evalE2.asInstanceOf[Double]) / math.log(evalE1.asInstanceOf[Double])
-      }
-      if (result.isNaN) null else result
-    }
+    this(EulerNumber(), child)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval1 = base.gen(ctx)
-    val eval2 = value.gen(ctx)
-    val resultCode =
-      s"java.lang.Math.log(${eval2.primitive}) / java.lang.Math.log(${eval1.primitive})"
-
-    s"""
-      ${eval2.code}
-      boolean ${ev.isNull} = ${eval2.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval1.code}
-        if (!${eval1.isNull}) {
-          ${ev.primitive} = ${resultCode};
-        } else {
-          ${ev.primitive} = java.lang.Math.log(${eval2.primitive}) / java.lang.Math.log(10.0);
-        }
-      }
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)") + s"""
       if (Double.valueOf(${ev.primitive}).isNaN()) {
         ${ev.isNull} = true;
       }
-    """
+      """
   }
 }
