@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.scalatest.Matchers._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType}
@@ -26,68 +24,92 @@ import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType}
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("arithmetic") {
-    val row = create_row(1, 2, 3, null)
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.int.at(2)
-    val c4 = 'a.int.at(3)
-
-    checkEvaluation(UnaryMinus(c1), -1, row)
-    checkEvaluation(UnaryMinus(Literal.create(100, IntegerType)), -100)
-
-    checkEvaluation(Add(c1, c4), null, row)
-    checkEvaluation(Add(c1, c2), 3, row)
-    checkEvaluation(Add(c1, Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(Add(Literal.create(null, IntegerType), c2), null, row)
-    checkEvaluation(
-      Add(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null, row)
-
-    checkEvaluation(-c1, -1, row)
-    checkEvaluation(c1 + c2, 3, row)
-    checkEvaluation(c1 - c2, -1, row)
-    checkEvaluation(c1 * c2, 2, row)
-    checkEvaluation(c1 / c2, 0, row)
-    checkEvaluation(c1 % c2, 1, row)
+  /**
+   * Runs through the testFunc for all numeric data types.
+   *
+   * @param testFunc a test function that accepts a conversion function to convert an integer
+   *                 into another data type.
+   */
+  private def testNumericDataTypes(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toByte)
+    testFunc(_.toShort)
+    testFunc(identity)
+    testFunc(_.toLong)
+    testFunc(_.toFloat)
+    testFunc(_.toDouble)
+    testFunc(Decimal(_))
   }
 
-  test("fractional arithmetic") {
-    val row = create_row(1.1, 2.0, 3.1, null)
-    val c1 = 'a.double.at(0)
-    val c2 = 'a.double.at(1)
-    val c3 = 'a.double.at(2)
-    val c4 = 'a.double.at(3)
+  test("+ (Add)") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(Add(left, right), convert(3))
+      checkEvaluation(Add(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Add(left, Literal.create(null, right.dataType)), null)
+    }
+  }
 
-    checkEvaluation(UnaryMinus(c1), -1.1, row)
-    checkEvaluation(UnaryMinus(Literal.create(100.0, DoubleType)), -100.0)
-    checkEvaluation(Add(c1, c4), null, row)
-    checkEvaluation(Add(c1, c2), 3.1, row)
-    checkEvaluation(Add(c1, Literal.create(null, DoubleType)), null, row)
-    checkEvaluation(Add(Literal.create(null, DoubleType), c2), null, row)
-    checkEvaluation(
-      Add(Literal.create(null, DoubleType), Literal.create(null, DoubleType)), null, row)
+  test("- (UnaryMinus)") {
+    testNumericDataTypes { convert =>
+      val input = Literal(convert(1))
+      val dataType = input.dataType
+      checkEvaluation(UnaryMinus(input), convert(-1))
+      checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
+    }
+  }
 
-    checkEvaluation(-c1, -1.1, row)
-    checkEvaluation(c1 + c2, 3.1, row)
-    checkDoubleEvaluation(c1 - c2, (-0.9 +- 0.001), row)
-    checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
-    checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
-    checkDoubleEvaluation(c3 % c2, (1.1 +- 0.001), row)
+  test("- (Minus)") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(Subtract(left, right), convert(-1))
+      checkEvaluation(Subtract(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Subtract(left, Literal.create(null, right.dataType)), null)
+    }
+  }
+
+  test("* (Multiply)") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(Multiply(left, right), convert(2))
+      checkEvaluation(Multiply(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Multiply(left, Literal.create(null, right.dataType)), null)
+    }
+  }
+
+  test("/ (Divide) basic") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(2))
+      val right = Literal(convert(1))
+      val dataType = left.dataType
+      checkEvaluation(Divide(left, right), convert(2))
+      checkEvaluation(Divide(Literal.create(null, dataType), right), null)
+      checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
+    }
+  }
+
+  test("/ (Divide) for integral type") {
+    checkEvaluation(Divide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
+    checkEvaluation(Divide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
+    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
+    checkEvaluation(Divide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
+  }
+
+  test("/ (Divide) for floating point") {
+    checkEvaluation(Divide(Literal(1.0f), Literal(2.0f)), 0.5f)
+    checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
+    checkEvaluation(Divide(Literal(Decimal(1.0)), Literal(Decimal(2.0))), Decimal(0.5))
   }
 
   test("Abs") {
-    def testAbs(convert: (Int) => Any): Unit = {
+    testNumericDataTypes { convert =>
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
     }
-    testAbs(_.toByte)
-    testAbs(_.toShort)
-    testAbs(identity)
-    testAbs(_.toLong)
-    testAbs(_.toFloat)
-    testAbs(_.toDouble)
-    testAbs(Decimal(_))
   }
 
   test("Divide") {
