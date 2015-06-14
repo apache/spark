@@ -266,17 +266,18 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
-object Logarithm {
-  def apply(child: Expression): Expression = new Log(child)
-}
-
 case class Logarithm(left: Expression, right: Expression)
   extends AbstractBinaryMathExpression[Double, Double, Double]("LOG") {
+  def this(child: Expression) = {
+    this(Literal(math.E), child)
+  }
+
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
   override def dataType: DataType = DoubleType
 
   def base: Expression = left
   def value: Expression = right
+
   override def eval(input: InternalRow): Any = {
     val evalE2 = value.eval(input)
     if (evalE2 == null) {
