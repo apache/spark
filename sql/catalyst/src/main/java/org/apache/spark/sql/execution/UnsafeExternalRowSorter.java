@@ -27,7 +27,7 @@ import scala.math.Ordering;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
 import org.apache.spark.sql.types.StructType;
@@ -43,14 +43,14 @@ final class UnsafeExternalRowSorter {
   private final UnsafeRowConverter rowConverter;
   private final RowComparator rowComparator;
   private final PrefixComparator prefixComparator;
-  private final Function1<Row, Long> prefixComputer;
+  private final Function1<InternalRow, Long> prefixComputer;
 
   public UnsafeExternalRowSorter(
       StructType schema,
-      Ordering<Row> ordering,
+      Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
       // TODO: if possible, avoid this boxing of the return value
-      Function1<Row, Long> prefixComputer) {
+      Function1<InternalRow, Long> prefixComputer) {
     this.schema = schema;
     this.rowConverter = new UnsafeRowConverter(schema);
     this.rowComparator = new RowComparator(ordering, schema);
@@ -58,7 +58,7 @@ final class UnsafeExternalRowSorter {
     this.prefixComputer = prefixComputer;
   }
 
-  public Iterator<Row> sort(Iterator<Row> inputIterator) throws IOException {
+  public Iterator<InternalRow> sort(Iterator<InternalRow> inputIterator) throws IOException {
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
     byte[] rowConversionBuffer = new byte[1024 * 8];
@@ -74,7 +74,7 @@ final class UnsafeExternalRowSorter {
     );
     try {
       while (inputIterator.hasNext()) {
-        final Row row = inputIterator.next();
+        final InternalRow row = inputIterator.next();
         final int sizeRequirement = rowConverter.getSizeRequirement(row);
         if (sizeRequirement > rowConversionBuffer.length) {
           rowConversionBuffer = new byte[sizeRequirement];
@@ -108,7 +108,7 @@ final class UnsafeExternalRowSorter {
         }
 
         @Override
-        public Row next() {
+        public InternalRow next() {
           try {
             sortedIterator.loadNext();
             if (hasNext()) {
@@ -150,12 +150,12 @@ final class UnsafeExternalRowSorter {
 
   private static final class RowComparator extends RecordComparator {
     private final StructType schema;
-    private final Ordering<Row> ordering;
+    private final Ordering<InternalRow> ordering;
     private final int numFields;
     private final UnsafeRow row1 = new UnsafeRow();
     private final UnsafeRow row2 = new UnsafeRow();
 
-    public RowComparator(Ordering<Row> ordering, StructType schema) {
+    public RowComparator(Ordering<InternalRow> ordering, StructType schema) {
       this.schema = schema;
       this.numFields = schema.length();
       this.ordering = ordering;

@@ -268,15 +268,15 @@ case class UnsafeExternalSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  protected override def doExecute(): RDD[Row] = attachTree(this, "sort") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
     assert (codegenEnabled)
-    def doSort(iterator: Iterator[Row]): Iterator[Row] = {
+    def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
       val prefixComparator = new PrefixComparator {
         override def compare(prefix1: Long, prefix2: Long): Int = 0
       }
       // TODO: do real prefix comparsion. For dev/testing purposes, this is a dummy implementation.
-      def prefixComputer(row: Row): Long = 0
+      def prefixComputer(row: InternalRow): Long = 0
       new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer).sort(iterator)
     }
     child.execute().mapPartitions(doSort, preservesPartitioning = true)

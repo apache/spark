@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.serializer.Serializer
@@ -34,16 +33,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
-
-object Exchange {
-  /**
-   * Returns true when the ordering expressions are a subset of the key.
-   * if true, ShuffledRDD can use `setKeyOrdering(orderingKey)` to sort within [[Exchange]].
-   */
-  def canSortWithShuffle(partitioning: Partitioning, desiredOrdering: Seq[SortOrder]): Boolean = {
-    desiredOrdering.map(_.child).toSet.subsetOf(partitioning.keyExpressions.toSet)
-  }
-}
 
 /**
  * :: DeveloperApi ::
@@ -194,9 +183,6 @@ case class Exchange(
           }
         }
         val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
-        if (newOrdering.nonEmpty) {
-          shuffled.setKeyOrdering(keyOrdering)
-        }
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
@@ -317,23 +303,20 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child
         }
 
-          val withSort = if (needSort) {
-            // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
-            // supports the given schema.
-            val supportsUnsafeRowConversion: Boolean = try {
-              new UnsafeRowConverter(withShuffle.schema.map(_.dataType).toArray)
-              true
-            } catch {
-              case NonFatal(e) =>
-                false
-            }
-            if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
-              UnsafeExternalSort(rowOrdering, global = false, withShuffle)
-            } else if (sqlContext.conf.externalSortEnabled) {
-              ExternalSort(rowOrdering, global = false, withShuffle)
-            } else {
-              Sort(rowOrdering, global = false, withShuffle)
-            }
+        val withSort = if (needSort) {
+          // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
+          // supports the given schema.
+          val supportsUnsafeRowConversion: Boolean = try {
+            new UnsafeRowConverter(withShuffle.schema.map(_.dataType).toArray)
+            true
+          } catch {
+            case NonFatal(e) =>
+              false
+          }
+          if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
+            UnsafeExternalSort(rowOrdering, global = false, withShuffle)
+          } else if (sqlContext.conf.externalSortEnabled) {
+            ExternalSort(rowOrdering, global = false, withShuffle)
           } else {
             Sort(rowOrdering, global = false, withShuffle)
           }
@@ -364,18 +347,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case (UnspecifiedDistribution, Seq(), child) =>
             child
           case (UnspecifiedDistribution, rowOrdering, child) =>
-            // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
-            // supports the given schema.
-            val supportsUnsafeRowConversion: Boolean = try {
-              new UnsafeRowConverter(child.schema.map(_.dataType).toArray)
-              true
-            } catch {
-              case NonFatal(e) =>
-                false
-            }
-            if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
-              UnsafeExternalSort(rowOrdering, global = false, child)
-            } else if (sqlContext.conf.externalSortEnabled) {
+            if (sqlContext.conf.externalSortEnabled) {
               ExternalSort(rowOrdering, global = false, child)
             } else {
               Sort(rowOrdering, global = false, child)
