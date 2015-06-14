@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
@@ -320,7 +321,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(s.toString.toDouble), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -394,7 +395,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
     // TODO: Could be faster?
     val newRow = new GenericMutableRow(from.fields.size)
-    buildCast[catalyst.InternalRow](_, row => {
+    buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
         val v = row(i)
@@ -426,7 +427,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
   }
