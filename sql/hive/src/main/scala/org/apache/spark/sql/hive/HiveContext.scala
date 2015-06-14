@@ -518,7 +518,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
 private[hive] object HiveContext {
   /** The version of hive used internally by Spark SQL. */
-  val hiveExecutionVersion: String = "0.13.1"
+  val hiveExecutionVersion: String = "1.2.0"
 
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
@@ -532,7 +532,7 @@ private[hive] object HiveContext {
     // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar =>
       if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
-        propMap.put(confvar.varname, confvar.defaultVal)
+        propMap.put(confvar.varname, confvar.getDefaultValue())
       }
     }
     propMap.put("javax.jdo.option.ConnectionURL",

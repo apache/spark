@@ -132,7 +132,7 @@ private[hive] class ClientWrapper(
       case hive.v12 =>
         classOf[SessionState]
           .callStatic[SessionState, SessionState]("start", state)
-      case hive.v13 =>
+      case hive.v13 | hive.v120 =>
         classOf[SessionState]
           .callStatic[SessionState, SessionState]("setCurrentSessionState", state)
     }
@@ -200,7 +200,7 @@ private[hive] class ClientWrapper(
         },
         location = version match {
           case hive.v12 => Option(h.call[URI]("getDataLocation")).map(_.toString)
-          case hive.v13 => Option(h.call[Path]("getDataLocation")).map(_.toString)
+          case hive.v13 | hive.v120 => Option(h.call[Path]("getDataLocation")).map(_.toString)
         },
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
@@ -234,7 +234,7 @@ private[hive] class ClientWrapper(
     version match {
       case hive.v12 =>
         table.location.map(new URI(_)).foreach(u => qlTable.call[URI, Unit]("setDataLocation", u))
-      case hive.v13 =>
+      case hive.v13 | hive.v120 =>
         table.location
           .map(new org.apache.hadoop.fs.Path(_))
           .foreach(qlTable.call[Path, Unit]("setDataLocation", _))
@@ -282,7 +282,7 @@ private[hive] class ClientWrapper(
     val qlPartitions = version match {
       case hive.v12 =>
         client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
-      case hive.v13 =>
+      case hive.v13 | hive.v120 =>
         client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsOf", qlTable)
     }
     qlPartitions.toSeq.map(toHivePartition)
@@ -319,7 +319,7 @@ private[hive] class ClientWrapper(
         case hive.v12 =>
           classOf[CommandProcessorFactory]
             .callStatic[String, HiveConf, CommandProcessor]("get", tokens(0), conf)
-        case hive.v13 =>
+        case hive.v13 | hive.v120 =>
           classOf[CommandProcessorFactory]
             .callStatic[Array[String], HiveConf, CommandProcessor]("get", Array(tokens(0)), conf)
       }
@@ -339,7 +339,7 @@ private[hive] class ClientWrapper(
               val res = new JArrayList[String]
               driver.call[JArrayList[String], Boolean]("getResults", res)
               res.toSeq
-            case hive.v13 =>
+            case hive.v13 | hive.v120 =>
               val res = new JArrayList[Object]
               driver.call[JList[Object], Boolean]("getResults", res)
               res.map { r =>
@@ -390,7 +390,8 @@ private[hive] class ClientWrapper(
       replace,
       holdDDLTime,
       inheritTableSpecs,
-      isSkewedStoreAsSubdir)
+      isSkewedStoreAsSubdir,
+      false, false)
   }
 
   def loadTable(
@@ -402,7 +403,8 @@ private[hive] class ClientWrapper(
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime)
+      holdDDLTime,
+      false, false, false)
   }
 
   def loadDynamicPartitions(
@@ -420,7 +422,8 @@ private[hive] class ClientWrapper(
       replace,
       numDP,
       holdDDLTime,
-      listBucketingEnabled)
+      listBucketingEnabled,
+      false, 0)
   }
 
   def reset(): Unit = withHiveState {
@@ -428,7 +431,8 @@ private[hive] class ClientWrapper(
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
         client.getIndexes("default", t, 255).foreach { index =>
-          client.dropIndex("default", t, index.getIndexName, true)
+          client.dropIndex("default", t, index.getIndexName, true,
+            false)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)

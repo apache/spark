@@ -287,12 +287,13 @@ private[hive] object HiveQl {
         pe.getMessage match {
           case errorRegEx(line, start, message) =>
             throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
+                .initCause(pe)
           case otherMessage =>
-            throw new AnalysisException(otherMessage)
+            throw new AnalysisException(otherMessage).initCause(pe)
         }
       case e: MatchError => throw e
       case e: Exception =>
-        throw new AnalysisException(e.getMessage)
+        throw new AnalysisException(e.getMessage).initCause(e)
       case e: NotImplementedError =>
         throw new AnalysisException(
           s"""
@@ -300,7 +301,7 @@ private[hive] object HiveQl {
             |${dumpTree(getAst(sql))}
             |$e
             |${e.getStackTrace.head}
-          """.stripMargin)
+          """.stripMargin).initCause(e)
     }
   }
 

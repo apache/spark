@@ -220,7 +220,7 @@ private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
           // Get the class of this function.
           // In Hive 0.12, there is no windowFunctionInfo.getFunctionClass. So, we use
           // windowFunctionInfo.getfInfo().getFunctionClass for both Hive 0.13 and Hive 0.13.1.
-          val functionClass = windowFunctionInfo.getfInfo().getFunctionClass
+          val functionClass = windowFunctionInfo.getFunctionClass()
           val newChildren =
             // Rank(), DENSE_RANK(), CUME_DIST(), and PERCENT_RANK() do not take explicit
             // input parameters and requires implicit parameters, which

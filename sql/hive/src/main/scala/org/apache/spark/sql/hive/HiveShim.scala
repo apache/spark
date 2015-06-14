@@ -18,19 +18,26 @@
 package org.apache.spark.sql.hive
 
 import java.io.{InputStream, OutputStream}
+import java.net.URI
 import java.rmi.server.UID
+import java.sql.{Timestamp, Date => SqlDate}
+
+import com.esotericsoftware.kryo.serializers.FieldSerializer
+import com.esotericsoftware.kryo.{Serializer, Kryo}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.antlr.runtime.CommonToken
+import org.apache.hadoop.hive.metastore.api.Date
+import org.objenesis.strategy.StdInstantiatorStrategy
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.exec.{ColumnInfo, Operator, UDF}
+import org.apache.hadoop.hive.ql.plan.{OperatorDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
@@ -135,12 +142,84 @@ private[hive] object HiveShim {
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
+      deserializeObjectByKryo(runtimeSerializationKryo.get(), is, clazz)
         .asInstanceOf[UDFType]
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
+      serializeObjectByKryo(runtimeSerializationKryo.get(), function, out)
+    }
+
+    var runtimeSerializationKryo: ThreadLocal[Kryo] = new ThreadLocal[Kryo]() {
+      protected override def initialValue: Kryo = {
+        val kryo = new Kryo
+        kryo.setClassLoader(Thread.currentThread.getContextClassLoader)
+        kryo.register(classOf[Date], new SqlDateSerializer)
+        kryo.register(classOf[Timestamp], new TimestampSerializer)
+        kryo.register(classOf[Path], new PathSerializer)
+
+        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy())
+        removeField(kryo, classOf[Operator[_ <: OperatorDesc]], "colExprMap")
+        removeField(kryo, classOf[ColumnInfo], "objectInspector")
+        kryo
+      }
+    }
+
+    /**
+     * Kryo serializer for timestamp.
+     */
+    private class TimestampSerializer extends Serializer[Timestamp] {
+      def read(kryo: Kryo, input: Input, clazz: Class[Timestamp]): Timestamp = {
+        val ts = new Timestamp(input.readLong)
+        ts.setNanos(input.readInt)
+        ts
+      }
+
+      def write(kryo: Kryo, output: Output, ts: Timestamp) {
+        output.writeLong(ts.getTime)
+        output.writeInt(ts.getNanos)
+      }
+    }
+
+    /** Custom Kryo serializer for sql date, otherwise Kryo gets confused between
+   SqlDate and java.util.Date while deserializing
+      */
+    private class SqlDateSerializer extends Serializer[SqlDate] {
+      def read(kryo: Kryo, input: Input, clazz: Class[SqlDate]): SqlDate = {
+        return new SqlDate(input.readLong)
+      }
+
+      def write(kryo: Kryo, output: Output, sqlDate: SqlDate) {
+        output.writeLong(sqlDate.getTime)
+      }
+    }
+
+    private class CommonTokenSerializer extends Serializer[CommonToken] {
+      def read(kryo: Kryo, input: Input, clazz: Class[CommonToken]): CommonToken = {
+        return new CommonToken(input.readInt, input.readString)
+      }
+
+      def write(kryo: Kryo, output: Output, token: CommonToken) {
+        output.writeInt(token.getType)
+        output.writeString(token.getText)
+      }
+    }
+
+    private class PathSerializer extends Serializer[Path] {
+      def write(kryo: Kryo, output: Output, path: Path) {
+        output.writeString(path.toUri.toString)
+      }
+
+      def read(kryo: Kryo, input: Input, `type`: Class[Path]): Path = {
+        return new Path(URI.create(input.readString))
+      }
+    }
+
+    protected def removeField(kryo: Kryo, fieldtype: Class[_],
+        fieldName: String) {
+      val fld = new FieldSerializer(kryo, fieldtype)
+      fld.removeField(fieldName)
+      kryo.register(fieldtype, fld)
     }
 
     private var instance: AnyRef = null

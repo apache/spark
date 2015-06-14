@@ -48,6 +48,7 @@ private[hive] object IsolatedClientLoader {
   def hiveVersion(version: String): HiveVersion = version match {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
+    case "1.2.0" => hive.v120
   }
 
   private def downloadVersion(version: HiveVersion): Seq[URL] = {
