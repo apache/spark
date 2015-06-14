@@ -104,44 +104,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Divide(Literal(Decimal(1.0)), Literal(Decimal(2.0))), Decimal(0.5))
   }
 
+  test("% (Remainder)") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(Remainder(left, right), convert(1))
+      checkEvaluation(Remainder(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Remainder(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+    }
+  }
+
   test("Abs") {
     testNumericDataTypes { convert =>
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
     }
-  }
-
-  test("Divide") {
-    checkEvaluation(Divide(Literal(2), Literal(1)), 2)
-    checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
-    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
-    checkEvaluation(Divide(Literal(1), Literal(0)), null)
-    checkEvaluation(Divide(Literal(1.0), Literal(0.0)), null)
-    checkEvaluation(Divide(Literal(0.0), Literal(0.0)), null)
-    checkEvaluation(Divide(Literal(0), Literal.create(null, IntegerType)), null)
-    checkEvaluation(Divide(Literal(1), Literal.create(null, IntegerType)), null)
-    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal(0)), null)
-    checkEvaluation(Divide(Literal.create(null, DoubleType), Literal(0.0)), null)
-    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal(1)), null)
-    checkEvaluation(Divide(Literal.create(null, IntegerType), Literal.create(null, IntegerType)),
-      null)
-  }
-
-  test("Remainder") {
-    checkEvaluation(Remainder(Literal(2), Literal(1)), 0)
-    checkEvaluation(Remainder(Literal(1.0), Literal(2.0)), 1.0)
-    checkEvaluation(Remainder(Literal(1), Literal(2)), 1)
-    checkEvaluation(Remainder(Literal(1), Literal(0)), null)
-    checkEvaluation(Remainder(Literal(1.0), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(0.0), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(0), Literal.create(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal(1), Literal.create(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal(0)), null)
-    checkEvaluation(Remainder(Literal.create(null, DoubleType), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal(1)), null)
-    checkEvaluation(Remainder(Literal.create(null, IntegerType), Literal.create(null, IntegerType)),
-      null)
   }
 
   test("MaxOf") {

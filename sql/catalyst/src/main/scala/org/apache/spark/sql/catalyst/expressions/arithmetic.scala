@@ -244,11 +244,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) {
-      s".$decimalMethod"
-    } else {
-      s"$symbol"
-    }
+    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
+    val javaType = ctx.javaType(left.dataType)
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
@@ -256,8 +253,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} =
-          (${ctx.javaType(left.dataType)})(${eval1.primitive}$method(${eval2.primitive}));
+        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
       }
       """
   }
@@ -305,11 +301,8 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) {
-      s".$decimalMethod"
-    } else {
-      s"$symbol"
-    }
+    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
+    val javaType = ctx.javaType(left.dataType)
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
@@ -317,7 +310,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ${eval1.primitive}$method(${eval2.primitive});
+        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
       }
       """
   }
