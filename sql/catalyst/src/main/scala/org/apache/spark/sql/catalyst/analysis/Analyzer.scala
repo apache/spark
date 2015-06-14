@@ -563,8 +563,8 @@ class Analyzer(
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
         case Alias(g: Generator, name)
-          if g.resolved && 
-             g.elementTypes.size > 1 && 
+          if g.resolved &&
+             g.elementTypes.size > 1 &&
              java.util.regex.Pattern.matches("_c[0-9]+", name) => {
           // Assume the default name given by parser is "_c[0-9]+",
           // TODO in long term, move the naming logic from Parser to Analyzer.
