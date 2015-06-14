@@ -1097,7 +1097,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def log(base: Double, a: String): Column = log(base, Column(a))
+  def log(base: Double, columnName: String): Column = log(base, Column(columnName))
 
   /**
    * Computes the logarithm of the given value in base 10.

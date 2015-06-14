@@ -90,25 +90,17 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 }
 
 /**
- * A binary expression specifically for math functions that take two input parameters and
- * returns one output value.
- * @param name The short name of the function
- */
-abstract class AbstractBinaryMathExpression[T, U, V](name: String)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
-  override def toString: String = s"$name($left, $right)"
-}
-
-/**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
  * @param f The math function.
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends AbstractBinaryMathExpression[Double, Double, Double](name) { self: Product =>
+  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+
+  override def toString: String = s"$name($left, $right)"
 
   override def dataType: DataType = DoubleType
 
@@ -222,7 +214,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 
 
 case class Atan2(left: Expression, right: Expression)
-  extends AbstractBinaryMathExpression("ATAN2") {
+  extends BinaryMathExpression(math.atan2, "ATAN2") {
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
   override def dataType: DataType = DoubleType
 
