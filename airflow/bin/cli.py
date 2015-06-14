@@ -26,7 +26,7 @@ subdir_help = "File location or directory from which to look for the dag"
 
 def log_to_stdout():
     log = logging.getLogger()
-    log.setLevel(logging.DEBUG)
+    log.setLevel(settings.LOGGING_LEVEL)
     logformat = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     ch = logging.StreamHandler(sys.stdout)
@@ -35,7 +35,9 @@ def log_to_stdout():
 
 
 def backfill(args):
-    logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
+    logging.basicConfig(
+        level=settings.LOGGING_LEVEL,
+        format=settings.SIMPLE_LOG_FORMAT)
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
         raise Exception('dag_id could not be found')
@@ -80,7 +82,7 @@ def run(args):
         subdir = os.path.expanduser(subdir)
     logging.basicConfig(
         filename=filename,
-        level=logging.INFO,
+        level=settings.LOGGING_LEVEL,
         format=settings.LOG_FORMAT)
     if not args.pickle:
         dagbag = DagBag(subdir)
@@ -201,7 +203,9 @@ def test(args):
 
 
 def clear(args):
-    logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
+    logging.basicConfig(
+        level=settings.LOGGING_LEVEL,
+        format=settings.SIMPLE_LOG_FORMAT)
     dagbag = DagBag(args.subdir)
 
     if args.dag_id not in dagbag.dags:
@@ -308,7 +312,7 @@ def resetdb(args):
     if raw_input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
-        logging.basicConfig(level=logging.DEBUG,
+        logging.basicConfig(level=settings.LOGGING_LEVEL,
                             format=settings.SIMPLE_LOG_FORMAT)
         utils.resetdb()
     else:
