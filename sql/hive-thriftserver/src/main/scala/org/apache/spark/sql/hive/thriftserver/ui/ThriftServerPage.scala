@@ -111,27 +111,31 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   }
 
   private def errorMessageCell(errorMessage: String): Seq[Node] = {
-    val isMultiline = errorMessage.indexOf('\n') >= 0
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        errorMessage.substring(0, errorMessage.indexOf('\n'))
-      } else {
-        errorMessage
-      })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-      <div class="stacktrace-details collapsed">
-        <pre>{errorMessage}</pre>
-      </div>
-      // scalastyle:on
+    if(errorMessage == null) {
+      <td></td>
     } else {
-      ""
+      val isMultiline = errorMessage.indexOf('\n') >= 0
+      val errorSummary = StringEscapeUtils.escapeHtml4(
+        if (isMultiline) {
+          errorMessage.substring(0, errorMessage.indexOf('\n'))
+        } else {
+          errorMessage
+        })
+      val details = if (isMultiline) {
+        // scalastyle:off
+        <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+              class="expand-details">
+          + details
+        </span> ++
+          <div class="stacktrace-details collapsed">
+            <pre>{errorMessage}</pre>
+          </div>
+        // scalastyle:on
+      } else {
+        ""
+      }
+      <td>{errorSummary}{details}</td>
     }
-    <td>{errorSummary}{details}</td>
   }
 
   /** Generate stats of batch sessions of the thrift server program */

@@ -178,7 +178,6 @@ private[hive] class SparkExecuteStatementOperation(
       hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
-      System.out.println(parentSession.getUsername)
       val proxyUser = UserGroupInformation.createRemoteUser(parentSession.getUsername)
       val currentUser = UserGroupInformation.getCurrentUser
       SparkHadoopUtil.get.transferCredentials(currentUser, proxyUser)
