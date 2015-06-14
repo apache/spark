@@ -176,7 +176,10 @@ object HiveThriftServer2 extends Logging {
     }
 
     def onSessionClosed(sessionId: String): Unit = {
-      sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      val info = sessionList(sessionId)
+      if(info != null) {
+        sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      }
       onlineSessionNum -= 1
     }
 
