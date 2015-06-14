@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -52,8 +51,8 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
-    case dt: DecimalType => defineCodeGen(ctx, ev, c => s"c.unary_$$minus()")
-    case dt: NumericType => defineCodeGen(ctx, ev, c => s"-($c)")
+    case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
+    case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
   }
 
   protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
@@ -144,8 +143,8 @@ abstract class BinaryArithmetic extends BinaryExpression {
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
-      defineCodeGen(ctx, ev, (eval1, eval2) =>
-        s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
+      defineCodeGen(ctx, ev,
+        (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
   }
@@ -205,7 +204,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "/"
-  override def decimalMethod: String = "$divide"
+  override def decimalMethod: String = "$div"
 
   override def nullable: Boolean = true
 
@@ -245,11 +244,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) {
-      s".$decimalMethod"
-    } else {
-      s"$symbol"
-    }
+    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
+    val javaType = ctx.javaType(left.dataType)
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
@@ -257,7 +253,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ${eval1.primitive}$method(${eval2.primitive});
+        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
       }
       """
   }
@@ -265,7 +261,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "%"
-  override def decimalMethod: String = "reminder"
+  override def decimalMethod: String = "remainder"
 
   override def nullable: Boolean = true
 
@@ -305,11 +301,8 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) {
-      s".$decimalMethod"
-    } else {
-      s"$symbol"
-    }
+    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
+    val javaType = ctx.javaType(left.dataType)
     eval1.code + eval2.code +
       s"""
       boolean ${ev.isNull} = false;
@@ -317,7 +310,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
       if (${eval1.isNull} || ${eval2.isNull} || $test) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ${eval1.primitive}$method(${eval2.primitive});
+        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
       }
       """
   }
