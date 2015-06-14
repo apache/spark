@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
@@ -34,7 +35,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
 
-  override def eval(input: Row): Any = c
+  override def eval(input: InternalRow): Any = c
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
@@ -60,7 +61,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
@@ -89,21 +90,29 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 }
 
 /**
+ * A binary expression specifically for math functions that take two input parameters and
+ * returns one output value.
+ * @param name The short name of the function
+ */
+abstract class AbstractBinaryMathExpression[T, U, V](name: String)
+  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  override def toString: String = s"$name($left, $right)"
+}
+
+/**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
  * @param f The math function.
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends AbstractBinaryMathExpression[Double, Double, Double](name) { self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def toString: String = s"$name($left, $right)"
-
   override def dataType: DataType = DoubleType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -213,9 +222,11 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 
 
 case class Atan2(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.atan2, "ATAN2") {
+  extends AbstractBinaryMathExpression("ATAN2") {
+  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def dataType: DataType = DoubleType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -260,10 +271,13 @@ object Logarithm {
 }
 
 case class Logarithm(left: Expression, right: Expression)
-  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  extends AbstractBinaryMathExpression[Double, Double, Double]("LOG") {
+  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def dataType: DataType = DoubleType
+
   def base: Expression = left
   def value: Expression = right
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE2 = value.eval(input)
     if (evalE2 == null) {
       null
