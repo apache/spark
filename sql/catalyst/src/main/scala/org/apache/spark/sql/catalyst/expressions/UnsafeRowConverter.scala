@@ -67,7 +67,7 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    * @param baseOffset the base offset of the destination address
    * @return the number of bytes written. This should be equal to `getSizeRequirement(row)`.
    */
-  def writeRow(row: Row, baseObject: Object, baseOffset: Long): Long = {
+  def writeRow(row: Row, baseObject: Object, baseOffset: Long): Int = {
     unsafeRow.pointTo(baseObject, baseOffset, writers.length, null)
     var fieldNumber = 0
     var appendCursor: Int = fixedLengthSize
