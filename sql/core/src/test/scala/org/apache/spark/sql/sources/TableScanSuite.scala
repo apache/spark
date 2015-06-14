@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.sources
 
-import java.sql.{Timestamp, Date}
-
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -84,8 +83,8 @@ case class AllDataTypesScan(
         i.toDouble,
         Decimal(new java.math.BigDecimal(i)),
         Decimal(new java.math.BigDecimal(i)),
-        DateUtils.fromJavaDate(new Date(1970, 1, 1)),
-        DateUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
+        DateTimeUtils.fromJavaDate(new Date(1970, 1, 1)),
+        DateTimeUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
         UTF8String.fromString(s"varchar_$i"),
         Seq(i, i + 1),
         Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
@@ -93,7 +92,7 @@ case class AllDataTypesScan(
         Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
         Row(i, i.toString),
         Row(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
-          InternalRow(Seq(DateUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
+          InternalRow(Seq(DateTimeUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
     }
   }
 }
