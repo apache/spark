@@ -384,29 +384,7 @@ class StructType(DataType):
             "fields should be a list of StructField"
         self.fields = fields
 
-    def add_field(self, data_type):
-        """
-        Construct a StructType by adding new elements to it to define the schema
-        >>> struct1 = StructType().add_field(StructField("f1", StringType(), True))\
-                                  .add_field(StructField("f2", StringType(), True, None))
-        >>> struct2 = StructType([StructField("f1", StringType(), True),\
-         StructField("f2", StringType(), True, None)])
-        >>> struct1 == struct2
-        True
-        >>> struct1 = StructType().add_field(StructField("f1", StringType(), True))\
-                                  .add_field(StructField("f2", StringType(), True, None))
-        >>> struct2 = StructType([StructField("f1", StringType(), True)])
-        >>> struct1 == struct2
-        False
-
-        :param data_type: A StructField object to be added to the StructType
-        :return: a new updated StructType
-        """
-        assert isinstance(data_type, StructField)
-        self.fields.append(data_type)
-        return self
-
-    def add(self, name, data_type, nullable=True, metadata=None):
+    def add(self, nameOrStructField, data_type, nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema
         >>> struct1 = StructType().add("f1", StringType(), True)\
@@ -420,11 +398,28 @@ class StructType(DataType):
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
+        >>> struct1 = StructType().add(StructField("f1", StringType(), True))\
+                                  .add(StructField("f2", StringType(), True, None))
+        >>> struct2 = StructType([StructField("f1", StringType(), True),\
+         StructField("f2", StringType(), True, None)])
+        >>> struct1 == struct2
+        True
+        >>> struct1 = StructType().add(StructField("f1", StringType(), True))\
+                                  .add(StructField("f2", StringType(), True, None))
+        >>> struct2 = StructType([StructField("f1", StringType(), True)])
+        >>> struct1 == struct2
+        False
 
-        :param data_type: A StructField object to be added to the StructType
+        :param nameOrStructField: Either the name of the field or a StructField object
+        :param data_type: If present, the DataType of the StructField to create
+        :param nullable: Whether the field to add should be nullable (default True)
+        :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
-        return self.add_field(StructField(name, data_type, nullable, metadata))
+        if(isinstance(nameOrStructField, StructField)):
+            return self.fields.append(nameOrStructField)
+        else:
+            return self.fields.append(StructField(nameOrStructField, data_type, nullable, metadata))
 
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
