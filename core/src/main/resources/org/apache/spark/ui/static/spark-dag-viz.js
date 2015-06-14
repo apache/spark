@@ -150,7 +150,7 @@ function renderDagViz(forJob) {
 /* Render the RDD DAG visualization on the stage page. */
 function renderDagVizForStage(svgContainer) {
   var metadata = metadataContainer().select(".stage-metadata");
-  var dot = metadata.select(".dot-file").text();
+  var dot = metadata.select(".dot-file").text().trim();
   var containerId = VizConstants.graphPrefix + metadata.attr("stage-id");
   var container = svgContainer.append("g").attr("id", containerId);
   renderDot(dot, container, false);
