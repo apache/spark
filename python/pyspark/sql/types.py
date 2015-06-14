@@ -420,7 +420,7 @@ class StructType(DataType):
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
-
+        
         :param data_type: A StructField object to be added to the StructType
         :return: a new updated StructType
         """
