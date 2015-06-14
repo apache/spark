@@ -923,6 +923,15 @@ test_that("fillna() on a DataFrame", {
   expect_true(identical(expected, actual))  
 })
 
+test_that("crosstab() on a DataFrame", {
+  rdd <- lapply(parallelize(sc, 1:6), function(x) { list(x % 3, x % 2) })
+  df <- toDF(rdd, list("a", "b"))
+  ct <- crosstab(df, "a", "b")
+  ordered <- ct[order("a_b"),]
+  expected <- data.frame("a_b" = c("0", "1", "2"), "0" = c("1", "1", "1"), "1" = c("0", "0", "0"))
+  assert_true(identical(expected, ordered))
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
