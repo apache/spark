@@ -205,19 +205,17 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
     }
 
-    try:
-        hadoop_profiles = sbt_maven_hadoop_profiles[hadoop_version]
-    except KeyError:
+    if hadoop_version in sbt_maven_hadoop_profiles:
+        return sbt_maven_hadoop_profiles[hadoop_version]
+    else:
         print "[error] Could not find", hadoop_version, "in the list. Valid options",
-        print "are 'hadoop1.0', 'hadoop2.0', 'hadoop2.2', and 'hadoop2.3'."
+        print "are", sbt_maven_hadoop_profiles.keys()
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-    return hadoop_profiles
 
 
 def get_build_profiles(hadoop_version="hadoop2.3",
-                       base_profiles=True,
-                       hive_profiles=False):
+                       enable_base_profiles=True,
+                       enable_hive_profiles=False):
     """Returns a list of hadoop profiles to be used as looked up from the passed in hadoop profile
     key with the option of adding on the base and hive profiles."""
 
@@ -226,18 +224,19 @@ def get_build_profiles(hadoop_version="hadoop2.3",
     hadoop_profiles = get_hadoop_profiles(hadoop_version)
 
     build_profiles = hadoop_profiles
-    # first, check and add the base profiles
-    if base_profiles:
+
+    if enable_base_profiles:
         build_profiles = build_profiles + base_profiles
-    # second, check and add the hive profiles
-    if hive_profiles:
+
+    if enable_hive_profiles:
         build_profiles = build_profiles + hive_profiles
 
     return build_profiles
 
 
 def build_spark_maven(hadoop_version):
-    build_profiles = get_build_profiles(hadoop_version, hive_profiles=True)
+    # we always build with Hive support even if we skip Hive tests in most builds
+    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
@@ -248,7 +247,7 @@ def build_spark_maven(hadoop_version):
 
 
 def build_spark_sbt(hadoop_version):
-    build_profiles = get_build_profiles(hadoop_version, hive_profiles=True)
+    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly"]
@@ -275,22 +274,20 @@ def build_apache_spark(build_tool, hadoop_version):
 
 
 def detect_binary_inop_with_mima():
-    set_title_and_block("Detecting binary incompatibilities with MiMa",
-                        "BLOCK_MIMA")
+    set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
     run_cmd(["./dev/mima"])
 
 
-def determine_test_modules(test_env):
-    """This function current acts to determine if SQL tests need to be run in
-    addition to the core test suite *or* if _only_ SQL tests need to be run
-    as the git logs show that to be the only thing touched. In the future
-    this function will act more generically to help further segregate the
-    test suite runner (hence the function name).
-    @return a set of unique test names"""
-    test_suite = list()
+def identify_changed_modules(test_env):
+    """Given the passed in environment will determine the changed modules and
+    return them as a set. If the environment is local, will simply run all tests.
+    If run under the `amplab_jenkins` environment will determine the changed files
+    as compared to the `ghprbTargetBranch` and execute the necessary set of tests
+    to provide coverage for the changed code."""
+    test_suite = set()
 
     if test_env == "amplab_jenkins":
-        target_branch = os.environ.get("ghprbTargetBranch")
+        target_branch = os.environ["ghprbTargetBranch"]
 
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
 
@@ -329,27 +326,27 @@ def determine_test_modules(test_env):
         non_sql_files = set(changed_files).difference(set(sql_files))
 
         if non_sql_files:
-            test_suite.append("CORE")
+            test_suite.add("CORE")
         if sql_files:
             print "[info] Detected changes in SQL. Will run Hive test suite."
-            test_suite.append("SQL")
+            test_suite.add("SQL")
             if not non_sql_files:
                 print "[info] Detected no changes except in SQL. Will only run SQL tests."
         if mllib_files:
             print "[info] Detected changes in MLlib. Will run MLlib test suite."
-            test_suite.append("MLLIB")
+            test_suite.add("MLLIB")
         if streaming_files:
             print "[info] Detected changes in Streaming. Will run Streaming test suite."
-            test_suite.append("STREAMING")
+            test_suite.add("STREAMING")
         if graphx_files:
             print "[info] Detected changes in GraphX. Will run GraphX test suite."
-            test_suite.append("GRAPHX")
+            test_suite.add("GRAPHX")
 
-        return set(test_suite)
+        return test_suite
     else:
         # we aren't in the Amplab environment so simply run all tests
-        test_suite.append("ALL")
-        return set(test_suite)
+        test_suite.add("ALL")
+        return test_suite
 
 
 def run_scala_tests_maven(test_profiles):
@@ -369,7 +366,8 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     if "ALL" in test_modules:
         sbt_test_goals = ["test"]
     else:
-        # if we only have changes in SQL build a custom test list
+        # if we only have changes in SQL, MLlib, Streaming, or GraphX then build
+        # a custom test list
         if "SQL" in test_modules and "CORE" not in test_modules:
             sbt_test_goals = ["catalyst/test",
                               "sql/test",
@@ -378,20 +376,18 @@ def run_scala_tests_sbt(test_modules, test_profiles):
                               "mllib/test",
                               "examples/test"]
         if "MLLIB" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals = sbt_test_goals + ["mllib/test",
-                                               "examples/test"]
+            sbt_test_goals += ["mllib/test", "examples/test"]
         if "STREAMING" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals = sbt_test_goals + ["streaming/test",
-                                               "streaming-flume/test",
-                                               "streaming-flume-sink/test",
-                                               "streaming-kafka/test",
-                                               "streaming-mqtt/test",
-                                               "streaming-twitter/test",
-                                               "streaming-zeromq/test",
-                                               "examples/test"]
+            sbt_test_goals += ["streaming/test",
+                               "streaming-flume/test",
+                               "streaming-flume-sink/test",
+                               "streaming-kafka/test",
+                               "streaming-mqtt/test",
+                               "streaming-twitter/test",
+                               "streaming-zeromq/test",
+                               "examples/test"]
         if "GRAPHX" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals = sbt_test_goals + ["graphx/test",
-                                               "examples/test"]
+            sbt_test_goals += ["graphx/test", "examples/test"]
         if not sbt_test_goals:
             sbt_test_goals = ["test"]
 
@@ -410,12 +406,8 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_modules = set(test_modules)
 
-    # if the Spark SQL tests are enabled, run the tests with the Hive profiles
-    # enabled.
-    if "SQL" in test_modules:
-        test_profiles = get_build_profiles(hadoop_version, hive_profiles=True)
-    else:
-        test_profiles = get_build_profiles(hadoop_version)
+    hive_profiles = ("SQL" in test_modules)
+    test_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=hive_profiles)
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
@@ -473,7 +465,7 @@ def main():
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:"+os.environ.get("PATH")
+        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
@@ -497,7 +489,7 @@ def main():
     detect_binary_inop_with_mima()
 
     # test suites
-    test_modules = determine_test_modules(test_env)
+    test_modules = identify_changed_modules(test_env)
     run_scala_tests(build_tool, hadoop_version, test_modules)
     run_python_tests()
     run_sparkr_tests()
