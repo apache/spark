@@ -349,18 +349,6 @@ class StructField(DataType):
                            json["metadata"])
 
 
-class Foo:
-    def __init__(self):
-        """
-        Empty constructor to support new add interface.
-        """
-        self.fields = []
-
-    def append(self, b):
-        self.fields.append(b)
-        return self
-
-
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
