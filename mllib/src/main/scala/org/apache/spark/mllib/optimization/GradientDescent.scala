@@ -146,20 +146,20 @@ object GradientDescent extends Logging {
    * Sampling, and averaging the subgradients over this subset is performed using one standard
    * spark map-reduce in each iteration.
    *
-   * @param data - Input data for SGD. RDD of the set of data examples, each of
-   *               the form (label, [feature values]).
-   * @param gradient - Gradient object (used to compute the gradient of the loss function of
-   *                   one single data example)
-   * @param updater - Updater function to actually perform a gradient step in a given direction.
-   * @param stepSize - initial step size for the first step
-   * @param numIterations - number of iterations that SGD should be run.
-   * @param regParam - regularization parameter
-   * @param miniBatchFraction - fraction of the input data set that should be used for
-   *                            one iteration of SGD. Default value 1.0.
-   * @param convergenceTol - Minibatch iteration will end before numIterations if the
-   *                         difference between the current loss and the previous loss is less
-   *                         than this value. In measuring convergence, L2 norm is calculated.
-   *                         Default value 0.001. Must be between 0.0 and 1.0 inclusively.
+   * @param data Input data for SGD. RDD of the set of data examples, each of
+   *             the form (label, [feature values]).
+   * @param gradient Gradient object (used to compute the gradient of the loss function of
+   *                 one single data example)
+   * @param updater Updater function to actually perform a gradient step in a given direction.
+   * @param stepSize initial step size for the first step
+   * @param numIterations number of iterations that SGD should be run.
+   * @param regParam regularization parameter
+   * @param miniBatchFraction fraction of the input data set that should be used for
+   *                          one iteration of SGD. Default value 1.0.
+   * @param convergenceTol Minibatch iteration will end before numIterations if the relative
+   *                       difference between the current weight and the previous weight is less
+   *                       than this value. In measuring convergence, L2 norm is calculated.
+   *                       Default value 0.001. Must be between 0.0 and 1.0 inclusively.
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the
    *         stochastic loss computed for every iteration.
@@ -184,7 +184,6 @@ object GradientDescent extends Logging {
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
     // Record previous weight and current one to calculate solution vector difference
 
-    val initialWeightsNorm = norm(initialWeights.toBreeze.toDenseVector)
     var previousWeights: Option[Vector] = None
     var currentWeights: Option[Vector] = None
 
@@ -250,8 +249,8 @@ object GradientDescent extends Logging {
           currentWeights = Some(weights)
         }
         if (previousWeights != None && currentWeights != None) {
-          if (isConverged(previousWeights.get, currentWeights.get,
-            initialWeightsNorm, convergenceTol)) {
+          if (isConverged(previousWeights.get,
+            currentWeights.get, convergenceTol)) {
             converged = true
           }
         }
@@ -281,8 +280,10 @@ object GradientDescent extends Logging {
                                     regParam, miniBatchFraction, initialWeights, 0.001)
 
 
-  private def isConverged(previousWeights: Vector, currentWeights: Vector,
-                          initialWeightsNorm: Double, convergenceTol: Double): Boolean = {
+  private def isConverged(
+      previousWeights: Vector,
+      currentWeights: Vector,
+      convergenceTol: Double): Boolean = {
     // To compare with convergence tolerance.
     val previousBDV = previousWeights.toBreeze.toDenseVector
     val currentBDV = currentWeights.toBreeze.toDenseVector
@@ -290,7 +291,7 @@ object GradientDescent extends Logging {
     // This represents the difference of updated weights in the iteration.
     val solutionVecDiff: Double = norm(previousBDV - currentBDV)
 
-    solutionVecDiff < convergenceTol * initialWeightsNorm
+    solutionVecDiff < convergenceTol * norm(previousBDV)
   }
 
 }
