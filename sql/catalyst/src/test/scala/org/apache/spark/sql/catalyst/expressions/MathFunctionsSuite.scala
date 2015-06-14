@@ -211,6 +211,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     domain.foreach { case (v1, v2) =>
       checkEvaluation(Logarithm(Literal(v1), Literal(v2)), f(v1 + 0.0, v2 + 0.0), EmptyRow)
       checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
+      checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
     }
     checkEvaluation(
       Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
