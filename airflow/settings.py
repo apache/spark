@@ -36,7 +36,7 @@ Session = scoped_session(
     sessionmaker(autocommit=False, autoflush=False, bind=engine))
 
 # can't move this to configuration due to ConfigParser interpolation
-LOG_FORMAT =  \
+LOG_FORMAT = \
     '[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s'
 SIMPLE_LOG_FORMAT = \
     '%(asctime)s %(levelname)s - %(message)s'

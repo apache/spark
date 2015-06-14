@@ -3,6 +3,7 @@ import random
 
 from airflow import settings
 from airflow.models import Connection
+from airflow.utils import AirflowException
 
 
 class BaseHook(object):
@@ -22,7 +23,7 @@ class BaseHook(object):
             Connection).filter(
                 Connection.conn_id == conn_id).all()
         if not db:
-            raise Exception(
+            raise AirflowException(
                 "The conn_id `{0}` isn't defined".format(conn_id))
         session.expunge_all()
         session.close()

@@ -1,13 +1,5 @@
 #!/usr/bin/env python
-
-import airflow
-from airflow.configuration import conf
-from airflow.executors import DEFAULT_EXECUTOR
-from airflow import settings
-from airflow import utils
-from airflow import jobs
-from airflow.models import DagBag, TaskInstance, DagPickle
-
+import argparse
 import dateutil.parser
 from datetime import datetime
 import logging
@@ -15,7 +7,13 @@ import os
 import subprocess
 import sys
 
-import argparse
+import airflow
+from airflow import jobs, settings, utils
+from airflow.configuration import conf
+from airflow.executors import DEFAULT_EXECUTOR
+from airflow.models import DagBag, TaskInstance, DagPickle
+from airflow.utils import AirflowException
+
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
@@ -40,7 +38,7 @@ def backfill(args):
         format=settings.SIMPLE_LOG_FORMAT)
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
+        raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
 
     if args.start_date:
@@ -89,7 +87,7 @@ def run(args):
         if args.dag_id not in dagbag.dags:
             msg = 'DAG [{0}] could not be found'.format(args.dag_id)
             logging.error(msg)
-            raise Exception(msg)
+            raise AirflowException(msg)
         dag = dagbag.dags[args.dag_id]
         task = dag.get_task(task_id=args.task_id)
     else:
@@ -98,7 +96,7 @@ def run(args):
         dag_pickle = session.query(
             DagPickle).filter(DagPickle.id == args.pickle).first()
         if not dag_pickle:
-            raise Exception("Who hid the pickle!? [missing pickle]")
+            raise AirflowException("Who hid the pickle!? [missing pickle]")
         dag = dag_pickle.pickle
         task = dag.get_task(task_id=args.task_id)
 
@@ -166,7 +164,7 @@ def task_state(args):
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
+        raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
@@ -181,7 +179,7 @@ def list_dags(args):
 def list_tasks(args):
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
+        raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
     if args.tree:
         dag.tree_view()
@@ -195,7 +193,7 @@ def test(args):
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
+        raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
@@ -209,7 +207,7 @@ def clear(args):
     dagbag = DagBag(args.subdir)
 
     if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
+        raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
 
     if args.start_date:

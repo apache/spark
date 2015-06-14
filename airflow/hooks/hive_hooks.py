@@ -11,6 +11,7 @@ from thrift.protocol import TBinaryProtocol
 from hive_service import ThriftHive
 import pyhs2
 
+from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
 
@@ -61,7 +62,7 @@ class HiveCliHook(BaseHook):
                 sp.wait()
 
                 if sp.returncode:
-                    raise Exception(all_err)
+                    raise AirflowException(all_err)
 
     def load_file(
             self,
@@ -229,7 +230,7 @@ class HiveMetastoreHook(BaseHook):
         self.metastore._oprot.trans.open()
         table = self.metastore.get_table(dbname=schema, tbl_name=table_name)
         if len(table.partitionKeys) == 0:
-            raise Exception("The table isn't partitioned")
+            raise AirflowException("The table isn't partitioned")
         else:
             if filter:
                 parts = self.metastore.get_partitions_by_filter(
@@ -260,7 +261,7 @@ class HiveMetastoreHook(BaseHook):
         elif len(parts[0]) == 1:
             field = parts[0].keys()[0]
         elif not field:
-            raise Exception(
+            raise AirflowException(
                 "Please specify the field you want the max "
                 "value for")
 

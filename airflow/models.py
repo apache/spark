@@ -19,12 +19,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
+from airflow import settings, utils
 from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow.configuration import conf
-from airflow import settings
-from airflow import utils
-from airflow.utils import State
-from airflow.utils import apply_defaults, provide_session
+from airflow.utils import (
+    AirflowException, State, apply_defaults, provide_session)
 
 Base = declarative_base()
 ID_LEN = 250
@@ -745,7 +744,7 @@ class TaskInstance(Base):
                         '''Setting kill signal handler'''
                         logging.error("Killing subprocess")
                         task_copy.on_kill()
-                        raise Exception("Task received SIGTERM signal")
+                        raise AirflowException("Task received SIGTERM signal")
                     signal.signal(signal.SIGTERM, signal_handler)
 
                     self.render_templates()
@@ -852,7 +851,7 @@ class TaskInstance(Base):
                     result = {
                         k: rt(content[k], jinja_context) for k in content}
                 else:
-                    raise Exception("Type not supported for templating")
+                    raise AirflowException("Type not supported for templating")
                 setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
@@ -1200,7 +1199,7 @@ class BaseOperator(object):
         for t in self.get_direct_relatives():
             if task is t:
                 msg = "Cycle detect in DAG. Faulty task: {0}".format(task)
-                raise Exception(msg)
+                raise AirflowException(msg)
             else:
                 t.detect_downstream_cycle(task=task)
         return False
@@ -1240,7 +1239,7 @@ class BaseOperator(object):
 
     def append_only_new(self, l, item):
         if any([item is t for t in l]):
-            raise Exception(
+            raise AirflowException(
                 'Dependency {self}, {item} already registered'
                 ''.format(**locals()))
         else:
@@ -1251,7 +1250,7 @@ class BaseOperator(object):
             task_or_task_list = [task_or_task_list]
         for task in task_or_task_list:
             if not isinstance(task_or_task_list, list):
-                raise Exception('Expecting a task')
+                raise AirflowException('Expecting a task')
             if upstream:
                 self.append_only_new(task._downstream_list, self)
                 self.append_only_new(self._upstream_list, task)
@@ -1607,7 +1606,7 @@ class DAG(object):
         for task in self.tasks:
             if task.task_id == task_id:
                 return task
-        raise Exception("Task {task_id} not found".format(**locals()))
+        raise AirflowException("Task {task_id} not found".format(**locals()))
 
     def __cmp__(self, other):
         blacklist = {'_sa_instance_state', 'end_date', 'last_pickled', 'tasks'}
@@ -1664,12 +1663,12 @@ class DAG(object):
         :type task: task
         '''
         if not self.start_date and not task.start_date:
-            raise Exception("Task is missing the start_date parameter")
+            raise AirflowException("Task is missing the start_date parameter")
         if not task.start_date:
             task.start_date = self.start_date
 
         if task.task_id in [t.task_id for t in self.tasks]:
-            raise Exception(
+            raise AirflowException(
                 "Task id '{0}' has already been added "
                 "to the DAG ".format(task.task_id))
         else:

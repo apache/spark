@@ -1,6 +1,7 @@
 import logging
 from tempfile import NamedTemporaryFile
 
+from airflow.utils import AirflowException
 from airflow.hooks import HiveCliHook, S3Hook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -94,11 +95,11 @@ class S3ToHiveTransfer(BaseOperator):
         logging.info("Downloading S3 file")
         if self.wildcard_match:
             if not self.s3.check_for_wildcard_key(self.s3_key):
-                raise Exception("No key matches {0}".format(self.s3_key))
+                raise AirflowException("No key matches {0}".format(self.s3_key))
             s3_key_object = self.s3.get_wildcard_key(self.s3_key)
         else:
             if not self.s3.check_for_key(self.s3_key):
-                raise Exception(
+                raise AirflowException(
                     "The key {0} does not exists".format(self.s3_key))
             s3_key_object = self.s3.get_key(self.s3_key)
         with NamedTemporaryFile("w") as f:
@@ -131,7 +132,7 @@ class S3ToHiveTransfer(BaseOperator):
                                             "File headers:\n {header_list}\n"
                                             "Field names: \n {field_names}\n"
                                             "".format(**locals()))
-                            raise Exception("Headers do not match the "
+                            raise AirflowException("Headers do not match the "
                                             "field_dict keys")
                     with NamedTemporaryFile("w") as f_no_headers:
                         tmpf.seek(0)

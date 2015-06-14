@@ -2,6 +2,7 @@ from collections import OrderedDict
 import json
 import logging
 
+from airflow.utils import AirflowException
 from airflow.hooks import PrestoHook, HiveMetastoreHook, MySqlHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -126,7 +127,7 @@ class HiveStatsCollectionOperator(BaseOperator):
         row = hook.get_first(hql=sql)
         logging.info("Record: " + str(row))
         if not row:
-            raise Exception("The query returned None")
+            raise AirflowException("The query returned None")
 
         part_json = json.dumps(self.partition, sort_keys=True)
 

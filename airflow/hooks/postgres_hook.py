@@ -1,5 +1,7 @@
 import psycopg2
+
 from airflow import settings
+from airflow.utils import AirflowException
 from airflow.models import Connection
 
 
@@ -23,7 +25,7 @@ class PostgresHook(object):
                 Connection).filter(
                     Connection.conn_id == postgres_conn_id)
             if db.count() == 0:
-                raise Exception("The postgres_dbid you provided isn't defined")
+                raise AirflowException("The postgres_dbid you provided isn't defined")
             else:
                 db = db.all()[0]
             self.host = db.host

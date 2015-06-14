@@ -2,6 +2,7 @@ import logging
 from tempfile import NamedTemporaryFile
 import subprocess
 
+from airflow.utils import AirflowException
 from airflow.hooks import S3Hook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -63,7 +64,7 @@ class S3FileTransformOperator(BaseOperator):
         logging.info("Downloading source S3 file {0}"
                      "".format(self.source_s3_key))
         if not self.source_s3.check_for_key(self.source_s3_key):
-            raise Exception("The source key {0} does not exist"
+            raise AirflowException("The source key {0} does not exist"
                             "".format(self.source_s3_key))
         source_s3_key_object = self.source_s3.get_key(self.source_s3_key)
         with NamedTemporaryFile("w") as f_source, NamedTemporaryFile("w") as f_dest:
@@ -79,7 +80,7 @@ class S3FileTransformOperator(BaseOperator):
             logging.info("Transform script stdout "
                          "" + transform_script_stdoutdata)
             if transform_script_process.returncode > 0:
-                raise Exception("Transform script failed "
+                raise AirflowException("Transform script failed "
                                 "" + transform_script_stderrdata)
             else:
                 logging.info("Transform script successful."

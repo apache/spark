@@ -1,6 +1,8 @@
 from airflow import settings
+from airflow.utils import AirflowException
 from airflow.models import Connection
 from airflow.hooks.base_hook import BaseHook
+
 from pyhive import presto
 from pyhive.exc import DatabaseError
 
@@ -34,7 +36,7 @@ class PrestoHook(BaseHook):
                 Connection).filter(
                     Connection.conn_id == presto_conn_id)
             if db.count() == 0:
-                raise Exception("The presto_conn_id provided isn't defined")
+                raise AirflowException("The presto_conn_id provided isn't defined")
             else:
                 db = db.all()[0]
             self.host = db.host

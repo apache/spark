@@ -1,5 +1,6 @@
 import logging
 
+from airflow.utils import AirflowException
 from airflow.hooks import PrestoHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -35,10 +36,10 @@ class PrestoCheckOperator(BaseOperator):
         records = hook.get_first(hql=self.sql)
         logging.info("Record: " + str(records))
         if not records:
-            raise Exception("The query returned None")
+            raise AirflowException("The query returned None")
         elif not all([bool(r) for r in records]):
             exceptstr = "Test failed.\nQuery:\n{q}\nResults:\n{r!s}"
-            raise Exception(exceptstr.format(q=self.sql, r=records))
+            raise AirflowException(exceptstr.format(q=self.sql, r=records))
         logging.info("Success.")
 
 
@@ -93,7 +94,7 @@ class PrestoValueCheckOperator(BaseOperator):
         hook = PrestoHook(presto_conn_id=self.presto_conn_id)
         records = hook.get_first(hql=self.sql)
         if not records:
-            raise Exception("The query returned None")
+            raise AirflowException("The query returned None")
         test_results = []
         except_temp = ("Test failed.\nPass value:{self.pass_value}\n"
                        "Query:\n{self.sql}\nResults:\n{records!s}")
@@ -104,7 +105,7 @@ class PrestoValueCheckOperator(BaseOperator):
                 num_rec = [float(r) for r in records]
             except (ValueError, TypeError) as e:
                 cvestr = "Converting a result to float failed.\n"
-                raise Exception(cvestr+except_temp.format(**locals()))
+                raise AirflowException(cvestr+except_temp.format(**locals()))
             if self.has_tolerance:
                 tests = [
                     r / (1 + self.tol) <= self.pass_value <= r / (1 - self.tol)
@@ -112,7 +113,7 @@ class PrestoValueCheckOperator(BaseOperator):
             else:
                 tests = [r == self.pass_value for r in num_rec]
         if not all(tests):
-            raise Exception(except_temp.format(**locals()))
+            raise AirflowException(except_temp.format(**locals()))
 
 
 class PrestoIntervalCheckOperator(BaseOperator):
@@ -164,9 +165,9 @@ class PrestoIntervalCheckOperator(BaseOperator):
         logging.info('Executing SQL check: ' + self.sql1)
         row1 = hook.get_first(hql=self.sql1)
         if not row2:
-            raise Exception("The query {q} returned None").format(q=self.sql2)
+            raise AirflowException("The query {q} returned None").format(q=self.sql2)
         if not row1:
-            raise Exception("The query {q} returned None").format(q=self.sql1)
+            raise AirflowException("The query {q} returned None").format(q=self.sql1)
         current = dict(zip(self.metrics_sorted, row1))
         reference = dict(zip(self.metrics_sorted, row2))
         ratios = {}
@@ -192,5 +193,5 @@ class PrestoIntervalCheckOperator(BaseOperator):
             for k in failed_tests:
                 logging.warning(fstr.format(k=k, r=ratios[k],
                                 tr=self.metrics_thresholds[k]))
-            raise Exception(estr.format(", ".join(failed_tests)))
+            raise AirflowException(estr.format(", ".join(failed_tests)))
         logging.info("All tests have passed")

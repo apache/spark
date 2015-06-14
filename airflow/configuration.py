@@ -3,6 +3,9 @@ import errno
 import logging
 import os
 
+class AirflowConfigException(Exception):
+    pass
+
 defaults = {
     'core': {
         'unit_test_mode': False,
@@ -190,7 +193,7 @@ class ConfigParserWithDefaults(ConfigParser):
             return ConfigParser.get(self, section, key)
         except:
             if section not in d or key not in d[section]:
-                raise Exception(
+                raise AirflowConfigException(
                     "section/key [{section}/{key}] not found "
                     "in config".format(**locals()))
             else:
@@ -205,7 +208,7 @@ class ConfigParserWithDefaults(ConfigParser):
         elif val == "false":
             return False
         else:
-            Exception("Not a boolean.")
+            raise AirflowConfigException("Not a boolean.")
 
     def getint(self, section, key):
         return int(self.get(section, key))
@@ -218,7 +221,7 @@ def mkdir_p(path):
         if exc.errno == errno.EEXIST and os.path.isdir(path):
             pass
         else:
-            raise Exception('Had trouble creating a directory')
+            raise AirflowConfigException('Had trouble creating a directory')
 
 """
 Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
