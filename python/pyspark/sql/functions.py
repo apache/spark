@@ -408,11 +408,11 @@ def when(condition, value):
 def log(col, base=math.e):
     """Returns the first argument-based logarithm of the second argument.
 
-    >>> df.select(log(df.age, 10.0).alias('ten')).collect()
-    [Row(ten=0.30102999566398114), Row(ten=0.6989700043360187)]
+    >>> df.select(log(df.age, 10.0).alias('ten')).map(lambda l: round(l.ten, 5)).collect()
+    [0.30103, 0.69897]
 
-    >>> df.select(log(df.age).alias('e')).collect()
-    [Row(e=0.6931471805597018), Row(e=1.609437912433535)]
+    >>> df.select(log(df.age).alias('e')).map(lambda l: round(l.e, 5)).collect()
+    [0.69315, 1.60944]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.log(base, _to_java_column(col))
