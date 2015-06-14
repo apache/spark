@@ -34,16 +34,16 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SerializableWritable, SparkException, Partition => SparkPartition}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
