@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
@@ -26,7 +25,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
 
-abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 

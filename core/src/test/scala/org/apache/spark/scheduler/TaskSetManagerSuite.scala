@@ -22,8 +22,6 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{ManualClock, Utils}
@@ -146,7 +144,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]]("", stageId, 0) {
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
-class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf

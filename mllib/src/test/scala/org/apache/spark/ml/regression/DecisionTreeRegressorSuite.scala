@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
@@ -28,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 
-class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import DecisionTreeRegressorSuite.compareAPIs
 
@@ -69,7 +68,7 @@ class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
   // TODO: test("model save/load")   SPARK-6725
 }
 
-private[ml] object DecisionTreeRegressorSuite extends FunSuite {
+private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
 
   /**
    * Train 2 decision trees on the given dataset, one using the old API and one using the new API.

@@ -22,12 +22,14 @@ import java.util.Properties
 import org.apache.commons.lang3.SerializationUtils
 import org.scalatest.{BeforeAndAfterEach, Suite}
 
+import org.apache.spark.SparkFunSuite
+
 /**
  * Mixin for automatically resetting system properties that are modified in ScalaTest tests.
  * This resets the properties after each individual test.
  *
  * The order in which fixtures are mixed in affects the order in which they are invoked by tests.
- * If we have a suite `MySuite extends FunSuite with Foo with Bar`, then
+ * If we have a suite `MySuite extends SparkFunSuite with Foo with Bar`, then
  * Bar's `super` is Foo, so Bar's beforeEach() will and afterEach() methods will be invoked first
  * by the rest runner.
  *

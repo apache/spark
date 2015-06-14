@@ -32,7 +32,7 @@ import org.apache.spark._
  * Selenium tests for the Spark Web UI.
  */
 class UISeleniumSuite
-  extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 

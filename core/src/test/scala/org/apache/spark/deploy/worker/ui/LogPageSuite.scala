@@ -19,40 +19,56 @@ package org.apache.spark.deploy.worker.ui
 
 import java.io.{File, FileWriter}
 
-import org.mockito.Mockito.mock
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.PrivateMethodTester
 
-class LogPageSuite extends FunSuite with PrivateMethodTester {
+import org.apache.spark.SparkFunSuite
+
+class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("get logs simple") {
     val webui = mock(classOf[WorkerWebUI])
+    val tmpDir = new File(sys.props("java.io.tmpdir"))
+    val workDir = new File(tmpDir, "work-dir")
+    workDir.mkdir()
+    when(webui.workDir).thenReturn(workDir)
     val logPage = new LogPage(webui)
 
     // Prepare some fake log files to read later
     val out = "some stdout here"
     val err = "some stderr here"
-    val tmpDir = new File(sys.props("java.io.tmpdir"))
-    val tmpOut = new File(tmpDir, "stdout")
-    val tmpErr = new File(tmpDir, "stderr")
-    val tmpRand = new File(tmpDir, "random")
+    val tmpOut = new File(workDir, "stdout")
+    val tmpErr = new File(workDir, "stderr")
+    val tmpErrBad = new File(tmpDir, "stderr") // outside the working directory
+    val tmpOutBad = new File(tmpDir, "stdout")
+    val tmpRand = new File(workDir, "random")
     write(tmpOut, out)
     write(tmpErr, err)
+    write(tmpOutBad, out)
+    write(tmpErrBad, err)
     write(tmpRand, "1 6 4 5 2 7 8")
 
     // Get the logs. All log types other than "stderr" or "stdout" will be rejected
     val getLog = PrivateMethod[(String, Long, Long, Long)]('getLog)
     val (stdout, _, _, _) =
-      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "stdout", None, 100)
+      logPage invokePrivate getLog(workDir.getAbsolutePath, "stdout", None, 100)
     val (stderr, _, _, _) =
-      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "stderr", None, 100)
+      logPage invokePrivate getLog(workDir.getAbsolutePath, "stderr", None, 100)
     val (error1, _, _, _) =
-      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "random", None, 100)
+      logPage invokePrivate getLog(workDir.getAbsolutePath, "random", None, 100)
     val (error2, _, _, _) =
-      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "does-not-exist.txt", None, 100)
+      logPage invokePrivate getLog(workDir.getAbsolutePath, "does-not-exist.txt", None, 100)
+    // These files exist, but live outside the working directory
+    val (error3, _, _, _) =
+      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "stderr", None, 100)
+    val (error4, _, _, _) =
+      logPage invokePrivate getLog(tmpDir.getAbsolutePath, "stdout", None, 100)
     assert(stdout === out)
     assert(stderr === err)
-    assert(error1.startsWith("Error"))
-    assert(error2.startsWith("Error"))
+    assert(error1.startsWith("Error: Log type must be one of "))
+    assert(error2.startsWith("Error: Log type must be one of "))
+    assert(error3.startsWith("Error: invalid log directory"))
+    assert(error4.startsWith("Error: invalid log directory"))
   }
 
   /** Write the specified string to the file. */

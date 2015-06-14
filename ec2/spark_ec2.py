@@ -70,7 +70,7 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
     "1.3.0",
     "1.3.1",
-    "1.4.0"
+    "1.4.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -83,6 +83,7 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
+    "1.4.0": "0.6.4",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -90,7 +91,7 @@ DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
 # Default location to get the spark-ec2 scripts (and ami-list) from
 DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
-DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.4"
 
 
 def setup_external_libs(libs):
@@ -220,7 +221,8 @@ def parse_args():
              "(default: %default).")
     parser.add_option(
         "--hadoop-major-version", default="1",
-        help="Major version of Hadoop (default: %default)")
+        help="Major version of Hadoop. Valid options are 1 (Hadoop 1.0.4), 2 (CDH 4.2.0), yarn " +
+             "(Hadoop 2.4.0) (default: %default)")
     parser.add_option(
         "-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
         help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -272,7 +274,8 @@ def parse_args():
         help="Launch fresh slaves, but use an existing stopped master if possible")
     parser.add_option(
         "--worker-instances", type="int", default=1,
-        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: %default)")
+        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES. Not used if YARN " +
+             "is used as Hadoop major version (default: %default)")
     parser.add_option(
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
@@ -762,6 +765,10 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     if opts.ganglia:
         modules.append('ganglia')
 
+    # Clear SPARK_WORKER_INSTANCES if running on YARN
+    if opts.hadoop_major_version == "yarn":
+        opts.worker_instances = ""
+
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
     print("Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
@@ -995,6 +1002,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 
     master_addresses = [get_dns_name(i, opts.private_ips) for i in master_nodes]
     slave_addresses = [get_dns_name(i, opts.private_ips) for i in slave_nodes]
+    worker_instances_str = "%d" % opts.worker_instances if opts.worker_instances else ""
     template_vars = {
         "master_list": '\n'.join(master_addresses),
         "active_master": active_master,
@@ -1008,7 +1016,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_version": spark_v,
         "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
-        "spark_worker_instances": "%d" % opts.worker_instances,
+        "spark_worker_instances": worker_instances_str,
         "spark_master_opts": opts.master_opts
     }
 

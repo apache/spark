@@ -140,7 +140,8 @@ function renderDagViz(forJob) {
 
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
-    var nodeId = VizConstants.nodePrefix + d3.select(this).text();
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
@@ -235,7 +236,7 @@ function renderDagVizForJob(svgContainer) {
     // them separately later. Note that we cannot draw them now because we need to
     // put these edges in a separate container that is on top of all stage graphs.
     metadata.selectAll(".incoming-edge").each(function(v) {
-      var edge = d3.select(this).text().split(","); // e.g. 3,4 => [3, 4]
+      var edge = d3.select(this).text().trim().split(","); // e.g. 3,4 => [3, 4]
       crossStageEdges.push(edge);
     });
   });

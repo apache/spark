@@ -28,6 +28,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -121,21 +122,28 @@ private[spark] class Client(
     } catch {
       case e: Throwable =>
         if (appId != null) {
-          val appStagingDir = getAppStagingDir(appId)
-          try {
-            val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
-            val stagingDirPath = new Path(appStagingDir)
-            val fs = FileSystem.get(hadoopConf)
-            if (!preserveFiles && fs.exists(stagingDirPath)) {
-              logInfo("Deleting staging directory " + stagingDirPath)
-              fs.delete(stagingDirPath, true)
-            }
-          } catch {
-            case ioe: IOException =>
-              logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
-          }
+          cleanupStagingDir(appId)
         }
         throw e
+    }
+  }
+
+  /**
+   * Cleanup application staging directory.
+   */
+  private def cleanupStagingDir(appId: ApplicationId): Unit = {
+    val appStagingDir = getAppStagingDir(appId)
+    try {
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      val stagingDirPath = new Path(appStagingDir)
+      val fs = FileSystem.get(hadoopConf)
+      if (!preserveFiles && fs.exists(stagingDirPath)) {
+        logInfo("Deleting staging directory " + stagingDirPath)
+        fs.delete(stagingDirPath, true)
+      }
+    } catch {
+      case ioe: IOException =>
+        logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
     }
   }
 
@@ -764,6 +772,9 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+          case NonFatal(e) =>
+            logError(s"Failed to contact YARN for application $appId.", e)
+            return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
 
@@ -782,6 +793,7 @@ private[spark] class Client(
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
+        cleanupStagingDir(appId)
         return (state, report.getFinalApplicationStatus)
       }
 

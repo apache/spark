@@ -19,15 +19,14 @@ package org.apache.spark.mllib.classification
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
 
-class StreamingLogisticRegressionSuite extends FunSuite with TestSuiteBase {
+class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 30000
@@ -158,5 +157,22 @@ class StreamingLogisticRegressionSuite extends FunSuite with TestSuiteBase {
     // assert that prediction error improves, ensuring that the updated model is being used
     val error = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints).toList
     assert(error.head > 0.8 & error.last < 0.2)
+  }
+
+  // Test empty RDDs in a stream
+  test("handling empty RDDs in a stream") {
+    val model = new StreamingLogisticRegressionWithSGD()
+      .setInitialWeights(Vectors.dense(-0.1))
+      .setStepSize(0.01)
+      .setNumIterations(10)
+    val numBatches = 10
+    val emptyInput = Seq.empty[Seq[LabeledPoint]]
+    val ssc = setupStreams(emptyInput,
+      (inputDStream: DStream[LabeledPoint]) => {
+        model.trainOn(inputDStream)
+        model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
+      }
+    )
+    val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
   }
 }

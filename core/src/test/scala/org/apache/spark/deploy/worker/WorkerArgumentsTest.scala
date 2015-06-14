@@ -18,11 +18,10 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.SparkConf
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 
-class WorkerArgumentsTest extends FunSuite {
+class WorkerArgumentsTest extends SparkFunSuite {
 
   test("Memory can't be set to 0 when cmd line args leave off M or G") {
     val conf = new SparkConf

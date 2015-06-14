@@ -47,6 +47,10 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
+    // Check that weird parameters are passed correctly.
+    parameters("option_with_underscores")
+    parameters("option.with.dots")
+
     AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
   }
 }
@@ -121,7 +125,9 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
 
@@ -152,7 +158,9 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
   }
@@ -354,7 +362,9 @@ class TableScanSuite extends DataSourceTest {
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',
-       |  to '10'
+       |  to '10',
+       |  option_with_underscores 'someval',
+       |  option.with.dots 'someval'
        |)
        """.stripMargin)
 

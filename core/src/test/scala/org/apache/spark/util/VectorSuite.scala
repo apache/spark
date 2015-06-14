@@ -19,13 +19,13 @@ package org.apache.spark.util
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
 /**
  * Tests org.apache.spark.util.Vector functionality
  */
 @deprecated("suppress compile time deprecation warning", "1.0.0")
-class VectorSuite extends FunSuite {
+class VectorSuite extends SparkFunSuite {
 
   def verifyVector(vector: Vector, expectedLength: Int): Unit = {
     assert(vector.length == expectedLength)

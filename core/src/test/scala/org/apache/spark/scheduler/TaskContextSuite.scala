@@ -21,7 +21,6 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.mockito.Mockito._
 import org.mockito.Matchers.any
 
-import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -29,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
 
 
-class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
   test("calls TaskCompletionListener after failure") {
     TaskContextSuite.completed = false

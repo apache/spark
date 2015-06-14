@@ -21,14 +21,15 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 import org.apache.spark.sql.types._
 import org.h2.jdbc.JdbcSQLException
-import org.scalatest.{FunSuite, BeforeAndAfter}
+import org.scalatest.BeforeAndAfter
 import TestSQLContext._
 import TestSQLContext.implicits._
 
-class JDBCSuite extends FunSuite with BeforeAndAfter {
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
@@ -408,6 +409,17 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
+  }
+
+  test("quote column names by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+
+    val columns = Seq("abc", "key")
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
   }
 
   test("Dialect unregister") {

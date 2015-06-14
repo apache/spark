@@ -17,11 +17,9 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.rdd.RDD
 
-class ImplicitOrderingSuite extends FunSuite with LocalSparkContext {
+class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
   // Tests that PairRDDFunctions grabs an implicit Ordering in various cases where it should.
   test("basic inference of Orderings"){
     sc = new SparkContext("local", "test")

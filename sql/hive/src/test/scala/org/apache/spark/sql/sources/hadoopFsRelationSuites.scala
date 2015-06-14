@@ -21,9 +21,8 @@ import java.io.File
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
@@ -502,7 +501,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 }
 
-class CommitFailureTestRelationSuite extends FunSuite with SQLTestUtils {
+class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
   import TestHive.implicits._
 
   override val sqlContext = TestHive
@@ -593,6 +592,21 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
       checkAnswer(read.format("parquet").load(path), df)
+    }
+  }
+
+  test("SPARK-8079: Avoid NPE thrown from BaseWriterContainer.abortJob") {
+    withTempPath { dir =>
+      intercept[AnalysisException] {
+        // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
+        // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
+        // the bug.  Please refer to spark-8079 for more details.
+        range(1, 10)
+          .withColumnRenamed("id", "a b")
+          .write
+          .format("parquet")
+          .save(dir.getCanonicalPath)
+      }
     }
   }
 }

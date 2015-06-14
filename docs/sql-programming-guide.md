@@ -1475,7 +1475,7 @@ expressed in HiveQL.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc);
+HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc.sc);
 
 sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
 sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
@@ -1783,6 +1783,13 @@ that these options will be deprecated in future release as more optimizations ar
     <td>200</td>
     <td>
       Configures the number of partitions to use when shuffling data for joins or aggregations.
+    </td>
+  </tr>
+   <tr>
+    <td><code>spark.sql.planner.externalSort</code></td>
+    <td>false</td>
+    <td>
+      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
     </td>
   </tr>
 </table>

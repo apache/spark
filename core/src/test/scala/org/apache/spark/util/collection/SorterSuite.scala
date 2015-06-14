@@ -20,11 +20,10 @@ package org.apache.spark.util.collection
 import java.lang.{Float => JFloat, Integer => JInteger}
 import java.util.{Arrays, Comparator}
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.random.XORShiftRandom
 
-class SorterSuite extends FunSuite {
+class SorterSuite extends SparkFunSuite {
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)

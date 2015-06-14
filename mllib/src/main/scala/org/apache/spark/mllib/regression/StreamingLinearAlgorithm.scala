@@ -83,21 +83,23 @@ abstract class StreamingLinearAlgorithm[
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
     data.foreachRDD { (rdd, time) =>
-      val initialWeights =
-        model match {
-          case Some(m) =>
-            m.weights
-          case None =>
-            val numFeatures = rdd.first().features.size
-            Vectors.dense(numFeatures)
+      if (!rdd.isEmpty) {
+        val initialWeights =
+          model match {
+            case Some(m) =>
+              m.weights
+            case None =>
+              val numFeatures = rdd.first().features.size
+              Vectors.dense(numFeatures)
+          }
+        model = Some(algorithm.run(rdd, initialWeights))
+        logInfo(s"Model updated at time ${time.toString}")
+        val display = model.get.weights.size match {
+          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
+          case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
-      model = Some(algorithm.run(rdd, initialWeights))
-      logInfo("Model updated at time %s".format(time.toString))
-      val display = model.get.weights.size match {
-        case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
-        case _ => model.get.weights.toArray.mkString("[", ",", "]")
+        logInfo(s"Current model: weights, ${display}")
       }
-      logInfo("Current model: weights, %s".format (display))
     }
   }
 
