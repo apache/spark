@@ -24,7 +24,6 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -176,9 +175,8 @@ class CodeGenContext {
    * Generate code for compare expression in Java
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
-    // Use signum() to keep any small difference bwteen float/double
-    case FloatType | DoubleType => s"(int)java.lang.Math.signum($c1 - $c2)"
-    case dt: DataType if isPrimitiveType(dt) => s"(int)($c1 - $c2)"
+    // use c1 - c2 may overflow
+    case dt: DataType if isPrimitiveType(dt) => s"(int)($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case other => s"$c1.compare($c2)"
   }
