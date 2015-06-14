@@ -26,7 +26,7 @@ MKDIR %SPARK_HOME%\R\lib
 
 R.exe CMD INSTALL --library="%SPARK_HOME%\R\lib"  %SPARK_HOME%\R\pkg\
 
-REM Zip the SparkR package so that it can be distributed to worker nodes on YARN
+rem Zip the SparkR package so that it can be distributed to worker nodes on YARN
 pushd %SPARK_HOME%\R\lib
 jar cfM "%SPARK_HOME%\R\lib\sparkr.zip" SparkR
 popd
