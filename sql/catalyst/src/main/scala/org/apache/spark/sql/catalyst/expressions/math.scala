@@ -215,8 +215,6 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
-  override def dataType: DataType = DoubleType
 
   override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
