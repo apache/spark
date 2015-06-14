@@ -376,7 +376,7 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
                 parent_module_globals[attr] = getattr(module, attr)
                 imported_attrs += [attr]
         except:
-            logging.warning("Couldn't import module " + mod)
+            logging.debug("Couldn't import module " + mod)
     return imported_attrs
 
 
