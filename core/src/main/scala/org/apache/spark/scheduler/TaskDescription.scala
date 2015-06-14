@@ -27,6 +27,7 @@ import org.apache.spark.util.SerializableBuffer
  */
 private[spark] class TaskDescription(
     val taskId: Long,
+    val attemptNumber: Int,
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet

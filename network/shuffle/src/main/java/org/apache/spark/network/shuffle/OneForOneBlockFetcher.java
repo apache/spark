@@ -29,7 +29,6 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
-import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Simple wrapper on top of a TransportClient which interprets each chunk as a whole block, and

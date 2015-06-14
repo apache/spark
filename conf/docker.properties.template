@@ -1,0 +1,3 @@
+spark.mesos.executor.docker.image: <image built from `../docker/spark-mesos/Dockerfile`>
+spark.mesos.executor.docker.volumes: /usr/local/lib:/host/usr/local/lib:ro
+spark.mesos.executor.home: /opt/spark

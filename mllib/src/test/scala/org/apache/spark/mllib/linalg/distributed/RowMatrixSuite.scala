@@ -20,12 +20,12 @@ package org.apache.spark.mllib.linalg.distributed
 import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -96,7 +96,7 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("similar columns") {
-    val colMags = Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94))
+    val colMags = Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94))
     val expected = BDM(
       (0.0, 54.0, 72.0),
       (0.0, 0.0, 78.0),
@@ -171,6 +171,14 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("validate k in svd") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      intercept[IllegalArgumentException] {
+        mat.computeSVD(-1)
+      }
+    }
+  }
+
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
   }
@@ -224,7 +232,7 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
         assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
         assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
-        assert(summary.normL2 === Vectors.dense(Math.sqrt(126), Math.sqrt(66), Math.sqrt(94)),
+        assert(summary.normL2 === Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94)),
           "magnitude mismatch.")
         assert(summary.normL1 === Vectors.dense(18.0, 12.0, 16.0), "L1 norm mismatch")
       }
@@ -232,7 +240,7 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class RowMatrixClusterSuite extends FunSuite with LocalClusterSparkContext {
+class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   var mat: RowMatrix = _
 

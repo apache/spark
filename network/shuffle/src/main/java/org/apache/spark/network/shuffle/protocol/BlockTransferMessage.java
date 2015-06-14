@@ -67,7 +67,8 @@ public abstract class BlockTransferMessage implements Encodable {
 
   /** Serializes the 'type' byte followed by the message itself. */
   public byte[] toByteArray() {
-    ByteBuf buf = Unpooled.buffer(encodedLength());
+    // Allow room for encoded message, plus the type byte
+    ByteBuf buf = Unpooled.buffer(encodedLength() + 1);
     buf.writeByte(type().id);
     encode(buf);
     assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();

@@ -21,13 +21,11 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, HashMap, Map}
-import scala.concurrent.Await
+import scala.collection.mutable.{HashMap, HashSet, Map}
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
-import akka.actor._
-import akka.pattern.ask
-
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
@@ -38,14 +36,15 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-/** Actor class for MapOutputTrackerMaster */
-private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
-  extends Actor with ActorLogReceive with Logging {
+/** RpcEndpoint class for MapOutputTrackerMaster */
+private[spark] class MapOutputTrackerMasterEndpoint(
+    override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
+  extends RpcEndpoint with Logging {
   val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
-  override def receiveWithLogging = {
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
-      val hostPort = sender.path.address.hostPort
+      val hostPort = context.sender.address.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
       val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
       val serializedSize = mapOutputStatuses.size
@@ -53,39 +52,38 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
         val msg = s"Map output statuses were $serializedSize bytes which " +
           s"exceeds spark.akka.frameSize ($maxAkkaFrameSize bytes)."
 
-        /* For SPARK-1244 we'll opt for just logging an error and then throwing an exception.
-         * Note that on exception the actor will just restart. A bigger refactoring (SPARK-1239)
-         * will ultimately remove this entire code path. */
+        /* For SPARK-1244 we'll opt for just logging an error and then sending it to the sender.
+         * A bigger refactoring (SPARK-1239) will ultimately remove this entire code path. */
         val exception = new SparkException(msg)
         logError(msg, exception)
-        throw exception
+        context.sendFailure(exception)
+      } else {
+        context.reply(mapOutputStatuses)
       }
-      sender ! mapOutputStatuses
 
     case StopMapOutputTracker =>
-      logInfo("MapOutputTrackerActor stopped!")
-      sender ! true
-      context.stop(self)
+      logInfo("MapOutputTrackerMasterEndpoint stopped!")
+      context.reply(true)
+      stop()
   }
 }
 
 /**
  * Class that keeps track of the location of the map output of
  * a stage. This is abstract because different versions of MapOutputTracker
- * (driver and worker) use different HashMap to store its metadata.
+ * (driver and executor) use different HashMap to store its metadata.
  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
-  private val timeout = AkkaUtils.askTimeout(conf)
 
-  /** Set to the MapOutputTrackerActor living on the driver. */
-  var trackerActor: ActorRef = _
+  /** Set to the MapOutputTrackerMasterEndpoint living on the driver. */
+  var trackerEndpoint: RpcEndpointRef = _
 
   /**
-   * This HashMap has different behavior for the master and the workers.
+   * This HashMap has different behavior for the driver and the executors.
    *
-   * On the master, it serves as the source of map outputs recorded from ShuffleMapTasks.
-   * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
-   * master's corresponding HashMap.
+   * On the driver, it serves as the source of map outputs recorded from ShuffleMapTasks.
+   * On the executors, it simply serves as a cache, in which a miss triggers a fetch from the
+   * driver's corresponding HashMap.
    *
    * Note: because mapStatuses is accessed concurrently, subclasses should make sure it's a
    * thread-safe map.
@@ -99,17 +97,16 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
 
-  /** Remembers which map output locations are currently being fetched on a worker. */
+  /** Remembers which map output locations are currently being fetched on an executor. */
   private val fetching = new HashSet[Int]
 
   /**
-   * Send a message to the trackerActor and get its result within a default timeout, or
+   * Send a message to the trackerEndpoint and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
-  protected def askTracker(message: Any): Any = {
+  protected def askTracker[T: ClassTag](message: Any): T = {
     try {
-      val future = trackerActor.ask(message)(timeout)
-      Await.result(future, timeout)
+      trackerEndpoint.askWithRetry[T](message)
     } catch {
       case e: Exception =>
         logError("Error communicating with MapOutputTracker", e)
@@ -117,9 +114,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
+  /** Send a one-way message to the trackerEndpoint, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    val response = askTracker(message)
+    val response = askTracker[Boolean](message)
     if (response != true) {
       throw new SparkException(
         "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
@@ -136,14 +133,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
-        if (fetching.contains(shuffleId)) {
-          // Someone else is fetching it; wait for them to be done
-          while (fetching.contains(shuffleId)) {
-            try {
-              fetching.wait()
-            } catch {
-              case e: InterruptedException =>
-            }
+        // Someone else is fetching it; wait for them to be done
+        while (fetching.contains(shuffleId)) {
+          try {
+            fetching.wait()
+          } catch {
+            case e: InterruptedException =>
           }
         }
 
@@ -158,11 +153,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
       if (fetchedStatuses == null) {
         // We won the race to fetch the output locs; do so
-        logInfo("Doing the fetch; tracker actor = " + trackerActor)
+        logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:
         try {
-          val fetchedBytes =
-            askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
+          val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
@@ -198,8 +192,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /**
    * Called from executors to update the epoch number, potentially clearing old outputs
-   * because of a fetch failure. Each worker task calls this with the latest epoch
-   * number on the master at the time it was created.
+   * because of a fetch failure. Each executor task calls this with the latest epoch
+   * number on the driver at the time it was created.
    */
   def updateEpoch(newEpoch: Long) {
     epochLock.synchronized {
@@ -231,7 +225,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private var cacheEpoch = epoch
 
   /**
-   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the master,
+   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the driver,
    * so that statuses are dropped only by explicit de-registering or by TTL-based cleaning (if set).
    * Other than these two scenarios, nothing should be dropped from this HashMap.
    */
@@ -290,6 +284,53 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
+  /**
+   * Return a list of locations that each have fraction of map output greater than the specified
+   * threshold.
+   *
+   * @param shuffleId id of the shuffle
+   * @param reducerId id of the reduce task
+   * @param numReducers total number of reducers in the shuffle
+   * @param fractionThreshold fraction of total map output size that a location must have
+   *                          for it to be considered large.
+   *
+   * This method is not thread-safe.
+   */
+  def getLocationsWithLargestOutputs(
+      shuffleId: Int,
+      reducerId: Int,
+      numReducers: Int,
+      fractionThreshold: Double)
+    : Option[Array[BlockManagerId]] = {
+
+    if (mapStatuses.contains(shuffleId)) {
+      val statuses = mapStatuses(shuffleId)
+      if (statuses.nonEmpty) {
+        // HashMap to add up sizes of all blocks at the same location
+        val locs = new HashMap[BlockManagerId, Long]
+        var totalOutputSize = 0L
+        var mapIdx = 0
+        while (mapIdx < statuses.length) {
+          val status = statuses(mapIdx)
+          val blockSize = status.getSizeForBlock(reducerId)
+          if (blockSize > 0) {
+            locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
+            totalOutputSize += blockSize
+          }
+          mapIdx = mapIdx + 1
+        }
+        val topLocs = locs.filter { case (loc, size) =>
+          size.toDouble / totalOutputSize >= fractionThreshold
+        }
+        // Return if we have any locations which satisfy the required threshold
+        if (topLocs.nonEmpty) {
+          return Some(topLocs.map(_._1).toArray)
+        }
+      }
+    }
+    None
+  }
+
   def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1
@@ -329,7 +370,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   override def stop() {
     sendTracker(StopMapOutputTracker)
     mapStatuses.clear()
-    trackerActor = null
+    trackerEndpoint = null
     metadataCleaner.cancel()
     cachedSerializedStatuses.clear()
   }
@@ -341,7 +382,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 }
 
 /**
- * MapOutputTracker for the workers, which fetches map output information from the driver's
+ * MapOutputTracker for the executors, which fetches map output information from the driver's
  * MapOutputTrackerMaster.
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
@@ -351,24 +392,33 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
 private[spark] object MapOutputTracker extends Logging {
 
+  val ENDPOINT_NAME = "MapOutputTracker"
+
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
   // generally be pretty compressible because many map outputs will be on the same hostname.
   def serializeMapStatuses(statuses: Array[MapStatus]): Array[Byte] = {
     val out = new ByteArrayOutputStream
     val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
-    // Since statuses can be modified in parallel, sync on it
-    statuses.synchronized {
-      objOut.writeObject(statuses)
+    Utils.tryWithSafeFinally {
+      // Since statuses can be modified in parallel, sync on it
+      statuses.synchronized {
+        objOut.writeObject(statuses)
+      }
+    } {
+      objOut.close()
     }
-    objOut.close()
     out.toByteArray
   }
 
   // Opposite of serializeMapStatuses.
   def deserializeMapStatuses(bytes: Array[Byte]): Array[MapStatus] = {
     val objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(bytes)))
-    objIn.readObject().asInstanceOf[Array[MapStatus]]
+    Utils.tryWithSafeFinally {
+      objIn.readObject().asInstanceOf[Array[MapStatus]]
+    } {
+      objIn.close()
+    }
   }
 
   // Convert an array of MapStatuses to locations and sizes for a given reduce ID. If

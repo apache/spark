@@ -18,10 +18,10 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
-import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
+import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
@@ -107,7 +107,7 @@ class Accumulable[R, T] (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue = value_
+  def localValue: R = value_
 
   /**
    * Set the accumulator's value; only allowed on master.
@@ -135,7 +135,7 @@ class Accumulable[R, T] (
     Accumulators.register(this, false)
   }
 
-  override def toString = if (value_ == null) "null" else value_.toString
+  override def toString: String = if (value_ == null) "null" else value_.toString
 }
 
 /**
@@ -228,7 +228,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @tparam T result type
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-    extends Accumulable[T,T](initialValue, param, name) {
+  extends Accumulable[T, T](initialValue, param, name) {
 
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 }
@@ -255,22 +255,22 @@ object AccumulatorParam {
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
-    def zero(initialValue: Double) = 0.0
+    def zero(initialValue: Double): Double = 0.0
   }
 
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
-    def zero(initialValue: Int) = 0
+    def zero(initialValue: Int): Int = 0
   }
 
   implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
-    def addInPlace(t1: Long, t2: Long) = t1 + t2
-    def zero(initialValue: Long) = 0L
+    def addInPlace(t1: Long, t2: Long): Long = t1 + t2
+    def zero(initialValue: Long): Long = 0L
   }
 
   implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
-    def addInPlace(t1: Float, t2: Float) = t1 + t2
-    def zero(initialValue: Float) = 0f
+    def addInPlace(t1: Float, t2: Float): Float = t1 + t2
+    def zero(initialValue: Float): Float = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
@@ -278,11 +278,24 @@ object AccumulatorParam {
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
-private object Accumulators {
-  // TODO: Use soft references? => need to make readObject work properly then
-  val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
-  var lastId: Long = 0
+private[spark] object Accumulators extends Logging {
+  /**
+   * This global map holds the original accumulator objects that are created on the driver.
+   * It keeps weak references to these objects so that accumulators can be garbage-collected
+   * once the RDDs and user-code that reference them are cleaned up.
+   */
+  val originals = Map[Long, WeakReference[Accumulable[_, _]]]()
+
+  /**
+   * This thread-local map holds per-task copies of accumulators; it is used to collect the set
+   * of accumulator updates to send back to the driver when tasks complete. After tasks complete,
+   * this map is cleared by `Accumulators.clear()` (see Executor.scala).
+   */
+  private val localAccums = new ThreadLocal[Map[Long, Accumulable[_, _]]]() {
+    override protected def initialValue() = Map[Long, Accumulable[_, _]]()
+  }
+
+  private var lastId: Long = 0
 
   def newId(): Long = synchronized {
     lastId += 1
@@ -291,24 +304,29 @@ private object Accumulators {
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
-      originals(a.id) = a
+      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
     } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+      localAccums.get()(a.id) = a
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
   def clear() {
     synchronized {
-      localAccums.remove(Thread.currentThread)
+      localAccums.get.clear()
+    }
+  }
+
+  def remove(accId: Long) {
+    synchronized {
+      originals.remove(accId)
     }
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
+    for ((id, accum) <- localAccums.get) {
       ret(id) = accum.localValue
     }
     return ret
@@ -318,11 +336,20 @@ private object Accumulators {
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
       if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
+        // Since we are now storing weak references, we must check whether the underlying data
+        // is valid.
+        originals(id).get match {
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case None =>
+            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
+        }
+      } else {
+        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
       }
     }
   }
 
-  def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
-  def stringifyValue(value: Any) = "%s".format(value)
+  def stringifyPartialValue(partialValue: Any): String = "%s".format(partialValue)
+
+  def stringifyValue(value: Any): String = "%s".format(value)
 }

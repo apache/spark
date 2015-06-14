@@ -17,17 +17,15 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{SerializerInstance, Serializer}
 import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
@@ -106,6 +104,8 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] val shuffleMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
 
+  private[this] val serializerInstance: SerializerInstance = serializer.newInstance()
+
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
    * longer place fetched blocks into [[results]].
@@ -156,8 +156,8 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             results.put(new SuccessFetchResult(BlockId(blockId), sizeMap(blockId), buf))
-            shuffleMetrics.remoteBytesRead += buf.size
-            shuffleMetrics.remoteBlocksFetched += 1
+            shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBlocksFetched(1)
           }
           logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
@@ -233,7 +233,8 @@ final class ShuffleBlockFetcherIterator(
       val blockId = iter.next()
       try {
         val buf = blockManager.getBlockData(blockId)
-        shuffleMetrics.localBlocksFetched += 1
+        shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
         results.put(new SuccessFetchResult(blockId, 0, buf))
       } catch {
@@ -277,7 +278,7 @@ final class ShuffleBlockFetcherIterator(
     currentResult = results.take()
     val result = currentResult
     val stopFetchWait = System.currentTimeMillis()
-    shuffleMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
+    shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
     result match {
       case SuccessFetchResult(_, size, _) => bytesInFlight -= size
@@ -298,7 +299,7 @@ final class ShuffleBlockFetcherIterator(
         // the scheduler gets a FetchFailedException.
         Try(buf.createInputStream()).map { is0 =>
           val is = blockManager.wrapForCompression(blockId, is0)
-          val iter = serializer.newInstance().deserializeStream(is).asIterator
+          val iter = serializerInstance.deserializeStream(is).asKeyValueIterator
           CompletionIterator[Any, Iterator[Any]](iter, {
             // Once the iterator is exhausted, release the buffer and set currentResult to null
             // so we don't release it again in cleanup.

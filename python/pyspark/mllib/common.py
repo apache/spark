@@ -15,14 +15,19 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version >= '3':
+    long = int
+    unicode = str
+
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
-from py4j.java_collections import MapConverter, ListConverter, JavaArray, JavaList
+from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-
+from pyspark.sql import DataFrame, SQLContext
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
@@ -36,7 +41,7 @@ _float_str_mapping = {
 
 def _new_smart_decode(obj):
     if isinstance(obj, float):
-        s = unicode(obj)
+        s = str(obj)
         return _float_str_mapping.get(s, s)
     return _old_smart_decode(obj)
 
@@ -70,21 +75,19 @@ def _py2java(sc, obj):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
-    elif isinstance(obj, dict):
-        obj = MapConverter().convert(obj, sc._gateway._gateway_client)
-    elif isinstance(obj, (list, tuple)):
-        obj = ListConverter().convert(obj, sc._gateway._gateway_client)
+    elif isinstance(obj, list):
+        obj = ListConverter().convert([_py2java(sc, x) for x in obj], sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass
-    elif isinstance(obj, (int, long, float, bool, basestring)):
+    elif isinstance(obj, (int, long, float, bool, bytes, unicode)):
         pass
     else:
-        bytes = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.SerDe.loads(bytes)
+        data = bytearray(PickleSerializer().dumps(obj))
+        obj = sc._jvm.SerDe.loads(data)
     return obj
 
 
-def _java2py(sc, r):
+def _java2py(sc, r, encoding="bytes"):
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -96,6 +99,9 @@ def _java2py(sc, r):
             jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
+        if clsName == 'DataFrame':
+            return DataFrame(r, SQLContext(sc))
+
         if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
@@ -104,8 +110,8 @@ def _java2py(sc, r):
             except Py4JJavaError:
                 pass  # not pickable
 
-    if isinstance(r, bytearray):
-        r = PickleSerializer().loads(str(r))
+    if isinstance(r, (bytearray, bytes)):
+        r = PickleSerializer().loads(bytes(r), encoding=encoding)
     return r
 
 
@@ -136,3 +142,20 @@ class JavaModelWrapper(object):
     def call(self, name, *a):
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
+
+
+def inherit_doc(cls):
+    """
+    A decorator that makes a class inherit documentation from its parents.
+    """
+    for name, func in vars(cls).items():
+        # only inherit docstring for public functions
+        if name.startswith("_"):
+            continue
+        if not func.__doc__:
+            for parent in cls.__bases__:
+                parent_func = getattr(parent, name, None)
+                if parent_func and getattr(parent_func, "__doc__", None):
+                    func.__doc__ = parent_func.__doc__
+                    break
+    return cls

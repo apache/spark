@@ -17,77 +17,79 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.ql.parse.{SemanticAnalyzer, ASTNode}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.{SparkPlan, Command, LeafNode}
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.hive.client.{HiveTable, HiveColumn}
+import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation, HiveMetastoreTypes}
 
 /**
- * :: Experimental ::
  * Create table and insert the query result into it.
- * @param database the database name of the new relation
- * @param tableName the table name of the new relation
+ * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param allowExisting allow continue working if it's already exists, otherwise
  *                      raise exception
- * @param extra the extra information for this Operator, it should be the
- *              ASTNode object for extracting the CreateTableDesc.
-
  */
-@Experimental
+private[hive]
 case class CreateTableAsSelect(
-    database: String,
-    tableName: String,
+    tableDesc: HiveTable,
     query: LogicalPlan,
-    allowExisting: Boolean,
-    extra: ASTNode) extends LeafNode with Command {
+    allowExisting: Boolean)
+  extends RunnableCommand {
 
-  def output = Seq.empty
+  def database: String = tableDesc.database
+  def tableName: String = tableDesc.name
 
-  private[this] def sc = sqlContext.asInstanceOf[HiveContext]
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    lazy val metastoreRelation: MetastoreRelation = {
+      import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+      import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+      import org.apache.hadoop.io.Text
+      import org.apache.hadoop.mapred.TextInputFormat
 
-  // A lazy computing of the metastoreRelation
-  private[this] lazy val metastoreRelation: MetastoreRelation = {
-    // Get the CreateTableDesc from Hive SemanticAnalyzer
-    val sa = new SemanticAnalyzer(sc.hiveconf)
+      val withFormat =
+        tableDesc.copy(
+          inputFormat =
+            tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
+          outputFormat =
+            tableDesc.outputFormat
+              .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
+          serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
 
-    sa.analyze(extra, new Context(sc.hiveconf))
-    val desc = sa.getQB().getTableDesc
-    // Create Hive Table
-    sc.catalog.createTable(database, tableName, query.output, allowExisting, Some(desc))
+      val withSchema = if (withFormat.schema.isEmpty) {
+        // Hive doesn't support specifying the column list for target table in CTAS
+        // However we don't think SparkSQL should follow that.
+        tableDesc.copy(schema =
+        query.output.map(c =>
+          HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)))
+      } else {
+        withFormat
+      }
 
-    // Get the Metastore Relation
-    sc.catalog.lookupRelation(Some(database), tableName, None) match {
-      case r: MetastoreRelation => r
+      hiveContext.catalog.client.createTable(withSchema)
+
+      // Get the Metastore Relation
+      hiveContext.catalog.lookupRelation(Seq(database, tableName), None) match {
+        case r: MetastoreRelation => r
+      }
     }
-  }
-
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    if (sc.catalog.tableExists(Some(database), tableName)) {
+    if (hiveContext.catalog.tableExists(Seq(database, tableName))) {
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
-        throw
-          new org.apache.hadoop.hive.metastore.api.AlreadyExistsException(s"$database.$tableName")
+        throw new AnalysisException(s"$database.$tableName already exists.")
       }
     } else {
-      sc.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
+      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
     }
 
-    Seq.empty[Row]
-  }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
+    Seq.empty[InternalRow]
   }
 
   override def argString: String = {

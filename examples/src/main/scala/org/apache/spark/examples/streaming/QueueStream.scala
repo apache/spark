@@ -22,7 +22,6 @@ import scala.collection.mutable.SynchronizedQueue
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 
 object QueueStream {
 

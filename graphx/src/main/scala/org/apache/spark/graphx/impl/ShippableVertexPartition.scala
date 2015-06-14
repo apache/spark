@@ -74,8 +74,8 @@ object ShippableVertexPartition {
    * Implicit conversion to allow invoking `VertexPartitionBase` operations directly on a
    * `ShippableVertexPartition`.
    */
-  implicit def shippablePartitionToOps[VD: ClassTag](partition: ShippableVertexPartition[VD]) =
-    new ShippableVertexPartitionOps(partition)
+  implicit def shippablePartitionToOps[VD: ClassTag](partition: ShippableVertexPartition[VD])
+    : ShippableVertexPartitionOps[VD] = new ShippableVertexPartitionOps(partition)
 
   /**
    * Implicit evidence that `ShippableVertexPartition` is a member of the

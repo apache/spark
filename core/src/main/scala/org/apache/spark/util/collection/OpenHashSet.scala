@@ -20,6 +20,8 @@ package org.apache.spark.util.collection
 import scala.reflect._
 import com.google.common.hash.Hashing
 
+import org.apache.spark.annotation.Private
+
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
  * removed.
@@ -37,7 +39,7 @@ import com.google.common.hash.Hashing
  * It uses quadratic probing with a power-of-2 hash table size, which is guaranteed
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
-private[spark]
+@Private
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
@@ -85,7 +87,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
 
   protected var _bitset = new BitSet(_capacity)
 
-  def getBitSet = _bitset
+  def getBitSet: BitSet = _bitset
 
   // Init of the array in constructor (instead of in declaration) to work around a Scala compiler
   // specialization bug that would generate two arrays (one for Object and one for specialized T).
@@ -110,6 +112,14 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     rehashIfNeeded(k, grow, move)
   }
 
+  def union(other: OpenHashSet[T]): OpenHashSet[T] = {
+    val iterator = other.iterator
+    while (iterator.hasNext) {
+      add(iterator.next())
+    }
+    this
+  }
+
   /**
    * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
    * The caller is responsible for calling rehashIfNeeded.
@@ -122,7 +132,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    */
   def addWithoutResize(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
-    var i = 1
+    var delta = 1
     while (true) {
       if (!_bitset.get(pos)) {
         // This is a new key.
@@ -134,14 +144,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
         // Found an existing key.
         return pos
       } else {
-        val delta = i
+        // quadratic probing with values increase by 1, 2, 3, ...
         pos = (pos + delta) & _mask
-        i += 1
+        delta += 1
       }
     }
-    // Never reached here
-    assert(INVALID_POS != INVALID_POS)
-    INVALID_POS
+    throw new RuntimeException("Should never reach here.")
   }
 
   /**
@@ -163,27 +171,25 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    */
   def getPos(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
-    var i = 1
-    val maxProbe = _data.size
-    while (i < maxProbe) {
+    var delta = 1
+    while (true) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
       } else if (k == _data(pos)) {
         return pos
       } else {
-        val delta = i
+        // quadratic probing with values increase by 1, 2, 3, ...
         pos = (pos + delta) & _mask
-        i += 1
+        delta += 1
       }
     }
-    // Never reached here
-    INVALID_POS
+    throw new RuntimeException("Should never reach here.")
   }
 
   /** Return the value at the specified position. */
   def getValue(pos: Int): T = _data(pos)
 
-  def iterator = new Iterator[T] {
+  def iterator: Iterator[T] = new Iterator[T] {
     var pos = nextPos(0)
     override def hasNext: Boolean = pos != INVALID_POS
     override def next(): T = {

@@ -19,88 +19,78 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import akka.actor._
-import akka.pattern.ask
-import akka.util.Timeout
-
 import org.mockito.Mockito.{mock, when}
-
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
+import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
+import org.apache.spark.rpc.RpcEnv
+import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.util._
 
 
-class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
-  with PrivateMethodTester {
+class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
+  with PrivateMethodTester with ResetSystemProperties {
 
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
-  var actorSystem: ActorSystem = null
+  var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
-  var oldArch: String = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  conf.set("spark.kryoserializer.buffer.mb", "1")
+  conf.set("spark.kryoserializer.buffer", "1m")
   val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
-  def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
+  def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+    val manager = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     manager.initialize("app-id")
     manager
   }
 
-  before {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
+  override def beforeEach(): Unit = {
+    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    oldArch = System.setProperty("os.arch", "amd64")
+    System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
-    conf.set("spark.driver.port", boundPort.toString)
+    conf.set("spark.driver.port", rpcEnv.address.port.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
-    master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf, true)
+    master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
   }
 
-  after {
+  override def afterEach(): Unit = {
     if (store != null) {
       store.stop()
       store = null
@@ -109,24 +99,18 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       store2.stop()
       store2 = null
     }
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
+    rpcEnv.shutdown()
+    rpcEnv.awaitTermination()
+    rpcEnv = null
     master = null
-
-    if (oldArch != null) {
-      conf.set("os.arch", oldArch)
-    } else {
-      System.clearProperty("os.arch")
-    }
-
-    System.clearProperty("spark.test.useCompressedOops")
   }
 
   test("StorageLevel object caching") {
     val level1 = StorageLevel(false, false, false, false, 3)
-    val level2 = StorageLevel(false, false, false, false, 3) // this should return the same object as level1
-    val level3 = StorageLevel(false, false, false, false, 2) // this should return a different object
+    // this should return the same object as level1
+    val level2 = StorageLevel(false, false, false, false, 3)
+    // this should return a different object
+    val level3 = StorageLevel(false, false, false, false, 2)
     assert(level2 === level1, "level2 is not same as level1")
     assert(level2.eq(level1), "level2 is not the same object as level1")
     assert(level3 != level1, "level3 is same as level1")
@@ -157,6 +141,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(id2_.eq(id1), "Deserialized id2 is not the same object as original id1")
   }
 
+  test("BlockManagerId.isDriver() backwards-compatibility with legacy driver ids (SPARK-6716)") {
+    assert(BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "XXX", 1).isDriver)
+    assert(BlockManagerId(SparkContext.LEGACY_DRIVER_IDENTIFIER, "XXX", 1).isDriver)
+    assert(!BlockManagerId("notADriverIdentifier", "XXX", 1).isDriver)
+  }
+
   test("master + 1 manager interaction") {
     store = makeBlockManager(20000)
     val a1 = new Array[Byte](4000)
@@ -179,8 +169,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
-    store.dropFromMemory("a1", null)
-    store.dropFromMemory("a2", null)
+    store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
@@ -366,10 +356,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    implicit val timeout = Timeout(30, TimeUnit.SECONDS)
-    val reregister = !Await.result(
-      master.driverActor ? BlockManagerHeartbeat(store.blockManagerId),
-      timeout.duration).asInstanceOf[Boolean]
+    val reregister = !master.driverEndpoint.askWithRetry[Boolean](
+      BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister == true)
   }
 
@@ -422,8 +410,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       t2.join()
       t3.join()
 
-      store.dropFromMemory("a1", null)
-      store.dropFromMemory("a2", null)
+      store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
       store.waitForAsyncReregister()
     }
   }
@@ -440,19 +428,19 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list1Get = store.get("list1")
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
-    assert(list1Get.get.inputMetrics.bytesRead === list1SizeEstimate)
-    assert(list1Get.get.inputMetrics.readMethod === DataReadMethod.Memory)
+    assert(list1Get.get.bytes === list1SizeEstimate)
+    assert(list1Get.get.readMethod === DataReadMethod.Memory)
     val list2MemoryGet = store.get("list2memory")
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
-    assert(list2MemoryGet.get.inputMetrics.bytesRead === list2SizeEstimate)
-    assert(list2MemoryGet.get.inputMetrics.readMethod === DataReadMethod.Memory)
+    assert(list2MemoryGet.get.bytes === list2SizeEstimate)
+    assert(list2MemoryGet.get.readMethod === DataReadMethod.Memory)
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
-    assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
-    assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
+    assert(list2DiskGet.get.bytes > 0)
+    assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
   }
 
   test("in-memory LRU storage") {
@@ -538,6 +526,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   test("tachyon storage") {
     // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
     val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
+    conf.set(ExternalBlockStore.BLOCK_MANAGER_NAME, ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)
     if (tachyonUnitTestEnabled) {
       store = makeBlockManager(1200)
       val a1 = new Array[Byte](400)
@@ -794,7 +783,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
+    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
       0)
 
@@ -816,7 +805,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // Create a non-trivial (not all zeros) byte array
     var counter = 0.toByte
-    def incr = {counter = (counter + 1).toByte; counter;}
+    def incr: Byte = {counter = (counter + 1).toByte; counter;}
     val bytes = Array.fill[Byte](1000)(incr)
     val byteBuffer = ByteBuffer.wrap(bytes)
 
@@ -826,14 +815,14 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     // be nice to refactor classes involved in disk storage in a way that
     // allows for easier testing.
     val blockManager = mock(classOf[BlockManager])
-    when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
+    when(blockManager.conf).thenReturn(conf.clone.set(confKey, "0"))
     val diskBlockManager = new DiskBlockManager(blockManager, conf)
 
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val mapped = diskStoreMapped.getBytes(blockId).get
 
-    when(blockManager.conf).thenReturn(conf.clone.set(confKey, (1000 * 1000).toString))
+    when(blockManager.conf).thenReturn(conf.clone.set(confKey, "1m"))
     val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val notMapped = diskStoreNotMapped.getBytes(blockId).get
@@ -970,8 +959,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store.putIterator("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
-    assert(store.master.getMatchingBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askSlaves = false).size
+      === 3)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("list1"), askSlaves = false).size
+      === 1)
 
     // insert some more blocks
     store.putIterator("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
@@ -979,8 +970,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store.putIterator("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
-    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size
+      === 1)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = true).size
+      === 3)
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
     blockIds.foreach { blockId =>
@@ -1073,6 +1066,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     var unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
+    memoryStore.releasePendingUnrollMemoryForThisThread()
 
     // Unroll with not enough space. This should succeed after kicking out someBlock1.
     store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
@@ -1083,6 +1077,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(droppedBlocks.size === 1)
     assert(droppedBlocks.head._1 === TestBlockId("someBlock1"))
     droppedBlocks.clear()
+    memoryStore.releasePendingUnrollMemoryForThisThread()
 
     // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
     // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
@@ -1102,8 +1097,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val memoryStore = store.memoryStore
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
-    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
-    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
@@ -1156,8 +1151,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val diskStore = store.diskStore
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
-    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
-    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
     store.putIterator("b1", smallIterator, memAndDisk)
@@ -1199,7 +1194,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val memOnly = StorageLevel.MEMORY_ONLY
     val memoryStore = store.memoryStore
     val smallList = List.fill(40)(new Array[Byte](100))
-    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisThread === 0)
 
     // All unroll memory used is released because unrollSafely returned an array
@@ -1229,5 +1224,31 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(unrollMemoryAfterB5 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
+  }
+
+  test("lazily create a big ByteBuffer to avoid OOM if it cannot be put into MemoryStore") {
+    store = makeBlockManager(12000)
+    val memoryStore = store.memoryStore
+    val blockId = BlockId("rdd_3_10")
+    val result = memoryStore.putBytes(blockId, 13000, () => {
+      fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
+    })
+    assert(result.size === 13000)
+    assert(result.data === null)
+    assert(result.droppedBlocks === Nil)
+  }
+
+  test("put a small ByteBuffer to MemoryStore") {
+    store = makeBlockManager(12000)
+    val memoryStore = store.memoryStore
+    val blockId = BlockId("rdd_3_10")
+    var bytes: ByteBuffer = null
+    val result = memoryStore.putBytes(blockId, 10000, () => {
+      bytes = ByteBuffer.allocate(10000)
+      bytes
+    })
+    assert(result.size === 10000)
+    assert(result.data === Right(bytes))
+    assert(result.droppedBlocks === Nil)
   }
 }

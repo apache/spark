@@ -113,7 +113,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Collect the neighbor vertex attributes for each vertex.
    *
    * @note This function could be highly inefficient on power-law
-   * graphs where high degree vertices may force a large ammount of
+   * graphs where high degree vertices may force a large amount of
    * information to be collected to a single location.
    *
    * @param edgeDirection the direction along which to collect
@@ -124,18 +124,18 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
     val nbrs = edgeDirection match {
       case EdgeDirection.Either =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => {
             ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr)))
             ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr)))
           },
           (a, b) => a ++ b, TripletFields.All)
       case EdgeDirection.In =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr))),
           (a, b) => a ++ b, TripletFields.Src)
       case EdgeDirection.Out =>
-        graph.aggregateMessages[Array[(VertexId,VD)]](
+        graph.aggregateMessages[Array[(VertexId, VD)]](
           ctx => ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr))),
           (a, b) => a ++ b, TripletFields.Dst)
       case EdgeDirection.Both =>
@@ -187,7 +187,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
 
   /**
    * Join the vertices with an RDD and then apply a function from the
-   * the vertex and RDD entry to a new vertex value.  The input table
+   * vertex and RDD entry to a new vertex value.  The input table
    * should contain at most one entry for each vertex.  If no entry is
    * provided the map function is skipped and the old value is used.
    *
@@ -253,7 +253,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
-      vpred: (VertexId, VD2) => Boolean = (v:VertexId, d:VD2) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD2) => Boolean = (v: VertexId, d: VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
   }
 
@@ -276,6 +276,32 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       }
     }
    retVal
+  }
+
+  /**
+   * Convert bi-directional edges into uni-directional ones.
+   * Some graph algorithms (e.g., TriangleCount) assume that an input graph
+   * has its edges in canonical direction.
+   * This function rewrites the vertex ids of edges so that srcIds are bigger
+   * than dstIds, and merges the duplicated edges.
+   *
+   * @param mergeFunc the user defined reduce function which should
+   * be commutative and associative and is used to combine the output
+   * of the map phase
+   *
+   * @return the resulting graph with canonical edges
+   */
+  def convertToCanonicalEdges(
+      mergeFunc: (ED, ED) => ED = (e1, e2) => e1): Graph[VD, ED] = {
+    val newEdges =
+      graph.edges
+        .map {
+          case e if e.srcId < e.dstId => ((e.srcId, e.dstId), e.attr)
+          case e => ((e.dstId, e.srcId), e.attr)
+        }
+        .reduceByKey(mergeFunc)
+        .map(e => new Edge(e._1._1, e._1._2, e._2))
+    Graph(graph.vertices, newEdges)
   }
 
   /**
@@ -330,7 +356,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
@@ -344,6 +370,31 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergence(graph, tol, resetProb)
+  }
+
+
+  /**
+   * Run personalized PageRank for a given vertex, such that all random walks
+   * are started relative to the source node.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank$#runUntilConvergenceWithOptions]]
+   */
+  def personalizedPageRank(src: VertexId, tol: Double,
+    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    PageRank.runUntilConvergenceWithOptions(graph, tol, resetProb, Some(src))
+  }
+
+  /**
+   * Run Personalized PageRank for a fixed number of iterations with
+   * with all iterations originating at the source node
+   * returning a graph with vertex attributes
+   * containing the PageRank and edge attributes the normalized edge weight.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank$#runWithOptions]]
+   */
+  def staticPersonalizedPageRank(src: VertexId, numIter: Int,
+    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    PageRank.runWithOptions(graph, numIter, resetProb, Some(src))
   }
 
   /**

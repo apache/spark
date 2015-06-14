@@ -18,23 +18,27 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
+import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-class ColumnTypeSuite extends FunSuite with Logging {
+
+class ColumnTypeSuite extends SparkFunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
     val checks = Map(
-      INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4, BOOLEAN -> 1,
-      STRING -> 8, DATE -> 8, TIMESTAMP -> 12, BINARY -> 16, GENERIC -> 16)
+      INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
+      FIXED_DECIMAL(15, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 8,
+      BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -56,22 +60,23 @@ class ColumnTypeSuite extends FunSuite with Logging {
       }
     }
 
-    checkActualSize(INT,       Int.MaxValue,      4)
-    checkActualSize(SHORT,     Short.MaxValue,    2)
-    checkActualSize(LONG,      Long.MaxValue,     8)
-    checkActualSize(BYTE,      Byte.MaxValue,     1)
-    checkActualSize(DOUBLE,    Double.MaxValue,   8)
-    checkActualSize(FLOAT,     Float.MaxValue,    4)
-    checkActualSize(BOOLEAN,   true,              1)
-    checkActualSize(STRING,    "hello",           4 + "hello".getBytes("utf-8").length)
-    checkActualSize(DATE,      new Date(0L),      8)
-    checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
+    checkActualSize(INT, Int.MaxValue, 4)
+    checkActualSize(SHORT, Short.MaxValue, 2)
+    checkActualSize(LONG, Long.MaxValue, 8)
+    checkActualSize(BYTE, Byte.MaxValue, 1)
+    checkActualSize(DOUBLE, Double.MaxValue, 8)
+    checkActualSize(FLOAT, Float.MaxValue, 4)
+    checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
+    checkActualSize(BOOLEAN, true, 1)
+    checkActualSize(STRING, UTF8String.fromString("hello"), 4 + "hello".getBytes("utf-8").length)
+    checkActualSize(DATE, 0, 4)
+    checkActualSize(TIMESTAMP, 0L, 8)
 
     val binary = Array.fill[Byte](4)(0: Byte)
-    checkActualSize(BINARY,  binary, 4 + 4)
+    checkActualSize(BINARY, binary, 4 + 4)
 
     val generic = Map(1 -> "a")
-    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 11)
+    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
   }
 
   testNativeColumnType[BooleanType.type](
@@ -93,13 +98,21 @@ class ColumnTypeSuite extends FunSuite with Logging {
 
   testNativeColumnType[DoubleType.type](DOUBLE, _.putDouble(_), _.getDouble)
 
+  testNativeColumnType[DecimalType](
+    FIXED_DECIMAL(15, 10),
+    (buffer: ByteBuffer, decimal: Decimal) => {
+      buffer.putLong(decimal.toUnscaledLong)
+    },
+    (buffer: ByteBuffer) => {
+      Decimal(buffer.getLong(), 15, 10)
+    })
+
   testNativeColumnType[FloatType.type](FLOAT, _.putFloat(_), _.getFloat)
 
   testNativeColumnType[StringType.type](
     STRING,
-    (buffer: ByteBuffer, string: String) => {
-
-      val bytes = string.getBytes("utf-8")
+    (buffer: ByteBuffer, string: UTF8String) => {
+      val bytes = string.getBytes
       buffer.putInt(bytes.length)
       buffer.put(bytes)
     },
@@ -107,7 +120,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
       val length = buffer.getInt()
       val bytes = new Array[Byte](length)
       buffer.get(bytes)
-      new String(bytes, "utf-8")
+      UTF8String.fromBytes(bytes)
     })
 
   testColumnType[BinaryType.type, Array[Byte]](
@@ -148,12 +161,47 @@ class ColumnTypeSuite extends FunSuite with Logging {
     }
   }
 
-  def testNativeColumnType[T <: NativeType](
-      columnType: NativeColumnType[T],
-      putter: (ByteBuffer, T#JvmType) => Unit,
-      getter: (ByteBuffer) => T#JvmType): Unit = {
+  test("CUSTOM") {
+    val conf = new SparkConf()
+    conf.set("spark.kryo.registrator", "org.apache.spark.sql.columnar.Registrator")
+    val serializer = new SparkSqlSerializer(conf).newInstance()
 
-    testColumnType[T, T#JvmType](columnType, putter, getter)
+    val buffer = ByteBuffer.allocate(512)
+    val obj = CustomClass(Int.MaxValue, Long.MaxValue)
+    val serializedObj = serializer.serialize(obj).array()
+
+    GENERIC.append(serializer.serialize(obj).array(), buffer)
+    buffer.rewind()
+
+    val length = buffer.getInt
+    assert(length === serializedObj.length)
+    assert(13 == length) // id (1) + int (4) + long (8)
+
+    val genericSerializedObj = SparkSqlSerializer.serialize(obj)
+    assert(length != genericSerializedObj.length)
+    assert(length < genericSerializedObj.length)
+
+    assertResult(obj, "Custom deserialized object didn't equal the original object") {
+      val bytes = new Array[Byte](length)
+      buffer.get(bytes, 0, length)
+      serializer.deserialize(ByteBuffer.wrap(bytes))
+    }
+
+    buffer.rewind()
+    buffer.putInt(serializedObj.length).put(serializedObj)
+
+    assertResult(obj, "Custom deserialized object didn't equal the original object") {
+      buffer.rewind()
+      serializer.deserialize(ByteBuffer.wrap(GENERIC.extract(buffer)))
+    }
+  }
+
+  def testNativeColumnType[T <: AtomicType](
+      columnType: NativeColumnType[T],
+      putter: (ByteBuffer, T#InternalType) => Unit,
+      getter: (ByteBuffer) => T#InternalType): Unit = {
+
+    testColumnType[T, T#InternalType](columnType, putter, getter)
   }
 
   def testColumnType[T <: DataType, JvmType](
@@ -205,5 +253,37 @@ class ColumnTypeSuite extends FunSuite with Logging {
     }
     if (sb.nonEmpty) sb.setLength(sb.length - 1)
     sb.toString()
+  }
+
+  test("column type for decimal types with different precision") {
+    (1 to 18).foreach { i =>
+      assertResult(FIXED_DECIMAL(i, 0)) {
+        ColumnType(DecimalType(i, 0))
+      }
+    }
+
+    assertResult(GENERIC) {
+      ColumnType(DecimalType(19, 0))
+    }
+  }
+}
+
+private[columnar] final case class CustomClass(a: Int, b: Long)
+
+private[columnar] object CustomerSerializer extends Serializer[CustomClass] {
+  override def write(kryo: Kryo, output: Output, t: CustomClass) {
+    output.writeInt(t.a)
+    output.writeLong(t.b)
+  }
+  override def read(kryo: Kryo, input: Input, aClass: Class[CustomClass]): CustomClass = {
+    val a = input.readInt()
+    val b = input.readLong()
+    CustomClass(a, b)
+  }
+}
+
+private[columnar] final class Registrator extends KryoRegistrator {
+  override def registerClasses(kryo: Kryo) {
+    kryo.register(classOf[CustomClass], CustomerSerializer)
   }
 }

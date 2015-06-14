@@ -31,10 +31,9 @@ import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
-  val workerActor = parent.worker.self
-  val worker = parent.worker
-  val timeout = parent.timeout
+private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
+  private val workerActor = parent.worker.self
+  private val timeout = parent.timeout
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
@@ -134,7 +133,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
       <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.command.arguments(1)}</td>
+      <td>{driver.driverDesc.command.arguments(2)}</td>
       <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}

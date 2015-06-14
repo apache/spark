@@ -62,11 +62,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * @param subsamplingRate Fraction of the training data used for learning decision tree.
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                      maintain a separate RDD of node Id cache for each row.
- * @param checkpointDir If the node Id cache is used, it will help to checkpoint
- *                      the node Id cache periodically. This is the checkpoint directory
- *                      to be used for the node Id cache.
  * @param checkpointInterval How often to checkpoint when the node Id cache gets updated.
- *                           E.g. 10 means that the cache will get checkpointed every 10 updates.
+ *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
+ *                           the checkpoint directory is not set in
+ *                           [[org.apache.spark.SparkContext]], this setting is ignored.
  */
 @Experimental
 class Strategy (
@@ -82,13 +81,15 @@ class Strategy (
     @BeanProperty var maxMemoryInMB: Int = 256,
     @BeanProperty var subsamplingRate: Double = 1,
     @BeanProperty var useNodeIdCache: Boolean = false,
-    @BeanProperty var checkpointDir: Option[String] = None,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
-  def isMulticlassClassification =
+  def isMulticlassClassification: Boolean = {
     algo == Classification && numClasses > 2
-  def isMulticlassWithCategoricalFeatures
-    = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+  }
+
+  def isMulticlassWithCategoricalFeatures: Boolean = {
+    isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+  }
 
   /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
@@ -156,13 +157,16 @@ class Strategy (
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
+    require(subsamplingRate > 0 && subsamplingRate <= 1,
+      s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
+      s"$subsamplingRate")
   }
 
   /** Returns a shallow copy of this instance. */
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointDir, checkpointInterval)
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
   }
 }
 
@@ -173,11 +177,19 @@ object Strategy {
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
    * @param algo  "Classification" or "Regression"
    */
-  def defaultStrategy(algo: String): Strategy = algo match {
-    case "Classification" =>
+  def defaultStrategy(algo: String): Strategy = {
+    defaultStategy(Algo.fromString(algo))
+  }
+
+  /**
+   * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
+   * @param algo Algo.Classification or Algo.Regression
+   */
+  def defaultStategy(algo: Algo): Strategy = algo match {
+    case Algo.Classification =>
       new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
         numClasses = 2)
-    case "Regression" =>
+    case Algo.Regression =>
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }

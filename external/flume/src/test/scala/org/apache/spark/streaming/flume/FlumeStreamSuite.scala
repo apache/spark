@@ -19,31 +19,31 @@ package org.apache.spark.streaming.flume
 
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
-import java.nio.charset.Charset
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
+import org.apache.commons.lang3.RandomUtils
 import org.apache.flume.source.avro
 import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestOutputStream}
-import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted}
 import org.apache.spark.util.Utils
 
-class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
+class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
   val conf = new SparkConf().setMaster("local[4]").setAppName("FlumeStreamSuite")
 
   var ssc: StreamingContext = null
@@ -76,11 +76,12 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
 
   /** Find a free port */
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
-    })._2
+    }, conf)._2
   }
 
   /** Setup and start the streaming context */
@@ -108,7 +109,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
 
     val inputEvents = input.map { item =>
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(item.getBytes("UTF-8")))
+      event.setBody(ByteBuffer.wrap(item.getBytes(Charsets.UTF_8)))
       event.setHeaders(Map[CharSequence, CharSequence]("test" -> "header"))
       event
     }
@@ -137,21 +138,22 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
       val status = client.appendBatch(inputEvents.toList)
       status should be (avro.Status.OK)
     }
-    
-    val decoder = Charset.forName("UTF-8").newDecoder()    
+
     eventually(timeout(10 seconds), interval(100 milliseconds)) {
       val outputEvents = outputBuffer.flatten.map { _.event }
       outputEvents.foreach {
         event =>
           event.getHeaders.get("test") should be("header")
       }
-      val output = outputEvents.map(event => decoder.decode(event.getBody()).toString)
+      val output = outputEvents.map(event => new String(event.getBody.array(), Charsets.UTF_8))
       output should be (input)
     }
   }
 
   /** Class to create socket channel with compression */
-  private class CompressionChannelFactory(compressionLevel: Int) extends NioClientSocketChannelFactory {
+  private class CompressionChannelFactory(compressionLevel: Int)
+    extends NioClientSocketChannelFactory {
+
     override def newChannel(pipeline: ChannelPipeline): SocketChannel = {
       val encoder = new ZlibEncoder(compressionLevel)
       pipeline.addFirst("deflater", encoder)

@@ -19,8 +19,7 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
@@ -28,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliCellSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
@@ -39,7 +38,7 @@ import org.apache.spark.streaming.dstream.DStream
  */
 object MLUtils {
 
-  private[util] lazy val EPSILON = {
+  private[mllib] lazy val EPSILON = {
     var eps = 1.0
     while ((1.0 + (eps / 2.0)) != 1.0) {
       eps /= 2.0
@@ -83,6 +82,18 @@ object MLUtils {
           val value = indexAndValue(1).toDouble
           (index, value)
         }.unzip
+
+        // check if indices are one-based and in ascending order
+        var previous = -1
+        var i = 0
+        val indicesLength = indices.length
+        while (i < indicesLength) {
+          val current = indices(i)
+          require(current > previous, "indices should be one-based and in ascending order" )
+          previous = current
+          i += 1
+        }
+
         (label, indices.toArray, values.toArray)
       }
 
@@ -154,10 +165,12 @@ object MLUtils {
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
-      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
-        s"${i + 1}:$v"
+      val sb = new StringBuilder(label.toString)
+      features.foreachActive { case (i, v) =>
+        sb += ' '
+        sb ++= s"${i + 1}:$v"
       }
-      (Iterator(label) ++ featureStrings).mkString(" ")
+      sb.mkString
     }
     dataStr.saveAsTextFile(dir)
   }
@@ -257,12 +270,28 @@ object MLUtils {
    * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
   def appendBias(vector: Vector): Vector = {
-    val vector1 = vector.toBreeze match {
-      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
-      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
-      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    vector match {
+      case dv: DenseVector =>
+        val inputValues = dv.values
+        val inputLength = inputValues.length
+        val outputValues = Array.ofDim[Double](inputLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputLength)
+        outputValues(inputLength) = 1.0
+        Vectors.dense(outputValues)
+      case sv: SparseVector =>
+        val inputValues = sv.values
+        val inputIndices = sv.indices
+        val inputValuesLength = inputValues.length
+        val dim = sv.size
+        val outputValues = Array.ofDim[Double](inputValuesLength + 1)
+        val outputIndices = Array.ofDim[Int](inputValuesLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputValuesLength)
+        System.arraycopy(inputIndices, 0, outputIndices, 0, inputValuesLength)
+        outputValues(inputValuesLength) = 1.0
+        outputIndices(inputValuesLength) = dim
+        Vectors.sparse(dim + 1, outputIndices, outputValues)
+      case _ => throw new IllegalArgumentException(s"Do not support vector type ${vector.getClass}")
     }
-    Vectors.fromBreeze(vector1)
   }
 
   /**
@@ -314,13 +343,27 @@ object MLUtils {
       val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
         (sqDist + EPSILON)
       if (precisionBound2 > precision) {
-        // TODO: breezeSquaredDistance is slow,
-        // so we should replace it with our own implementation.
-        sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+        sqDist = Vectors.sqdist(v1, v2)
       }
     } else {
-      sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+      sqDist = Vectors.sqdist(v1, v2)
     }
     sqDist
+  }
+
+  /**
+   * When `x` is positive and large, computing `math.log(1 + math.exp(x))` will lead to arithmetic
+   * overflow. This will happen when `x > 709.78` which is not a very large number.
+   * It can be addressed by rewriting the formula into `x + math.log1p(math.exp(-x))` when `x > 0`.
+   *
+   * @param x a floating-point value as input.
+   * @return the result of `math.log(1 + math.exp(x))`.
+   */
+  private[spark] def log1pExp(x: Double): Double = {
+    if (x > 0) {
+      x + math.log1p(math.exp(-x))
+    } else {
+      math.log1p(math.exp(x))
+    }
   }
 }

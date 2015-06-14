@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
@@ -30,7 +29,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
-  def apply(input: Row): Row = {
+  def apply(input: InternalRow): InternalRow = {
     val outputArray = new Array[Any](exprArray.length)
     var i = 0
     while (i < exprArray.length) {
@@ -40,7 +39,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     new GenericRow(outputArray)
   }
 
-  override def toString = s"Row => [${exprArray.mkString(",")}]"
+  override def toString: String = s"Row => [${exprArray.mkString(",")}]"
 }
 
 /**
@@ -55,14 +54,14 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
 
   private[this] val exprArray = expressions.toArray
   private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
-  def currentValue: Row = mutableRow
+  def currentValue: InternalRow = mutableRow
 
   override def target(row: MutableRow): MutableProjection = {
     mutableRow = row
     this
   }
 
-  override def apply(input: Row): Row = {
+  override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
       mutableRow(i) = exprArray(i).eval(input)
@@ -76,74 +75,74 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
  */
-class JoinedRow extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
 
-  def iterator = row1.iterator ++ row2.iterator
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
 
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
 
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
 
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
 
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
 
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
 
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
 
   override def getAs[T](i: Int): T =
-    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  def copy() = {
-    val totalSize = row1.size + row2.size
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
@@ -153,9 +152,17 @@ class JoinedRow extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
   }
 }
 
@@ -168,74 +175,74 @@ class JoinedRow extends Row {
  * Row will be referenced, increasing the opportunity for the JIT to play tricks.  This sounds
  * crazy but in benchmarks it had noticeable effects.
  */
-class JoinedRow2 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow2 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
 
-  def iterator = row1.iterator ++ row2.iterator
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
 
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
 
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
 
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
 
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
 
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
 
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
 
   override def getAs[T](i: Int): T =
-    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  def copy() = {
-    val totalSize = row1.size + row2.size
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
@@ -245,83 +252,91 @@ class JoinedRow2 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
   }
 }
 
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow3 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow3 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
 
-  def iterator = row1.iterator ++ row2.iterator
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
 
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
 
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
 
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
 
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
 
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
 
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
 
   override def getAs[T](i: Int): T =
-    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  def copy() = {
-    val totalSize = row1.size + row2.size
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
@@ -331,83 +346,91 @@ class JoinedRow3 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
   }
 }
 
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow4 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow4 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
 
-  def iterator = row1.iterator ++ row2.iterator
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
 
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
 
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
 
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
 
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
 
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
 
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
 
   override def getAs[T](i: Int): T =
-    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  def copy() = {
-    val totalSize = row1.size + row2.size
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
@@ -417,83 +440,91 @@ class JoinedRow4 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
   }
 }
 
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow5 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow5 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
 
-  def iterator = row1.iterator ++ row2.iterator
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
 
-  def length = row1.length + row2.length
+  override def length: Int = row1.length + row2.length
 
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
 
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
 
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
 
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
 
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
 
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
 
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
 
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
 
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
 
   override def getAs[T](i: Int): T =
-    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  def copy() = {
-    val totalSize = row1.size + row2.size
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
     while(i < totalSize) {
@@ -503,8 +534,110 @@ class JoinedRow5 extends Row {
     new GenericRow(copiedValues)
   }
 
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
+  }
+}
+
+/**
+ * JIT HACK: Replace with macros
+ */
+class JoinedRow6 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
+
+  def this(left: InternalRow, right: InternalRow) = {
+    this()
+    row1 = left
+    row2 = right
+  }
+
+  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
+    row1 = r1
+    row2 = r2
+    this
+  }
+
+  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
+  def withLeft(newLeft: InternalRow): InternalRow = {
+    row1 = newLeft
+    this
+  }
+
+  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
+  def withRight(newRight: InternalRow): InternalRow = {
+    row2 = newRight
+    this
+  }
+
+  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
+
+  override def length: Int = row1.length + row2.length
+
+  override def apply(i: Int): Any =
+    if (i < row1.length) row1(i) else row2(i - row1.length)
+
+  override def isNullAt(i: Int): Boolean =
+    if (i < row1.length) row1.isNullAt(i) else row2.isNullAt(i - row1.length)
+
+  override def getInt(i: Int): Int =
+    if (i < row1.length) row1.getInt(i) else row2.getInt(i - row1.length)
+
+  override def getLong(i: Int): Long =
+    if (i < row1.length) row1.getLong(i) else row2.getLong(i - row1.length)
+
+  override def getDouble(i: Int): Double =
+    if (i < row1.length) row1.getDouble(i) else row2.getDouble(i - row1.length)
+
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.length) row1.getBoolean(i) else row2.getBoolean(i - row1.length)
+
+  override def getShort(i: Int): Short =
+    if (i < row1.length) row1.getShort(i) else row2.getShort(i - row1.length)
+
+  override def getByte(i: Int): Byte =
+    if (i < row1.length) row1.getByte(i) else row2.getByte(i - row1.length)
+
+  override def getFloat(i: Int): Float =
+    if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
+
+  override def getString(i: Int): String =
+    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
+
+  override def getAs[T](i: Int): T =
+    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
+
+  override def copy(): InternalRow = {
+    val totalSize = row1.length + row2.length
+    val copiedValues = new Array[Any](totalSize)
+    var i = 0
+    while(i < totalSize) {
+      copiedValues(i) = apply(i)
+      i += 1
+    }
+    new GenericRow(copiedValues)
+  }
+
+  override def toString: String = {
+    // Make sure toString never throws NullPointerException.
+    if ((row1 eq null) && (row2 eq null)) {
+      "[ empty row ]"
+    } else if (row1 eq null) {
+      row2.mkString("[", ",", "]")
+    } else if (row2 eq null) {
+      row1.mkString("[", ",", "]")
+    } else {
+      mkString("[", ",", "]")
+    }
   }
 }

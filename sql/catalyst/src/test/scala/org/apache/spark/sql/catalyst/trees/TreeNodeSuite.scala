@@ -19,21 +19,24 @@ package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{StringType, NullType}
+import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
-  def children = optKey.toSeq
-  def nullable = true
-  def dataType = NullType
+  override def children: Seq[Expression] = optKey.toSeq
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
   override lazy val resolved = true
-  type EvaluatedType = Any
-  def eval(input: Row) = null.asInstanceOf[Any]
+  override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
 }
 
-class TreeNodeSuite extends FunSuite {
+case class ComplexPlan(exprs: Seq[Seq[Expression]])
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  override def output: Seq[Attribute] = Nil
+}
+
+class TreeNodeSuite extends SparkFunSuite {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))
@@ -90,9 +93,9 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("transform works on nodes with Option children") {
-    val dummy1 = Dummy(Some(Literal("1", StringType)))
+    val dummy1 = Dummy(Some(Literal.create("1", StringType)))
     val dummy2 = Dummy(None)
-    val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
+    val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
 
     var actual = dummy1 transformDown toZero
     assert(actual === Dummy(Some(Literal(0))))
@@ -104,4 +107,131 @@ class TreeNodeSuite extends FunSuite {
     assert(actual === Dummy(None))
   }
 
+  test("preserves origin") {
+    CurrentOrigin.setPosition(1, 1)
+    val add = Add(Literal(1), Literal(1))
+    CurrentOrigin.reset()
+
+    val transformed = add transform {
+      case Literal(1, _) => Literal(2)
+    }
+
+    assert(transformed.origin.line.isDefined)
+    assert(transformed.origin.startPosition.isDefined)
+  }
+
+  test("foreach up") {
+    val actual = new ArrayBuffer[String]()
+    val expected = Seq("1", "2", "3", "4", "-", "*", "+")
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    expression foreachUp {
+      case b: BinaryExpression => actual.append(b.symbol);
+      case l: Literal => actual.append(l.toString);
+    }
+
+    assert(expected === actual)
+  }
+
+  test("find") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Find the top node.
+    var actual: Option[Expression] = expression.find {
+      case add: Add => true
+      case other => false
+    }
+    var expected: Option[Expression] =
+      Some(Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4)))))
+    assert(expected === actual)
+
+    // Find the first children.
+    actual = expression.find {
+      case Literal(1, IntegerType) => true
+      case other => false
+    }
+    expected = Some(Literal(1))
+    assert(expected === actual)
+
+    // Find an internal node (Subtract).
+    actual = expression.find {
+      case sub: Subtract => true
+      case other => false
+    }
+    expected = Some(Subtract(Literal(3), Literal(4)))
+    assert(expected === actual)
+
+    // Find a leaf node.
+    actual = expression.find {
+      case Literal(3, IntegerType) => true
+      case other => false
+    }
+    expected = Some(Literal(3))
+    assert(expected === actual)
+
+    // Find nothing.
+    actual = expression.find {
+      case Literal(100, IntegerType) => true
+      case other => false
+    }
+    expected = None
+    assert(expected === actual)
+  }
+
+  test("collectFirst") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+
+    // Collect the top node.
+    {
+      val actual = expression.collectFirst {
+        case add: Add => add
+      }
+      val expected =
+        Some(Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4)))))
+      assert(expected === actual)
+    }
+
+    // Collect the first children.
+    {
+      val actual = expression.collectFirst {
+        case l @ Literal(1, IntegerType) => l
+      }
+      val expected = Some(Literal(1))
+      assert(expected === actual)
+    }
+
+    // Collect an internal node (Subtract).
+    {
+      val actual = expression.collectFirst {
+        case sub: Subtract => sub
+      }
+      val expected = Some(Subtract(Literal(3), Literal(4)))
+      assert(expected === actual)
+    }
+
+    // Collect a leaf node.
+    {
+      val actual = expression.collectFirst {
+        case l @ Literal(3, IntegerType) => l
+      }
+      val expected = Some(Literal(3))
+      assert(expected === actual)
+    }
+
+    // Collect nothing.
+    {
+      val actual = expression.collectFirst {
+        case l @ Literal(100, IntegerType) => l
+      }
+      val expected = None
+      assert(expected === actual)
+    }
+  }
+
+  test("transformExpressions on nested expression sequence") {
+    val plan = ComplexPlan(Seq(Seq(Literal(1)), Seq(Literal(2))))
+    val actual = plan.transformExpressions {
+      case Literal(value, _) => Literal(value.toString)
+    }
+    val expected = ComplexPlan(Seq(Seq(Literal("1")), Seq(Literal("2"))))
+    assert(expected === actual)
+  }
 }

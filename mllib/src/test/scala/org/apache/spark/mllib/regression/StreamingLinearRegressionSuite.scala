@@ -19,17 +19,16 @@ package org.apache.spark.mllib.regression
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
 
-class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
+class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
-  override def maxWaitTimeMillis = 20000
+  override def maxWaitTimeMillis: Int = 20000
 
   // Assert that two values are equal within tolerance epsilon
   def assertEqual(v1: Double, v2: Double, epsilon: Double) {
@@ -52,7 +51,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data
@@ -84,7 +83,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data
@@ -118,7 +117,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // create model initialized with true weights
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(10.0, 10.0))
-      .setStepSize(0.1)
+      .setStepSize(0.2)
       .setNumIterations(25)
 
     // generate sequence of simulated data for testing
@@ -138,5 +137,51 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
     // compute the mean absolute error and check that it's always less than 0.1
     val errors = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints)
     assert(errors.forall(x => x <= 0.1))
+  }
+
+  // Test training combined with prediction
+  test("training and prediction") {
+    // create model initialized with zero weights
+    val model = new StreamingLinearRegressionWithSGD()
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.2)
+      .setNumIterations(25)
+
+    // generate sequence of simulated data for testing
+    val numBatches = 10
+    val nPoints = 100
+    val testInput = (0 until numBatches).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), nPoints, 42 * (i + 1))
+    }
+
+    // train and predict
+    val ssc = setupStreams(testInput, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
+    })
+
+    val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
+
+    // assert that prediction error improves, ensuring that the updated model is being used
+    val error = output.map(batch => batch.map(p => math.abs(p._1 - p._2)).sum / nPoints).toList
+    assert((error.head - error.last) > 2)
+  }
+
+  // Test empty RDDs in a stream
+  test("handling empty RDDs in a stream") {
+    val model = new StreamingLinearRegressionWithSGD()
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.2)
+      .setNumIterations(25)
+    val numBatches = 10
+    val nPoints = 100
+    val emptyInput = Seq.empty[Seq[LabeledPoint]]
+    val ssc = setupStreams(emptyInput,
+      (inputDStream: DStream[LabeledPoint]) => {
+        model.trainOn(inputDStream)
+        model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
+      }
+    )
+    val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
   }
 }

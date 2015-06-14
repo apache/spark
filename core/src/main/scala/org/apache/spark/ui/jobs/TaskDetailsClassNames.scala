@@ -24,10 +24,11 @@ package org.apache.spark.ui.jobs
  * If new optional metrics are added here, they should also be added to the end of webui.css
  * to have the style set to "display: none;" by default.
  */
-private object TaskDetailsClassNames {
+private[spark] object TaskDetailsClassNames {
   val SCHEDULER_DELAY = "scheduler_delay"
-  val GC_TIME = "gc_time"
   val TASK_DESERIALIZATION_TIME = "deserialization_time"
+  val SHUFFLE_READ_BLOCKED_TIME = "fetch_wait_time"
+  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
   val RESULT_SERIALIZATION_TIME = "serialization_time"
   val GETTING_RESULT_TIME = "getting_result_time"
 }

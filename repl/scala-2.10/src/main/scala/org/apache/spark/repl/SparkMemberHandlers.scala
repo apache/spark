@@ -16,7 +16,7 @@ import scala.reflect.internal.Chars
 import scala.reflect.internal.Flags._
 import scala.language.implicitConversions
 
-trait SparkMemberHandlers {
+private[repl] trait SparkMemberHandlers {
   val intp: SparkIMain
 
   import intp.{ Request, global, naming }

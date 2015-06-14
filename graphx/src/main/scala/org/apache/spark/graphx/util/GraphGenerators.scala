@@ -133,6 +133,12 @@ object GraphGenerators {
     // This ensures that the 4 quadrants are the same size at all recursion levels
     val numVertices = math.round(
       math.pow(2.0, math.ceil(math.log(requestedNumVertices) / math.log(2.0)))).toInt
+    val numEdgesUpperBound =
+      math.pow(2.0, 2 * ((math.log(numVertices) / math.log(2.0)) - 1)).toInt
+    if (numEdgesUpperBound < numEdges) {
+      throw new IllegalArgumentException(
+        s"numEdges must be <= $numEdgesUpperBound but was $numEdges")
+    }
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
@@ -237,14 +243,15 @@ object GraphGenerators {
    * @return A graph containing vertices with the row and column ids
    * as their attributes and edge values as 1.0.
    */
-  def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int,Int), Double] = {
+  def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int, Int), Double] = {
     // Convert row column address into vertex ids (row major order)
     def sub2ind(r: Int, c: Int): VertexId = r * cols + c
 
-    val vertices: RDD[(VertexId, (Int,Int))] =
-      sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
+    val vertices: RDD[(VertexId, (Int, Int))] = sc.parallelize(0 until rows).flatMap { r =>
+      (0 until cols).map( c => (sub2ind(r, c), (r, c)) )
+    }
     val edges: RDD[Edge[Double]] =
-      vertices.flatMap{ case (vid, (r,c)) =>
+      vertices.flatMap{ case (vid, (r, c)) =>
         (if (r + 1 < rows) { Seq( (sub2ind(r, c), sub2ind(r + 1, c))) } else { Seq.empty }) ++
         (if (c + 1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c + 1))) } else { Seq.empty })
       }.map{ case (src, dst) => Edge(src, dst, 1.0) }

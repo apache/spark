@@ -17,18 +17,18 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.{existentials, postfixOps}
 
-import WriteAheadLogBasedBlockHandler._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage._
-import org.apache.spark.streaming.util.{Clock, SystemClock, WriteAheadLogFileSegment, WriteAheadLogManager}
-import org.apache.spark.util.Utils
+import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
+import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /** Trait that represents the metadata related to storage of blocks */
 private[streaming] trait ReceivedBlockStoreResult {
@@ -42,7 +42,7 @@ private[streaming] trait ReceivedBlockHandler {
   def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
-  def cleanupOldBlock(threshTime: Long)
+  def cleanupOldBlocks(threshTime: Long)
 }
 
 
@@ -62,7 +62,7 @@ private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockI
 private[streaming] class BlockManagerBasedBlockHandler(
     blockManager: BlockManager, storageLevel: StorageLevel)
   extends ReceivedBlockHandler with Logging {
-  
+
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
     val putResult: Seq[(BlockId, BlockStatus)] = block match {
       case ArrayBufferBlock(arrayBuffer) =>
@@ -82,7 +82,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     BlockManagerBasedStoreResult(blockId)
   }
 
-  def cleanupOldBlock(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long) {
     // this is not used as blocks inserted into the BlockManager are cleared by DStream's clearing
     // of BlockRDDs.
   }
@@ -96,7 +96,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
-    segment: WriteAheadLogFileSegment
+    walRecordHandle: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
 
@@ -116,23 +116,33 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   private val blockStoreTimeout = conf.getInt(
     "spark.streaming.receiver.blockStoreTimeout", 30).seconds
-  private val rollingInterval = conf.getInt(
-    "spark.streaming.receiver.writeAheadLog.rollingInterval", 60)
-  private val maxFailures = conf.getInt(
-    "spark.streaming.receiver.writeAheadLog.maxFailures", 3)
 
-  // Manages rolling log files
-  private val logManager = new WriteAheadLogManager(
-    checkpointDirToLogDir(checkpointDir, streamId),
-    hadoopConf, rollingInterval, maxFailures,
-    callerName = this.getClass.getSimpleName,
-    clock = clock
-  )
+  private val effectiveStorageLevel = {
+    if (storageLevel.deserialized) {
+      logWarning(s"Storage level serialization ${storageLevel.deserialized} is not supported when" +
+        s" write ahead log is enabled, change to serialization false")
+    }
+    if (storageLevel.replication > 1) {
+      logWarning(s"Storage level replication ${storageLevel.replication} is unnecessary when " +
+        s"write ahead log is enabled, change to replication 1")
+    }
+
+    StorageLevel(storageLevel.useDisk, storageLevel.useMemory, storageLevel.useOffHeap, false, 1)
+  }
+
+  if (storageLevel != effectiveStorageLevel) {
+    logWarning(s"User defined storage level $storageLevel is changed to effective storage level " +
+      s"$effectiveStorageLevel when write ahead log is enabled")
+  }
+
+  // Write ahead log manages
+  private val writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
+    conf, checkpointDirToLogDir(checkpointDir, streamId), hadoopConf)
 
   // For processing futures used in parallel block storing into block manager and write ahead log
   // # threads = 2, so that both writing to BM and WAL can proceed in parallel
   implicit private val executionContext = ExecutionContext.fromExecutorService(
-    Utils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
+    ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
 
   /**
    * This implementation stores the block into the block manager as well as a write ahead log.
@@ -156,7 +166,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Store the block in block manager
     val storeInBlockManagerFuture = Future {
       val putResult =
-        blockManager.putBytes(blockId, serializedBlock, storageLevel, tellMaster = true)
+        blockManager.putBytes(blockId, serializedBlock, effectiveStorageLevel, tellMaster = true)
       if (!putResult.map { _._1 }.contains(blockId)) {
         throw new SparkException(
           s"Could not store $blockId to block manager with storage level $storageLevel")
@@ -165,24 +175,22 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in write ahead log
     val storeInWriteAheadLogFuture = Future {
-      logManager.writeToLog(serializedBlock)
+      writeAheadLog.write(serializedBlock, clock.getTimeMillis())
     }
 
-    // Combine the futures, wait for both to complete, and return the write ahead log segment
-    val combinedFuture = for {
-      _ <- storeInBlockManagerFuture
-      fileSegment <- storeInWriteAheadLogFuture
-    } yield fileSegment
-    val segment = Await.result(combinedFuture, blockStoreTimeout)
-    WriteAheadLogBasedStoreResult(blockId, segment)
+    // Combine the futures, wait for both to complete, and return the write ahead log record handle
+    val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
+    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
+    WriteAheadLogBasedStoreResult(blockId, walRecordHandle)
   }
 
-  def cleanupOldBlock(threshTime: Long) {
-    logManager.cleanupOldLogs(threshTime)
+  def cleanupOldBlocks(threshTime: Long) {
+    writeAheadLog.clean(threshTime, false)
   }
 
   def stop() {
-    logManager.stop()
+    writeAheadLog.close()
+    executionContext.shutdown()
   }
 }
 

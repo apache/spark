@@ -34,10 +34,26 @@ object DataValidators extends Logging {
    *
    * @return True if labels are all zero or one, false otherwise.
    */
-   val binaryLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
+  val binaryLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     val numInvalid = data.filter(x => x.label != 1.0 && x.label != 0.0).count()
     if (numInvalid != 0) {
       logError("Classification labels should be 0 or 1. Found " + numInvalid + " invalid labels")
+    }
+    numInvalid == 0
+  }
+
+  /**
+   * Function to check if labels used for k class multi-label classification are
+   * in the range of {0, 1, ..., k - 1}.
+   *
+   * @return True if labels are all in the range of {0, 1, ..., k-1}, false otherwise.
+   */
+  def multiLabelValidator(k: Int): RDD[LabeledPoint] => Boolean = { data =>
+    val numInvalid = data.filter(x =>
+      x.label - x.label.toInt != 0.0 || x.label < 0 || x.label > k - 1).count()
+    if (numInvalid != 0) {
+      logError("Classification labels should be in {0 to " + (k - 1) + "}. " +
+        "Found " + numInvalid + " invalid labels")
     }
     numInvalid == 0
   }

@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.concurrent.Semaphore
+
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
@@ -27,54 +30,63 @@ private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
   with Logging {
 
-  var client: AppClient = null
-  var stopping = false
-  var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  @volatile var appId: String = _
+  private var client: AppClient = null
+  private var stopping = false
 
-  val registrationLock = new Object()
-  var registrationDone = false
+  @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
+  @volatile private var appId: String = _
 
-  val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  val totalExpectedCores = maxCores.getOrElse(0)
+  private val registrationBarrier = new Semaphore(0)
+
+  private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  private val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
 
     // The endpoint for executors to talk to us
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{APP_ID}}",
-      "{{WORKER_URL}}")
+    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
+      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val args = Seq(
+      "--driver-url", driverUrl,
+      "--executor-id", "{{EXECUTOR_ID}}",
+      "--hostname", "{{HOSTNAME}}",
+      "--cores", "{{CORES}}",
+      "--app-id", "{{APP_ID}}",
+      "--worker-url", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
-      cp.split(java.io.File.pathSeparator)
-    }
-    val libraryPathEntries =
-      sc.conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
-        cp.split(java.io.File.pathSeparator)
+    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
+      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+    val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
+      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+
+    // When testing, expose the parent class path to the child. This is processed by
+    // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
+    // when the assembly is built with the "*-provided" profiles enabled.
+    val testingClassPath =
+      if (sys.props.contains("spark.testing")) {
+        sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
+      } else {
+        Nil
       }
 
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
+      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir)
-
+    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
+      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
-
     waitForRegistration()
   }
 
@@ -82,8 +94,10 @@ private[spark] class SparkDeploySchedulerBackend(
     stopping = true
     super.stop()
     client.stop()
-    if (shutdownCallback != null) {
-      shutdownCallback(this)
+
+    val callback = shutdownCallback
+    if (callback != null) {
+      callback(this)
     }
   }
 
@@ -104,9 +118,12 @@ private[spark] class SparkDeploySchedulerBackend(
     notifyContext()
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
-      scheduler.error(reason)
-      // Ensure the application terminates, as we can no longer run jobs.
-      sc.stop()
+      try {
+        scheduler.error(reason)
+      } finally {
+        // Ensure the application terminates, as we can no longer run jobs.
+        sc.stop()
+      }
     }
   }
 
@@ -136,18 +153,11 @@ private[spark] class SparkDeploySchedulerBackend(
     }
 
   private def waitForRegistration() = {
-    registrationLock.synchronized {
-      while (!registrationDone) {
-        registrationLock.wait()
-      }
-    }
+    registrationBarrier.acquire()
   }
 
   private def notifyContext() = {
-    registrationLock.synchronized {
-      registrationDone = true
-      registrationLock.notifyAll()
-    }
+    registrationBarrier.release()
   }
 
 }

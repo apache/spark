@@ -20,18 +20,17 @@ package org.apache.spark.serializer
 import org.apache.spark.util.Utils
 
 import com.esotericsoftware.kryo.Kryo
-import org.scalatest.FunSuite
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, TestUtils}
+import org.apache.spark._
 import org.apache.spark.serializer.KryoDistributedTest._
 
-class KryoSerializerDistributedSuite extends FunSuite {
+class KryoSerializerDistributedSuite extends SparkFunSuite {
 
   test("kryo objects are serialised consistently in different processes") {
     val conf = new SparkConf(false)
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.kryo.registrator", classOf[AppJarRegistrator].getName)
-    conf.set("spark.task.maxFailures", "1")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", classOf[AppJarRegistrator].getName)
+      .set("spark.task.maxFailures", "1")
 
     val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))
     conf.setJars(List(jar.getPath))

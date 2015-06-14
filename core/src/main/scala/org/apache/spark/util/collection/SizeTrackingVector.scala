@@ -36,11 +36,4 @@ private[spark] class SizeTrackingVector[T: ClassTag]
     resetSamples()
     this
   }
-
-  /**
-   * Return a trimmed version of the underlying array.
-   */
-  def toArray: Array[T] = {
-    super.iterator.toArray
-  }
 }

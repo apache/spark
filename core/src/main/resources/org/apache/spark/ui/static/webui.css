@@ -19,6 +19,7 @@
   height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
+  min-width: 1200px
 }
 
 .navbar .navbar-inner {
@@ -39,12 +40,12 @@
 
 .navbar .nav > li a {
   height: 30px;
-  line-height: 30px;
+  line-height: 2;
 }
 
 .navbar-text {
   height: 50px;
-  line-height: 50px;
+  line-height: 3.3;
 }
 
 table.sortable thead {
@@ -84,15 +85,11 @@ table.sortable td {
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
 
-span.kill-link {
+a.kill-link {
   margin-right: 2px;
   margin-left: 20px;
   color: gray;
   float: right;
-}
-
-span.kill-link a {
-  color: gray;
 }
 
 span.expand-details {
@@ -102,15 +99,25 @@ span.expand-details {
   float: right;
 }
 
+span.rest-uri {
+  font-size: 10pt;
+  font-style: italic;
+  color: gray;
+}
+
 pre {
-  font-size: 0.8em;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px;
+  margin: 0;
+  border-radius: 3px;
 }
 
 .stage-details {
   max-height: 100px;
   overflow-y: auto;
   margin: 0;
-  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stage-details.collapsed {
@@ -120,11 +127,27 @@ pre {
   border: none;
 }
 
+.description-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: block;
+}
+
+.description-input-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: normal;
+  display: block;
+}
+
 .stacktrace-details {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
-  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+  transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stacktrace-details.collapsed {
@@ -134,7 +157,7 @@ pre {
   border: none;
 }
 
-span.expand-additional-metrics {
+span.expand-additional-metrics, span.expand-dag-viz {
   cursor: pointer;
 }
 
@@ -147,7 +170,7 @@ span.additional-metric-title {
 }
 
 .tooltip {
- font-weight: normal;
+  font-weight: normal;
 }
 
 .arrow-open {
@@ -155,9 +178,9 @@ span.additional-metric-title {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid black;
-  float: left;
-  margin-top: 6px;
+  border-top: 5px solid #08c;
+  display: inline-block;
+  margin-bottom: 2px;
 }
 
 .arrow-closed {
@@ -165,12 +188,39 @@ span.additional-metric-title {
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 5px solid black;
+  border-left: 5px solid #08c;
   display: inline-block;
+  margin-left: 2px;
+  margin-right: 3px;
+}
+
+.version {
+  line-height: 2.5;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
 }
 
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .gc_time, .deserialization_time, .serialization_time, .getting_result_time {
+.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
+.serialization_time, .getting_result_time {
   display: none;
+}
+
+.accordion-inner {
+  background: #f5f5f5;
+}
+
+.accordion-inner pre {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+a.expandbutton {
+  cursor: pointer;
 }

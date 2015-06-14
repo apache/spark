@@ -22,7 +22,7 @@ import java.util
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
@@ -47,10 +47,12 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 class HiveUdfSuite extends QueryTest {
-  import TestHive._
+
+  import TestHive.{udf, sql}
+  import TestHive.implicits._
 
   test("spark sql udf test that returns a struct") {
-    registerFunction("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
+    udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
     assert(sql(
       """
         |SELECT getStruct(1).f1,
@@ -58,7 +60,14 @@ class HiveUdfSuite extends QueryTest {
         |       getStruct(1).f3,
         |       getStruct(1).f4,
         |       getStruct(1).f5 FROM src LIMIT 1
-      """.stripMargin).first() === Row(1, 2, 3, 4, 5))
+      """.stripMargin).head() === Row(1, 2, 3, 4, 5))
+  }
+
+  test("SPARK-4785 When called with arguments referring column fields, PMOD throws NPE") {
+    checkAnswer(
+      sql("SELECT PMOD(CAST(key as INT), 10) FROM src LIMIT 1"),
+      Row(8)
+    )
   }
 
   test("hive struct udf") {
@@ -84,20 +93,41 @@ class HiveUdfSuite extends QueryTest {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
   }
 
-  test("SPARK-2693 udaf aggregates test") {
-    checkAnswer(sql("SELECT percentile(key,1) FROM src LIMIT 1"),
-      sql("SELECT max(key) FROM src").collect().toSeq)
+  test("SPARK-6409 UDAFAverage test") {
+    sql(s"CREATE TEMPORARY FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
+    checkAnswer(
+      sql("SELECT test_avg(1), test_avg(substr(value,5)) FROM src"),
+      Seq(Row(1.0, 260.182)))
+    sql("DROP TEMPORARY FUNCTION IF EXISTS test_avg")
+    TestHive.reset()
   }
+
+  test("SPARK-2693 udaf aggregates test") {
+    checkAnswer(sql("SELECT percentile(key, 1) FROM src LIMIT 1"),
+      sql("SELECT max(key) FROM src").collect().toSeq)
+
+    checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
+      sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
+  }
+
+  test("Generic UDAF aggregates") {
+    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
+      sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
+
+    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9, 0.9)) FROM src LIMIT 1"),
+      sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
+   }
 
   test("UDFIntegerToString") {
     val testData = TestHive.sparkContext.parallelize(
-      IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil)
+      IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF()
     testData.registerTempTable("integerTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '${classOf[UDFIntegerToString].getName}'")
+    val udfName = classOf[UDFIntegerToString].getName
+    sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '$udfName'")
     checkAnswer(
-      sql("SELECT testUDFIntegerToString(i) FROM integerTable"), //.collect(),
-      Seq(Seq("1"), Seq("2")))
+      sql("SELECT testUDFIntegerToString(i) FROM integerTable"),
+      Seq(Row("1"), Row("2")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFIntegerToString")
 
     TestHive.reset()
@@ -107,13 +137,13 @@ class HiveUdfSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
-      ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil)
+      ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil).toDF()
     testData.registerTempTable("listListIntTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListListInt AS '${classOf[UDFListListInt].getName}'")
     checkAnswer(
-      sql("SELECT testUDFListListInt(lli) FROM listListIntTable"), //.collect(),
-      Seq(Seq(0), Seq(2), Seq(13)))
+      sql("SELECT testUDFListListInt(lli) FROM listListIntTable"),
+      Seq(Row(0), Row(2), Row(13)))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFListListInt")
 
     TestHive.reset()
@@ -122,13 +152,13 @@ class HiveUdfSuite extends QueryTest {
   test("UDFListString") {
     val testData = TestHive.sparkContext.parallelize(
       ListStringCaseClass(Seq("a", "b", "c")) ::
-      ListStringCaseClass(Seq("d", "e")) :: Nil)
+      ListStringCaseClass(Seq("d", "e")) :: Nil).toDF()
     testData.registerTempTable("listStringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
     checkAnswer(
-      sql("SELECT testUDFListString(l) FROM listStringTable"), //.collect(),
-      Seq(Seq("a,b,c"), Seq("d,e")))
+      sql("SELECT testUDFListString(l) FROM listStringTable"),
+      Seq(Row("a,b,c"), Row("d,e")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFListString")
 
     TestHive.reset()
@@ -136,13 +166,13 @@ class HiveUdfSuite extends QueryTest {
 
   test("UDFStringString") {
     val testData = TestHive.sparkContext.parallelize(
-      StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil)
+      StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
     testData.registerTempTable("stringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUdf AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
-      sql("SELECT testStringStringUdf(\"hello\", s) FROM stringTable"), //.collect(),
-      Seq(Seq("hello world"), Seq("hello goodbye")))
+      sql("SELECT testStringStringUdf(\"hello\", s) FROM stringTable"),
+      Seq(Row("hello world"), Row("hello goodbye")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUdf")
 
     TestHive.reset()
@@ -153,13 +183,13 @@ class HiveUdfSuite extends QueryTest {
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) ::
-      Nil)
+      Nil).toDF()
     testData.registerTempTable("TwoListTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
     checkAnswer(
-      sql("SELECT testUDFTwoListList(lli, lli) FROM TwoListTable"), //.collect(),
-      Seq(Seq("0, 0"), Seq("2, 2"), Seq("13, 13")))
+      sql("SELECT testUDFTwoListList(lli, lli) FROM TwoListTable"),
+      Seq(Row("0, 0"), Row("2, 2"), Row("13, 13")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
 
     TestHive.reset()
@@ -218,7 +248,8 @@ class PairUdf extends GenericUDF {
   override def initialize(p1: Array[ObjectInspector]): ObjectInspector =
     ObjectInspectorFactory.getStandardStructObjectInspector(
       Seq("id", "value"),
-      Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector, PrimitiveObjectInspectorFactory.javaIntObjectInspector)
+      Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
+        PrimitiveObjectInspectorFactory.javaIntObjectInspector)
   )
 
   override def evaluate(args: Array[DeferredObject]): AnyRef = {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.tools
 
-import java.lang.reflect.Method
+import java.lang.reflect.{Type, Method}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -302,7 +302,7 @@ object JavaAPICompletenessChecker {
   private def isExcludedByInterface(method: Method): Boolean = {
     val excludedInterfaces =
       Set("org.apache.spark.Logging", "org.apache.hadoop.mapreduce.HadoopMapReduceUtil")
-    def toComparisionKey(method: Method) =
+    def toComparisionKey(method: Method): (Class[_], String, Type) =
       (method.getReturnType, method.getName, method.getGenericReturnType)
     val interfaces = method.getDeclaringClass.getInterfaces.filter { i =>
       excludedInterfaces.contains(i.getName)

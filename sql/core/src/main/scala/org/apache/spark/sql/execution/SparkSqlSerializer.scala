@@ -18,34 +18,36 @@
 package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
+import java.util.{HashMap => JavaHashMap}
+
+import org.apache.spark.sql.types.Decimal
 
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
-import com.twitter.chill.{AllScalaRegistrar, ResourcePool}
+import com.twitter.chill.ResourcePool
 
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.MutablePair
-import org.apache.spark.util.Utils
 
 import org.apache.spark.sql.catalyst.expressions.codegen.{IntegerHashSet, LongHashSet}
 
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
-    val kryo = new Kryo()
+    val kryo = super.newKryo()
     kryo.setRegistrationRequired(false)
     kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
     kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
                   new HyperLogLogSerializer)
-    kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
+    kryo.register(classOf[java.math.BigDecimal], new JavaBigDecimalSerializer)
+    kryo.register(classOf[BigDecimal], new ScalaBigDecimalSerializer)
 
     // Specific hashsets must come first TODO: Move to core.
     kryo.register(classOf[IntegerHashSet], new IntegerHashSetSerializer)
@@ -53,10 +55,9 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]],
                   new OpenHashSetSerializer)
     kryo.register(classOf[Decimal])
+    kryo.register(classOf[JavaHashMap[_, _]])
 
     kryo.setReferences(false)
-    kryo.setClassLoader(Utils.getSparkClassLoader)
-    new AllScalaRegistrar().apply(kryo)
     kryo
   }
 }
@@ -64,15 +65,12 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
 private[execution] class KryoResourcePool(size: Int)
     extends ResourcePool[SerializerInstance](size) {
 
-  val ser: KryoSerializer = {
+  val ser: SparkSqlSerializer = {
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
-    // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization
-    // related error.
-    new KryoSerializer(sparkConf)
+    new SparkSqlSerializer(sparkConf)
   }
 
-  def newInstance() = ser.newInstance()
+  def newInstance(): SerializerInstance = ser.newInstance()
 }
 
 private[sql] object SparkSqlSerializer {
@@ -98,14 +96,25 @@ private[sql] object SparkSqlSerializer {
     }
 }
 
-private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {
-  def write(kryo: Kryo, output: Output, bd: math.BigDecimal) {
+private[sql] class JavaBigDecimalSerializer extends Serializer[java.math.BigDecimal] {
+  def write(kryo: Kryo, output: Output, bd: java.math.BigDecimal) {
     // TODO: There are probably more efficient representations than strings...
-    output.writeString(bd.toString())
+    output.writeString(bd.toString)
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[java.math.BigDecimal]): java.math.BigDecimal = {
+    new java.math.BigDecimal(input.readString())
+  }
+}
+
+private[sql] class ScalaBigDecimalSerializer extends Serializer[BigDecimal] {
+  def write(kryo: Kryo, output: Output, bd: BigDecimal) {
+    // TODO: There are probably more efficient representations than strings...
+    output.writeString(bd.toString)
   }
 
   def read(kryo: Kryo, input: Input, tpe: Class[BigDecimal]): BigDecimal = {
-    BigDecimal(input.readString())
+    new java.math.BigDecimal(input.readString())
   }
 }
 

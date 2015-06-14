@@ -19,13 +19,12 @@ package org.apache.spark.mllib.optimization
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
 import org.jblas.{DoubleMatrix, SimpleBlas}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.TestingUtils._
 
-class NNLSSuite extends FunSuite {
+class NNLSSuite extends SparkFunSuite {
   /** Generate an NNLS problem whose optimal solution is the all-ones vector. */
   def genOnesData(n: Int, rand: Random): (DoubleMatrix, DoubleMatrix) = {
     val A = new DoubleMatrix(n, n, Array.fill(n*n)(rand.nextDouble()): _*)
@@ -55,7 +54,7 @@ class NNLSSuite extends FunSuite {
 
     for (k <- 0 until 100) {
       val (ata, atb) = genOnesData(n, rand)
-      val x = new DoubleMatrix(NNLS.solve(ata, atb, ws))
+      val x = new DoubleMatrix(NNLS.solve(ata.data, atb.data, ws))
       assert(x.length === n)
       val answer = DoubleMatrix.ones(n, 1)
       SimpleBlas.axpy(-1.0, answer, x)
@@ -68,18 +67,20 @@ class NNLSSuite extends FunSuite {
 
   test("NNLS: nonnegativity constraint active") {
     val n = 5
+    // scalastyle:off
     val ata = new DoubleMatrix(Array(
       Array( 4.377, -3.531, -1.306, -0.139,  3.418),
       Array(-3.531,  4.344,  0.934,  0.305, -2.140),
       Array(-1.306,  0.934,  2.644, -0.203, -0.170),
       Array(-0.139,  0.305, -0.203,  5.883,  1.428),
       Array( 3.418, -2.140, -0.170,  1.428,  4.684)))
+    // scalastyle:on
     val atb = new DoubleMatrix(Array(-1.632, 2.115, 1.094, -1.025, -0.636))
 
     val goodx = Array(0.13025, 0.54506, 0.2874, 0.0, 0.028628)
 
     val ws = NNLS.createWorkspace(n)
-    val x = NNLS.solve(ata, atb, ws)
+    val x = NNLS.solve(ata.data, atb.data, ws)
     for (i <- 0 until n) {
       assert(x(i) ~== goodx(i) absTol 1E-3)
       assert(x(i) >= 0)
@@ -104,7 +105,7 @@ class NNLSSuite extends FunSuite {
 
 
     val ws = NNLS.createWorkspace(n)
-    val x = new DoubleMatrix(NNLS.solve(ata, atb, ws))
+    val x = new DoubleMatrix(NNLS.solve(ata.data, atb.data, ws))
     val obj = computeObjectiveValue(ata, atb, x)
 
     assert(obj < refObj + 1E-5)

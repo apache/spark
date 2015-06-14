@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
@@ -69,29 +70,42 @@ private[spark] class MetricsSystem private (
     securityMgr: SecurityManager)
   extends Logging {
 
-  private[this] val confFile = conf.get("spark.metrics.conf", null)
-  private[this] val metricsConfig = new MetricsConfig(Option(confFile))
+  private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
   private val sources = new mutable.ArrayBuffer[Source]
   private val registry = new MetricRegistry()
 
+  private var running: Boolean = false
+
   // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
   private var metricsServlet: Option[MetricsServlet] = None
 
-  /** Get any UI handlers used by this metrics system. */
-  def getServletHandlers = metricsServlet.map(_.getHandlers).getOrElse(Array())
+  /**
+   * Get any UI handlers used by this metrics system; can only be called after start().
+   */
+  def getServletHandlers: Array[ServletContextHandler] = {
+    require(running, "Can only call getServletHandlers on a running MetricsSystem")
+    metricsServlet.map(_.getHandlers).getOrElse(Array())
+  }
 
   metricsConfig.initialize()
 
   def start() {
+    require(!running, "Attempting to start a MetricsSystem that is already running")
+    running = true
     registerSources()
     registerSinks()
     sinks.foreach(_.start)
   }
 
   def stop() {
-    sinks.foreach(_.stop)
+    if (running) {
+      sinks.foreach(_.stop)
+    } else {
+      logWarning("Stopping a MetricsSystem that is not running")
+    }
+    running = false
   }
 
   def report() {
@@ -107,7 +121,7 @@ private[spark] class MetricsSystem private (
    * @return An unique metric name for each combination of
    *         application, executor/driver and metric source.
    */
-  def buildRegistryName(source: Source): String = {
+  private[spark] def buildRegistryName(source: Source): String = {
     val appId = conf.getOption("spark.app.id")
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
@@ -116,8 +130,8 @@ private[spark] class MetricsSystem private (
       if (appId.isDefined && executorId.isDefined) {
         MetricRegistry.name(appId.get, executorId.get, source.sourceName)
       } else {
-        // Only Driver and Executor are set spark.app.id and spark.executor.id.
-        // For instance, Master and Worker are not related to a specific application.
+        // Only Driver and Executor set spark.app.id and spark.executor.id.
+        // Other instance types, e.g. Master and Worker, are not related to a specific application.
         val warningMsg = s"Using default name $defaultName for source because %s is not set."
         if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
         if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }
@@ -144,7 +158,7 @@ private[spark] class MetricsSystem private (
     })
   }
 
-  def registerSources() {
+  private def registerSources() {
     val instConfig = metricsConfig.getInstance(instance)
     val sourceConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
 
@@ -160,7 +174,7 @@ private[spark] class MetricsSystem private (
     }
   }
 
-  def registerSinks() {
+  private def registerSinks() {
     val instConfig = metricsConfig.getInstance(instance)
     val sinkConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
 
@@ -177,7 +191,10 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
+          case e: Exception => {
+            logError("Sink class " + classPath + " cannot be instantialized")
+            throw e
+          }
         }
       }
     }

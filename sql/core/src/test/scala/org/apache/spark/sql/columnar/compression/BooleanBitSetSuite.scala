@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.Row
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.columnar.{NoopColumnStats, BOOLEAN}
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.columnar.{BOOLEAN, NoopColumnStats}
 
-class BooleanBitSetSuite extends FunSuite {
+class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
 
   def skeleton(count: Int) {
@@ -33,8 +32,8 @@ class BooleanBitSetSuite extends FunSuite {
     // -------------
 
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
-    val rows = Seq.fill[Row](count)(makeRandomRow(BOOLEAN))
-    val values = rows.map(_.head)
+    val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
+    val values = rows.map(_(0))
 
     rows.foreach(builder.appendFrom(_, 0))
     val buffer = builder.build()

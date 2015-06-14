@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
@@ -44,7 +45,7 @@ case class BroadcastNestedLoopJoin(
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def output = {
+  override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -58,18 +59,16 @@ case class BroadcastNestedLoopJoin(
   }
 
   @transient private lazy val boundCondition =
-    InterpretedPredicate(
-      condition
-        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
-        .getOrElse(Literal(true)))
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  override def execute() = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation =
-      sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+      sparkContext.broadcast(broadcast.execute().map(_.copy())
+        .collect().toIndexedSeq)
 
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
-      val matchedRows = new CompactBuffer[Row]
+      val matchedRows = new CompactBuffer[InternalRow]
       // TODO: Use Spark's BitSet.
       val includedBroadcastTuples =
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
@@ -120,8 +119,8 @@ case class BroadcastNestedLoopJoin(
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
     /** Rows from broadcasted joined with nulls. */
-    val broadcastRowsWithNulls: Seq[Row] = {
-      val buf: CompactBuffer[Row] = new CompactBuffer()
+    val broadcastRowsWithNulls: Seq[InternalRow] = {
+      val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
       val rel = broadcastedRelation.value
       while (i < rel.length) {

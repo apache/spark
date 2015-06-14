@@ -19,95 +19,104 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataType, StructType, Row, SQLContext}
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.ScalaReflection.Schema
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
 object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
+  def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-        val schemaFields = schema.fields.toArray
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) =
-              ScalaReflection.convertToCatalyst(r.productElement(i), schemaFields(i).dataType)
-            i += 1
-          }
-
-          mutableRow
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r.productElement(i))
+          i += 1
         }
+
+        mutableRow
+      }
+    }
+  }
+
+  /**
+   * Convert the objects inside Row into the types Catalyst expected.
+   */
+  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[InternalRow] = {
+    data.mapPartitions { iterator =>
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r(i))
+          i += 1
+        }
+
+        mutableRow
       }
     }
   }
 }
 
-case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
+/** Logical plan node for scanning data from an RDD. */
+private[sql] case class LogicalRDD(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
-  def children = Nil
+  override def children: Seq[LogicalPlan] = Nil
 
-  def newInstance() =
+  override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan) = plan match {
+  override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
     case _ => false
   }
 
-  @transient override lazy val statistics = Statistics(
+  @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
+    sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
   )
 }
 
-case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute() = rdd
+/** Physical plan node for scanning data from an RDD. */
+private[sql] case class PhysicalRDD(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow]) extends LeafNode {
+  protected override def doExecute(): RDD[InternalRow] = rdd
 }
 
-@deprecated("Use LogicalRDD", "1.2.0")
-case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute() = rdd
-}
+/** Logical plan node for scanning data from a local collection. */
+private[sql]
+case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sqlContext: SQLContext)
+   extends LogicalPlan with MultiInstanceRelation {
 
-@deprecated("Use LogicalRDD", "1.2.0")
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQLContext)
-  extends LogicalPlan with MultiInstanceRelation {
+  override def children: Seq[LogicalPlan] = Nil
 
-  def output = alreadyPlanned.output
-  override def children = Nil
+  override def newInstance(): this.type =
+    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
 
-  override final def newInstance(): this.type = {
-    SparkLogicalPlan(
-      alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance()), rdd)
-        case _ => sys.error("Multiple instance of the same relation detected.")
-      })(sqlContext).asInstanceOf[this.type]
-  }
-
-  override def sameResult(plan: LogicalPlan) = plan match {
-    case SparkLogicalPlan(ExistingRdd(_, rdd)) =>
-      rdd.id == alreadyPlanned.asInstanceOf[ExistingRdd].rdd.id
+  override def sameResult(plan: LogicalPlan): Boolean = plan match {
+    case LogicalRDD(_, otherRDD) => rows == rows
     case _ => false
   }
 
-  @transient override lazy val statistics = Statistics(
-    // TODO: Instead of returning a default value here, find a way to return a meaningful size
-    // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
+  @transient override lazy val statistics: Statistics = Statistics(
+    // TODO: Improve the statistics estimation.
+    // This is made small enough so it can be broadcasted.
+    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
   )
 }

@@ -35,11 +35,10 @@ import org.apache.spark.util.Utils
  * @param preferredLocation the preferred location for this partition
  */
 private[spark] case class CoalescedRDDPartition(
-                                  index: Int,
-                                  @transient rdd: RDD[_],
-                                  parentsIndices: Array[Int],
-                                  @transient preferredLocation: String = ""
-                                  ) extends Partition {
+    index: Int,
+    @transient rdd: RDD[_],
+    parentsIndices: Array[Int],
+    @transient preferredLocation: Option[String] = None) extends Partition {
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
 
   @throws(classOf[IOException])
@@ -55,9 +54,10 @@ private[spark] case class CoalescedRDDPartition(
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {
-    val loc = parents.count(p =>
-      rdd.context.getPreferredLocs(rdd, p.index).map(tl => tl.host).contains(preferredLocation))
-
+    val loc = parents.count { p =>
+      val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
+      preferredLocation.exists(parentPreferredLocations.contains)
+    }
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
@@ -73,9 +73,9 @@ private[spark] case class CoalescedRDDPartition(
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
 private[spark] class CoalescedRDD[T: ClassTag](
-                                      @transient var prev: RDD[T],
-                                      maxPartitions: Int,
-                                      balanceSlack: Double = 0.10)
+    @transient var prev: RDD[T],
+    maxPartitions: Int,
+    balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
@@ -113,7 +113,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
    * @return the machine most preferred by split
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    List(partition.asInstanceOf[CoalescedRDDPartition].preferredLocation)
+    partition.asInstanceOf[CoalescedRDDPartition].preferredLocation.toSeq
   }
 }
 
@@ -147,7 +147,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
  *
  */
 
-private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
+private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
 
   def compare(o1: PartitionGroup, o2: PartitionGroup): Boolean = o1.size < o2.size
   def compare(o1: Option[PartitionGroup], o2: Option[PartitionGroup]): Boolean =
@@ -166,7 +166,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
 
   // determines the tradeoff between load-balancing the partitions sizes and their locality
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
-  val slack = (balanceSlack * prev.partitions.size).toInt
+  val slack = (balanceSlack * prev.partitions.length).toInt
 
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
@@ -186,7 +186,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     override val isEmpty = !it.hasNext
 
     // initializes/resets to start iterating from the beginning
-    def resetIterator() = {
+    def resetIterator(): Iterator[(String, Partition)] = {
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
@@ -196,10 +196,10 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
-    def hasNext(): Boolean = { !isEmpty }
+    override def hasNext: Boolean = { !isEmpty }
 
     // return the next preferredLocation of some partition of the RDD
-    def next(): (String, Partition) = {
+    override def next(): (String, Partition) = {
       if (it.hasNext) {
         it.next()
       } else {
@@ -237,7 +237,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     val rotIt = new LocationIterator(prev)
 
     // deal with empty case, just create targetLen partition groups with no preferred location
-    if (!rotIt.hasNext()) {
+    if (!rotIt.hasNext) {
       (1 to targetLen).foreach(x => groupArr += PartitionGroup())
       return
     }
@@ -310,11 +310,11 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
   def throwBalls() {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
-        for ((p,i) <- prev.partitions.zipWithIndex) {
+        for ((p, i) <- prev.partitions.zipWithIndex) {
           groupArr(i).arr += p
         }
       } else { // no locality available, then simply split partitions based on positions in array
-        for(i <- 0 until maxPartitions) {
+        for (i <- 0 until maxPartitions) {
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
           (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }
@@ -341,8 +341,14 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
   }
 }
 
-private[spark] case class PartitionGroup(prefLoc: String = "") {
+private case class PartitionGroup(prefLoc: Option[String] = None) {
   var arr = mutable.ArrayBuffer[Partition]()
+  def size: Int = arr.size
+}
 
-  def size = arr.size
+private object PartitionGroup {
+  def apply(prefLoc: String): PartitionGroup = {
+    require(prefLoc != "", "Preferred location must not be empty")
+    PartitionGroup(Some(prefLoc))
+  }
 }

@@ -17,13 +17,15 @@
 
 package org.apache.spark;
 
+import java.io.Serializable;
+
 /**
  * Exposes information about Spark Stages.
  *
  * This interface is not designed to be implemented outside of Spark.  We may add additional methods
  * which may break binary compatibility with outside implementations.
  */
-public interface SparkStageInfo {
+public interface SparkStageInfo extends Serializable {
   int stageId();
   int currentAttemptId();
   long submissionTime();

@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
+import array
 from collections import namedtuple
 
 from pyspark import SparkContext
 from pyspark.rdd import RDD
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
+from pyspark.mllib.util import JavaLoader, JavaSaveable
+from pyspark.sql import DataFrame
 
 __all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
@@ -39,7 +42,8 @@ class Rating(namedtuple("Rating", ["user", "product", "rating"])):
         return Rating, (int(self.user), int(self.product), float(self.rating))
 
 
-class MatrixFactorizationModel(JavaModelWrapper):
+@inherit_doc
+class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """A matrix factorisation model trained by regularized alternating
     least-squares.
@@ -49,17 +53,24 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
     >>> model = ALS.trainImplicit(ratings, 1, seed=10)
-    >>> model.predict(2,2)
-    0.4473...
+    >>> model.predict(2, 2)
+    0.4...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model = ALS.train(ratings, 1, seed=10)
+    >>> model = ALS.train(ratings, 2, seed=0)
     >>> model.predictAll(testset).collect()
-    [Rating(user=1, product=1, rating=1.0471...), Rating(user=1, product=2, rating=1.9679...)]
+    [Rating(user=1, product=1, rating=1.0...), Rating(user=1, product=2, rating=1.9...)]
 
     >>> model = ALS.train(ratings, 4, seed=10)
     >>> model.userFeatures().collect()
-    [(2, array('d', [...])), (1, array('d', [...]))]
+    [(1, array('d', [...])), (2, array('d', [...]))]
+
+    >>> model.recommendUsers(1, 2)
+    [Rating(user=2, product=1, rating=1.9...), Rating(user=1, product=1, rating=1.0...)]
+    >>> model.recommendProducts(1, 2)
+    [Rating(user=1, product=2, rating=1.9...), Rating(user=1, product=1, rating=1.0...)]
+    >>> model.rank
+    4
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
@@ -67,7 +78,7 @@ class MatrixFactorizationModel(JavaModelWrapper):
     True
 
     >>> model.productFeatures().collect()
-    [(2, array('d', [...])), (1, array('d', [...]))]
+    [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
@@ -75,41 +86,104 @@ class MatrixFactorizationModel(JavaModelWrapper):
     True
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
-    >>> model.predict(2,2)
-    3.735...
+    >>> model.predict(2, 2)
+    3.8...
+
+    >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
+    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
+    >>> model.predict(2, 2)
+    3.8...
 
     >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
-    >>> model.predict(2,2)
-    0.4473...
+    >>> model.predict(2, 2)
+    0.4...
+
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = MatrixFactorizationModel.load(sc, path)
+    >>> sameModel.predict(2, 2)
+    0.4...
+    >>> sameModel.predictAll(testset).collect()
+    [Rating(...
+    >>> try:
+    ...     os.removedirs(path)
+    ... except OSError:
+    ...     pass
     """
     def predict(self, user, product):
+        """
+        Predicts rating for the given user and product.
+        """
         return self._java_model.predict(int(user), int(product))
 
     def predictAll(self, user_product):
+        """
+        Returns a list of predicted ratings for input user and product pairs.
+        """
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
         assert len(first) == 2, "user_product should be RDD of (user, product)"
-        user_product = user_product.map(lambda (u, p): (int(u), int(p)))
+        user_product = user_product.map(lambda u_p: (int(u_p[0]), int(u_p[1])))
         return self.call("predict", user_product)
 
     def userFeatures(self):
-        return self.call("getUserFeatures")
+        """
+        Returns a paired RDD, where the first element is the user and the
+        second is an array of features corresponding to that user.
+        """
+        return self.call("getUserFeatures").mapValues(lambda v: array.array('d', v))
 
     def productFeatures(self):
-        return self.call("getProductFeatures")
+        """
+        Returns a paired RDD, where the first element is the product and the
+        second is an array of features corresponding to that product.
+        """
+        return self.call("getProductFeatures").mapValues(lambda v: array.array('d', v))
+
+    def recommendUsers(self, product, num):
+        """
+        Recommends the top "num" number of users for a given product and returns a list
+        of Rating objects sorted by the predicted rating in descending order.
+        """
+        return list(self.call("recommendUsers", product, num))
+
+    def recommendProducts(self, user, num):
+        """
+        Recommends the top "num" number of products for a given user and returns a list
+        of Rating objects sorted by the predicted rating in descending order.
+        """
+        return list(self.call("recommendProducts", user, num))
+
+    @property
+    def rank(self):
+        return self.call("rank")
+
+    @classmethod
+    def load(cls, sc, path):
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        return MatrixFactorizationModel(wrapper)
 
 
 class ALS(object):
 
     @classmethod
     def _prepare(cls, ratings):
-        assert isinstance(ratings, RDD), "ratings should be RDD"
+        if isinstance(ratings, RDD):
+            pass
+        elif isinstance(ratings, DataFrame):
+            ratings = ratings.rdd
+        else:
+            raise TypeError("Ratings should be represented by either an RDD or a DataFrame, "
+                            "but got %s." % type(ratings))
         first = ratings.first()
-        if not isinstance(first, Rating):
-            if isinstance(first, (tuple, list)):
-                ratings = ratings.map(lambda x: Rating(*x))
-            else:
-                raise ValueError("rating should be RDD of Rating or tuple/list")
+        if isinstance(first, Rating):
+            pass
+        elif isinstance(first, (tuple, list)):
+            ratings = ratings.map(lambda x: Rating(*x))
+        else:
+            raise TypeError("Expect a Rating or a tuple/list, but got %s." % type(first))
         return ratings
 
     @classmethod
@@ -130,8 +204,11 @@ class ALS(object):
 def _test():
     import doctest
     import pyspark.mllib.recommendation
+    from pyspark.sql import SQLContext
     globs = pyspark.mllib.recommendation.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest')
+    sc = SparkContext('local[4]', 'PythonTest')
+    globs['sc'] = sc
+    globs['sqlContext'] = SQLContext(sc)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

@@ -21,12 +21,12 @@ import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
 object SVMSuite {
 
@@ -45,7 +45,7 @@ object SVMSuite {
     nPoints: Int,
     seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights : _*)
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
@@ -56,9 +56,12 @@ object SVMSuite {
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
 
+  /** Binary labels, 3 features */
+  private val binaryModel = new SVMModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+
 }
 
-class SVMSuite extends FunSuite with MLlibTestSparkContext {
+class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
@@ -87,7 +90,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     val model = svm.run(testRDD)
 
     val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
 
@@ -113,7 +116,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -123,8 +126,8 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
 
     val model = svm.run(testRDD)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -141,7 +144,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
@@ -155,8 +158,8 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
 
     val model = svm.run(testRDD, initialWeights)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData,2)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -173,7 +176,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     val B = -1.5
     val C = 1.0
 
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
 
     val testRDDInvalid = testRDD.map { lp =>
@@ -191,9 +194,41 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     // Turning off data validation should not throw an exception
     new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
+
+  test("model save/load") {
+    // NOTE: This will need to be generalized once there are multiple model format versions.
+    val model = SVMSuite.binaryModel
+
+    model.clearThreshold()
+    assert(model.getThreshold.isEmpty)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = SVMModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+      assert(sameModel.getThreshold.isEmpty)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+
+    // Save model with threshold.
+    try {
+      model.setThreshold(0.7)
+      model.save(sc, path)
+      val sameModel2 = SVMModel.load(sc, path)
+      assert(model.getThreshold.get == sameModel2.getThreshold.get)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
-class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
+class SVMClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

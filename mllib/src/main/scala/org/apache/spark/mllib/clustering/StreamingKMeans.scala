@@ -20,17 +20,18 @@ package org.apache.spark.mllib.clustering
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
+ *
  * StreamingKMeansModel extends MLlib's KMeansModel for streaming
  * algorithms, so it can keep track of a continuously updated weight
  * associated with each cluster, and also update the model by
@@ -40,8 +41,10 @@ import org.apache.spark.util.random.XORShiftRandom
  * generalized to incorporate forgetfullness (i.e. decay).
  * The update rule (for each cluster) is:
  *
+ * {{{
  * c_t+1 = [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t]
  * n_t+t = n_t * a + m_t
+ * }}}
  *
  * Where c_t is the previously estimated centroid for that cluster,
  * n_t is the number of points assigned to it thus far, x_t is the centroid
@@ -62,7 +65,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * as batches or points.
  *
  */
-@DeveloperApi
+@Experimental
 class StreamingKMeansModel(
     override val clusterCenters: Array[Vector],
     val clusterWeights: Array[Double]) extends KMeansModel(clusterCenters) with Logging {
@@ -141,7 +144,8 @@ class StreamingKMeansModel(
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
+ *
  * StreamingKMeans provides methods for configuring a
  * streaming k-means analysis, training the model on streaming,
  * and using the model to make predictions on streaming data.
@@ -150,17 +154,19 @@ class StreamingKMeansModel(
  * Use a builder pattern to construct a streaming k-means analysis
  * in an application, like:
  *
+ * {{{
  *  val model = new StreamingKMeans()
  *    .setDecayFactor(0.5)
  *    .setK(3)
  *    .setRandomCenters(5, 100.0)
  *    .trainOn(DStream)
+ * }}}
  */
-@DeveloperApi
+@Experimental
 class StreamingKMeans(
     var k: Int,
     var decayFactor: Double,
-    var timeUnit: String) extends Logging {
+    var timeUnit: String) extends Logging with Serializable {
 
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
 
@@ -174,7 +180,7 @@ class StreamingKMeans(
 
   /** Set the decay factor directly (for forgetful algorithms). */
   def setDecayFactor(a: Double): this.type = {
-    this.decayFactor = decayFactor
+    this.decayFactor = a
     this
   }
 
@@ -230,6 +236,9 @@ class StreamingKMeans(
     }
   }
 
+  /** Java-friendly version of `trainOn`. */
+  def trainOn(data: JavaDStream[Vector]): Unit = trainOn(data.dstream)
+
   /**
    * Use the clustering model to make predictions on batches of data from a DStream.
    *
@@ -239,6 +248,11 @@ class StreamingKMeans(
   def predictOn(data: DStream[Vector]): DStream[Int] = {
     assertInitialized()
     data.map(model.predict)
+  }
+
+  /** Java-friendly version of `predictOn`. */
+  def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Integer] = {
+    JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Integer]])
   }
 
   /**
@@ -251,6 +265,14 @@ class StreamingKMeans(
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Int)] = {
     assertInitialized()
     data.mapValues(model.predict)
+  }
+
+  /** Java-friendly version of `predictOnValues`. */
+  def predictOnValues[K](
+      data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Integer] = {
+    implicit val tag = fakeClassTag[K]
+    JavaPairDStream.fromPairDStream(
+      predictOnValues(data.dstream).asInstanceOf[DStream[(K, java.lang.Integer)]])
   }
 
   /** Check whether cluster centers have been initialized. */

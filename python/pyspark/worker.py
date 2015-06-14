@@ -18,13 +18,12 @@
 """
 Worker that receives input from Piped RDD.
 """
+from __future__ import print_function
 import os
 import sys
 import time
 import socket
 import traceback
-import cProfile
-import pstats
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -39,9 +38,9 @@ utf8_deserializer = UTF8Deserializer()
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
-    write_long(1000 * boot, outfile)
-    write_long(1000 * init, outfile)
-    write_long(1000 * finish, outfile)
+    write_long(int(1000 * boot), outfile)
+    write_long(int(1000 * init), outfile)
+    write_long(int(1000 * finish), outfile)
 
 
 def add_path(path):
@@ -57,6 +56,12 @@ def main(infile, outfile):
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             exit(-1)
+
+        version = utf8_deserializer.loads(infile)
+        if version != "%d.%d" % sys.version_info[:2]:
+            raise Exception(("Python in worker has different version %s than that in " +
+                             "driver %s, PySpark cannot run with different minor versions") %
+                            ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
         shuffle.MemoryBytesSpilled = 0
@@ -74,6 +79,9 @@ def main(infile, outfile):
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
             add_path(os.path.join(spark_files_dir, filename))
+        if sys.version > '3':
+            import importlib
+            importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)
@@ -90,32 +98,28 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         if isinstance(command, Broadcast):
             command = pickleSer.loads(command.value)
-        (func, stats, deserializer, serializer) = command
+        func, profiler, deserializer, serializer = command
         init_time = time.time()
 
         def process():
             iterator = deserializer.load_stream(infile)
             serializer.dump_stream(func(split_index, iterator), outfile)
 
-        if stats:
-            p = cProfile.Profile()
-            p.runcall(process)
-            st = pstats.Stats(p)
-            st.stream = None  # make it picklable
-            stats.add(st.strip_dirs())
+        if profiler:
+            profiler.profile(process)
         else:
             process()
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc(), outfile)
+            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass
         except Exception:
             # Write the error to stderr if it happened while serializing
-            print >> sys.stderr, "PySpark worker failed with exception:"
-            print >> sys.stderr, traceback.format_exc()
+            print("PySpark worker failed with exception:", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
         exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)

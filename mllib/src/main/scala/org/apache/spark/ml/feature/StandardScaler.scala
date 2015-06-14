@@ -17,89 +17,112 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Star
-import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
-private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
+private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
+
+  /**
+   * Centers the data with mean before scaling.
+   * It will build a dense output, so this does not work on sparse input
+   * and will raise an exception.
+   * Default: false
+   * @group param
+   */
+  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
+
+  /**
+   * Scales the data to unit standard deviation.
+   * Default: true
+   * @group param
+   */
+  val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
+}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  */
-@AlphaComponent
-class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
+@Experimental
+class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
+  with StandardScalerParams {
 
+  def this() = this(Identifiable.randomUID("stdScal"))
+
+  setDefault(withMean -> false, withStd -> true)
+
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    import dataset.sqlContext._
-    val map = this.paramMap ++ paramMap
-    val input = dataset.select(map(inputCol).attr)
-      .map { case Row(v: Vector) =>
-        v
-      }
-    val scaler = new feature.StandardScaler().fit(input)
-    val model = new StandardScalerModel(this, map, scaler)
-    Params.inheritValues(map, this, model)
-    model
+  /** @group setParam */
+  def setWithMean(value: Boolean): this.type = set(withMean, value)
+
+  /** @group setParam */
+  def setWithStd(value: Boolean): this.type = set(withStd, value)
+
+  override def fit(dataset: DataFrame): StandardScalerModel = {
+    transformSchema(dataset.schema, logging = true)
+    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
+    val scalerModel = scaler.fit(input)
+    copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val inputType = schema(map(inputCol)).dataType
+  override def transformSchema(schema: StructType): StructType = {
+    val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${map(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains(map(outputCol)),
-      s"Output column ${map(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
+      s"Input column ${$(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[StandardScaler]].
  */
-@AlphaComponent
+@Experimental
 class StandardScalerModel private[ml] (
-    override val parent: StandardScaler,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    import dataset.sqlContext._
-    val map = this.paramMap ++ paramMap
-    val scale: (Vector) => Vector = (v) => {
-      scaler.transform(v)
-    }
-    dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    val scale = udf { scaler.transform _ }
+    dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val inputType = schema(map(inputCol)).dataType
+  override def transformSchema(schema: StructType): StructType = {
+    val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${map(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains(map(outputCol)),
-      s"Output column ${map(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
+      s"Input column ${$(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
 }

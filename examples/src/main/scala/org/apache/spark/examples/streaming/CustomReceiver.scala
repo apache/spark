@@ -23,7 +23,6 @@ import java.net.Socket
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.receiver.Receiver
 
 /**

@@ -18,43 +18,15 @@
 """
 Python bindings for MLlib.
 """
+from __future__ import absolute_import
 
-# MLlib currently needs and NumPy 1.4+, so complain if lower
+# MLlib currently needs NumPy 1.4+, so complain if lower
 
 import numpy
-if numpy.version.version < '1.4':
+
+ver = [int(x) for x in numpy.version.version.split('.')[:2]]
+if ver < [1, 4]:
     raise Exception("MLlib requires NumPy 1.4+")
 
-__all__ = ['classification', 'clustering', 'feature', 'linalg', 'random',
+__all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
            'recommendation', 'regression', 'stat', 'tree', 'util']
-
-import sys
-import rand as random
-random.__name__ = 'random'
-random.RandomRDDs.__module__ = __name__ + '.random'
-
-
-class RandomModuleHook(object):
-    """
-    Hook to import pyspark.mllib.random
-    """
-    fullname = __name__ + '.random'
-
-    def find_module(self, name, path=None):
-        # skip all other modules
-        if not name.startswith(self.fullname):
-            return
-        return self
-
-    def load_module(self, name):
-        if name == self.fullname:
-            return random
-
-        cname = name.rsplit('.', 1)[-1]
-        try:
-            return getattr(random, cname)
-        except AttributeError:
-            raise ImportError
-
-
-sys.meta_path.append(RandomModuleHook())

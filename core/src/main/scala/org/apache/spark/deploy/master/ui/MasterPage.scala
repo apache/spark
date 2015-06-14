@@ -26,39 +26,67 @@ import akka.pattern.ask
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
+import org.apache.spark.deploy.DeployMessages.{RequestKillDriver, MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 
-  override def renderJson(request: HttpServletRequest): JValue = {
+  def getMasterState: MasterStateResponse = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
-    JsonProtocol.writeMasterState(state)
+    Await.result(stateFuture, timeout)
+  }
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    JsonProtocol.writeMasterState(getMasterState)
+  }
+
+  def handleAppKillRequest(request: HttpServletRequest): Unit = {
+    handleKillRequest(request, id => {
+      parent.master.idToApp.get(id).foreach { app =>
+        parent.master.removeApplication(app, ApplicationState.KILLED)
+      }
+    })
+  }
+
+  def handleDriverKillRequest(request: HttpServletRequest): Unit = {
+    handleKillRequest(request, id => { master ! RequestKillDriver(id) })
+  }
+
+  private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
+    if (parent.killEnabled &&
+        parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
+      val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
+      val id = Option(request.getParameter("id"))
+      if (id.isDefined && killFlag) {
+        action(id.get)
+      }
+
+      Thread.sleep(100)
+    }
   }
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
+    val state = getMasterState
 
-    val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
+    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
+    val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("ID", "Name", "Cores", "Memory per Node", "Submitted Time", "User",
-      "State", "Duration")
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
+      "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
-    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory",
-      "Main Class")
+    val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
@@ -66,19 +94,27 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
-    def hasDrivers = activeDrivers.length > 0 || completedDrivers.length > 0
+    def hasDrivers: Boolean = activeDrivers.length > 0 || completedDrivers.length > 0
 
     val content =
         <div class="row-fluid">
           <div class="span12">
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
-              <li><strong>Workers:</strong> {state.workers.size}</li>
-              <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
-                {state.workers.map(_.coresUsed).sum} Used</li>
-              <li><strong>Memory:</strong>
-                {Utils.megabytesToString(state.workers.map(_.memory).sum)} Total,
-                {Utils.megabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
+              {
+                state.restUri.map { uri =>
+                  <li>
+                    <strong>REST URL:</strong> {uri}
+                    <span class="rest-uri"> (cluster mode)</span>
+                  </li>
+                }.getOrElse { Seq.empty }
+              }
+              <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
+              <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
+                {aliveWorkers.map(_.coresUsed).sum} Used</li>
+              <li><strong>Memory in use:</strong>
+                {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
+                {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.size} Running,
                 {state.completedApps.size} Completed </li>
@@ -155,9 +191,21 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def appRow(app: ApplicationInfo): Seq[Node] = {
+    val killLink = if (parent.killEnabled &&
+      (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill application ${app.id} ?')) " +
+          "{ this.parentNode.submit(); return true; } else { return false; }"
+      <form action="app/kill/" method="POST" style="display:inline">
+        <input type="hidden" name="id" value={app.id.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+    }
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
+        {killLink}
       </td>
       <td>
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
@@ -165,8 +213,8 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         {app.coresGranted}
       </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
+      <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
+        {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
@@ -176,8 +224,21 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {
+    val killLink = if (parent.killEnabled &&
+      (driver.state == DriverState.RUNNING ||
+        driver.state == DriverState.SUBMITTED ||
+        driver.state == DriverState.RELAUNCHING)) {
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill driver ${driver.id} ?')) " +
+          "{ this.parentNode.submit(); return true; } else { return false; }"
+      <form action="driver/kill/" method="POST" style="display:inline">
+        <input type="hidden" name="id" value={driver.id.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+    }
     <tr>
-      <td>{driver.id} </td>
+      <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
       </td>
@@ -188,7 +249,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
-      <td>{driver.desc.command.arguments(1)}</td>
+      <td>{driver.desc.command.arguments(2)}</td>
     </tr>
   }
 }

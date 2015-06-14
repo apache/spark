@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.json4s.jackson.JsonMethods.parse
-import org.scalatest.FunSuite
 
-class MetadataSuite extends FunSuite {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{MetadataBuilder, Metadata}
+
+class MetadataSuite extends SparkFunSuite {
 
   val baseMetadata = new MetadataBuilder()
     .putString("purpose", "ml")

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 import org.apache.spark.util.Utils
 
@@ -44,13 +47,21 @@ class HiveTableScanSuite extends HiveComparisonTest {
       |SELECT * from part_scan_test;
     """.stripMargin)
 
+  // In unit test, kv1.txt is a small file and will be loaded as table src
+  // Since the small file will be considered as a single split, we assume
+  // Hive / SparkSQL HQL has the same output even for SORT BY
+  createQueryTest("file_split_for_small_table",
+    """
+      |SELECT key, value FROM src SORT BY key, value
+    """.stripMargin)
+
   test("Spark-4041: lowercase issue") {
     TestHive.sql("CREATE TABLE tb (KEY INT, VALUE STRING) STORED AS ORC")
     TestHive.sql("insert into table tb select key, value from src")
     TestHive.sql("select KEY from tb where VALUE='just_for_test' limit 5").collect()
     TestHive.sql("drop table tb")
   }
-  
+
   test("Spark-4077: timestamp query for null value") {
     TestHive.sql("DROP TABLE IF EXISTS timestamp_query_null")
     TestHive.sql(
@@ -60,13 +71,23 @@ class HiveTableScanSuite extends HiveComparisonTest {
         FIELDS TERMINATED BY ','
         LINES TERMINATED BY '\n'
       """.stripMargin)
-    val location = 
+    val location =
       Utils.getSparkClassLoader.getResource("data/files/issue-4077-data.txt").getFile()
-     
+
     TestHive.sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE timestamp_query_null")
-    assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect() 
-      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
+    assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect()
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
   }
-  
+
+  test("Spark-4959 Attributes are case sensitive when using a select query from a projection") {
+    sql("create table spark_4959 (col1 string)")
+    sql("""insert into table spark_4959 select "hi" from src limit 1""")
+    table("spark_4959").select(
+      'col1.as("CaseSensitiveColName"),
+      'col1.as("CaseSensitiveColName2")).registerTempTable("spark_4959_2")
+
+    assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
+    assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+  }
 }

@@ -17,24 +17,32 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
+import java.io._
 
-import org.apache.spark.util.{Utils => SparkUtils}
+import org.apache.spark.util.Utils
 
 package object util {
-  /**
-   * Returns a path to a temporary file that probably does not exist.
-   * Note, there is always the race condition that someone created this
-   * file since the last time we checked.  Thus, this shouldn't be used
-   * for anything security conscious.
-   */
-  def getTempFilePath(prefix: String, suffix: String = ""): File = {
-    val tempFile = File.createTempFile(prefix, suffix)
-    tempFile.delete()
-    tempFile
+
+  /** Silences output to stderr or stdout for the duration of f */
+  def quietly[A](f: => A): A = {
+    val origErr = System.err
+    val origOut = System.out
+    try {
+      System.setErr(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+      System.setOut(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+
+      f
+    } finally {
+      System.setErr(origErr)
+      System.setOut(origOut)
+    }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8") = {
+  def fileToString(file: File, encoding: String = "UTF-8"): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -53,10 +61,9 @@ package object util {
     new String(outStream.toByteArray, encoding)
   }
 
-  def resourceToString(
-      resource:String,
-      encoding: String = "UTF-8",
-      classLoader: ClassLoader = SparkUtils.getSparkClassLoader) = {
+  def resourceToBytes(
+      resource: String,
+      classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
     val outStream = new ByteArrayOutputStream
     try {
@@ -72,7 +79,14 @@ package object util {
     finally {
       inStream.close()
     }
-    new String(outStream.toByteArray, encoding)
+    outStream.toByteArray
+  }
+
+  def resourceToString(
+      resource: String,
+      encoding: String = "UTF-8",
+      classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
+    new String(resourceToBytes(resource, classLoader), encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
@@ -104,7 +118,7 @@ package object util {
     new String(out.toByteArray)
   }
 
-  def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
+  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
 
   def benchmark[A](f: => A): A = {
     val startTime = System.nanoTime()

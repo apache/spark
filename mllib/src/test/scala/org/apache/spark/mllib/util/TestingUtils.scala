@@ -95,16 +95,16 @@ object TestingUtils {
     /**
      * Comparison using absolute tolerance.
      */
-    def absTol(eps: Double): CompareDoubleRightSide = CompareDoubleRightSide(AbsoluteErrorComparison,
-      x, eps, ABS_TOL_MSG)
+    def absTol(eps: Double): CompareDoubleRightSide =
+      CompareDoubleRightSide(AbsoluteErrorComparison, x, eps, ABS_TOL_MSG)
 
     /**
      * Comparison using relative tolerance.
      */
-    def relTol(eps: Double): CompareDoubleRightSide = CompareDoubleRightSide(RelativeErrorComparison,
-      x, eps, REL_TOL_MSG)
+    def relTol(eps: Double): CompareDoubleRightSide =
+      CompareDoubleRightSide(RelativeErrorComparison, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
   case class CompareVectorRightSide(
@@ -166,7 +166,7 @@ object TestingUtils {
         x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
   case class CompareMatrixRightSide(
@@ -178,17 +178,17 @@ object TestingUtils {
   implicit class MatrixWithAlmostEquals(val x: Matrix) {
 
     /**
-     * When the difference of two vectors are within eps, returns true; otherwise, returns false.
+     * When the difference of two matrices are within eps, returns true; otherwise, returns false.
      */
     def ~=(r: CompareMatrixRightSide): Boolean = r.fun(x, r.y, r.eps)
 
     /**
-     * When the difference of two vectors are within eps, returns false; otherwise, returns true.
+     * When the difference of two matrices are within eps, returns false; otherwise, returns true.
      */
     def !~=(r: CompareMatrixRightSide): Boolean = !r.fun(x, r.y, r.eps)
 
     /**
-     * Throws exception when the difference of two vectors are NOT within eps;
+     * Throws exception when the difference of two matrices are NOT within eps;
      * otherwise, returns true.
      */
     def ~==(r: CompareMatrixRightSide): Boolean = {
@@ -229,7 +229,7 @@ object TestingUtils {
         x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
-    override def toString = x.toString
+    override def toString: String = x.toString
   }
 
 }

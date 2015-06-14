@@ -50,8 +50,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   private var jID: SerializableWritable[JobID] = null
   private var taID: SerializableWritable[TaskAttemptID] = null
 
-  @transient private var writer: RecordWriter[AnyRef,AnyRef] = null
-  @transient private var format: OutputFormat[AnyRef,AnyRef] = null
+  @transient private var writer: RecordWriter[AnyRef, AnyRef] = null
+  @transient private var format: OutputFormat[AnyRef, AnyRef] = null
   @transient private var committer: OutputCommitter = null
   @transient private var jobContext: JobContext = null
   @transient private var taskContext: TaskAttemptContext = null
@@ -103,36 +103,21 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   def commit() {
-    val taCtxt = getTaskContext()
-    val cmtr = getOutputCommitter()
-    if (cmtr.needsTaskCommit(taCtxt)) {
-      try {
-        cmtr.commitTask(taCtxt)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException => {
-          logError("Error committing the output of task: " + taID.value, e)
-          cmtr.abortTask(taCtxt)
-          throw e
-        }
-      }
-    } else {
-      logInfo ("No need to commit output of task: " + taID.value)
-    }
+    SparkHadoopMapRedUtil.commitTask(
+      getOutputCommitter(), getTaskContext(), jobID, splitID, attemptID)
   }
 
   def commitJob() {
-    // always ? Or if cmtr.needsTaskCommit ?
     val cmtr = getOutputCommitter()
     cmtr.commitJob(getJobContext())
   }
 
   // ********* Private Functions *********
 
-  private def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {
+  private def getOutputFormat(): OutputFormat[AnyRef, AnyRef] = {
     if (format == null) {
       format = conf.value.getOutputFormat()
-        .asInstanceOf[OutputFormat[AnyRef,AnyRef]]
+        .asInstanceOf[OutputFormat[AnyRef, AnyRef]]
     }
     format
   }
@@ -153,7 +138,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   private def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
-      taskContext =  newTaskAttemptContext(conf.value, taID.value)
+      taskContext = newTaskAttemptContext(conf.value, taID.value)
     }
     taskContext
   }

@@ -25,7 +25,6 @@ import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
-import org.apache.spark.mllib.rdd.RDDFunctions._
 
 
 /**
@@ -210,7 +209,7 @@ object GradientDescent extends Logging {
      * if it's L2 updater; for L1 updater, the same logic is followed.
      */
     var regVal = updater.compute(
-      weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
+      weights, Vectors.zeros(weights.size), 0, 1, regParam)._2
 
     var converged = false // indicates whether converged based on convergenceTol
     var i = 1

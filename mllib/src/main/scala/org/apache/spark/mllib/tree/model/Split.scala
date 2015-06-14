@@ -38,9 +38,10 @@ case class Split(
     featureType: FeatureType,
     categories: List[Double]) {
 
-  override def toString =
-    "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType +
-      ", categories = " + categories
+  override def toString: String = {
+    s"Feature = $feature, threshold = $threshold, featureType = $featureType, " +
+      s"categories = $categories"
+  }
 }
 
 /**
@@ -67,4 +68,3 @@ private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
  */
 private[tree] class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
-

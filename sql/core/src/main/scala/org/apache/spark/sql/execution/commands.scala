@@ -20,41 +20,31 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{SQLConf, SQLContext}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 
-// TODO: DELETE ME...
-trait Command {
-  this: SparkPlan =>
-
-  /**
-   * A concrete command should override this lazy field to wrap up any side effects caused by the
-   * command or any other computation that should be evaluated exactly once. The value of this field
-   * can be used as the contents of the corresponding RDD generated from the physical plan of this
-   * command.
-   *
-   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
-   * so that the command can be executed eagerly right after the command query is created.
-   */
-  protected lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
-
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
-
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
-}
-
-// TODO: Replace command with runnable command.
-trait RunnableCommand extends logical.Command {
+/**
+ * A logical command that is executed for its side-effects.  `RunnableCommand`s are
+ * wrapped in `ExecutedCommand` during execution.
+ */
+private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
   self: Product =>
 
-  def output: Seq[Attribute]
+  override def output: Seq[Attribute] = Seq.empty
+  override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]
 }
 
-case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
+/**
+ * A physical operator that executes the run method of a `RunnableCommand` and
+ * saves the result to prevent multiple executions.
+ */
+private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
@@ -66,56 +56,67 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
    */
   protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
 
-  override def output = cmd.output
+  override def output: Seq[Attribute] = cmd.output
 
-  override def children = Nil
+  override def children: Seq[SparkPlan] = Nil
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
-  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val converted = sideEffectResult.map(r =>
+      CatalystTypeConverters.convertToCatalyst(r, schema).asInstanceOf[InternalRow])
+    sqlContext.sparkContext.parallelize(converted, 1)
+  }
 }
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommand(kv: Option[(String, Option[String])], output: Seq[Attribute])(
-    @transient context: SQLContext)
-  extends LeafNode with Command with Logging {
+case class SetCommand(
+    kv: Option[(String, Option[String])],
+    override val output: Seq[Attribute])
+  extends RunnableCommand with Logging {
 
-  override protected lazy val sideEffectResult: Seq[Row] = kv match {
+  override def run(sqlContext: SQLContext): Seq[Row] = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      context.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
+      if (value.toInt < 1) {
+        val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
+          "determining the number of reducers is not supported."
+        throw new IllegalArgumentException(msg)
+      } else {
+        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
+        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
+      }
 
     // Configures a single property.
     case Some((key, Some(value))) =>
-      context.setConf(key, value)
+      sqlContext.setConf(key, value)
       Seq(Row(s"$key=$value"))
 
-    // Queries all key-value pairs that are set in the SQLConf of the context. Notice that different
-    // from Hive, here "SET -v" is an alias of "SET". (In Hive, "SET" returns all changed properties
-    // while "SET -v" returns all properties.)
+    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
+    // Notice that different from Hive, here "SET -v" is an alias of "SET".
+    // (In Hive, "SET" returns all changed properties while "SET -v" returns all properties.)
     case Some(("-v", None)) | None =>
-      context.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+      sqlContext.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
 
     // Queries a single property.
     case Some((key, None)) =>
-      Seq(Row(s"$key=${context.getConf(key, "<undefined>")}"))
+      Seq(Row(s"$key=${sqlContext.getConf(key, "<undefined>")}"))
   }
-
-  override def otherCopyArgs = context :: Nil
 }
 
 /**
@@ -128,22 +129,22 @@ case class SetCommand(kv: Option[(String, Option[String])], output: Seq[Attribut
  */
 @DeveloperApi
 case class ExplainCommand(
-    logicalPlan: LogicalPlan, output: Seq[Attribute], extended: Boolean)(
-    @transient context: SQLContext)
-  extends LeafNode with Command {
+    logicalPlan: LogicalPlan,
+    override val output: Seq[Attribute] =
+      Seq(AttributeReference("plan", StringType, nullable = false)()),
+    extended: Boolean = false)
+  extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
-  override protected lazy val sideEffectResult: Seq[Row] = try {
+  override def run(sqlContext: SQLContext): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
-    val queryExecution = context.executePlan(logicalPlan)
+    val queryExecution = sqlContext.executePlan(logicalPlan)
     val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
 
     outputString.split("\n").map(Row(_))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
-
-  override def otherCopyArgs = context :: Nil
 }
 
 /**
@@ -154,17 +155,17 @@ case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
     isLazy: Boolean)
-  extends LeafNode with Command {
+  extends RunnableCommand {
 
-  override protected lazy val sideEffectResult = {
-    import sqlContext._
-
-    plan.foreach(_.registerTempTable(tableName))
-    cacheTable(tableName)
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    plan.foreach { logicalPlan =>
+      sqlContext.registerDataFrameAsTable(DataFrame(sqlContext, logicalPlan), tableName)
+    }
+    sqlContext.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      table(tableName).count()
+      sqlContext.table(tableName).count()
     }
 
     Seq.empty[Row]
@@ -178,9 +179,25 @@ case class CacheTableCommand(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class UncacheTableCommand(tableName: String) extends LeafNode with Command {
-  override protected lazy val sideEffectResult: Seq[Row] = {
-    sqlContext.table(tableName).unpersist()
+case class UncacheTableCommand(tableName: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.table(tableName).unpersist(blocking = false)
+    Seq.empty[Row]
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * :: DeveloperApi ::
+ * Clear all cached data from the in-memory cache.
+ */
+@DeveloperApi
+case object ClearCacheCommand extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.clearCache()
     Seq.empty[Row]
   }
 
@@ -191,12 +208,49 @@ case class UncacheTableCommand(tableName: String) extends LeafNode with Command 
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
-    @transient context: SQLContext)
-  extends LeafNode with Command {
+case class DescribeCommand(
+    child: SparkPlan,
+    override val output: Seq[Attribute],
+    isExtended: Boolean)
+  extends RunnableCommand {
 
-  override protected lazy val sideEffectResult: Seq[Row] = {
-    Row("# Registered as a temporary table", null, null) +:
-      child.output.map(field => Row(field.name, field.dataType.toString, null))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    child.schema.fields.map { field =>
+      val cmtKey = "comment"
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      Row(field.name, field.dataType.simpleString, comment)
+    }
+  }
+}
+
+/**
+ * A command for users to get tables in the given database.
+ * If a databaseName is not given, the current database will be used.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    SHOW TABLES [IN databaseName]
+ * }}}
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("tableName", StringType, false) ::
+      StructField("isTemporary", BooleanType, false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we need to return a Seq of rows, we will call getTables directly
+    // instead of calling tables in sqlContext.
+    val rows = sqlContext.catalog.getTables(databaseName).map {
+      case (tableName, isTemporary) => Row(tableName, isTemporary)
+    }
+
+    rows
   }
 }

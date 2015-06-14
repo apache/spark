@@ -23,17 +23,18 @@ import org.mockito.Mockito._
 import org.mockito.Matchers._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.util.Clock
 
-class DriverRunnerTest extends FunSuite {
+class DriverRunnerTest extends SparkFunSuite {
   private def createDriverRunner() = {
     val command = new Command("mainClass", Seq(), Map(), Seq(), Seq(), Seq())
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
-    new DriverRunner(new SparkConf(), "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, null, "akka://1.2.3.4/worker/")
+    val conf = new SparkConf()
+    new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      driverDescription, null, "akka://1.2.3.4/worker/", new SecurityManager(conf))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {
@@ -129,7 +130,7 @@ class DriverRunnerTest extends FunSuite {
       .thenReturn(-1) // fail 3
       .thenReturn(-1) // fail 4
       .thenReturn(0) // success
-    when(clock.currentTimeMillis())
+    when(clock.getTimeMillis())
       .thenReturn(0).thenReturn(1000) // fail 1 (short)
       .thenReturn(1000).thenReturn(2000) // fail 2 (short)
       .thenReturn(2000).thenReturn(10000) // fail 3 (long)

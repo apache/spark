@@ -105,7 +105,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
 
   private val rng: Random = new XORShiftRandom
 
-  override def setSeed(seed: Long) = rng.setSeed(seed)
+  override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (ub - lb <= 0.0) {
@@ -131,7 +131,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
   def cloneComplement(): BernoulliCellSampler[T] =
     new BernoulliCellSampler[T](lb, ub, !complement)
 
-  override def clone = new BernoulliCellSampler[T](lb, ub, complement)
+  override def clone: BernoulliCellSampler[T] = new BernoulliCellSampler[T](lb, ub, complement)
 }
 
 
@@ -153,7 +153,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
 
   private val rng: Random = RandomSampler.newDefaultRNG
 
-  override def setSeed(seed: Long) = rng.setSeed(seed)
+  override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (fraction <= 0.0) {
@@ -167,7 +167,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
     }
   }
 
-  override def clone = new BernoulliSampler[T](fraction)
+  override def clone: BernoulliSampler[T] = new BernoulliSampler[T](fraction)
 }
 
 
@@ -209,7 +209,7 @@ class PoissonSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] 
     }
   }
 
-  override def clone = new PoissonSampler[T](fraction)
+  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction)
 }
 
 
@@ -228,15 +228,18 @@ class GapSamplingIterator[T: ClassTag](
     val arrayClass = Array.empty[T].iterator.getClass
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     data.getClass match {
-      case `arrayClass` => ((n: Int) => { data = data.drop(n) })
-      case `arrayBufferClass` => ((n: Int) => { data = data.drop(n) })
-      case _ => ((n: Int) => {
+      case `arrayClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case `arrayBufferClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case _ =>
+        (n: Int) => {
           var j = 0
           while (j < n && data.hasNext) {
             data.next()
             j += 1
           }
-        })
+        }
     }
   }
 
@@ -244,21 +247,21 @@ class GapSamplingIterator[T: ClassTag](
 
   override def next(): T = {
     val r = data.next()
-    advance
+    advance()
     r
   }
 
   private val lnq = math.log1p(-f)
 
   /** skip elements that won't be sampled, according to geometric dist P(k) = (f)(1-f)^k. */
-  private def advance: Unit = {
+  private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)
     val k = (math.log(u) / lnq).toInt
     iterDrop(k)
   }
 
   /** advance to first sample as part of object construction. */
-  advance
+  advance()
   // Attempting to invoke this closer to the top with other object initialization
   // was causing it to break in strange ways, so I'm invoking it last, which seems to
   // work reliably.
@@ -279,15 +282,18 @@ class GapSamplingReplacementIterator[T: ClassTag](
     val arrayClass = Array.empty[T].iterator.getClass
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     data.getClass match {
-      case `arrayClass` => ((n: Int) => { data = data.drop(n) })
-      case `arrayBufferClass` => ((n: Int) => { data = data.drop(n) })
-      case _ => ((n: Int) => {
+      case `arrayClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case `arrayBufferClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case _ =>
+        (n: Int) => {
           var j = 0
           while (j < n && data.hasNext) {
             data.next()
             j += 1
           }
-        })
+        }
     }
   }
 
@@ -300,7 +306,7 @@ class GapSamplingReplacementIterator[T: ClassTag](
   override def next(): T = {
     val r = v
     rep -= 1
-    if (rep <= 0) advance
+    if (rep <= 0) advance()
     r
   }
 
@@ -309,7 +315,7 @@ class GapSamplingReplacementIterator[T: ClassTag](
    * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
    * q is the probabililty of Poisson(0; f)
    */
-  private def advance: Unit = {
+  private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)
     val k = (math.log(u) / (-f)).toInt
     iterDrop(k)
@@ -343,7 +349,7 @@ class GapSamplingReplacementIterator[T: ClassTag](
   }
 
   /** advance to first sample as part of object construction. */
-  advance
+  advance()
   // Attempting to invoke this closer to the top with other object initialization
   // was causing it to break in strange ways, so I'm invoking it last, which seems to
   // work reliably.
