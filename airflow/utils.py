@@ -18,8 +18,12 @@ from contextlib import contextmanager
 from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
-from airflow.configuration import conf
 from airflow import settings
+from airflow.configuration import conf
+
+
+class AirflowException(Exception):
+    pass
 
 
 class State(object):
@@ -170,10 +174,10 @@ def validate_key(k, max_length=250):
     if type(k) is not str:
         raise TypeError("The key has to be a string")
     elif len(k) > max_length:
-        raise Exception("The key has to be less than {0} characters".format(
+        raise AirflowException("The key has to be less than {0} characters".format(
             max_length))
     elif not re.match(r'^[A-Za-z0-9_\-\.]+$', k):
-        raise Exception(
+        raise AirflowException(
             "The key ({k}) has to be made of alphanumeric characters, dashes, "
             "dots and underscores exclusively".format(**locals()))
     else:
@@ -187,7 +191,7 @@ def date_range(start_date, end_date=datetime.now(), delta=timedelta(1)):
             l.append(start_date)
             start_date += delta
     else:
-        raise Exception("start_date can't be after end_date")
+        raise AirflowException("start_date can't be after end_date")
     return l
 
 
@@ -259,7 +263,7 @@ def apply_defaults(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         if len(args) > 1:
-            raise Exception(
+            raise AirflowException(
                 "Use keyword arguments when initializing operators")
         dag_args = {}
         dag_params = {}
@@ -293,7 +297,7 @@ def apply_defaults(func):
         missing_args = list(set(non_optional_args) - set(kwargs))
         if missing_args:
             msg = "Argument {0} is required".format(missing_args)
-            raise Exception(msg)
+            raise AirflowException(msg)
 
         kwargs['params'] = dag_params
 

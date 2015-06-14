@@ -3,22 +3,17 @@ from datetime import datetime
 import getpass
 import logging
 import signal
+import socket
 import subprocess
 import sys
 from time import sleep
 
-from sqlalchemy import (
-    Column, Integer, String, DateTime)
-from sqlalchemy import func, Index
+from sqlalchemy import Column, Integer, String, DateTime, func, Index
 from sqlalchemy.orm.session import make_transient
 
-from airflow import executors
+from airflow import executors, models, settings, utils
 from airflow.configuration import conf
-from airflow import models
-from airflow import settings
-from airflow import utils
-import socket
-from airflow.utils import State
+from airflow.utils import AirflowException, State
 
 
 Base = models.Base
@@ -95,7 +90,7 @@ class BaseJob(Base):
         session.merge(job)
         session.commit()
         session.close()
-        raise Exception("Job shut down externally.")
+        raise AirflowException("Job shut down externally.")
 
     def on_kill(self):
         '''
@@ -539,7 +534,7 @@ class BackfillJob(BaseJob):
         executor.end()
         session.close()
         if failed:
-            raise Exception(
+            raise AirflowException(
                 "Some tasks instances failed, here's the list:\n"+str(failed))
 
 

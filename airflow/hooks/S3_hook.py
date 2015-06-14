@@ -5,13 +5,14 @@ import fnmatch
 import ConfigParser
 from urlparse import urlparse
 
-from airflow.hooks.base_hook import BaseHook
-
 import boto
 from boto.s3.connection import S3Connection
 from boto.sts import STSConnection
 boto.set_stream_logger('boto')
 logging.getLogger("boto").setLevel(logging.INFO)
+
+from airflow.utils import AirflowException
+from airflow.hooks.base_hook import BaseHook
 
 
 def _parse_s3_config(config_file_name, config_format='boto', profile=None):
@@ -31,7 +32,7 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
     if Config.read(config_file_name):
         sections = Config.sections()
     else:
-        raise Exception("Couldn't read {0}".format(config_file_name))
+        raise AirflowException("Couldn't read {0}".format(config_file_name))
     # Setting option names depending on file format
     conf_format = config_format.lower()
     if conf_format == 'boto':
@@ -53,7 +54,7 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
         secret_key_option = 'secret_key'
     # Actual Parsing
     if cred_section not in sections:
-        raise Exception("This config file format is not recognized")
+        raise AirflowException("This config file format is not recognized")
     else:
         try:
             access_key = Config.get(cred_section, key_id_option)
@@ -94,10 +95,10 @@ class S3Hook(BaseHook):
                 self.role_arn = "arn:aws:iam::" + self.aws_account_id
                 self.role_arn += ":role/" + self.aws_iam_role
         except TypeError as e:
-            raise Exception("S3 connection needs to set configuration"
+            raise AirflowException("S3 connection needs to set configuration"
                             "parameters in extra")
         except KeyError as e:
-            raise Exception("S3 connection definition needs to include"
+            raise AirflowException("S3 connection definition needs to include"
                             "{p} in extra".format(p=e.message))
         self.connection = self.get_conn()
 
@@ -113,7 +114,7 @@ class S3Hook(BaseHook):
     def _parse_s3_url(self, s3url):
         parsed_url = urlparse(s3url)
         if not parsed_url.netloc:
-            raise Exception('Please provide a bucket_name')
+            raise AirflowException('Please provide a bucket_name')
         else:
             bucket_name = parsed_url.netloc
             if parsed_url.path[0] == '/':

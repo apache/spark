@@ -3,13 +3,12 @@ import logging
 from urlparse import urlparse
 from time import sleep
 
-from airflow import settings
-from airflow import hooks
+from airflow import hooks, settings
 from airflow.models import BaseOperator
 from airflow.models import Connection as DB
 from airflow.models import State
 from airflow.models import TaskInstance
-from airflow.utils import apply_defaults
+from airflow.utils import apply_defaults, AirflowException
 
 
 class BaseSensorOperator(BaseOperator):
@@ -42,14 +41,14 @@ class BaseSensorOperator(BaseOperator):
         Function that the sensors defined while deriving this class should
         override.
         '''
-        raise Exception('Override me.')
+        raise AirflowException('Override me.')
 
     def execute(self, context):
         started_at = datetime.now()
         while not self.poke():
             sleep(self.poke_interval)
             if (datetime.now() - started_at).seconds > self.timeout:
-                raise Exception('Snap. Time is OUT.')
+                raise AirflowException('Snap. Time is OUT.')
         logging.info("Success criteria met. Exiting.")
 
 
@@ -77,7 +76,7 @@ class SqlSensor(BaseSensorOperator):
         session = settings.Session()
         db = session.query(DB).filter(DB.conn_id == conn_id).first()
         if not db:
-            raise Exception("conn_id doesn't exist in the repository")
+            raise AirflowException("conn_id doesn't exist in the repository")
         self.hook = db.get_hook()
         session.commit()
         session.close()
@@ -235,12 +234,12 @@ class S3KeySensor(BaseSensorOperator):
         session = settings.Session()
         db = session.query(DB).filter(DB.conn_id == s3_conn_id).first()
         if not db:
-            raise Exception("conn_id doesn't exist in the repository")
+            raise AirflowException("conn_id doesn't exist in the repository")
         # Parse
         if bucket_name is None:
             parsed_url = urlparse(bucket_key)
             if parsed_url.netloc == '':
-                raise Exception('Please provide a bucket_name')
+                raise AirflowException('Please provide a bucket_name')
             else:
                 bucket_name = parsed_url.netloc
                 if parsed_url.path[0] == '/':
@@ -296,7 +295,7 @@ class S3PrefixSensor(BaseSensorOperator):
         session = settings.Session()
         db = session.query(DB).filter(DB.conn_id == s3_conn_id).first()
         if not db:
-            raise Exception("conn_id doesn't exist in the repository")
+            raise AirflowException("conn_id doesn't exist in the repository")
         # Parse
         self.bucket_name = bucket_name
         self.prefix = prefix

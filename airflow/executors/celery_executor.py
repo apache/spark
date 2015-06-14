@@ -5,6 +5,7 @@ import time
 from celery import Celery
 from celery import states as celery_states
 
+from airflow.utils import AirflowException
 from airflow.executors.base_executor import BaseExecutor
 from airflow.configuration import conf
 
@@ -38,7 +39,7 @@ def execute_command(command):
     rc = subprocess.Popen(command, shell=True).wait()
     if rc:
         logging.error(rc)
-        raise Exception('Celery command failed')
+        raise AirflowException('Celery command failed')
 
 
 class CeleryExecutor(BaseExecutor):

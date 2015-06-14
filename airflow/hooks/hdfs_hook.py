@@ -1,6 +1,12 @@
 from airflow.hooks.base_hook import BaseHook
 from snakebite.client import Client, HAClient, Namenode
 
+from airflow.utils import AirflowException
+
+
+class HDFSHookException(AirflowException):
+    pass
+
 
 class HDFSHook(BaseHook):
     '''
@@ -21,5 +27,5 @@ class HDFSHook(BaseHook):
             nn = [Namenode(conn.host, conn.port) for conn in connections]
             client = HAClient(nn)
         else:
-            raise Exception("conn_id doesn't exist in the repository")
+            raise HDFSHookException("conn_id doesn't exist in the repository")
         return client

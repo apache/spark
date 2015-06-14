@@ -1,3 +1,4 @@
+from airflow.utils import AirflowException
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 from airflow.executors import DEFAULT_EXECUTOR
@@ -25,11 +26,11 @@ class SubDagOperator(BaseOperator):
         :type subdag: airflow.DAG
         """
         if 'dag' not in kwargs:
-            raise Exception("Please pass in the `dag` param")
+            raise AirflowException("Please pass in the `dag` param")
         dag = kwargs['dag']
         super(SubDagOperator, self).__init__(*args, **kwargs)
         if dag.dag_id + '.' + kwargs['task_id'] != subdag.dag_id:
-            raise Exception(
+            raise AirflowException(
                 "The subdag's dag_id should correspond to the parent's "
                 "'dag_id.task_id'")
         self.subdag = subdag

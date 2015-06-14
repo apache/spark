@@ -2,6 +2,7 @@ import logging
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import gettempdir, NamedTemporaryFile
 
+from airflow.utils import AirflowException
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults, TemporaryDirectory
 
@@ -60,7 +61,7 @@ class BashOperator(BaseOperator):
                              "return code {0}".format(sp.returncode))
 
                 if sp.returncode:
-                    raise Exception("Bash command failed")
+                    raise AirflowException("Bash command failed")
 
     def on_kill(self):
         logging.info('Sending SIGTERM signal to bash subprocess')

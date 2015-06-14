@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime, timedelta
 import dateutil.parser
+from functools import wraps
 import json
 import logging
 import os
@@ -25,28 +26,24 @@ from pygments.lexers import (
     IniLexer, YamlLexer, JsonLexer, TextLexer)
 from pygments.formatters import HtmlFormatter
 
-from sqlalchemy import or_
-
+import chartkick
 import jinja2
 import markdown
-import chartkick
+from sqlalchemy import or_
 
 import airflow
-login_required = airflow.login.login_required
-current_user = airflow.login.current_user
-logout_user = airflow.login.logout_user
-
-from airflow.settings import Session
-from airflow import jobs
-from airflow import models
-from airflow import login
-from airflow.models import State
-from airflow import settings
+from airflow import jobs, login, models, settings, utils
 from airflow.configuration import conf
-from airflow import utils
+from airflow.models import State
+from airflow.settings import Session
+from airflow.utils import AirflowException
 from airflow.www import utils as wwwutils
 
-from functools import wraps
+
+login_required = login.login_required
+current_user = login.current_user
+logout_user = login.logout_user
+
 
 AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
@@ -289,7 +286,7 @@ class Airflow(BaseView):
         try:
             args = eval(chart.default_params)
             if type(args) is not type(dict()):
-                raise Exception('Not a dict')
+                raise AirflowException('Not a dict')
         except:
             args = {}
             payload['error'] += (
@@ -363,7 +360,7 @@ class Airflow(BaseView):
                     df[df.columns[x_col]] = pd.to_datetime(
                         df[df.columns[x_col]])
                 except Exception as e:
-                    raise Exception(str(e))
+                    raise AirflowException(str(e))
                 df[df.columns[x_col]] = df[df.columns[x_col]].apply(
                     lambda x: int(x.strftime("%s")) * 1000)
 
