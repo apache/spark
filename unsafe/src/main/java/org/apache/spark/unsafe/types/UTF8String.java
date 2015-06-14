@@ -125,37 +125,37 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public boolean contains(final UTF8String substring) {
+    if (substring == null) return false;
     final byte[] b = substring.getBytes();
     if (b.length == 0) {
       return true;
     }
 
     for (int i = 0; i <= bytes.length - b.length; i++) {
-      if (bytes[i] == b[0] && startsWith(substring, i)) {
+      if (bytes[i] == b[0] && startsWith(b, i)) {
         return true;
       }
     }
     return false;
   }
 
-  private boolean startsWith(final UTF8String prefix, int offset) {
-    byte[] b = prefix.getBytes();
-    if (b.length + offset > bytes.length || offset < 0) {
+  private boolean startsWith(final byte[] prefix, int offset) {
+    if (prefix.length + offset > bytes.length || offset < 0) {
       return false;
     }
     int i = 0;
-    while (i < b.length && b[i] == bytes[i + offset]) {
+    while (i < prefix.length && prefix[i] == bytes[i + offset]) {
       i++;
     }
-    return i == b.length;
+    return i == prefix.length;
   }
 
   public boolean startsWith(final UTF8String prefix) {
-    return startsWith(prefix, 0);
+    return prefix != null && startsWith(prefix.getBytes(), 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    return startsWith(suffix, bytes.length - suffix.getBytes().length);
+    return suffix != null && startsWith(suffix.getBytes(), bytes.length - suffix.getBytes().length);
   }
 
   public UTF8String toUpperCase() {
