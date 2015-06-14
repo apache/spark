@@ -50,11 +50,6 @@ object MimaExcludes {
             // Removing a testing method from a private class
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
-            // Removing internal class only used for reading/writing parquet
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution")
           )
