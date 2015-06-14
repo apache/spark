@@ -4453,7 +4453,7 @@ Release 1.4.0
   2015-03-20 14:44:21 -0400
   Commit: 48866f7, github.com/apache/spark/pull/5016
 
-  [SPARK-6371] [build] Update version to 1.4.0-SNAPSHOT.
+  [SPARK-6371] [build] Update version to 1.4.0.
   Marcelo Vanzin <vanzin@cloudera.com>
   2015-03-20 18:43:57 +0000
   Commit: a745645, github.com/apache/spark/pull/5056
