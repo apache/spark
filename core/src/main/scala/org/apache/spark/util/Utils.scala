@@ -868,14 +868,14 @@ private[spark] object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getHostAddress)
+    customHostname.getOrElse(localIpAddress.getHostName)
   }
 
   /**
    * Get the local machine's URI.
    */
   def localHostNameForURI(): String = {
-    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
+    customHostname.getOrElse(localHostName)
   }
 
   def checkHost(host: String, message: String = "") {
