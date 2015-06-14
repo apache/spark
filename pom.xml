@@ -1707,17 +1707,16 @@
                 <arg>-Xep:SynchronizeOnNonFinalField:ERROR</arg>
                 <arg>-Xep:TypeParameterUnusedInFormals:ERROR</arg>
                 <arg>-Xep:WaitNotInLoop:ERROR</arg>
+                <arg>-Xep:CannotMockFinalClass:ERROR</arg>
+                <arg>-Xep:EqualsHashCode:WARN</arg>
+                <arg>-Xep:NonCanonicalStaticImport:ERROR</arg>
+                <arg>-Xep:NonOverridingEquals:ERROR</arg>
+                <arg>-Xep:PreconditionsInvalidPlaceholder:ERROR</arg>
+                <arg>-Xep:UnnecessaryStaticImport:WARN</arg>
                 <!--
                 These commented-out checkers doesn't exist or mature in error prone 2.0.1,
                 which is the underline version of plexus-compiler-javac-errorprone 2.5,
                 we should enable these checkers if possible when we update this dependency
-
-                <arg>-Xep:CannotMockFinalClass:ERROR</arg>
-                <arg>-Xep:EqualsHashCode:ERROR</arg>
-                <arg>-Xep:NonCanonicalStaticImport:ERROR</arg>
-                <arg>-Xep:NonOverridingEquals:ERROR</arg>
-                <arg>-Xep:PreconditionsInvalidPlaceholder:ERROR</arg>
-                <arg>-Xep:UnnecessaryStaticImport:ERROR</arg>
                 -->
               </compilerArgs>
             </configuration>
@@ -1726,6 +1725,13 @@
                 <groupId>org.codehaus.plexus</groupId>
                 <artifactId>plexus-compiler-javac-errorprone</artifactId>
                 <version>2.5</version>
+              </dependency>
+              <!-- override plexus-compiler-javac-errorprone's dependency on
+                   Error Prone with the latest version -->
+              <dependency>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_core</artifactId>
+                <version>2.0.3</version>
               </dependency>
             </dependencies>
           </plugin>

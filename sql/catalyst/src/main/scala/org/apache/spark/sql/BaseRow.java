@@ -139,12 +139,12 @@ public abstract class BaseRow implements Row {
     throw new UnsupportedOperationException();
   }
 
-  @Override
+  @Override  @SuppressWarnings("TypeParameterUnusedInFormals")
   public <T> T getAs(int i) {
     throw new UnsupportedOperationException();
   }
 
-  @Override
+  @Override  @SuppressWarnings("TypeParameterUnusedInFormals")
   public <T> T getAs(String fieldName) {
     throw new UnsupportedOperationException();
   }
