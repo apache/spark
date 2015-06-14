@@ -162,4 +162,9 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
   }
+
+  test("accurate precision after multiplication") {
+    val decimal = (Decimal(Long.MaxValue, 100, 0) * Decimal(Long.MaxValue, 100, 0)).toJavaBigDecimal
+    assert(decimal.unscaledValue.toString === "85070591730234615847396907784232501249")
+  }
 }

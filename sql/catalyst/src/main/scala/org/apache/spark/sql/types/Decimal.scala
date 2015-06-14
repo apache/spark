@@ -261,7 +261,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def - (that: Decimal): Decimal = Decimal(toBigDecimal - that.toBigDecimal)
 
-  def * (that: Decimal): Decimal = Decimal(toBigDecimal * that.toBigDecimal)
+  def * (that: Decimal): Decimal = Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal))
 
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toBigDecimal / that.toBigDecimal)
