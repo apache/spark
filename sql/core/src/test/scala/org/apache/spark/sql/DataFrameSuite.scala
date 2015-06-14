@@ -132,6 +132,14 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("explode alias and star") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(explode($"a").as("a"), $"*"),
+      Row("a", Seq("a"), 1) :: Nil)
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),

@@ -561,7 +561,9 @@ class Analyzer(
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
         case Alias(g: Generator, name)
-          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+          if g.resolved &&
+             g.elementTypes.size > 1 &&
+             java.util.regex.Pattern.matches("_c[0-9]+", name) => {
           // Assume the default name given by parser is "_c[0-9]+",
           // TODO in long term, move the naming logic from Parser to Analyzer.
           // In projection, Parser gave default name for TGF as does for normal UDF,
@@ -570,7 +572,7 @@ class Analyzer(
           // Let's simply ignore the default given name for this case.
           Some((g, Nil))
         }
-        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
