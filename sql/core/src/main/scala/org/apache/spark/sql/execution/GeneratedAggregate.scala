@@ -270,7 +270,9 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (groupingExpressions.isEmpty) {
+      if (!iter.hasNext) {
+        Iterator[InternalRow]()
+      } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
