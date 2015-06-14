@@ -370,7 +370,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
         .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
         case None => throw new Exception("Error: a secret key must be specified via the " +
-          "spark.authenticate.secret config")
+          SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
       }
     }
     sCookie
