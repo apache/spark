@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.Substring
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -225,6 +226,10 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
 
+  def this(str: Expression, pos: Expression) = {
+    this(str, pos, Literal(Integer.MAX_VALUE))
+  }
+
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
@@ -287,12 +292,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     // TODO: This is broken because max is not an integer value.
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"
-  }
-}
-
-object Substring {
-  def apply(str: Expression, pos: Expression): Substring = {
-    apply(str, pos, Literal(Integer.MAX_VALUE))
   }
 }
 
