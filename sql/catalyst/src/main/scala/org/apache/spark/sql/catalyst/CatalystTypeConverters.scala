@@ -52,7 +52,8 @@ object CatalystTypeConverters {
     }
   }
 
-  private[sql] def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+  private[sql] def getConverterForType(dataType: DataType)
+    : CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -288,7 +289,8 @@ object CatalystTypeConverters {
       toScala(row.getLong(column))
   }
 
-  private[sql] object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+  private[sql] object BigDecimalConverter
+    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
       case d: JavaBigDecimal => Decimal(d)
