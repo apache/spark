@@ -168,20 +168,20 @@ case class TakeOrderedAndProject(
 
   private val projection = projectList.map(newProjection(_, child.output))
 
-  private def collectData(): Iterator[InternalRow] = {
-    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord).toIterator
+  private def collectData(): Array[InternalRow] = {
+    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     projection.map(data.map(_)).getOrElse(data)
   }
 
   override def executeCollect(): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    collectData().map(converter(_).asInstanceOf[Row]).toArray
+    collectData().map(converter(_).asInstanceOf[Row])
   }
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
   protected override def doExecute(): RDD[InternalRow] =
-    sparkContext.makeRDD(collectData().toArray[InternalRow], 1)
+    sparkContext.makeRDD(collectData(), 1)
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
