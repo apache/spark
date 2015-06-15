@@ -288,7 +288,7 @@ object CatalystTypeConverters {
       toScala(row.getLong(column))
   }
 
-  private object BigDecimalConverte extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+  private object BigDecimalConverter extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
       case d: JavaBigDecimal => Decimal(d)
@@ -407,7 +407,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private def createToScalaConverter(dataType: DataType): Any => Any = {
+  private[sql] def createToScalaConverter(dataType: DataType): Any => Any = {
     getConverterForType(dataType).toScala
   }
 }
