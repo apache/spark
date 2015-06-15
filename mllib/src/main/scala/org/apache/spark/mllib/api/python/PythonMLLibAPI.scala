@@ -643,7 +643,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
 
-    def save(sc: SparkContext, path: String) = model.save(sc, path)
+    def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
   }
 
   /**
