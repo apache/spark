@@ -334,11 +334,11 @@ def identify_changed_modules(test_env):
         doc_files = [f for f in changed_files if f.startswith("docs/")]
 
         # union together all changed top level project files
-        top_level_project_files = set().union([set(f) for f in [sql_files,
-                                                                mllib_files,
-                                                                streaming_files,
-                                                                graphx_files,
-                                                                doc_files]])
+        top_level_project_files = set().union(set(f) for f in [sql_files,
+                                                               mllib_files,
+                                                               streaming_files,
+                                                               graphx_files,
+                                                               doc_files])
         changed_core_files = set(changed_files).difference(top_level_project_files)
 
         if changed_core_files:
