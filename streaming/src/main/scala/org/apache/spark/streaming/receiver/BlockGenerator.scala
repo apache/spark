@@ -21,10 +21,10 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.SystemClock
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -80,10 +80,7 @@ private[streaming] class BlockGenerator(
 
   private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
-  if (blockIntervalMs <= 0) {
-    throw new SparkException(s"'spark.streaming.blockInterval' was set as wrong value " +
-      s"$blockIntervalMs, it must be greater than zero.")
-  }
+  require(blockIntervalMs > 0 ,s"'spark.streaming.blockInterval' should be a positive value")
 
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
