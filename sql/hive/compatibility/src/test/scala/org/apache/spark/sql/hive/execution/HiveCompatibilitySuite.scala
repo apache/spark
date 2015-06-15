@@ -933,7 +933,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_stddev_pop",
     "udf_stddev_samp",
     "udf_string",
-    // "udf_struct",  TODO: FIX THIS and enable it.
+    "udf_struct",  // TODO: FIX THIS and enable it.
     "udf_substring",
     "udf_subtract",
     "udf_sum",

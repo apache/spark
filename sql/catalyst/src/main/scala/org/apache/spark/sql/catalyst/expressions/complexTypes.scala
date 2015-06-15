@@ -53,7 +53,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * Returns a Row containing the evaluation of all children expressions.
  * TODO: [[CreateStruct]] does not support codegen.
  */
-case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
+case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -62,9 +62,14 @@ case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
   override lazy val dataType: StructType = {
     assert(resolved,
       s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
-    val fields = children.map { child =>
-      StructField(child.name, child.dataType, child.nullable, child.metadata)
-    }
+      val fields = children.zipWithIndex.map { case (child, idx) =>
+        child match {
+          case ne: NamedExpression =>
+            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+          case _ =>
+            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+        }
+      }
     StructType(fields)
   }
 
