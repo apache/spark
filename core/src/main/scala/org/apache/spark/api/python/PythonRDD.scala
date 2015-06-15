@@ -426,8 +426,8 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /** Create an RDD that has no partitions or elements. */
-  def emptyRDD[T](sc: JavaSparkContext): JavaRDD[Array[Byte]] = {
-    sc.emptyRDD[Array[Byte]]
+  def emptyRDD[T](sc: JavaSparkContext): JavaRDD[T] = {
+    sc.emptyRDD[T]
   }
 
   /**
