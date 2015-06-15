@@ -68,7 +68,7 @@ private[hive] class SparkHiveWriterContainer(
   @transient private var writer: FileSinkOperator.RecordWriter = null
   @transient protected lazy val committer = conf.value.getOutputCommitter
   @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
-  @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
+  @transient protected lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
   @transient private lazy val outputFormat =
     conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
 
@@ -230,7 +230,15 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       val path = {
         val outputPath = FileOutputFormat.getOutputPath(conf.value)
         assert(outputPath != null, "Undefined job output-path")
-        val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
+        var workPath = outputPath
+        if(committer.isInstanceOf[FileOutputCommitter]) {
+          // use the path like $outputPath/_temporary/${attemptId}/
+          // to avoid write to the same file when `spark.speculation=true`
+          workPath = committer
+            .asInstanceOf[FileOutputCommitter]
+            .getWorkPath(taskContext, outputPath)
+        }
+        workPath = new Path(workPath, dynamicPartPath.stripPrefix("/"))
         new Path(workPath, getOutputName)
       }
 
