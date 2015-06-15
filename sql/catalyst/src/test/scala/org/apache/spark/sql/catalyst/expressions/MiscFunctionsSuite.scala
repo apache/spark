@@ -23,11 +23,10 @@ import org.apache.spark.sql.types.{StringType, BinaryType}
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("md5") {
-    checkEvaluation(Md5(Literal("ABC")), "902fbdd2b1df0c4f70b4a5d23525e932")
+    checkEvaluation(Md5(Literal("ABC".getBytes)), "902fbdd2b1df0c4f70b4a5d23525e932")
     checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "6ac1e56bc78f031059be7be854522c4c")
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
-    checkEvaluation(Md5(Literal.create(null, StringType)), null)
   }
 
 }

@@ -26,19 +26,22 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A function that calculates an MD5 128-bit checksum and returns it as a hex string
- * For input of type [[StringType]] or [[BinaryType]]
+ * For input of type [[BinaryType]]
  */
-case class Md5(child: Expression) extends UnaryExpression {
+case class Md5(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
 
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+
   override def checkInputDataTypes(): TypeCheckResult =
-    if (child.dataType == StringType || child.dataType == BinaryType) {
+    if (child.dataType == BinaryType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
         s"types error in ${this.getClass.getSimpleName} " +
-          s"get (${child.dataType}, expect StringType or BinaryType).")
+          s"get (${child.dataType}, expect BinaryType).")
     }
 
   override def children: Seq[Expression] = child :: Nil
@@ -47,10 +50,8 @@ case class Md5(child: Expression) extends UnaryExpression {
     val value = child.eval(input)
     if (value == null) {
       null
-    } else if (child.dataType == BinaryType) {
+    } else{
       UTF8String.fromString(DigestUtils.md5Hex(value.asInstanceOf[Array[Byte]]))
-    } else {
-      UTF8String.fromString(DigestUtils.md5Hex(value.asInstanceOf[UTF8String].getBytes))
     }
   }
 
