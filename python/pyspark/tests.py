@@ -873,6 +873,13 @@ class RDDTests(ReusedPySparkTestCase):
             sizes = sort.glom().map(len).collect()
             for size in sizes:
                 self.assertGreater(size, 0)
+               
+    def test_pipe_functions(self):
+        data = ['1','2','3']
+        rdd = self.sc.parallelize(data)
+        self.assertRaises(Exception, rdd.pipe('cc').collect())
+        result = rdd.pipe('cat').collect().sort()
+        [self.assertEqual(x, y) for x, y in zip(data, result)]
 
 
 class ProfilerTests(PySparkTestCase):
