@@ -20,7 +20,7 @@ package org.apache.spark.unsafe.types;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-import javax.annotation.Nullable;
+import javax.annotation.Nonnull;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
-  @Nullable
+  @Nonnull
   private byte[] bytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -55,7 +55,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Updates the UTF8String with String.
    */
-  public UTF8String set(final String str) {
+  protected UTF8String set(final String str) {
     if (str == null) {
       bytes = new byte[0];
     } else {
@@ -73,7 +73,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Updates the UTF8String with byte[], which should be encoded in UTF-8.
    */
-  public UTF8String set(final byte[] bytes) {
+  protected UTF8String set(final byte[] bytes) {
     this.bytes = (bytes != null) ? bytes : new byte[0];
     return this;
   }
