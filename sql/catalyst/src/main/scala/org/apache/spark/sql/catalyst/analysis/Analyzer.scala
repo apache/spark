@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -396,19 +397,31 @@ class Analyzer(
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
           if !s.resolved && a.resolved =>
-        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
         val groupingRelation = LocalRelation(
           grouping.collect { case ne: NamedExpression => ne.toAttribute }
         )
 
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, a, groupingRelation)
+        // Find sort attributes that are projected away so we can temporarily add them back in.
+        val (resolvedOrdering, unresolved) = resolveAndFindMissing(ordering, a, groupingRelation)
+
+        // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
+        // Sort.
+        val (withAggsRemoved, aliasedAggregateList) = resolvedOrdering.map {
+          case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
+            val aliased = Alias(aggOrdering.child, "_aggOrdering")()
+            (aggOrdering.copy(child = aliased.toAttribute), aliased :: Nil)
+
+          case other => (other, Nil)
+        }.unzip
+
+        val missing = unresolved ++ aliasedAggregateList.flatten
 
         if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
-            Sort(resolvedOrdering, global,
+            Sort(withAggsRemoved, global,
               Aggregate(grouping, aggs ++ missing, child)))
         } else {
           s // Nothing we can do here. Return original plan.
