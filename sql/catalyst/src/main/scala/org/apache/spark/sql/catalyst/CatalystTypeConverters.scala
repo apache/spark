@@ -52,8 +52,7 @@ object CatalystTypeConverters {
     }
   }
 
-  private[sql] def getConverterForType(dataType: DataType)
-    : CatalystTypeConverter[Any, Any, Any] = {
+  private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -82,7 +81,7 @@ object CatalystTypeConverters {
    * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
    * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
    */
-  private[sql] abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
+  private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
     extends Serializable {
 
     /**
@@ -130,13 +129,13 @@ object CatalystTypeConverters {
     protected def toScalaImpl(row: InternalRow, column: Int): ScalaOutputType
   }
 
-  private[sql] object IdentityConverter extends CatalystTypeConverter[Any, Any, Any] {
+  private object IdentityConverter extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Any = row(column)
   }
 
-  private[sql] case class UDTConverter(
+  private case class UDTConverter(
       udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
     override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
@@ -144,7 +143,7 @@ object CatalystTypeConverters {
   }
 
   /** Converter for arrays, sequences, and Java iterables. */
-  private[sql] case class ArrayConverter(
+  private case class ArrayConverter(
       elementType: DataType) extends CatalystTypeConverter[Any, Seq[Any], Seq[Any]] {
 
     private[this] val elementConverter = getConverterForType(elementType)
@@ -176,7 +175,7 @@ object CatalystTypeConverters {
       toScala(row(column).asInstanceOf[Seq[Any]])
   }
 
-  private[sql] case class MapConverter(
+  private case class MapConverter(
       keyType: DataType,
       valueType: DataType)
     extends CatalystTypeConverter[Any, Map[Any, Any], Map[Any, Any]] {
@@ -215,7 +214,7 @@ object CatalystTypeConverters {
       toScala(row(column).asInstanceOf[Map[Any, Any]])
   }
 
-  private[sql] case class StructConverter(
+  private case class StructConverter(
       structType: StructType) extends CatalystTypeConverter[Any, Row, InternalRow] {
 
     private[this] val converters = structType.fields.map { f => getConverterForType(f.dataType) }
@@ -259,7 +258,7 @@ object CatalystTypeConverters {
       toScala(row(column).asInstanceOf[InternalRow])
   }
 
-  private[sql] object StringConverter extends CatalystTypeConverter[Any, String, Any] {
+  private object StringConverter extends CatalystTypeConverter[Any, String, Any] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
@@ -272,14 +271,14 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): String = row(column).toString
   }
 
-  private[sql] object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
+  private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
     override def toCatalystImpl(scalaValue: Date): Int = DateUtils.fromJavaDate(scalaValue)
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: InternalRow, column: Int): Date = toScala(row.getInt(column))
   }
 
-  private[sql] object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
+  private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
     override def toCatalystImpl(scalaValue: Timestamp): Long =
       DateUtils.fromJavaTimestamp(scalaValue)
     override def toScala(catalystValue: Any): Timestamp =
@@ -289,8 +288,7 @@ object CatalystTypeConverters {
       toScala(row.getLong(column))
   }
 
-  private[sql] object BigDecimalConverter
-    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+  private object BigDecimalConverte extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
       case d: BigDecimal => Decimal(d)
       case d: JavaBigDecimal => Decimal(d)
@@ -304,7 +302,7 @@ object CatalystTypeConverters {
       }
   }
 
-  private[sql] abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
+  private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
     final override def toScala(catalystValue: Any): Any = catalystValue
     final override def toCatalystImpl(scalaValue: T): Any = scalaValue
   }
@@ -409,7 +407,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private[sql] def createToScalaConverter(dataType: DataType): Any => Any = {
+  private def createToScalaConverter(dataType: DataType): Any => Any = {
     getConverterForType(dataType).toScala
   }
 }
