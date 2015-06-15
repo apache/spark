@@ -225,7 +225,7 @@ private[hive] case class HiveRankImpliedOrderSpec(
   override def nullable: Boolean = child.nullable
   override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
-  override def eval(input: Row): Any = child.eval(input)
+  override def eval(input: InternalRow): Any = child.eval(input)
   override def defineOrderSpec(orderSpec: Seq[Expression]): Expression =
     child.copy(children = child.children ++ orderSpec)
 }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{LeafNode, UnaryNode}
 import org.apache.spark.sql.types.{NumericType, DataType, LongType, IntegerType}
 
@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{NumericType, DataType, LongType, IntegerType}
  */
 abstract class WindowSpec extends Expression {
   self: Product =>
-  override def eval(input: Row): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
@@ -296,7 +296,7 @@ case class WindowExpression(
   override def children: Seq[Expression] =
     windowFunction :: windowSpec :: Nil
 
-  override def eval(input: Row): Any =
+  override def eval(input: InternalRow): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def dataType: DataType = windowFunction.dataType
@@ -326,7 +326,7 @@ case class ComposedWindowFunction(child: Expression) extends Expression
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
   override def toString: String = child.toString
-  override def eval(input: Row): Any = child.eval(input)
+  override def eval(input: InternalRow): Any = child.eval(input)
 }
 
 /**
@@ -350,7 +350,7 @@ abstract class RankLikeFunction extends AggregateFunction {
   var value: Long = 0L
   var last: Row = EmptyRow
   val extractor = new InterpretedProjection(children)
-  override def eval(input: Row): Any = value
+  override def eval(input: InternalRow): Any = value
 }
 
 /**
@@ -365,7 +365,7 @@ case class Rank(children: Seq[Expression]) extends RankLikeExpression {
 
 case class RankFunction(override val children: Seq[Expression], base: AggregateExpression)
     extends RankLikeFunction {
-  def update(input: Row): Unit = {
+  def update(input: InternalRow): Unit = {
     val current = extractor(input)
     counter += 1
     if (current != last) {
@@ -382,7 +382,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLikeExpression {
 
 case class DenseRankFunction(override val children: Seq[Expression], base: AggregateExpression)
     extends RankLikeFunction {
-  def update(input: Row): Unit = {
+  def update(input: InternalRow): Unit = {
     val current = extractor(input)
     if (current != last) {
       counter += 1

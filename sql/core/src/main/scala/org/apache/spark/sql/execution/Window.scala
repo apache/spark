@@ -128,7 +128,7 @@ case class Window(
     }
 
     // Create factories and collect unbound expressions for each frame.
-    val factories = mutable.Buffer.empty[Seq[Row] => WindowFunctionFrame]
+    val factories = mutable.Buffer.empty[Seq[InternalRow] => WindowFunctionFrame]
     val unboundExpressions = mutable.Buffer.empty[Expression]
     groupedWindowExprs.foreach {
       case (frame, unboundFrameExpressions) =>
@@ -147,14 +147,14 @@ case class Window(
           case ('R', SpecifiedWindowFrame(RowFrame,
             FrameBoundaryExtractor(low),
             FrameBoundaryExtractor(high))) if low == high =>
-            input: Seq[Row] => new ShiftingWindowFunctionFrame(input, frameExpressions, low)
+            input: Seq[InternalRow] => new ShiftingWindowFunctionFrame(input, frameExpressions, low)
           // Below
           case ('A', SpecifiedWindowFrame(frameType,
             UnboundedPreceding,
             FrameBoundaryExtractor(high))) =>
             val uBoundOrdering = createBoundOrdering(frameType, high)
             val factories = aggregateFrameExpressions
-            input: Seq[Row] => new UnboundedPrecedingWindowFunctionFrame(input,
+            input: Seq[InternalRow] => new UnboundedPrecedingWindowFunctionFrame(input,
               factories, uBoundOrdering)
           // Above
           case ('A', SpecifiedWindowFrame(frameType,
@@ -168,7 +168,7 @@ case class Window(
               case a: AggregateExpression => a
               }
             }
-            input: Seq[Row] => new UnboundedFollowingWindowFunctionFrame(input,
+            input: Seq[InternalRow] => new UnboundedFollowingWindowFunctionFrame(input,
               factories, lBoundOrdering)
           // Sliding
           case ('A', SpecifiedWindowFrame(frameType,
@@ -177,20 +177,20 @@ case class Window(
             val lBoundOrdering = createBoundOrdering(frameType, low)
             val uBoundOrdering = createBoundOrdering(frameType, high)
             val factories = aggregateFrameExpressions
-            input: Seq[Row] => new SlidingWindowFunctionFrame(input,
+            input: Seq[InternalRow] => new SlidingWindowFunctionFrame(input,
               factories, lBoundOrdering, uBoundOrdering)
           // Pivot
           case ('P', SpecifiedWindowFrame(_,
             UnboundedPreceding,
             UnboundedFollowing)) =>
             val factories = aggregateFrameExpressions
-            input: Seq[Row] => new PivotWindowFunctionFrame(input, factories)
+            input: Seq[InternalRow] => new PivotWindowFunctionFrame(input, factories)
           // Global
           case ('A', SpecifiedWindowFrame(_,
             UnboundedPreceding,
             UnboundedFollowing)) =>
             val factories = aggregateFrameExpressions
-            input: Seq[Row] => new UnboundedWindowFunctionFrame(input, factories)
+            input: Seq[InternalRow] => new UnboundedWindowFunctionFrame(input, factories)
           // Error
           case (tag, fr) =>
             sys.error(s"Unsupported Expression Type $tag Frame $fr combination" +
@@ -213,16 +213,16 @@ case class Window(
     (factories.toArray, projection, factories.size, unboundExpressions.size)
   }
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { stream =>
-      new Iterator[Row] {
+      new Iterator[InternalRow] {
         // Get all relevant projections.
         val result = projection()
         val grouping = newProjection(windowSpec.partitionSpec, child.output)
 
         // Manage the stream and the grouping.
-        var nextRow: Row = EmptyRow
-        var nextGroup: Row = EmptyRow
+        var nextRow: InternalRow = EmptyRow
+        var nextGroup: InternalRow = EmptyRow
         var nextRowAvailable: Boolean = false
         private[this] def fetchNextRow() {
           nextRowAvailable = stream.hasNext
@@ -237,7 +237,7 @@ case class Window(
         fetchNextRow()
 
         // Manage the current partition.
-        var rows: CompactBuffer[Row] = _
+        var rows: CompactBuffer[InternalRow] = _
         var frames: Array[WindowFunctionFrame] = _
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
@@ -273,7 +273,7 @@ case class Window(
 
         val join = new JoinedRow6
         val windowFunctionResult = new GenericMutableRow(windowFunctionCount)
-        def next(): Row = {
+        def next(): InternalRow = {
           if (hasNext) {
             // Get the results for the window functions.
             var i = 0
@@ -316,14 +316,14 @@ case class Window(
  * TODO check the Runtime performance. Possibly revert measures if they don't work.
  */
 private[execution] abstract class BoundOrdering {
-  def compare(input: Seq[Row], inputIndex: Int, outputIndex: Int): Int
+  def compare(input: Seq[InternalRow], inputIndex: Int, outputIndex: Int): Int
 }
 
 /**
  * Compare the input index to the bound of the output index.
  */
 private[execution] final case class RowBoundOrdering(offset: Int) extends BoundOrdering {
-  override def compare(input: Seq[Row], inputIndex: Int, outputIndex: Int): Int =
+  override def compare(input: Seq[InternalRow], inputIndex: Int, outputIndex: Int): Int =
     inputIndex - (outputIndex + offset)
 }
 
@@ -331,10 +331,10 @@ private[execution] final case class RowBoundOrdering(offset: Int) extends BoundO
  * Compare the value of the input index to the value bound of the output index.
  */
 private[execution] final case class RangeBoundOrdering(
-  ordering: Ordering[Row],
+  ordering: Ordering[InternalRow],
   current: Projection,
   bound: Projection) extends BoundOrdering {
-  override def compare(input: Seq[Row], inputIndex: Int, outputIndex: Int): Int =
+  override def compare(input: Seq[InternalRow], inputIndex: Int, outputIndex: Int): Int =
     ordering.compare(current(input(inputIndex)), bound(input(outputIndex)))
 }
 
@@ -373,7 +373,7 @@ private[execution] abstract class WindowFunctionFrame {
  * @param offset the size (in rows) of the shift.
  */
 private[execution] final class ShiftingWindowFunctionFrame(
-  rows: Seq[Row],
+  rows: Seq[InternalRow],
   exprs: Array[Expression],
   offset: Int) extends WindowFunctionFrame {
   val count = exprs.length
@@ -406,7 +406,7 @@ private[execution] abstract class AggregateWindowFunctionFrame(
   }
 
   /** Update an array of aggregate functions. */
-  final def update(aggregates: Array[AggregateFunction], input: Row): Unit = {
+  final def update(aggregates: Array[AggregateFunction], input: InternalRow): Unit = {
     var i = 0
     while (i < count) {
       aggregates(i).update(input)
@@ -437,7 +437,7 @@ private[execution] abstract class AggregateWindowFunctionFrame(
  * @param ubound comparator used to identify the upper bound of an output row.
  */
 private[execution] final class SlidingWindowFunctionFrame(
-  input: Seq[Row],
+  input: Seq[InternalRow],
   factories: Array[AggregateExpression],
   lbound: BoundOrdering,
   ubound: BoundOrdering) extends AggregateWindowFunctionFrame(factories) {
@@ -500,7 +500,7 @@ private[execution] final class SlidingWindowFunctionFrame(
  * @param factories to create the aggregates with.
  */
 private[execution] final class UnboundedWindowFunctionFrame(
-  input: Seq[Row],
+  input: Seq[InternalRow],
   factories: Array[AggregateExpression]) extends AggregateWindowFunctionFrame(factories) {
   val result = {
     val aggregates = create()
@@ -523,7 +523,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
  * @param factories to create the aggregates with.
  */
 private[execution] final class PivotWindowFunctionFrame(
-  input: Seq[Row],
+  input: Seq[InternalRow],
   factories: Array[AggregateExpression]) extends AggregateWindowFunctionFrame(factories) {
   val result = {
     // Collect the data.
@@ -552,7 +552,7 @@ private[execution] final class PivotWindowFunctionFrame(
  * @param ubound comparator used to identify the upper bound of an output row.
  */
 private[execution] final class UnboundedPrecedingWindowFunctionFrame(
-  input: Seq[Row],
+  input: Seq[InternalRow],
   factories: Array[AggregateExpression],
   ubound: BoundOrdering) extends AggregateWindowFunctionFrame(factories) {
   val result = {
@@ -603,7 +603,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
  * @param lbound comparator used to identify the lower bound of an output row.
  */
 private[execution] final class UnboundedFollowingWindowFunctionFrame(
-  input: Seq[Row],
+  input: Seq[InternalRow],
   factories: Array[AggregateExpression],
   lbound: BoundOrdering) extends AggregateWindowFunctionFrame(factories) {
   val result = {
