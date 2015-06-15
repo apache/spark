@@ -1349,7 +1349,7 @@ object functions {
 
   /**
    * Calculates the MD5 digest and returns the value as a 32 character hex string.
-   * 
+   *
    * @group misc_funcs
    * @since 1.5.0
    */
