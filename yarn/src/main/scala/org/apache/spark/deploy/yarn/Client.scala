@@ -1187,21 +1187,21 @@ object Client extends Logging {
     YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
 
   /**
-   * Returns the path to be sent to the NM for a local path string.
+   * Returns the path to be sent to the NM for a path that is valid on the gateway.
    *
    * This method uses two configuration values:
    *
-   * - spark.yarn.config.localPath: a string that identifies a portion of the input path that may
-   *   only be valid in the local process.
-   * - spark.yarn.config.clusterPath: a string with which to replace the local path. This may
+   * - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
+   *   only be valid in the gateway node.
+   * - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
    *   contain, for example, env variable references, which will be expanded by the NMs when
    *   starting containers.
    *
    * If either config is not available, the input path is returned.
    */
   def getClusterPath(conf: SparkConf, path: String): String = {
-    val localPath = conf.get("spark.yarn.config.localPath", null)
-    val clusterPath = conf.get("spark.yarn.config.clusterPath", null)
+    val localPath = conf.get("spark.yarn.config.gatewayPath", null)
+    val clusterPath = conf.get("spark.yarn.config.replacementPath", null)
     if (localPath != null && clusterPath != null) {
       path.replace(localPath, clusterPath)
     } else {

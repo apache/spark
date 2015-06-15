@@ -155,8 +155,8 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     val conf = new Configuration()
     val sparkConf = new SparkConf()
       .set(Client.CONF_SPARK_JAR, "local:/localPath/spark.jar")
-      .set("spark.yarn.config.localPath", "/localPath")
-      .set("spark.yarn.config.clusterPath", "/remotePath")
+      .set("spark.yarn.config.gatewayPath", "/localPath")
+      .set("spark.yarn.config.replacementPath", "/remotePath")
 
     Client.getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
     Client.getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
