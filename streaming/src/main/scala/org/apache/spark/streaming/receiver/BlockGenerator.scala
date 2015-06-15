@@ -80,7 +80,7 @@ private[streaming] class BlockGenerator(
 
   private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
-  require(blockIntervalMs > 0 ,s"'spark.streaming.blockInterval' should be a positive value")
+  require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
 
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
