@@ -324,6 +324,12 @@ class SparkContext(object):
         with SparkContext._lock:
             SparkContext._active_spark_context = None
 
+    def emptyRDD(self):
+        """
+        Create an RDD that has no partitions or elements.
+        """
+        return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
+
     def range(self, start, end=None, step=1, numSlices=None):
         """
         Create a new RDD of int containing elements from `start` to `end`
