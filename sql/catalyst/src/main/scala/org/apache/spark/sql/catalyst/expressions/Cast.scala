@@ -437,17 +437,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"new ${ctx.stringType}().set($c)")
+          s"new ${ctx.stringType}().fromString($c)")
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""new ${ctx.stringType}().set(
+          s"""new ${ctx.stringType}().fromString(
                 org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
       case (TimestampType, StringType) =>
         super.genCode(ctx, ev)
       case (_, StringType) =>
-        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().set(String.valueOf($c))")
+        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().fromString(String.valueOf($c))")
 
       // fallback for DecimalType, this must be before other numeric types
       case (_, dt: DecimalType) =>
