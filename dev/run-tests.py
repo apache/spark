@@ -501,6 +501,7 @@ def main():
 
     # determine high level changes
     changed_modules = identify_changed_modules(test_env)
+    print "[info] Found the following changed modules:", ", ".join(changed_modules)
 
     # determine if docs were changed and if we're inside the amplab environment
     if "DOCS" in changed_modules and test_env == "amplab_jenkins":
