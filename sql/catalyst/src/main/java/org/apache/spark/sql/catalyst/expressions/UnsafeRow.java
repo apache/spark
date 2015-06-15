@@ -310,7 +310,6 @@ public final class UnsafeRow extends BaseMutableRow {
 
   public UTF8String getUTF8String(int i) {
     assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
     final long offsetToStringSize = getLong(i);
     final int stringSizeInBytes =
       (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
@@ -322,8 +321,7 @@ public final class UnsafeRow extends BaseMutableRow {
       PlatformDependent.BYTE_ARRAY_OFFSET,
       stringSizeInBytes
     );
-    str.set(strBytes);
-    return str;
+    return UTF8String.fromBytes(strBytes);
   }
 
   @Override
