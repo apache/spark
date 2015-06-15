@@ -1029,10 +1029,10 @@ class DataFrame private[sql](
 
     val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
     val names = schema.toAttributes.map(_.name)
+    val convert = CatalystTypeConverters.getConverterForType(schema)
 
     val rowFunction =
-      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema)
-        .asInstanceOf[InternalRow]))
+      f.andThen(_.map(convert.toCatalyst(_).asInstanceOf[InternalRow]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
@@ -1059,8 +1059,8 @@ class DataFrame private[sql](
     val names = attributes.map(_.name)
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
-      f(row(0).asInstanceOf[A]).map(o =>
-        InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+      val convert = CatalystTypeConverters.getConverterForType(dataType)
+      f(row(0).asInstanceOf[A]).map(o => InternalRow(convert.toCatalyst(o)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
