@@ -1432,8 +1432,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-7067: order by queries for complex ExtractValue chain") {
-    withTable("t") {
-      read.json(sparkContext.makeRDD(
+    withTempTable("t") {
+      sqlContext.read.json(sqlContext.sparkContext.makeRDD(
         """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
       checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
