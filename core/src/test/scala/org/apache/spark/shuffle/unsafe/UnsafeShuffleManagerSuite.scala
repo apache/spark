@@ -76,6 +76,15 @@ class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
       mapSideCombine = false
     )))
 
+    // Shuffles with key orderings are supported as long as no aggregator is specified
+    assert(canUseUnsafeShuffle(shuffleDep(
+      partitioner = new HashPartitioner(2),
+      serializer = kryo,
+      keyOrdering = Some(mock(classOf[Ordering[Any]])),
+      aggregator = None,
+      mapSideCombine = false
+    )))
+
   }
 
   test("unsupported shuffle dependencies") {
@@ -100,14 +109,7 @@ class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
       mapSideCombine = false
     )))
 
-    // We do not support shuffles that perform any kind of aggregation or sorting of keys
-    assert(!canUseUnsafeShuffle(shuffleDep(
-      partitioner = new HashPartitioner(2),
-      serializer = kryo,
-      keyOrdering = Some(mock(classOf[Ordering[Any]])),
-      aggregator = None,
-      mapSideCombine = false
-    )))
+    // We do not support shuffles that perform aggregation
     assert(!canUseUnsafeShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
       serializer = kryo,
@@ -115,7 +117,6 @@ class UnsafeShuffleManagerSuite extends SparkFunSuite with Matchers {
       aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
       mapSideCombine = false
     )))
-    // We do not support shuffles that perform any kind of aggregation or sorting of keys
     assert(!canUseUnsafeShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
       serializer = kryo,

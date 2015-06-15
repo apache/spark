@@ -832,11 +832,7 @@ private[spark] object SparkSubmitUtils {
       ivyConfName: String,
       md: DefaultModuleDescriptor): Unit = {
     // Add scala exclusion rule
-    val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
-    val scalaDependencyExcludeRule =
-      new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
-    scalaDependencyExcludeRule.addConfiguration(ivyConfName)
-    md.addExcludeRule(scalaDependencyExcludeRule)
+    md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
     // other spark-streaming utility components. Underscore is there to differentiate between
@@ -845,13 +841,8 @@ private[spark] object SparkSubmitUtils {
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
     components.foreach { comp =>
-      val sparkArtifacts =
-        new ArtifactId(new ModuleId("org.apache.spark", s"spark-$comp*"), "*", "*", "*")
-      val sparkDependencyExcludeRule =
-        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
-      sparkDependencyExcludeRule.addConfiguration(ivyConfName)
-
-      md.addExcludeRule(sparkDependencyExcludeRule)
+      md.addExcludeRule(createExclusion(s"org.apache.spark:spark-$comp*:*", ivySettings,
+        ivyConfName))
     }
   }
 
@@ -864,6 +855,7 @@ private[spark] object SparkSubmitUtils {
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
+   * @param exclusions Exclusions to apply when resolving transitive dependencies
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
@@ -871,6 +863,7 @@ private[spark] object SparkSubmitUtils {
       coordinates: String,
       remoteRepos: Option[String],
       ivyPath: Option[String],
+      exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
@@ -928,6 +921,10 @@ private[spark] object SparkSubmitUtils {
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
 
+        exclusions.foreach { e =>
+          md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
+        }
+
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {
@@ -944,6 +941,18 @@ private[spark] object SparkSubmitUtils {
       }
     }
   }
+
+  private def createExclusion(
+      coords: String,
+      ivySettings: IvySettings,
+      ivyConfName: String): ExcludeRule = {
+    val c = extractMavenCoordinates(coords)(0)
+    val id = new ArtifactId(new ModuleId(c.groupId, c.artifactId), "*", "*", "*")
+    val rule = new DefaultExcludeRule(id, ivySettings.getMatcher("glob"), null)
+    rule.addConfiguration(ivyConfName)
+    rule
+  }
+
 }
 
 /**
