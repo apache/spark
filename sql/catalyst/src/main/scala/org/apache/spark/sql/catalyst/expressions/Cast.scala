@@ -437,7 +437,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"new ${ctx.stringType}().fromString($c)")
+          s"new ${ctx.stringType}().fromBytes($c)")
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
           s"""new ${ctx.stringType}().fromString(
