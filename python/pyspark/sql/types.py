@@ -376,25 +376,23 @@ class StructType(DataType):
     def add(self, name_or_struct_field, data_type=None, nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema
-        >>> struct1 = StructType().add("f1", StringType(), True)\
-                                  .add("f2", StringType(), True, None)
+        >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True),\
          StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
-        >>> struct1 = StructType().add("f1", StringType(), True)\
-                                  .add("f2", StringType(), True, None)
+        >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
-        >>> struct1 = StructType().add(StructField("f1", StringType(), True))\
-                                  .add(StructField("f2", StringType(), True, None))
-        >>> struct2 = StructType([StructField("f1", StringType(), True),\
-         StructField("f2", StringType(), True, None)])
+        >>> struct1 = StructType().add(StructField("f1", StringType(), True))
+        ...     .add(StructField("f2", StringType(), True, None))
+        >>> struct2 = StructType([StructField("f1", StringType(), True),
+        ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
-        >>> struct1 = StructType().add(StructField("f1", StringType(), True))\
-                                  .add(StructField("f2", StringType(), True, None))
+        >>> struct1 = StructType().add(StructField("f1", StringType(), True))
+        ...     .add(StructField("f2", StringType(), True, None))
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
@@ -405,6 +403,7 @@ class StructType(DataType):
         :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
+
         if isinstance(name_or_struct_field, StructField):
             return self.fields.append(name_or_struct_field)
         else:
