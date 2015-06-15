@@ -109,7 +109,6 @@ object RandomForestClassifier {
     RandomForestParams.supportedFeatureSubsetStrategies
 }
 
-
 /**
  * :: AlphaComponent ::
  *
