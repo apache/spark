@@ -159,6 +159,11 @@ def run_python_style_checks():
     run_cmd(["./dev/lint-python"])
 
 
+def build_spark_documentation():
+    set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
+    os.environ["PRODUCTION"] = "1 jekyll build"
+
+
 def exec_maven(mvn_args=[]):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -215,21 +220,26 @@ def get_hadoop_profiles(hadoop_version):
 
 def get_build_profiles(hadoop_version="hadoop2.3",
                        enable_base_profiles=True,
-                       enable_hive_profiles=False):
+                       enable_hive_profiles=False,
+                       enable_doc_profiles=False):
     """Returns a list of hadoop profiles to be used as looked up from the passed in hadoop profile
     key with the option of adding on the base and hive profiles."""
 
     base_profiles = ["-Pkinesis-asl"]
     hive_profiles = ["-Phive", "-Phive-thriftserver"]
+    doc_profiles = []
     hadoop_profiles = get_hadoop_profiles(hadoop_version)
 
     build_profiles = hadoop_profiles
 
     if enable_base_profiles:
-        build_profiles = build_profiles + base_profiles
+        build_profiles += base_profiles
 
     if enable_hive_profiles:
-        build_profiles = build_profiles + hive_profiles
+        build_profiles += hive_profiles
+
+    if enable_doc_profiles:
+        build_profiles += doc_profiles
 
     return build_profiles
 
@@ -259,7 +269,7 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
-def build_apache_spark(build_tool, hadoop_version):
+def build_apache_spark(build_tool, hadoop_version, changed_modules):
     """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
 
@@ -284,7 +294,7 @@ def identify_changed_modules(test_env):
     If run under the `amplab_jenkins` environment will determine the changed files
     as compared to the `ghprbTargetBranch` and execute the necessary set of tests
     to provide coverage for the changed code."""
-    test_suite = set()
+    changed_modules = set()
 
     if test_env == "amplab_jenkins":
         target_branch = os.environ["ghprbTargetBranch"]
@@ -295,7 +305,6 @@ def identify_changed_modules(test_env):
         # remove any empty strings
         changed_files = [f for f in raw_output.split('\n') if f]
 
-        # find any sql files
         sql_files = [f for f in changed_files
                      if any(f.startswith(p) for p in
                             ["sql/",
@@ -322,31 +331,39 @@ def identify_changed_modules(test_env):
                         if any(f.startswith(p) for p in
                                ["examples/src/main/scala/org/apache/spark/examples/graphx/",
                                 "graphx/"])]
+        doc_files = [f for f in changed_files if f.startswith("docs/")]
 
-        non_sql_files = set(changed_files).difference(set(sql_files))
+        # union together all changed top level project files
+        top_level_project_files = set().union([set(f) for f in [sql_files,
+                                                                mllib_files,
+                                                                streaming_files,
+                                                                graphx_files,
+                                                                doc_files]])
+        changed_core_files = set(changed_files).difference(top_level_project_files)
 
-        if non_sql_files:
-            test_suite.add("CORE")
+        if changed_core_files:
+            changed_modules.add("CORE")
         if sql_files:
             print "[info] Detected changes in SQL. Will run Hive test suite."
-            test_suite.add("SQL")
-            if not non_sql_files:
-                print "[info] Detected no changes except in SQL. Will only run SQL tests."
+            changed_modules.add("SQL")
         if mllib_files:
             print "[info] Detected changes in MLlib. Will run MLlib test suite."
-            test_suite.add("MLLIB")
+            changed_modules.add("MLLIB")
         if streaming_files:
             print "[info] Detected changes in Streaming. Will run Streaming test suite."
-            test_suite.add("STREAMING")
+            changed_modules.add("STREAMING")
         if graphx_files:
             print "[info] Detected changes in GraphX. Will run GraphX test suite."
-            test_suite.add("GRAPHX")
+            changed_modules.add("GRAPHX")
+        if doc_files:
+            print "[info] Detected changes in documentation. Will build spark with documentation."
+            changed_modules.add("DOCS")
 
-        return test_suite
+        return changed_modules
     else:
         # we aren't in the Amplab environment so simply run all tests
-        test_suite.add("ALL")
-        return test_suite
+        changed_modules.add("ALL")
+        return changed_modules
 
 
 def run_scala_tests_maven(test_profiles):
@@ -482,15 +499,21 @@ def main():
     run_scala_style_checks()
     run_python_style_checks()
 
+    # determine high level changes
+    changed_modules = identify_changed_modules(test_env)
+
+    # determine if docs were changed and if we're inside the amplab environment
+    if "DOCS" in changed_modules and test_env == "amplab_jenkins":
+        build_spark_documentation()
+
     # spark build
-    build_apache_spark(build_tool, hadoop_version)
+    build_apache_spark(build_tool, hadoop_version, changed_modules)
 
     # backwards compatibility checks
     detect_binary_inop_with_mima()
 
-    # test suites
-    test_modules = identify_changed_modules(test_env)
-    run_scala_tests(build_tool, hadoop_version, test_modules)
+    # run the test suites
+    run_scala_tests(build_tool, hadoop_version, changed_modules)
     run_python_tests()
     run_sparkr_tests()
 
