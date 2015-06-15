@@ -242,7 +242,7 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
 }
 
 
-object RpcTimeout {
+private[spark] object RpcTimeout {
 
   private[this] val messagePrefix = "This timeout is controlled by "
 
