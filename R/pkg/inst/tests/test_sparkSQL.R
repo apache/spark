@@ -101,6 +101,43 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 })
 
+test_that("convert NAs to null type in DataFrames", {
+  rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
+  df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  expect_true(is.na(collect(df)[2, "a"]))
+  expect_equal(collect(df)[2, "b"], 4L)
+
+  l <- data.frame(x = 1L, y = c(1L, NA_integer_, 3L))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(df)[2, "x"], 1L)
+  expect_true(is.na(collect(df)[2, "y"]))
+
+  rdd <- parallelize(sc, list(list(1, 2), list(NA, 4)))
+  df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  expect_true(is.na(collect(df)[2, "a"]))
+  expect_equal(collect(df)[2, "b"], 4)
+
+  l <- data.frame(x = 1, y = c(1, NA_real_, 3))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(df)[2, "x"], 1)
+  expect_true(is.na(collect(df)[2, "y"]))
+
+  l <- list("a", "b", NA, "d")
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], "d")
+
+  l <- list("a", "b", NA_character_, "d")
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], "d")
+
+  l <- list(TRUE, FALSE, NA, TRUE)
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], TRUE)
+})
+
 test_that("toDF", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- toDF(rdd, list("a", "b"))
@@ -504,6 +541,19 @@ test_that("read.df() from json file", {
   df <- read.df(sqlContext, jsonPath, "json")
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
+
+  # Check if we can apply a user defined schema
+  schema <- structType(structField("name", type = "string"),
+                       structField("age", type = "double"))
+
+  df1 <- read.df(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df1, "DataFrame"))
+  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+
+  # Run the same with loadDF
+  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df2, "DataFrame"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 })
 
 test_that("write.df() as parquet file", {

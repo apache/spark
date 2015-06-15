@@ -226,7 +226,7 @@ case class Window(
  * @param child       Child operator
  */
 case class Expand(
-    projections: Seq[GroupExpression],
+    projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def statistics: Statistics = {

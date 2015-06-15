@@ -61,8 +61,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt}")
 
-    kafkaTestUtils.waitUntilLeaderOffset(topic, 0, messages.size)
-
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
     val rdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
@@ -86,7 +84,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     // this is the "lots of messages" case
     kafkaTestUtils.sendMessages(topic, sent)
     val sentCount = sent.values.sum
-    kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sentCount)
 
     // rdd defined from leaders after sending messages, should get the number sent
     val rdd = getRdd(kc, Set(topic))
@@ -113,7 +110,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val sentOnlyOne = Map("d" -> 1)
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
-    kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sentCount + 1)
 
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0, "got messages when there shouldn't be any")

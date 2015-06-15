@@ -182,6 +182,7 @@ abstract class DeserializationStream {
       } catch {
         case eof: EOFException =>
           finished = true
+          null
       }
     }
 

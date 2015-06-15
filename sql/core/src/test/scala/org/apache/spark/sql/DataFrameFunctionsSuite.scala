@@ -85,9 +85,59 @@ class DataFrameFunctionsSuite extends QueryTest {
     }
   }
 
+  test("constant functions") {
+    checkAnswer(
+      testData2.select(e()).limit(1),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      testData2.select(pi()).limit(1),
+      Row(scala.math.Pi)
+    )
+    checkAnswer(
+      ctx.sql("SELECT E()"),
+      Row(scala.math.E)
+    )
+    checkAnswer(
+      ctx.sql("SELECT PI()"),
+      Row(scala.math.Pi)
+    )
+  }
+
   test("bitwiseNOT") {
     checkAnswer(
       testData2.select(bitwiseNOT($"a")),
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
+  }
+
+  test("if function") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("if(a = 1, 'one', 'not_one')", "if(b = 1, 'one', 'not_one')"),
+      Row("one", "not_one"))
+  }
+
+  test("nvl function") {
+    checkAnswer(
+      ctx.sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
+      Row("x", "y", null))
+  }
+
+  test("string length function") {
+    checkAnswer(
+      nullStrings.select(strlen($"s"), strlen("s")),
+      nullStrings.collect().toSeq.map { r =>
+        val v = r.getString(1)
+        val l = if (v == null) null else v.length
+        Row(l, l)
+      })
+
+    checkAnswer(
+      nullStrings.selectExpr("length(s)"),
+      nullStrings.collect().toSeq.map { r =>
+        val v = r.getString(1)
+        val l = if (v == null) null else v.length
+        Row(l)
+      })
   }
 }

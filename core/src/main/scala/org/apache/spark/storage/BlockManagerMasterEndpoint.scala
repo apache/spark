@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
+import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.concurrent.{ExecutionContext, Future}
@@ -112,6 +113,17 @@ class BlockManagerMasterEndpoint(
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
 
+    case HasCachedBlocks(executorId) =>
+      blockManagerIdByExecutor.get(executorId) match {
+        case Some(bm) =>
+          if (blockManagerInfo.contains(bm)) {
+            val bmInfo = blockManagerInfo(bm)
+            context.reply(bmInfo.cachedBlocks.nonEmpty)
+          } else {
+            context.reply(false)
+          }
+        case None => context.reply(false)
+      }
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -418,6 +430,9 @@ private[spark] class BlockManagerInfo(
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
+  // Cached blocks held by this BlockManager. This does not include broadcast blocks.
+  private val _cachedBlocks = new mutable.HashSet[BlockId]
+
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
   def updateLastSeenMs() {
@@ -451,27 +466,35 @@ private[spark] class BlockManagerInfo(
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
+      var blockStatus: BlockStatus = null
       if (storageLevel.useMemory) {
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
+        blockStatus = BlockStatus(storageLevel, memSize, 0, 0)
+        _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
+        blockStatus = BlockStatus(storageLevel, 0, diskSize, 0)
+        _blocks.put(blockId, blockStatus)
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
       if (storageLevel.useOffHeap) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, externalBlockStoreSize))
+        blockStatus = BlockStatus(storageLevel, 0, 0, externalBlockStoreSize)
+        _blocks.put(blockId, blockStatus)
         logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
+      }
+      if (!blockId.isBroadcast && blockStatus.isCached) {
+        _cachedBlocks += blockId
       }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
+      _cachedBlocks -= blockId
       if (blockStatus.storageLevel.useMemory) {
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
@@ -494,6 +517,7 @@ private[spark] class BlockManagerInfo(
       _remainingMem += _blocks.get(blockId).memSize
       _blocks.remove(blockId)
     }
+    _cachedBlocks -= blockId
   }
 
   def remainingMem: Long = _remainingMem
@@ -501,6 +525,9 @@ private[spark] class BlockManagerInfo(
   def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
+
+  // This does not include broadcast blocks.
+  def cachedBlocks: collection.Set[BlockId] = _cachedBlocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 

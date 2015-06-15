@@ -20,7 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.Substring
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
@@ -47,7 +50,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == null) {
       null
@@ -119,7 +122,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) {
       null
@@ -137,6 +140,10 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
   override def convert(v: UTF8String): UTF8String = v.toUpperCase()
 
   override def toString: String = s"Upper($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
+  }
 }
 
 /**
@@ -147,6 +154,10 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def convert(v: UTF8String): UTF8String = v.toLowerCase()
 
   override def toString: String = s"Lower($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
+  }
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
@@ -159,7 +170,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
     if(leftEval == null) {
       null
@@ -181,6 +192,9 @@ trait StringComparison extends ExpectsInputTypes {
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
+  }
 }
 
 /**
@@ -189,6 +203,9 @@ case class Contains(left: Expression, right: Expression)
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
+  }
 }
 
 /**
@@ -197,6 +214,9 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with Predicate with StringComparison {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
+  }
 }
 
 /**
@@ -206,9 +226,14 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
 
+  def this(str: Expression, pos: Expression) = {
+    this(str, pos, Literal(Integer.MAX_VALUE))
+  }
+
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+
   override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
@@ -242,7 +267,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     (start, end)
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
     val po = pos.eval(input)
     val ln = len.eval(input)
@@ -258,7 +283,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           ba.slice(st, end)
         case s: UTF8String =>
           val (st, end) = slicePos(start, length, () => s.length())
-          s.slice(st, end)
+          s.substring(st, end)
       }
     }
   }
@@ -267,5 +292,24 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     // TODO: This is broken because max is not an integer value.
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"
+  }
+}
+
+/**
+ * A function that return the length of the given string expression.
+ */
+case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = IntegerType
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) null else string.asInstanceOf[UTF8String].length
+  }
+
+  override def toString: String = s"length($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).length()")
   }
 }

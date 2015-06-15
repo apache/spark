@@ -302,7 +302,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
       val partitions = metastoreRelation.hiveQlPartitions.map { p =>
         val location = p.getLocation
-        val values = Row.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
+        val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
         ParquetPartition(values, location)

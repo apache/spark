@@ -58,6 +58,15 @@ object HiveTypeCoercion {
     case _ => None
   }
 
+  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
+  private def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
+    findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
+      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
+      case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+      case _ => None
+    })
+  }
+
   /**
    * Find the tightest common type of a set of types by continuously applying
    * `findTightestCommonTypeOfTwo` on these types.
@@ -87,10 +96,11 @@ trait HiveTypeCoercion {
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
-    BooleanEqualization ::
+    BooleanEquality ::
     StringToIntegralCasts ::
     FunctionArgumentConversion ::
     CaseWhenCoercion ::
+    IfCoercion ::
     Division ::
     PropagateTypes ::
     ExpectedInputConversion ::
@@ -445,12 +455,6 @@ trait HiveTypeCoercion {
                                   e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
           val resultType = DecimalType(max(p1, p2), max(s1, s2))
           b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
-        case b @ BinaryComparison(e1 @ DecimalType.Fixed(_, _), e2)
-          if e2.dataType == DecimalType.Unlimited =>
-          b.makeCopy(Array(Cast(e1, DecimalType.Unlimited), e2))
-        case b @ BinaryComparison(e1, e2 @ DecimalType.Fixed(_, _))
-          if e1.dataType == DecimalType.Unlimited =>
-          b.makeCopy(Array(e1, Cast(e2, DecimalType.Unlimited)))
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
@@ -479,9 +483,9 @@ trait HiveTypeCoercion {
   /**
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
-  object BooleanEqualization extends Rule[LogicalPlan] {
-    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, new java.math.BigDecimal(1))
-    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, new java.math.BigDecimal(0))
+  object BooleanEquality extends Rule[LogicalPlan] {
+    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1))
+    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal(0))
 
     private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
       CaseKeyWhen(numericExpr, Seq(
@@ -512,22 +516,22 @@ trait HiveTypeCoercion {
       // all other cases are considered as false.
 
       // We may simplify the expression if one side is literal numeric values
-      case EqualTo(left @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => left
-      case EqualTo(left @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => Not(left)
-      case EqualTo(Literal(value, _: NumericType), right @ BooleanType())
-        if trueValues.contains(value) => right
-      case EqualTo(Literal(value, _: NumericType), right @ BooleanType())
-        if falseValues.contains(value) => Not(right)
-      case EqualNullSafe(left @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => And(IsNotNull(left), left)
-      case EqualNullSafe(left @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => And(IsNotNull(left), Not(left))
-      case EqualNullSafe(Literal(value, _: NumericType), right @ BooleanType())
-        if trueValues.contains(value) => And(IsNotNull(right), right)
-      case EqualNullSafe(Literal(value, _: NumericType), right @ BooleanType())
-        if falseValues.contains(value) => And(IsNotNull(right), Not(right))
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => bool
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Not(bool)
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => bool
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => Not(bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
         transform(left , right)
@@ -655,6 +659,26 @@ trait HiveTypeCoercion {
           }.reduce(_ ++ _)
           CaseKeyWhen(Cast(c.key, commonType), castedBranches)
         }.getOrElse(c)
+    }
+  }
+
+  /**
+   * Coerces the type of different branches of If statement to a common type.
+   */
+  object IfCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Find tightest common type for If, if the true value and false value have different types.
+      case i @ If(pred, left, right) if left.dataType != right.dataType =>
+        findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>
+          val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
+          val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
+          If(pred, newLeft, newRight)
+        }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
+
+      // Convert If(null literal, _, _) into boolean type.
+      // In the optimizer, we should short-circuit this directly into false value.
+      case If(pred, left, right) if pred.dataType == NullType =>
+        If(Literal.create(null, BooleanType), left, right)
     }
   }
 
