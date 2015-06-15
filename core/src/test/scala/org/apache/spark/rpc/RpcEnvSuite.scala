@@ -569,7 +569,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val defaultDurationSeconds = 1
     val rt3 = RpcTimeout(conf, Seq(defaultProp), defaultDurationSeconds.toString + "s")
     assert( defaultDurationSeconds === rt3.duration.toSeconds )
-    assert( rt3.message.contains(defaultProp) )
+    assert( rt3.conf.contains(defaultProp) )
 
     // Try to construct RpcTimeout with an unconfigured property
     intercept[Throwable] {

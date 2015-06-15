@@ -197,19 +197,16 @@ private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
  * Associates a timeout with a description so that a when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.
  * @param timeout timeout duration in seconds
- * @param description description to be displayed in a timeout exception
+ * @param conf the configuration parameter that controls this timeout
  */
-private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
+private[spark] class RpcTimeout(timeout: FiniteDuration, val conf: String) {
 
   /** Get the timeout duration */
   def duration: FiniteDuration = timeout
 
-  /** Get the message associated with this timeout */
-  def message: String = description
-
   /** Amends the standard message of TimeoutException to include the description */
   private def createRpcTimeoutException(te: TimeoutException): RpcTimeoutException = {
-    new RpcTimeoutException(te.getMessage() + " " + description, te)
+    new RpcTimeoutException(te.getMessage() + ". This timeout is controlled by " + conf, te)
   }
 
   /**
@@ -244,8 +241,6 @@ private[spark] class RpcTimeout(timeout: FiniteDuration, description: String) {
 
 private[spark] object RpcTimeout {
 
-  private[this] val messagePrefix = "This timeout is controlled by "
-
   /**
    * Lookup the timeout property in the configuration and create
    * a RpcTimeout with the property key in the description.
@@ -255,7 +250,7 @@ private[spark] object RpcTimeout {
    */
   def apply(conf: SparkConf, timeoutProp: String): RpcTimeout = {
     val timeout = { conf.getTimeAsSeconds(timeoutProp) seconds }
-    new RpcTimeout(timeout, messagePrefix + timeoutProp)
+    new RpcTimeout(timeout, timeoutProp)
   }
 
   /**
@@ -268,7 +263,7 @@ private[spark] object RpcTimeout {
    */
   def apply(conf: SparkConf, timeoutProp: String, defaultValue: String): RpcTimeout = {
     val timeout = { conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds }
-    new RpcTimeout(timeout, messagePrefix + timeoutProp)
+    new RpcTimeout(timeout, timeoutProp)
   }
 
   /**
@@ -292,6 +287,6 @@ private[spark] object RpcTimeout {
     }
     val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
     val timeout = { Utils.timeStringAsSeconds(finalProp._2) seconds }
-    new RpcTimeout(timeout, messagePrefix + finalProp._1)
+    new RpcTimeout(timeout, finalProp._1)
   }
 }
