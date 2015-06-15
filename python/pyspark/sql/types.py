@@ -367,10 +367,11 @@ class StructType(DataType):
         False
         """
         if not fields:
-            fields = []
-        assert all(isinstance(f, StructField) for f in fields),\
+            self.fields = []
+        else:
+            self.fields = fields
+            assert all(isinstance(f, StructField) for f in fields),\
             "fields should be a list of StructField"
-        self.fields = fields
 
     def add(self, name_or_struct_field, data_type=None, nullable=True, metadata=None):
         """
