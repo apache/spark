@@ -282,11 +282,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = logs.flatMap { fileStatus =>
       try {
         val res = replay(fileStatus, bus)
-        res.map { r =>
-          logInfo(s"Application log ${r.logPath} loaded successfully.")
-        }.getOrElse {
-          logInfo(
-            s"Failed to load application log ${fileStatus.getPath}." +
+        res match {
+          case Some(r) => logInfo(s"Application log ${r.logPath} loaded successfully.")
+          case None => logWarning(s"Failed to load application log ${fileStatus.getPath}." +
             "The application may have not started.")
         }
         res
