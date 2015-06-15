@@ -537,6 +537,14 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
+    override def onTaskResubmit(taskResubmit: SparkListenerTaskResubmit): Unit = {
+      val stageId = taskResubmit.stageId
+      allocationManager.synchronized {
+        val num = stageIdToNumTasks.getOrElse(stageId, 0)
+        stageIdToNumTasks.update(stageId, num + 1)
+      }
+    }
+
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
       val stageId = taskStart.stageId
       val taskId = taskStart.taskInfo.taskId
@@ -559,6 +567,7 @@ private[spark] class ExecutorAllocationManager(
         if (numTasksScheduled == numTasksTotal) {
           // No more pending tasks for this stage
           stageIdToNumTasks -= stageId
+          stageIdToTaskIndices -= stageId
           if (stageIdToNumTasks.isEmpty) {
             allocationManager.onSchedulerQueueEmpty()
           }

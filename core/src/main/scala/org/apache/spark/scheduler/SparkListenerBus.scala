@@ -34,6 +34,8 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
         listener.onJobStart(jobStart)
       case jobEnd: SparkListenerJobEnd =>
         listener.onJobEnd(jobEnd)
+      case taskResubmit: SparkListenerTaskResubmit =>
+        listener.onTaskResubmit(taskResubmit)
       case taskStart: SparkListenerTaskStart =>
         listener.onTaskStart(taskStart)
       case taskGettingResult: SparkListenerTaskGettingResult =>

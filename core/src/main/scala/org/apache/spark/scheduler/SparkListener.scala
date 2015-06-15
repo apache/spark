@@ -40,6 +40,9 @@ case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Propert
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerTaskResubmit(stageId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
   extends SparkListenerEvent
 
@@ -144,6 +147,11 @@ trait SparkListener {
    * Called when a stage is submitted
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
+
+  /**
+   * Called when a task is resubmit
+   */
+  def onTaskResubmit(taskResubmit: SparkListenerTaskResubmit) { }
 
   /**
    * Called when a task starts

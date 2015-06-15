@@ -153,6 +153,10 @@ class DAGScheduler(
   // may lead to more delay in scheduling if those locations are busy.
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
+  def taskResubmit(task: Task[_]) {
+    eventProcessLoop.post(ResubmitEvent(task))
+  }
+
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessLoop.post(BeginEvent(task, taskInfo))
@@ -735,6 +739,10 @@ class DAGScheduler(
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
     submitWaitingStages()
+  }
+
+  private[scheduler] def handleResubmitEvent(task: Task[_]) {
+    listenerBus.post(SparkListenerTaskResubmit(task.stageId))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
@@ -1470,6 +1478,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case ExecutorLost(execId) =>
       dagScheduler.handleExecutorLost(execId, fetchFailed = false)
+
+    case ResubmitEvent(task) =>
+      dagScheduler.handleResubmitEvent(task)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
