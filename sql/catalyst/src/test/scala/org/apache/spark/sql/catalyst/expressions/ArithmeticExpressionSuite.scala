@@ -154,7 +154,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
 
     checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(-1), null, EmptyRow)
+    checkEvaluation(Sqrt(-1.0), null, EmptyRow)
     checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
 }
