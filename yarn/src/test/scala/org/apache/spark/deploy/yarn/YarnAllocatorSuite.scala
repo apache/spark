@@ -48,8 +48,6 @@ class MockResolver extends DNSToSwitchMapping {
 }
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
-  import YarnAllocatorSuite._
-
   val conf = new Configuration()
   conf.setClass(
     CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
@@ -85,14 +83,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     override def equals(other: Any): Boolean = false
   }
 
-  def createAllocator(maxExecutors: Int = 5): MockYarnAllocator = {
+  def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
     val args = ArrayBuffer(
       "--num-executors", s"$maxExecutors",
       "--executor-cores", "5",
       "--executor-memory", "2048",
       "--jar", "somejar.jar",
       "--class", "SomeClass")
-    new MockYarnAllocator(
+    new YarnAllocator(
       "not used",
       conf,
       sparkConf,
@@ -244,155 +242,5 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(vmemMsg.contains("5.8 GB of 4.2 GB virtual memory used."))
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
-
-  test("allocate locality preferred containers with enough resource and no matched existed " +
-    "containers") {
-    // 1. All the locations of current containers cannot satisfy the new requirements
-    // 2. Current requested container number can fully satisfy the pending tasks.
-
-    val handler = createAllocator(2)
-    handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host2")))
-
-    handler.requestTotalExecutorsWithPreferredLocalities(
-      5, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10))
-    handler.updateResourceRequests()
-    val nodesOfRequests = handler.containerRequests.toArray.map { request =>
-      if (request.getNodes == null) {
-        null
-      } else {
-        request.getNodes.toArray(new Array[String](request.getNodes.size))
-      }
-    }
-
-    assert(nodesOfRequests === Array(
-      null, // container1 request
-      null, // container2 request
-      /** newly request locality preferred containers */
-      Array("host3", "host4", "host5"),
-      Array("host3", "host4", "host5"),
-      Array("host3", "host4")))
-  }
-
-  test("allocate locality preferred containers with enough resource and partially matched " +
-    "containers") {
-    // 1. Parts of current containers' location can satisfy the new requirements
-    // 2. Current requested container number can fully satisfy the pending tasks.
-
-    val handler = createAllocator(3)
-    handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host1"),
-      createContainer("host2")
-    ))
-
-    handler.requestTotalExecutorsWithPreferredLocalities(
-      6, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
-    handler.updateResourceRequests()
-    val nodesOfRequests = handler.containerRequests.toArray.map { request =>
-      if (request.getNodes == null) {
-        null
-      } else {
-        request.getNodes.toArray(new Array[String](request.getNodes.size))
-      }
-    }
-
-    assert(nodesOfRequests === Array(
-      null, // container1 request
-      null, // container1 request
-      null, // container2 request
-      /** newly requested locality preferred containers */
-      null, // requested requested container with no locality preference
-      Array("host2", "host3"),
-      Array("host2", "host3")))
-  }
-
-  test("allocate locality preferred containers with limited resource and partially matched " +
-    "containers") {
-    // 1. Parts of current containers' location can satisfy the new requirements
-    // 2. Current requested container number cannot fully satisfy the pending tasks.
-
-    val handler = createAllocator(3)
-    handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host1"),
-      createContainer("host2")
-    ))
-
-    handler.requestTotalExecutorsWithPreferredLocalities(
-      4, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
-    handler.updateResourceRequests()
-    val nodesOfRequests = handler.containerRequests.toArray.map { request =>
-      if (request.getNodes == null) {
-        null
-      } else {
-        request.getNodes.toArray(new Array[String](request.getNodes.size))
-      }
-    }
-
-    assert(nodesOfRequests === Array(
-      null, // container1 request
-      null, // container1 request
-      null, // container2 request
-      /** newly requested locality preferred containers */
-      Array("host2", "host3")))
-  }
-
-  test("allocate containers with no locality preference") {
-    // Request new container without locality preference
-
-    val handler = createAllocator(2)
-    handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host2")
-    ))
-
-    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty)
-    handler.updateResourceRequests()
-    val nodesOfRequests = handler.containerRequests.toArray.map { request =>
-      if (request.getNodes == null) {
-        null
-      } else {
-        request.getNodes.toArray(new Array[String](request.getNodes.size))
-      }
-    }
-
-    assert(nodesOfRequests === Array(
-      null, // container1 request
-      null, // container2 request
-      /** newly requested locality preferred containers */
-      null))
-  }
 }
 
-object YarnAllocatorSuite {
-  class MockYarnAllocator(
-      driverUrl: String,
-      conf: Configuration,
-      sparkConf: SparkConf,
-      amClient: AMRMClient[ContainerRequest],
-      appAttemptId: ApplicationAttemptId,
-      args: ApplicationMasterArguments,
-      securityMgr: SecurityManager) extends YarnAllocator(
-    driverUrl,
-    conf,
-    sparkConf,
-    amClient,
-    appAttemptId,
-    args,
-    securityMgr) {
-    val containerRequests = ArrayBuffer[ContainerRequest]()
-
-    override protected def createContainerRequest(resource: Resource, nodes: Array[String],
-        racks: Array[String]): ContainerRequest = {
-      val request = super.createContainerRequest(resource, nodes, racks)
-      containerRequests += request
-      request
-    }
-  }
-}
