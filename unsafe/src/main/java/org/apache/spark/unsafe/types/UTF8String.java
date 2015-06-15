@@ -56,12 +56,16 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Updates the UTF8String with String.
    */
   public UTF8String set(final String str) {
-    try {
-      bytes = str.getBytes("utf-8");
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      PlatformDependent.throwException(e);
+    if (str == null) {
+      bytes = new byte[0];
+    } else {
+      try {
+        bytes = str.getBytes("utf-8");
+      } catch (UnsupportedEncodingException e) {
+        // Turn the exception into unchecked so we can find out about it at runtime, but
+        // don't need to add lots of boilerplate code everywhere.
+        PlatformDependent.throwException(e);
+      }
     }
     return this;
   }
@@ -70,7 +74,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Updates the UTF8String with byte[], which should be encoded in UTF-8.
    */
   public UTF8String set(final byte[] bytes) {
-    this.bytes = bytes;
+    this.bytes = (bytes != null) ? bytes : new byte[0];
     return this;
   }
 
@@ -185,6 +189,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int compareTo(final UTF8String other) {
+    if (other == null) return 1;
     final byte[] b = other.getBytes();
     for (int i = 0; i < bytes.length && i < b.length; i++) {
       int res = bytes[i] - b[i];
