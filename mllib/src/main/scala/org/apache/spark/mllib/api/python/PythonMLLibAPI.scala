@@ -27,6 +27,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
+import org.apache.spark.SparkContext
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
@@ -641,6 +642,8 @@ private[python] class PythonMLLibAPI extends Serializable {
     def getVectors: JMap[String, JList[Float]] = {
       model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
     }
+
+    def save(sc: SparkContext, path: String) = model.save(sc, path)
   }
 
   /**
