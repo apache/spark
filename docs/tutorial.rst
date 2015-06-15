@@ -40,6 +40,7 @@ complicated, a line by line explanation follows below.
 
     dag = DAG('tutorial', default_args=default_args)
 
+    # t1, t2 and t3 are examples of tasks created by instatiating operators
     t1 = BashOperator(
         task_id='print_date',
         bash_command='date',
@@ -123,8 +124,9 @@ We also pass the default argument dictionary that we just define.
 
 Tasks
 -----
-Tasks are generated when instantiating objects from operators. The first
-argument ``task_id`` acts as a unique identifier for the task.
+Tasks are generated when instantiating objects from operators. An object
+instatiated from an operator is called a constructor. The first argument
+``task_id`` acts as a unique identifier for the task.
 
 .. code:: python
 
@@ -141,24 +143,25 @@ argument ``task_id`` acts as a unique identifier for the task.
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
 an argument common to all operators (``email_on_failure``) inherited 
-from BaseOperator to the operators constructor. This is simpler than 
+from BaseOperator to the operator's constructor. This is simpler than
 passing every argument for every constructor call. Also, notice that in 
-the second call we override ``email_on_failure`` parameter with ``False``.
+the second task we override ``email_on_failure`` parameter with ``False``.
 
-The precedence rules for operator is:
+The precedence rules for a task are as follows:
 
-* Use the argument explicitly passed to the constructor
-* Look in the default_args dictonary, use the value from there if it exists
-* Use the operator's default, if any
-* If none of these are defined, Airflow raises an exception
+1.  Explicitly passed arguments
+2.  Values that exist in the ``default_args`` dictionary
+3.  The operator's default value, if one exists
 
+A task must include or inherit the arguments ``task_id`` and ``owner``,
+otherwise Airflow will raise an exception.
 
 Templating with Jinja
 ---------------------
 Airflow leverages the power of 
 `Jinja Templating <http://jinja.pocoo.org/docs/dev/>`_  and provides
 the pipeline author
-with a set of builtin parameters and macros. Airflow also provides
+with a set of built-in parameters and macros. Airflow also provides
 hooks for the pipeline author to define their own parameters, macros and
 templates.
 
@@ -172,7 +175,7 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
     templated_command = """
         {% for i in range(5) %}
             echo "{{ ds }}"
-            echo "{{ macros.ds_add(ds, 7)}}"
+            echo "{{ macros.ds_add(ds, 7) }}"
             echo "{{ params.my_param }}"
         {% endfor %}
     """
@@ -185,25 +188,20 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
 
 Notice that the ``templated_command`` contains code logic in ``{% %}`` blocks,
 references parameters like ``{{ ds }}``, calls a function as in
-``{{ macros.ds_add(ds, 7)}}``, and references a user defined parameter
+``{{ macros.ds_add(ds, 7)}}``, and references a user-defined parameter
 in ``{{ params.my_param }}``.
 
-The ``params`` hook in BaseOperator allows you to pass a dictionary of 
+The ``params`` hook in ``BaseOperator`` allows you to pass a dictionary of
 parameters and/or objects to your templates. Please take the time
 to understand how the parameter ``my_param`` makes it through to the template.
 
-Note that templated fields can point to files if you prefer. 
-It may be desirable for many reasons, like keeping your scripts logic
-outside of your pipeline code, getting proper code highlighting in files, 
-and just generally allowing you to organize your pipeline's logic as you
-please. 
-
-In the above example, we could have 
-had a file ``templated_command.sh``, and referenced it in the ``bash_command``
-parameter, as in
-``bash_command='templated_command.sh'`` where the file location is relative
-to the pipeline's (``tutorial.py``) location. Note that it is also possible 
-to define your ``template_searchpath`` pointing to any folder 
+Files can also be passed to the ``bash_command`` argument, like
+``bash_command='templated_command.sh'`` where the file location is relative to
+the directory containing the pipeline file (``tutorial.py`` in this case). This
+may be desirable for many reasons, like separating your script's logic and
+pipeline code, allowing for proper code highlighting in files composed in
+different languages, and general flexibility in structuring pipelines. It is
+also possible to define your ``template_searchpath`` pointing to any folder
 locations in the DAG constructor call.
 
 Setting up Dependencies
