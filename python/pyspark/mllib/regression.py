@@ -198,8 +198,7 @@ class LinearRegressionWithSGD(object):
               initialWeights=None, regParam=0.0, regType=None, intercept=False,
               validateData=True):
         """
-        Train a linear regression model with no regularization using
-        Stochastic Gradient Descent.
+        Train a linear regression model using Stochastic Gradient Descent.
         This solves the least squares regression formulation
                 f(weights) = 1/n ||A weights-y||^2^
         (which is the mean squared error).
@@ -437,7 +436,7 @@ class RidgeRegressionWithSGD(object):
         """
         Train a regression model with L2-regularization using
         Stochastic Gradient Descent.
-        This solves the l1-regularized least squares regression
+        This solves the l2-regularized least squares regression
         formulation
             f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
         Here the data matrix has n rows, and the input RDD holds the

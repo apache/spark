@@ -73,7 +73,7 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
 
 /**
  * Train a regression model with L2-regularization using Stochastic Gradient Descent.
- * This solves the l1-regularized least squares regression formulation
+ * This solves the l2-regularized least squares regression formulation
  *          f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
