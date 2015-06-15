@@ -25,8 +25,8 @@ import org.apache.spark.sql.types.{BinaryType, StringType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * A function that calculates an MD5 128-bit checksum for the string or binary.
- * Defined for String and Binary types.
+ * A function that calculates an MD5 128-bit checksum and returns it as a hex string
+ * For input of type [[StringType]] or [[BinaryType]]
  */
 case class Md5(child: Expression) extends UnaryExpression {
 
@@ -43,7 +43,7 @@ case class Md5(child: Expression) extends UnaryExpression {
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
       null

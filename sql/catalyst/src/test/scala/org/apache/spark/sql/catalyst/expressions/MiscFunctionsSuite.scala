@@ -18,16 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types.{StringType, BinaryType}
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("md5") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'a.binary.at(0)
-    checkEvaluation(Md5(s1), "902fbdd2b1df0c4f70b4a5d23525e932", create_row("ABC"))
-    checkEvaluation(Md5(s2), "6ac1e56bc78f031059be7be854522c4c",
-      create_row(Array[Byte](1, 2, 3, 4, 5, 6)))
+    checkEvaluation(Md5(Literal("ABC")), "902fbdd2b1df0c4f70b4a5d23525e932")
+    checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)), "6ac1e56bc78f031059be7be854522c4c")
+    checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
+    checkEvaluation(Md5(Literal.create(null, StringType)), null)
   }
 
 }
