@@ -18,17 +18,16 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 
 
 /**
- * For Catalyst to work correctly, concrete implementations of [[Expression]]s must be case classes
- * whose constructor arguments are all Expressions types. In addition, if we want to support more
- * than one constructor, define those constructors explicitly as apply methods in the companion
- * object.
+ * If an expression wants to be exposed in the function registry (so users can call it with
+ * "name(arguments...)", the concrete implementation must be a case class whose constructor
+ * arguments are all Expressions types.
  *
  * See [[Substring]] for an example.
  */
@@ -59,7 +58,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): Any
+  def eval(input: InternalRow = null): Any
 
   /**
    * Returns an [[GeneratedExpressionCode]], which contains Java source code that
@@ -136,12 +135,17 @@ abstract class Expression extends TreeNode[Expression] {
    * cosmetically (i.e. capitalization of names in attributes may be different).
    */
   def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {
+      elements1.length == elements2.length && elements1.zip(elements2).forall {
+        case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+        case (Some(e1: Expression), Some(e2: Expression)) => e1 semanticEquals e2
+        case (t1: Traversable[_], t2: Traversable[_]) => checkSemantic(t1.toSeq, t2.toSeq)
+        case (i1, i2) => i1 == i2
+      }
+    }
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
-    elements1.length == elements2.length && elements1.zip(elements2).forall {
-      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-      case (i1, i2) => i1 == i2
-    }
+    checkSemantic(elements1, elements2)
   }
 
   /**
@@ -212,6 +216,9 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = child.nullable
+
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not not null, use `f` to generate the expression.
@@ -237,18 +244,6 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       }
     """
   }
-}
-
-// TODO Semantically we probably not need GroupExpression
-// All we need is holding the Seq[Expression], and ONLY used in doing the
-// expressions transformation correctly. Probably will be removed since it's
-// not like a real expressions.
-case class GroupExpression(children: Seq[Expression]) extends Expression {
-  self: Product =>
-  override def eval(input: Row): Any = throw new UnsupportedOperationException
-  override def nullable: Boolean = false
-  override def foldable: Boolean = false
-  override def dataType: DataType = throw new UnsupportedOperationException
 }
 
 /**

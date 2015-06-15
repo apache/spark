@@ -31,7 +31,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.{InternalRow, _}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.errors.DialectException
@@ -120,11 +120,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = {
-    val fr = new SimpleFunctionRegistry
-    FunctionRegistry.expressions.foreach { case (name, func) => fr.registerFunction(name, func) }
-    fr
-  }
+  protected[sql] lazy val functionRegistry: FunctionRegistry =
+    new OverrideFunctionRegistry(FunctionRegistry.builtin)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -489,10 +486,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[Row])
+      rowRDD.map(converter(_).asInstanceOf[InternalRow])
     } else {
-      rowRDD
+      rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
@@ -534,7 +543,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
           extractors.zip(attributeSeq).map { case (e, attr) =>
             CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
           }.toArray[Any]
-        ) : Row
+        ) : InternalRow
       }
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
@@ -889,7 +898,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val planner = new SparkPlanner
 
   @transient
-  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
    * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
@@ -956,7 +965,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
@@ -1038,7 +1047,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericRow(m): Row}
+      iter.map { m => new GenericRow(m): InternalRow}
     }
 
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))

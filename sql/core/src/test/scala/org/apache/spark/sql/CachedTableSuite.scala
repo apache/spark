@@ -25,7 +25,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 case class BigData(s: String)
 
@@ -94,7 +94,7 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("too big for memory") {
-    val data = "*" * 10000
+    val data = "*" * 1000
     ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
       .registerTempTable("bigData")
     ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)

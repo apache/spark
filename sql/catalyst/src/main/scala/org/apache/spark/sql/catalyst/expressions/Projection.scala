@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
@@ -30,7 +29,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
-  def apply(input: Row): Row = {
+  def apply(input: InternalRow): InternalRow = {
     val outputArray = new Array[Any](exprArray.length)
     var i = 0
     while (i < exprArray.length) {
@@ -55,14 +54,14 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
 
   private[this] val exprArray = expressions.toArray
   private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
-  def currentValue: Row = mutableRow
+  def currentValue: InternalRow = mutableRow
 
   override def target(row: MutableRow): MutableProjection = {
     mutableRow = row
     this
   }
 
-  override def apply(input: Row): Row = {
+  override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
       mutableRow(i) = exprArray(i).eval(input)
@@ -76,31 +75,31 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
  */
-class JoinedRow extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -142,7 +141,7 @@ class JoinedRow extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -176,31 +175,31 @@ class JoinedRow extends Row {
  * Row will be referenced, increasing the opportunity for the JIT to play tricks.  This sounds
  * crazy but in benchmarks it had noticeable effects.
  */
-class JoinedRow2 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow2 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -242,7 +241,7 @@ class JoinedRow2 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -270,31 +269,31 @@ class JoinedRow2 extends Row {
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow3 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow3 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -336,7 +335,7 @@ class JoinedRow3 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -364,31 +363,31 @@ class JoinedRow3 extends Row {
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow4 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow4 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -430,7 +429,7 @@ class JoinedRow4 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -458,31 +457,31 @@ class JoinedRow4 extends Row {
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow5 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow5 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -524,7 +523,7 @@ class JoinedRow5 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0
@@ -552,31 +551,31 @@ class JoinedRow5 extends Row {
 /**
  * JIT HACK: Replace with macros
  */
-class JoinedRow6 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+class JoinedRow6 extends InternalRow {
+  private[this] var row1: InternalRow = _
+  private[this] var row2: InternalRow = _
 
-  def this(left: Row, right: Row) = {
+  def this(left: InternalRow, right: InternalRow) = {
     this()
     row1 = left
     row2 = right
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
+  def withLeft(newLeft: InternalRow): InternalRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
+  def withRight(newRight: InternalRow): InternalRow = {
     row2 = newRight
     this
   }
@@ -618,7 +617,7 @@ class JoinedRow6 extends Row {
   override def getAs[T](i: Int): T =
     if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
     var i = 0

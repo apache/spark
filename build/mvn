@@ -69,11 +69,14 @@ install_app() {
 
 # Install maven under the build/ folder
 install_mvn() {
+  local MVN_VERSION="3.3.3"
+
   install_app \
-    "http://archive.apache.org/dist/maven/maven-3/3.2.5/binaries" \
-    "apache-maven-3.2.5-bin.tar.gz" \
-    "apache-maven-3.2.5/bin/mvn"
-  MVN_BIN="${_DIR}/apache-maven-3.2.5/bin/mvn"
+    "http://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries" \
+    "apache-maven-${MVN_VERSION}-bin.tar.gz" \
+    "apache-maven-${MVN_VERSION}/bin/mvn"
+
+  MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
 }
 
 # Install zinc under the build/ folder
@@ -105,28 +108,16 @@ install_scala() {
   SCALA_LIBRARY="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-library.jar"
 }
 
-# Determines if a given application is already installed. If not, will attempt
-# to install
-## Arg1 - application name
-## Arg2 - Alternate path to local install under build/ dir
-check_and_install_app() {
-  # create the local environment variable in uppercase
-  local app_bin="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
-  # some black magic to set the generated app variable (i.e. MVN_BIN) into the
-  # environment
-  eval "${app_bin}=`which $1 2>/dev/null`"
-
-  if [ -z "`which $1 2>/dev/null`" ]; then
-    install_$1
-  fi
-}
-
 # Setup healthy defaults for the Zinc port if none were provided from
 # the environment
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
-# Check and install all applications necessary to build Spark
-check_and_install_app "mvn"
+# Install Maven if necessary
+MVN_BIN="$(command -v mvn)"
+
+if [ ! "$MVN_BIN" ]; then
+  install_mvn
+fi
 
 # Install the proper version of Scala and Zinc for the build
 install_zinc

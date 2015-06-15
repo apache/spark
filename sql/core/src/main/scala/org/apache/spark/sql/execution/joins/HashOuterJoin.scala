@@ -68,20 +68,23 @@ case class HashOuterJoin(
     }
   }
 
-  @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
-  @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
+  @transient private[this] lazy val DUMMY_LIST = Seq[InternalRow](null)
+  @transient private[this] lazy val EMPTY_LIST = Seq.empty[InternalRow]
 
   @transient private[this] lazy val leftNullRow = new GenericRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericRow(right.output.length)
   @transient private[this] lazy val boundCondition =
-    condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
+    condition.map(
+      newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
-      key: Row, joinedRow: JoinedRow, rightIter: Iterable[Row]): Iterator[Row] = {
-    val ret: Iterable[Row] = {
+      key: InternalRow,
+      joinedRow: JoinedRow,
+      rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
+    val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = rightIter.collect {
           case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
@@ -99,12 +102,15 @@ case class HashOuterJoin(
   }
 
   private[this] def rightOuterIterator(
-      key: Row, leftIter: Iterable[Row], joinedRow: JoinedRow): Iterator[Row] = {
+      key: InternalRow,
+      leftIter: Iterable[InternalRow],
+      joinedRow: JoinedRow): Iterator[InternalRow] = {
 
-    val ret: Iterable[Row] = {
+    val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = leftIter.collect {
-          case l if boundCondition(joinedRow.withLeft(l)) => joinedRow.copy
+          case l if boundCondition(joinedRow.withLeft(l)) =>
+            joinedRow.copy
         }
         if (temp.size == 0) {
           joinedRow.withLeft(leftNullRow).copy :: Nil
@@ -119,14 +125,14 @@ case class HashOuterJoin(
   }
 
   private[this] def fullOuterIterator(
-      key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row],
-      joinedRow: JoinedRow): Iterator[Row] = {
+      key: InternalRow, leftIter: Iterable[InternalRow], rightIter: Iterable[InternalRow],
+      joinedRow: JoinedRow): Iterator[InternalRow] = {
 
     if (!key.anyNull) {
       // Store the positions of records in right, if one of its associated row satisfy
       // the join condition.
       val rightMatchedSet = scala.collection.mutable.Set[Int]()
-      leftIter.iterator.flatMap[Row] { l =>
+      leftIter.iterator.flatMap[InternalRow] { l =>
         joinedRow.withLeft(l)
         var matched = false
         rightIter.zipWithIndex.collect {
@@ -157,24 +163,25 @@ case class HashOuterJoin(
           joinedRow(leftNullRow, r).copy()
       }
     } else {
-      leftIter.iterator.map[Row] { l =>
+      leftIter.iterator.map[InternalRow] { l =>
         joinedRow(l, rightNullRow).copy()
-      } ++ rightIter.iterator.map[Row] { r =>
+      } ++ rightIter.iterator.map[InternalRow] { r =>
         joinedRow(leftNullRow, r).copy()
       }
     }
   }
 
   private[this] def buildHashTable(
-      iter: Iterator[Row], keyGenerator: Projection): JavaHashMap[Row, CompactBuffer[Row]] = {
-    val hashTable = new JavaHashMap[Row, CompactBuffer[Row]]()
+      iter: Iterator[InternalRow],
+      keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
+    val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]]()
     while (iter.hasNext) {
       val currentRow = iter.next()
       val rowKey = keyGenerator(currentRow)
 
       var existingMatchList = hashTable.get(rowKey)
       if (existingMatchList == null) {
-        existingMatchList = new CompactBuffer[Row]()
+        existingMatchList = new CompactBuffer[InternalRow]()
         hashTable.put(rowKey, existingMatchList)
       }
 
@@ -184,7 +191,7 @@ case class HashOuterJoin(
     hashTable
   }
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)

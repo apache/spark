@@ -172,8 +172,8 @@ class Analyzer(
      * expressions which equal GroupBy expressions with Literal(null), if those expressions
      * are not set for this grouping set (according to the bit mask).
      */
-    private[this] def expand(g: GroupingSets): Seq[GroupExpression] = {
-      val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
+    private[this] def expand(g: GroupingSets): Seq[Seq[Expression]] = {
+      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
 
       g.bitmasks.foreach { bitmask =>
         // get the non selected grouping attributes according to the bit mask
@@ -194,7 +194,7 @@ class Analyzer(
             Literal.create(bitmask, IntegerType)
         })
 
-        result += GroupExpression(substitution)
+        result += substitution
       }
 
       result.toSeq
@@ -460,7 +460,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
+          case u @ UnresolvedFunction(name, children) =>
             withPosition(u) {
               registry.lookupFunction(name, children)
             }
@@ -494,20 +494,21 @@ class Analyzer(
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
-          if aggregate.resolved && containsAggregate(havingCondition) => {
+          if aggregate.resolved && containsAggregate(havingCondition) =>
+
         val evaluatedCondition = Alias(havingCondition, "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
 
         Project(aggregate.output,
           Filter(evaluatedCondition.toAttribute,
             aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
-      }
     }
 
-    protected def containsAggregate(condition: Expression): Boolean =
+    protected def containsAggregate(condition: Expression): Boolean = {
       condition
         .collect { case ae: AggregateExpression => ae }
         .nonEmpty
+    }
   }
 
   /**
@@ -562,7 +563,9 @@ class Analyzer(
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
         case Alias(g: Generator, name)
-          if g.elementTypes.size > 1 && java.util.regex.Pattern.matches("_c[0-9]+", name) => {
+          if g.resolved &&
+             g.elementTypes.size > 1 &&
+             java.util.regex.Pattern.matches("_c[0-9]+", name) => {
           // Assume the default name given by parser is "_c[0-9]+",
           // TODO in long term, move the naming logic from Parser to Analyzer.
           // In projection, Parser gave default name for TGF as does for normal UDF,
@@ -571,7 +574,7 @@ class Analyzer(
           // Let's simply ignore the default given name for this case.
           Some((g, Nil))
         }
-        case Alias(g: Generator, name) if g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},

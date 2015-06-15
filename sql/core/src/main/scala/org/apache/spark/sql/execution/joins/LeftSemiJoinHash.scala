@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -42,10 +42,10 @@ case class LeftSemiJoinHash(
 
   override def output: Seq[Attribute] = left.output
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashSet = new java.util.HashSet[Row]()
-      var currentRow: Row = null
+      val hashSet = new java.util.HashSet[InternalRow]()
+      var currentRow: InternalRow = null
 
       // Create a Hash set of buildKeys
       while (buildIter.hasNext) {

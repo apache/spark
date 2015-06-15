@@ -134,6 +134,14 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("explode alias and star") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(explode($"a").as("a"), $"*"),
+      Row("a", Seq("a"), 1) :: Nil)
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
@@ -469,12 +477,63 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("showString(negative)") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |only showing top 0 rows
+                           |""".stripMargin
+    assert(testData.select($"*").showString(-1) === expectedAnswer)
+  }
+
+  test("showString(0)") {
+    val expectedAnswer = """+---+-----+
+                           ||key|value|
+                           |+---+-----+
+                           |+---+-----+
+                           |only showing top 0 rows
+                           |""".stripMargin
+    assert(testData.select($"*").showString(0) === expectedAnswer)
+  }
+
+  test("showString: array") {
+    val df = Seq(
+      (Array(1, 2, 3), Array(1, 2, 3)),
+      (Array(2, 3, 4), Array(2, 3, 4))
+    ).toDF()
+    val expectedAnswer = """+---------+---------+
+                           ||       _1|       _2|
+                           |+---------+---------+
+                           ||[1, 2, 3]|[1, 2, 3]|
+                           ||[2, 3, 4]|[2, 3, 4]|
+                           |+---------+---------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
+  test("showString: minimum column width") {
+    val df = Seq(
+      (1, 1),
+      (2, 2)
+    ).toDF()
+    val expectedAnswer = """+---+---+
+                           || _1| _2|
+                           |+---+---+
+                           ||  1|  1|
+                           ||  2|  2|
+                           |+---+---+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
                            |+---+-----+
                            ||  1|    1|
                            |+---+-----+
+                           |only showing top 1 row
                            |""".stripMargin
     assert(testData.select($"*").showString(1) === expectedAnswer)
   }

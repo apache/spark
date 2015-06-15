@@ -360,6 +360,24 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("specifying the column list for CTAS") {
+    Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
+
+    sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    checkAnswer(
+      sql("SELECT a, b from gen__tmp"),
+      sql("select key, value from mytable1").collect())
+    sql("DROP TABLE gen__tmp")
+
+    sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
+    checkAnswer(
+      sql("SELECT a, b from gen__tmp"),
+      sql("select cast(key as double), cast(value as double) from mytable1").collect())
+    sql("DROP TABLE gen__tmp")
+
+    sql("drop table mytable1")
+  }
+
   test("command substitution") {
     sql("set tbl=src")
     checkAnswer(
@@ -627,12 +645,20 @@ class SQLQuerySuite extends QueryTest {
       .queryExecution.analyzed
   }
 
-  test("test script transform") {
+  test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(100000 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
-      .queryExecution.toRdd.count())
+        .queryExecution.toRdd.count())
+  }
+
+  test("test script transform for stderr") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(0 ===
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
+        .queryExecution.toRdd.count())
   }
 
   test("window function: udaf with aggregate expressin") {
@@ -847,6 +873,10 @@ class SQLQuerySuite extends QueryTest {
     intercept[AnalysisException] {
       sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
     }
+  }
+
+  test("Cast STRING to BIGINT") {
+    checkAnswer(sql("SELECT CAST('775983671874188101' as BIGINT)"), Row(775983671874188101L))
   }
 
   // `Math.exp(1.0)` has different result for different jdk version, so not use createQueryTest

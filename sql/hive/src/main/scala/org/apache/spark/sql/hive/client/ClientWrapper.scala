@@ -27,7 +27,7 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.{TableType => HTableType}
 import org.apache.hadoop.hive.metastore.api
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata
@@ -59,8 +59,7 @@ private[hive] class ClientWrapper(
     version: HiveVersion,
     config: Map[String, String])
   extends ClientInterface
-  with Logging
-  with ReflectionMagic {
+  with Logging {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new java.io.OutputStream {
@@ -88,6 +87,12 @@ private[hive] class ClientWrapper(
       }
       stringBuilder.toString()
     }
+  }
+
+  private val shim = version match {
+    case hive.v12 => new Shim_v0_12()
+    case hive.v13 => new Shim_v0_13()
+    case hive.v14 => new Shim_v0_14()
   }
 
   val state = {
@@ -128,14 +133,7 @@ private[hive] class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     Hive.set(client)
-    version match {
-      case hive.v12 =>
-        classOf[SessionState]
-          .callStatic[SessionState, SessionState]("start", state)
-      case hive.v13 =>
-        classOf[SessionState]
-          .callStatic[SessionState, SessionState]("setCurrentSessionState", state)
-    }
+    shim.setCurrentSessionState(state)
     val ret = try f finally {
       Thread.currentThread().setContextClassLoader(original)
     }
@@ -193,15 +191,12 @@ private[hive] class ClientWrapper(
         properties = h.getParameters.toMap,
         serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.toMap,
         tableType = h.getTableType match {
-          case TableType.MANAGED_TABLE => ManagedTable
-          case TableType.EXTERNAL_TABLE => ExternalTable
-          case TableType.VIRTUAL_VIEW => VirtualView
-          case TableType.INDEX_TABLE => IndexTable
+          case HTableType.MANAGED_TABLE => ManagedTable
+          case HTableType.EXTERNAL_TABLE => ExternalTable
+          case HTableType.VIRTUAL_VIEW => VirtualView
+          case HTableType.INDEX_TABLE => IndexTable
         },
-        location = version match {
-          case hive.v12 => Option(h.call[URI]("getDataLocation")).map(_.toString)
-          case hive.v13 => Option(h.call[Path]("getDataLocation")).map(_.toString)
-        },
+        location = shim.getDataLocation(h),
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
         serde = Option(h.getSerializationLib),
@@ -231,14 +226,7 @@ private[hive] class ClientWrapper(
     // set create time
     qlTable.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
 
-    version match {
-      case hive.v12 =>
-        table.location.map(new URI(_)).foreach(u => qlTable.call[URI, Unit]("setDataLocation", u))
-      case hive.v13 =>
-        table.location
-          .map(new org.apache.hadoop.fs.Path(_))
-          .foreach(qlTable.call[Path, Unit]("setDataLocation", _))
-    }
+    table.location.foreach { loc => shim.setDataLocation(qlTable, loc) }
     table.inputFormat.map(toInputFormat).foreach(qlTable.setInputFormatClass)
     table.outputFormat.map(toOutputFormat).foreach(qlTable.setOutputFormatClass)
     table.serde.foreach(qlTable.setSerializationLib)
@@ -279,13 +267,7 @@ private[hive] class ClientWrapper(
 
   override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
-    val qlPartitions = version match {
-      case hive.v12 =>
-        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsForPruner", qlTable)
-      case hive.v13 =>
-        client.call[metadata.Table, JSet[metadata.Partition]]("getAllPartitionsOf", qlTable)
-    }
-    qlPartitions.toSeq.map(toHivePartition)
+    shim.getAllPartitions(client, qlTable).map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
@@ -315,15 +297,7 @@ private[hive] class ClientWrapper(
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc: CommandProcessor = version match {
-        case hive.v12 =>
-          classOf[CommandProcessorFactory]
-            .callStatic[String, HiveConf, CommandProcessor]("get", tokens(0), conf)
-        case hive.v13 =>
-          classOf[CommandProcessorFactory]
-            .callStatic[Array[String], HiveConf, CommandProcessor]("get", Array(tokens(0)), conf)
-      }
-
+      val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
         case driver: Driver =>
           val response: CommandProcessorResponse = driver.run(cmd)
@@ -334,21 +308,7 @@ private[hive] class ClientWrapper(
           }
           driver.setMaxRows(maxRows)
 
-          val results = version match {
-            case hive.v12 =>
-              val res = new JArrayList[String]
-              driver.call[JArrayList[String], Boolean]("getResults", res)
-              res.toSeq
-            case hive.v13 =>
-              val res = new JArrayList[Object]
-              driver.call[JList[Object], Boolean]("getResults", res)
-              res.map { r =>
-                r match {
-                  case s: String => s
-                  case a: Array[Object] => a(0).asInstanceOf[String]
-                }
-              }
-          }
+          val results = shim.getDriverResults(driver)
           driver.close()
           results
 
@@ -382,8 +342,8 @@ private[hive] class ClientWrapper(
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit = withHiveState {
-
-    client.loadPartition(
+    shim.loadPartition(
+      client,
       new Path(loadPath), // TODO: Use URI
       tableName,
       partSpec,
@@ -398,7 +358,8 @@ private[hive] class ClientWrapper(
       tableName: String,
       replace: Boolean,
       holdDDLTime: Boolean): Unit = withHiveState {
-    client.loadTable(
+    shim.loadTable(
+      client,
       new Path(loadPath),
       tableName,
       replace,
@@ -413,7 +374,8 @@ private[hive] class ClientWrapper(
       numDP: Int,
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = withHiveState {
-    client.loadDynamicPartitions(
+    shim.loadDynamicPartitions(
+      client,
       new Path(loadPath),
       tableName,
       partSpec,

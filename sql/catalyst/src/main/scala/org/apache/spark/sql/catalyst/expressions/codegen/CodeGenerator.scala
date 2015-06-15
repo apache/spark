@@ -24,15 +24,18 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
 class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
 class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
 
 /**
- * Java source for evaluating an [[Expression]] given a [[Row]] of input.
+ * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
@@ -122,7 +125,7 @@ class CodeGenContext {
     case BinaryType => "byte[]"
     case StringType => stringType
     case DateType => "int"
-    case TimestampType => "java.sql.Timestamp"
+    case TimestampType => "long"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -140,6 +143,7 @@ class CodeGenContext {
     case FloatType => "Float"
     case BooleanType => "Boolean"
     case DateType => "Integer"
+    case TimestampType => "Long"
     case _ => javaType(dt)
   }
 
@@ -155,31 +159,50 @@ class CodeGenContext {
     case DoubleType => "-1.0"
     case IntegerType => "-1"
     case DateType => "-1"
+    case TimestampType => "-1L"
     case _ => "null"
   }
 
   /**
-   * Returns a function to generate equal expression in Java
+   * Generate code for equal expression in Java
    */
-  def equalFunc(dataType: DataType): ((String, String) => String) = dataType match {
-    case BinaryType => { case (eval1, eval2) =>
-      s"java.util.Arrays.equals($eval1, $eval2)" }
-    case IntegerType | BooleanType | LongType | DoubleType | FloatType | ShortType | ByteType =>
-      { case (eval1, eval2) => s"$eval1 == $eval2" }
-    case other =>
-      { case (eval1, eval2) => s"$eval1.equals($eval2)" }
+  def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
+    case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
+    case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
+    case other => s"$c1.equals($c2)"
   }
 
   /**
-   * List of data types that have special accessors and setters in [[Row]].
+   * Generate code for compare expression in Java
+   */
+  def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
+    // Use signum() to keep any small difference bwteen float/double
+    case FloatType | DoubleType => s"(int)java.lang.Math.signum($c1 - $c2)"
+    case dt: DataType if isPrimitiveType(dt) => s"(int)($c1 - $c2)"
+    case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case other => s"$c1.compare($c2)"
+  }
+
+  /**
+   * List of data types that have special accessors and setters in [[InternalRow]].
    */
   val nativeTypes =
     Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType)
 
   /**
-   * Returns true if the data type has a special accessor and setter in [[Row]].
+   * Returns true if the data type has a special accessor and setter in [[InternalRow]].
    */
   def isNativeType(dt: DataType): Boolean = nativeTypes.contains(dt)
+
+  /**
+   * List of data types who's Java type is primitive type
+   */
+  val primitiveTypes = nativeTypes ++ Seq(DateType, TimestampType)
+
+  /**
+   * Returns true if the Java type is primitive type
+   */
+  def isPrimitiveType(dt: DataType): Boolean = primitiveTypes.contains(dt)
 }
 
 /**

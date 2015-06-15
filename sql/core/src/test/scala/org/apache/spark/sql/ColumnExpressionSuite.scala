@@ -185,12 +185,20 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
+
+    checkAnswer(
+      ctx.sql("select isnull(null), isnull(1)"),
+      Row(true, false))
   }
 
   test("isNotNull") {
     checkAnswer(
       nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
+
+    checkAnswer(
+      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      Row(false, true))
   }
 
   test("===") {
@@ -361,23 +369,6 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key.asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key.desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(lit(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
@@ -393,6 +384,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      Row("AB", "CDE"))
   }
 
   test("lower") {
@@ -410,6 +405,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      Row("ab", "cde"))
   }
 
   test("monotonicallyIncreasingId") {
