@@ -372,7 +372,7 @@ class StructType(DataType):
             "fields should be a list of StructField"
         self.fields = fields
 
-    def add(self, nameOrStructField, data_type, nullable=True, metadata=None):
+    def add(self, name_or_struct_field, data_type=None, nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema
         >>> struct1 = StructType().add("f1", StringType(), True)\
@@ -404,10 +404,10 @@ class StructType(DataType):
         :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
-        if(isinstance(nameOrStructField, StructField)):
-            return self.fields.append(nameOrStructField)
+        if isinstance(name_or_struct_field, StructField):
+            return self.fields.append(name_or_struct_field)
         else:
-            return self.fields.append(StructField(nameOrStructField, data_type, nullable, metadata))
+            return self.fields.append(StructField(name_or_struct_field, data_type, nullable, metadata))
 
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
