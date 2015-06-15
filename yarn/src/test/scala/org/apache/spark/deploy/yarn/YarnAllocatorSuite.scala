@@ -19,8 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{Arrays, List => JList}
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
@@ -84,7 +82,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
-    val args = ArrayBuffer(
+    val args = Array(
       "--num-executors", s"$maxExecutors",
       "--executor-cores", "5",
       "--executor-memory", "2048",
@@ -96,7 +94,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf,
       rmClient,
       appAttemptId,
-      new ApplicationMasterArguments(args.toArray),
+      new ApplicationMasterArguments(args),
       new SecurityManager(sparkConf))
   }
 
@@ -243,4 +241,3 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
 }
-
