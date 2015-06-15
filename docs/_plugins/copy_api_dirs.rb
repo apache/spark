@@ -23,8 +23,10 @@ if not (ENV['SKIP_API'] == '1')
     # Build Scaladoc for Java/Scala
 
     puts "Moving to project root and building API docs."
-    curr_dir = pwd
-    cd("..")
+    copy_api_path = "#{__FILE__}"
+    curr_dir = "#{File.dirname(copy_api_path)}"
+    cd(curr_dir)
+    cd("../..")
 
     puts "Running 'build/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
     puts `build/sbt -Pkinesis-asl compile unidoc`
