@@ -621,7 +621,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def in(list: Column*): Column = In(expr, list.map(_.expr))
+  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.

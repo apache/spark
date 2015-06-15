@@ -296,6 +296,15 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
+  test("in") {
+    var expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2)
+    checkAnswer(testData2.filter($"a" in(1, 2)), expectedAnswer)
+    expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 3)
+    checkAnswer(testData2.filter($"a" in(1, 3)), expectedAnswer)
+    expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 2 || r.getInt(0) == 3)
+    checkAnswer(testData2.filter($"a" in(2, 3)), expectedAnswer)
+  }
+
   val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
