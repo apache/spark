@@ -374,7 +374,7 @@ class StructType(DataType):
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
 
-    def add(self, name_or_struct_field, data_type=None, nullable=True, metadata=None):
+    def add(self, name_or_struct_field, data_type=NullType(), nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
@@ -386,14 +386,14 @@ class StructType(DataType):
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
-        >>> struct1 = StructType().add(StructField("f1", StringType(), True))
-        ...     .add(StructField("f2", StringType(), True, None))
+        >>> struct1 = (StructType().add(StructField("f1", StringType(), True))
+        ...     .add(StructField("f2", StringType(), True, None)))
         >>> struct2 = StructType([StructField("f1", StringType(), True),
         ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
-        >>> struct1 = StructType().add(StructField("f1", StringType(), True))
-        ...     .add(StructField("f2", StringType(), True, None))
+        >>> struct1 = (StructType().add(StructField("f1", StringType(), True))
+        ...     .add(StructField("f2", StringType(), True, None)))
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         False
@@ -404,12 +404,12 @@ class StructType(DataType):
         :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
-
         if isinstance(name_or_struct_field, StructField):
-            return self.fields.append(name_or_struct_field)
+            self.fields.append(name_or_struct_field)
+            return self
         else:
-            return self.fields.append(StructField(name_or_struct_field,
-                                                  data_type, nullable, metadata))
+            self.fields.append(StructField(name_or_struct_field, data_type, nullable, metadata))
+            return self
 
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
