@@ -504,7 +504,7 @@ private[spark] class ExecutorAllocationManager(
   private class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
-    private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
+    private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[String]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
@@ -549,6 +549,7 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskStart.stageId
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
+      val attemptId = taskStart.taskInfo.attempt
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
@@ -561,7 +562,7 @@ private[spark] class ExecutorAllocationManager(
         }
 
         // If this is the last pending task, mark the scheduler queue as empty
-        stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+        stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[String]) += (taskIndex + "." + attemptId)
         val numTasksScheduled = stageIdToTaskIndices(stageId).size
         val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
         if (numTasksScheduled == numTasksTotal) {
