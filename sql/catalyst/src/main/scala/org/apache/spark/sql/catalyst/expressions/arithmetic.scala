@@ -58,38 +58,6 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
   protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
 }
 
-case class Sqrt(child: Expression) extends UnaryArithmetic {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = true
-  override def toString: String = s"SQRT($child)"
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function sqrt")
-
-  private lazy val numeric = TypeUtils.getNumeric(child.dataType)
-
-  protected override def evalInternal(evalE: Any) = {
-    val value = numeric.toDouble(evalE)
-    if (value < 0) null
-    else math.sqrt(value)
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        if (${eval.primitive} < 0.0) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.primitive} = java.lang.Math.sqrt(${eval.primitive});
-        }
-      }
-    """
-  }
-}
-
 /**
  * A function that get the absolute value of the numeric value.
  */

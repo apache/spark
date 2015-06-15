@@ -191,6 +191,11 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
   }
 
+  test("sqrt") {
+    testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+  }
+
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)

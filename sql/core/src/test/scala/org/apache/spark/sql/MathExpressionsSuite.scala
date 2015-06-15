@@ -257,6 +257,16 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(ctx.sql("SELECT LOG2(8), LOG2(null)"), Row(3, null))
   }
 
+  test("sqrt") {
+    val df = Seq((1, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(sqrt("a"), sqrt("b")),
+      Row(1.0, 2.0))
+
+    checkAnswer(ctx.sql("SELECT SQRT(4.0), SQRT(null)"), Row(2.0, null))
+    checkAnswer(df.selectExpr("sqrt(a)", "sqrt(b)", "sqrt(null)"), Row(1.0, 2.0, null))
+  }
+
   test("negative") {
     checkAnswer(
       ctx.sql("SELECT negative(1), negative(0), negative(-1)"),

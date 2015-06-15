@@ -707,10 +707,18 @@ object functions {
   /**
    * Computes the square root of the specified float value.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 1.3.0
    */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
    * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
