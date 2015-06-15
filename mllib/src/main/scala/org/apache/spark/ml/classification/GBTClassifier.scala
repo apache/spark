@@ -190,8 +190,9 @@ final class GBTClassificationModel(
 
   protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predict(features))
-    val prediction = blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
+    val treePredictions = modelAccesor().trees.map(_.rootNode.predict(features))
+    val prediction = blas.ddot(modelAccesor().numTrees, treePredictions, 1,
+      modelAccesor().treeWeights, 1)
     if (prediction > 0.0) 1.0 else 0.0
   }
 

@@ -136,7 +136,7 @@ final class RandomForestRegressionModel private[ml] (
   protected def predictImpl(features: Vector, modelAccesor: () => TreeEnsembleModel): Double = {
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predict(features)).sum / numTrees
+    modelAccesor().trees.map(_.rootNode.predict(features)).sum / modelAccesor().numTrees
   }
 
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
