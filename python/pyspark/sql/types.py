@@ -407,7 +407,8 @@ class StructType(DataType):
         if isinstance(name_or_struct_field, StructField):
             return self.fields.append(name_or_struct_field)
         else:
-            return self.fields.append(StructField(name_or_struct_field, data_type, nullable, metadata))
+            return self.fields.append(StructField(name_or_struct_field,
+                                                  data_type, nullable, metadata))
 
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
