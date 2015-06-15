@@ -100,9 +100,6 @@ class NaiveBayesModel private[mllib] (
       case Bernoulli =>
         val prob = bernoulliCalculation(testData)
         labels(prob.argmax)
-      case _ =>
-        // This should never happen.
-        throw new UnknownError(s"Invalid modelType: $modelType.")
     }
   }
 
@@ -122,19 +119,16 @@ class NaiveBayesModel private[mllib] (
       case Bernoulli =>
         val prob = bernoulliCalculation(testData)
         posteriorProbabilities(prob)
-      case _ =>
-        // This should never happen.
-        throw new UnknownError(s"Invalid modelType: $modelType.")
     }
   }
 
-  protected[classification] def multinomialCalculation(testData: Vector): DenseVector = {
+  private def multinomialCalculation(testData: Vector): DenseVector = {
     val prob = thetaMatrix.multiply(testData)
     BLAS.axpy(1.0, piVector, prob)
     prob
   }
 
-  protected[classification] def bernoulliCalculation(testData: Vector): DenseVector = {
+  private def bernoulliCalculation(testData: Vector): DenseVector = {
     testData.foreachActive { (index, value) =>
       if (value != 0.0 && value != 1.0) {
         throw new SparkException(
@@ -147,7 +141,7 @@ class NaiveBayesModel private[mllib] (
     prob
   }
 
-  protected[classification] def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
+  private def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
     val maxLogs = max(prob.toBreeze)
     val minLogs = min(prob.toBreeze)
     val normalized = prob.toArray.map(e => (e - minLogs) / (maxLogs - minLogs))
