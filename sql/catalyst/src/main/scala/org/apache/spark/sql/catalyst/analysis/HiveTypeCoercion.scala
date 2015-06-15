@@ -294,7 +294,6 @@ trait HiveTypeCoercion {
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case Sqrt(e @ StringType()) => Sqrt(Cast(e, DoubleType))
     }
   }
 

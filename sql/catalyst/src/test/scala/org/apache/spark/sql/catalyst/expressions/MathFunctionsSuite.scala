@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.DoubleType
 
@@ -194,6 +195,19 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("sqrt") {
     testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
     testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+
+    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
+    val rowSequence = inputSequence.map(l => create_row(l.toDouble))
+    val d = 'a.double.at(0)
+
+    for ((row, expected) <- rowSequence zip expectedResults) {
+      checkEvaluation(Sqrt(d), expected, row)
+    }
+
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(Sqrt(Literal(-1.0)), null, EmptyRow)
+    checkEvaluation(Sqrt(Literal(-1.5)), null, EmptyRow)
   }
 
   test("pow") {

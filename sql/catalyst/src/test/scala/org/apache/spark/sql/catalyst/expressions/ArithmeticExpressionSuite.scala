@@ -142,19 +142,4 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf(Literal.create(null, IntegerType), 1), 1)
     checkEvaluation(MinOf(1, Literal.create(null, IntegerType)), 1)
   }
-
-  test("SQRT") {
-    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
-    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
-    val rowSequence = inputSequence.map(l => create_row(l.toDouble))
-    val d = 'a.double.at(0)
-
-    for ((row, expected) <- rowSequence zip expectedResults) {
-      checkEvaluation(Sqrt(d), expected, row)
-    }
-
-    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(-1.0), null, EmptyRow)
-    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
-  }
 }
