@@ -38,21 +38,20 @@ object DefaultOptimizer extends Optimizer {
       EliminateSubQueries) ::
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
-    Batch("Operator Reordering", FixedPoint(100),
+    Batch("Operator Optimizations", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
-      PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
       ProjectCollapsing,
-      CombineLimits) ::
-    Batch("ConstantFolding", FixedPoint(100),
+      CombineLimits,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      PushPredicateThroughJoin,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
