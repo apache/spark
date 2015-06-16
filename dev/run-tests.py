@@ -168,8 +168,9 @@ def build_spark_documentation():
     jekyll_bin = which("jekyll")
 
     if not jekyll_bin:
-        print "[warn] Cannot find a version of `jekyll` on the system; please",
+        print "[error] Cannot find a version of `jekyll` on the system; please",
         print "install one and retry to build documentation."
+        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
         run_cmd([jekyll_bin, "build"])
 
