@@ -1042,8 +1042,6 @@ class Airflow(BaseView):
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        width = request.args.get('width', None) or "100%"
-        height = request.args.get('height', None) or "800"
         blur = conf.getboolean('webserver', 'demo_mode')
         arrange = request.args.get('arrange', "LR")
         dag = dagbag.get_dag(dag_id)
@@ -1111,8 +1109,8 @@ class Airflow(BaseView):
             'airflow/graph.html',
             dag=dag,
             form=form,
-            width=width,
-            height=height,
+            width=request.args.get('width', "100%"),
+            height=request.args.get('height', "800"),
             execution_date=dttm.isoformat(),
             arrange=arrange,
             operators=sorted(
@@ -1337,7 +1335,8 @@ class QueryView(DataProfilingMixin, BaseView):
         dbs = session.query(models.Connection).order_by(
             models.Connection.conn_id).all()
         session.expunge_all()
-        db_choices = [(db.conn_id, db.conn_id) for db in dbs if db.get_hook()]
+        db_choices = list(
+            {(db.conn_id, db.conn_id) for db in dbs if db.get_hook()})
         conn_id_str = request.args.get('conn_id')
         csv = request.args.get('csv') == "true"
         sql = request.args.get('sql')
