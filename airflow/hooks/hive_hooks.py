@@ -285,10 +285,14 @@ class HiveServer2Hook(BaseHook):
                 database=schema) as conn:
             with conn.cursor() as cur:
                 cur.execute(hql)
-                return {
-                    'data': cur.fetchall(),
-                    'header': cur.getSchema(),
-                }
+                results = cur.fetchall()
+                if results:
+                    return {
+                        'data': results,
+                        'header': cur.getSchema(),
+                    }
+                else:
+                    return {}
 
     def to_csv(self, hql, csv_filepath, schema='default'):
         schema = schema or 'default'
