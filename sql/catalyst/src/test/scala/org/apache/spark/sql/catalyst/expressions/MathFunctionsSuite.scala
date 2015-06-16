@@ -18,6 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types.DoubleType
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -49,10 +52,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       c: Expression => Expression,
       f: T => T,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false,
+      expectNaN: Boolean = false): Unit = {
     if (expectNull) {
       domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
+      }
+    } else if (expectNaN) {
+      domain.foreach { value =>
+        checkNaN(c(Literal(value)), EmptyRow)
       }
     } else {
       domain.foreach { value =>
@@ -73,10 +81,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       c: (Expression, Expression) => Expression,
       f: (Double, Double) => Double,
       domain: Iterable[(Double, Double)] = (-20 to 20).map(v => (v * 0.1, v * -0.1)),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false,
+      expectNaN: Boolean = false): Unit = {
     if (expectNull) {
       domain.foreach { case (v1, v2) =>
         checkEvaluation(c(Literal(v1), Literal(v2)), null, create_row(null))
+      }
+    } else if (expectNaN) {
+      domain.foreach { case (v1, v2) =>
+        checkNaN(c(Literal(v1), Literal(v2)), create_row(null))
       }
     } else {
       domain.foreach { case (v1, v2) =>
@@ -86,6 +99,62 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  private def checkNaN(
+    expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
+    checkNaNWithoutCodegen(expression, inputRow)
+    checkNaNWithGeneratedProjection(expression, inputRow)
+    checkNaNWithOptimization(expression, inputRow)
+  }
+
+  private def checkNaNWithoutCodegen(
+    expression: Expression,
+    expected: Any,
+    inputRow: InternalRow = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    if (!actual.asInstanceOf[Double].isNaN) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+      fail(s"Incorrect evaluation (codegen off): $expression, " +
+        s"actual: $actual, " +
+        s"expected: NaN$input")
+    }
+  }
+
+
+  private def checkNaNWithGeneratedProjection(
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
+
+    val plan = try {
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
+    } catch {
+      case e: Throwable =>
+        val ctx = GenerateProjection.newCodeGenContext()
+        val evaluated = expression.gen(ctx)
+        fail(
+          s"""
+             |Code generation of $expression failed:
+             |${evaluated.code}
+             |$e
+          """.stripMargin)
+    }
+
+    val actual = plan(inputRow).apply(0)
+    if (!actual.asInstanceOf[Double].isNaN) {
+      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: NaN$input")
+    }
+  }
+
+  private def checkNaNWithOptimization(
+    expression: Expression,
+    inputRow: InternalRow = EmptyRow): Unit = {
+    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
+    val optimizedPlan = DefaultOptimizer.execute(plan)
+    checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
   }
 
   test("e") {
@@ -102,7 +171,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
-    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNull = true)
+    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
   }
 
   test("sinh") {
@@ -115,7 +184,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("acos") {
     testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
-    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNull = true)
+    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
   }
 
   test("cosh") {
@@ -171,29 +240,29 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("log") {
-    testUnary(Log, math.log, (0 to 20).map(_ * 0.1))
-    testUnary(Log, math.log, (-5 to -1).map(_ * 0.1), expectNull = true)
+    testUnary(Log, math.log, (1 to 20).map(_ * 0.1))
+    testUnary(Log, math.log, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log10") {
-    testUnary(Log10, math.log10, (0 to 20).map(_ * 0.1))
-    testUnary(Log10, math.log10, (-5 to -1).map(_ * 0.1), expectNull = true)
+    testUnary(Log10, math.log10, (1 to 20).map(_ * 0.1))
+    testUnary(Log10, math.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
   }
 
   test("log1p") {
-    testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
-    testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
+    testUnary(Log1p, math.log1p, (0 to 20).map(_ * 0.1))
+    testUnary(Log1p, math.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
   }
 
   test("log2") {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
-    testUnary(Log2, f, (0 to 20).map(_ * 0.1))
-    testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
+    testUnary(Log2, f, (1 to 20).map(_ * 0.1))
+    testUnary(Log2, f, (-5 to 0).map(_ * 1.0), expectNull = true)
   }
 
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
-    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
   }
 
   test("hypot") {

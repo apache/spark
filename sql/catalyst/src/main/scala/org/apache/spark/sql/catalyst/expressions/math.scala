@@ -66,8 +66,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
     if (evalE == null) {
       null
     } else {
-      val result = f(evalE.asInstanceOf[Double])
-      if (result.isNaN) null else result
+      f(evalE.asInstanceOf[Double])
     }
   }
 
@@ -81,9 +80,31 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
-          ${ev.isNull} = true;
-        }
+      }
+    """
+  }
+}
+
+abstract class UnaryMathLogExpression(f: Double => Double, name: String)
+  extends UnaryMathExpression(f, name) {
+  self: Product =>
+
+  override def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null || evalE.asInstanceOf[Double] <= 0.0) {
+      null
+    } else {
+      f(evalE.asInstanceOf[Double])
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull} || Double.valueOf(${eval.primitive}) <= 0.0;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
       }
     """
   }
@@ -113,8 +134,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
       if (evalE2 == null) {
         null
       } else {
-        val result = f(evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
-        if (result.isNaN) null else result
+        f(evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
       }
     }
   }
@@ -160,28 +180,45 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
 
-case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryMathLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryMathLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
+      boolean ${ev.isNull} = ${eval.isNull} || Double.valueOf(${eval.primitive}) <= 0.0;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
-        if (Double.valueOf(${ev.primitive}).isNaN()) {
-          ${ev.isNull} = true;
-        }
       }
     """
   }
 }
 
-case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryMathLogExpression(math.log10, "LOG10")
 
-case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
+case class Log1p(child: Expression) extends UnaryMathLogExpression(math.log1p, "LOG1P") {
+  override def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null || evalE.asInstanceOf[Double] + 1 <= 0.0) {
+      null
+    } else {
+      math.log1p(evalE.asInstanceOf[Double])
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull} || Double.valueOf(${eval.primitive}) + 1 <= 0.0;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
+      }
+    """
+  }
+}
 
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
@@ -226,19 +263,14 @@ case class Atan2(left: Expression, right: Expression)
         null
       } else {
         // With codegen, the values returned by -0.0 and 0.0 are different. Handled with +0.0
-        val result = math.atan2(evalE1.asInstanceOf[Double] + 0.0,
+        math.atan2(evalE1.asInstanceOf[Double] + 0.0,
           evalE2.asInstanceOf[Double] + 0.0)
-        if (result.isNaN) null else result
       }
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
 
@@ -248,10 +280,6 @@ case class Hypot(left: Expression, right: Expression)
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
