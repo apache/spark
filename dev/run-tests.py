@@ -517,8 +517,9 @@ def main():
     run_python_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
-    if "DOCS" in changed_modules and test_env == "amplab_jenkins":
-        build_spark_documentation()
+    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
+    #    build_spark_documentation()
 
     # spark build
     build_apache_spark(build_tool, hadoop_version, changed_modules)
