@@ -224,7 +224,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    */
   private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
     val newCapacity = _capacity * 2
-    require(newCapacity <= OpenHashSet.MAX_CAPACITY,
+    require(newCapacity > 0 && newCapacity <= OpenHashSet.MAX_CAPACITY,
       s"Can't contain more than ${(loadFactor * OpenHashSet.MAX_CAPACITY).toInt} elements")
     allocateFunc(newCapacity)
     val newBitset = new BitSet(newCapacity)
