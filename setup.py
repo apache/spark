@@ -21,7 +21,7 @@ samba = ['pysmbclient>=0.1.3']
 s3 = ['boto>=2.36.0']
 
 all_dbs = postgres + mysql + hive
-devel = all_dbs + doc + samba + s3
+devel = all_dbs + doc + samba + s3 + ['nose']
 
 setup(
     name='airflow',
