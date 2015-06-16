@@ -27,8 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
- * arguments are all Expressions types. In addition, if it needs to support more than one
- * constructor, define those constructors explicitly as apply methods in the companion object.
+ * arguments are all Expressions types.
  *
  * See [[Substring]] for an example.
  */

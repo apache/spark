@@ -105,8 +105,8 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
 
-  override def eval(input: catalyst.InternalRow): Any = {
-    val baseValue = child.eval(input).asInstanceOf[catalyst.InternalRow]
+  override def eval(input: InternalRow): Any = {
+    val baseValue = child.eval(input).asInstanceOf[InternalRow]
     if (baseValue == null) null else baseValue(ordinal)
   }
 }
@@ -125,8 +125,8 @@ case class GetArrayStructFields(
   override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
 
-  override def eval(input: catalyst.InternalRow): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Seq[catalyst.InternalRow]]
+  override def eval(input: InternalRow): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]
     if (baseValue == null) null else {
       baseValue.map { row =>
         if (row == null) null else row(ordinal)
@@ -146,7 +146,7 @@ abstract class ExtractValueWithOrdinal extends ExtractValue {
   override def toString: String = s"$child[$ordinal]"
   override def children: Seq[Expression] = child :: ordinal :: Nil
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
       null

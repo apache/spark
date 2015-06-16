@@ -55,7 +55,7 @@ private[sql] object JDBCRDD extends Logging {
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType.Unlimited }
+      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType(20,0) }
       case java.sql.Types.BINARY        => BinaryType
       case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType

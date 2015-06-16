@@ -38,7 +38,7 @@ abstract class AggregateExpression extends Expression {
    * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
    * replaced with a physical aggregate operator at runtime.
    */
-  override def eval(input: catalyst.InternalRow = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
@@ -81,7 +81,7 @@ abstract class AggregateFunction
   override def nullable: Boolean = base.nullable
   override def dataType: DataType = base.dataType
 
-  def update(input: catalyst.InternalRow): Unit
+  def update(input: InternalRow): Unit
 
   // Do we really need this?
   override def newInstance(): AggregateFunction = {
@@ -109,7 +109,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
   val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
   val cmp = GreaterThan(currentMin, expr)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     if (currentMin.value == null) {
       currentMin.value = expr.eval(input)
     } else if (cmp.eval(input) == true) {
@@ -117,7 +117,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = currentMin.value
+  override def eval(input: InternalRow): Any = currentMin.value
 }
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -140,7 +140,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
   val currentMax: MutableLiteral = MutableLiteral(null, expr.dataType)
   val cmp = LessThan(currentMax, expr)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     if (currentMax.value == null) {
       currentMax.value = expr.eval(input)
     } else if (cmp.eval(input) == true) {
@@ -148,7 +148,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = currentMax.value
+  override def eval(input: InternalRow): Any = currentMax.value
 }
 
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -206,14 +206,14 @@ case class CollectHashSetFunction(
   @transient
   val distinctValue = new InterpretedProjection(expr)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = distinctValue(input)
     if (!evaluatedExpr.anyNull) {
       seen.add(evaluatedExpr)
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     seen
   }
 }
@@ -239,7 +239,7 @@ case class CombineSetsAndCountFunction(
 
   val seen = new OpenHashSet[Any]()
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
     val inputIterator = inputSetEval.iterator
     while (inputIterator.hasNext) {
@@ -247,7 +247,7 @@ case class CombineSetsAndCountFunction(
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = seen.size.toLong
+  override def eval(input: InternalRow): Any = seen.size.toLong
 }
 
 /** The data type of ApproxCountDistinctPartition since its output is a HyperLogLog object. */
@@ -454,7 +454,7 @@ case class CombineSetsAndSumFunction(
 
   val seen = new OpenHashSet[Any]()
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
     val inputIterator = inputSetEval.iterator
     while (inputIterator.hasNext) {
@@ -462,8 +462,8 @@ case class CombineSetsAndSumFunction(
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
-    val casted = seen.asInstanceOf[OpenHashSet[catalyst.InternalRow]]
+  override def eval(input: InternalRow): Any = {
+    val casted = seen.asInstanceOf[OpenHashSet[InternalRow]]
     if (casted.size == 0) {
       null
     } else {
@@ -525,7 +525,7 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   private def addFunction(value: Any) = Add(sum,
     Cast(Literal.create(value, expr.dataType), calcType))
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     if (count == 0L) {
       null
     } else {
@@ -542,7 +542,7 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
     }
   }
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       count += 1
@@ -556,14 +556,14 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var count: Long = _
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       count += 1L
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = count
+  override def eval(input: InternalRow): Any = count
 }
 
 case class ApproxCountDistinctPartitionFunction(
@@ -575,14 +575,14 @@ case class ApproxCountDistinctPartitionFunction(
 
   private val hyperLogLog = new HyperLogLog(relativeSD)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       hyperLogLog.offer(evaluatedExpr)
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = hyperLogLog
+  override def eval(input: InternalRow): Any = hyperLogLog
 }
 
 case class ApproxCountDistinctMergeFunction(
@@ -594,12 +594,12 @@ case class ApproxCountDistinctMergeFunction(
 
   private val hyperLogLog = new HyperLogLog(relativeSD)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     hyperLogLog.addAll(evaluatedExpr.asInstanceOf[HyperLogLog])
   }
 
-  override def eval(input: catalyst.InternalRow): Any = hyperLogLog.cardinality()
+  override def eval(input: InternalRow): Any = hyperLogLog.cardinality()
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -620,11 +620,11 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
   private val addFunction =
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     sum.update(addFunction, input)
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     expr.dataType match {
       case DecimalType.Fixed(_, _) =>
         Cast(sum, dataType).eval(null)
@@ -653,7 +653,7 @@ case class CombineSumFunction(expr: Expression, base: AggregateExpression)
   private val addFunction =
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum, zero))
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val result = expr.eval(input)
     // partial sum result can be null only when no input rows present
     if(result != null) {
@@ -661,7 +661,7 @@ case class CombineSumFunction(expr: Expression, base: AggregateExpression)
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     expr.dataType match {
       case DecimalType.Fixed(_, _) =>
         Cast(sum, dataType).eval(null)
@@ -677,14 +677,14 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
 
   private val seen = new scala.collection.mutable.HashSet[Any]()
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     if (seen.size == 0) {
       null
     } else {
@@ -708,14 +708,14 @@ case class CountDistinctFunction(
   @transient
   val distinctValue = new InterpretedProjection(expr)
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = distinctValue(input)
     if (!evaluatedExpr.anyNull) {
       seen.add(evaluatedExpr)
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = seen.size.toLong
+  override def eval(input: InternalRow): Any = seen.size.toLong
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -723,13 +723,13 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var result: Any = null
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     if (result == null) {
       result = expr.eval(input)
     }
   }
 
-  override def eval(input: catalyst.InternalRow): Any = result
+  override def eval(input: InternalRow): Any = result
 }
 
 case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -737,11 +737,11 @@ case class LastFunction(expr: Expression, base: AggregateExpression) extends Agg
 
   var result: Any = null
 
-  override def update(input: catalyst.InternalRow): Unit = {
+  override def update(input: InternalRow): Unit = {
     result = input
   }
 
-  override def eval(input: catalyst.InternalRow): Any = {
-    if (result != null) expr.eval(result.asInstanceOf[catalyst.InternalRow]) else null
+  override def eval(input: InternalRow): Any = {
+    if (result != null) expr.eval(result.asInstanceOf[InternalRow]) else null
   }
 }
