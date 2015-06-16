@@ -302,6 +302,10 @@ private[deploy] object IvyTestUtils {
       useIvyLayout: Boolean = false,
       withPython: Boolean = false,
       ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
+    try {
+      // delete the artifact from the cache as well if it already exists
+      FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+    }
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
       withPython)
     try {
