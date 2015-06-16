@@ -24,11 +24,13 @@ from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+from pyspark.streaming import DStream
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
-           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
+           'StreamingLogisticRegressionWithSGD']
 
 
 class LinearClassificationModel(LinearModel):
@@ -581,6 +583,92 @@ class NaiveBayes(object):
             raise ValueError("`data` should be an RDD of LabeledPoint")
         labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
+
+
+class StreamingLogisticRegressionWithSGD(object):
+    """
+    Run LogisticRegression with SGD on a stream of data.
+
+    After training on a stream of data, the weights obtained at the end of
+    training are used as initial weights for the next stream of data.
+    :param: stepSize          Step size for each iteration of gradient
+                              descent.
+    :param: numIterations     Total number of iterations run.
+    :param: miniBatchFraction Fraction of data on which SGD is run for each
+                              iteration.
+    :param: regParam          L2 Regularization parameter.
+    """
+    def __init__(self, stepSize=0.1, numIterations=50,
+                 miniBatchFraction=1.0, regParam=0.01):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.regParam = regParam
+        self.miniBatchFraction = miniBatchFraction
+        self._model = None
+
+    def _validate(self, dstream):
+        if not isinstance(dstream, DStream):
+            raise TypeError(
+                "dstream should be a DStream object, got %s" % type(dstream))
+        if not self._model:
+            raise ValueError(
+                "Model must be intialized using setInitialWeights")
+
+    @property
+    def latestModel(self):
+        """
+        Returns a LogisticRegressionModel fit on the latest stream of data.
+
+        The weights and intercepts can be got from the `weights` and
+        `intercept` attributes.
+        """
+        return self._model
+
+    def setInitialWeights(self, initialWeights):
+        """
+        Set the initial value of weights.
+
+        This must be set before running trainOn and predicOn
+        """
+        initialWeights = _convert_to_vector(initialWeights)
+
+        # LogisticRegressionWithSGD does only binary classification.
+        self._model = LogisticRegressionModel(
+            initialWeights, 0, initialWeights.size, 2)
+
+    def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
+        self._validate(dstream)
+
+        def update(rdd):
+            try:
+                rdd.first()
+            except ValueError:
+                pass
+            else:
+                self._model = LogisticRegressionWithSGD.train(
+                    rdd, self.numIterations, self.stepSize,
+                    self.miniBatchFraction, self._model.weights)
+
+        dstream.foreachRDD(update)
+
+    def predictOn(self, dstream):
+        """
+        Make predictions on a dstream of Vectors.
+
+        Returns a transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.map(lambda x: self._model.predict(x))
+
+    def predictOnValues(self, dstream):
+        """
+        Make predictions on a keyed dstream where the values are Vectors.
+
+        Returns a transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.mapValues(lambda x: self._model.predict(x))
 
 
 def _test():
