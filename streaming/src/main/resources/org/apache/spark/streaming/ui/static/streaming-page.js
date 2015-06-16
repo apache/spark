@@ -223,10 +223,10 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
         .style("border-left", "0px solid white");
 
     var margin = {top: 20, right: 30, bottom: 30, left: 10};
-    var width = 300 - margin.left - margin.right;
+    var width = 350 - margin.left - margin.right;
     var height = 150 - margin.top - margin.bottom;
 
-    var x = d3.scale.linear().domain([0, maxXForHistogram]).range([0, width]);
+    var x = d3.scale.linear().domain([0, maxXForHistogram]).range([0, width - 50]);
     var y = d3.scale.linear().domain([minY, maxY]).range([height, 0]);
 
     var xAxis = d3.svg.axis().scale(x).orient("top").ticks(5);
@@ -248,7 +248,7 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
         .attr("class", "x axis")
         .call(xAxis)
         .append("text")
-            .attr("transform", "translate(" + (margin.left + width - 40) + ", 15)")
+            .attr("transform", "translate(" + (margin.left + width - 50) + ", 15)")
             .text("#batches");
 
     svg.append("g")
