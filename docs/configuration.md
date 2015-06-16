@@ -8,7 +8,6 @@ title: Configuration
 
 Spark provides three locations to configure the system:
 
-* ADDING DOC CHANGE FOR TESTING
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
   a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
   system properties.
