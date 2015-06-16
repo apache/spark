@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
-import org.apache.spark.sql.catalyst.expressions.{Row, _}
+import org.apache.spark.sql.catalyst.expressions.{InternalRow, _}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -137,7 +137,7 @@ private[hive] trait HiveStrategies {
             val partitionLocations = partitions.map(_.getLocation)
 
             if (partitionLocations.isEmpty) {
-              PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+              PhysicalRDD(plan.output, sparkContext.emptyRDD[InternalRow]) :: Nil
             } else {
               hiveContext
                 .read.parquet(partitionLocations: _*)
@@ -165,7 +165,7 @@ private[hive] trait HiveStrategies {
           // TODO: Remove this hack for Spark 1.3.
           case iae: java.lang.IllegalArgumentException
               if iae.getMessage.contains("Can not create a Path from an empty string") =>
-            PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+            PhysicalRDD(plan.output, sparkContext.emptyRDD[InternalRow]) :: Nil
         }
       case _ => Nil
     }

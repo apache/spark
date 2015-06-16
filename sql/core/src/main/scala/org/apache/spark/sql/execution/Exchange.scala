@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.unsafe.UnsafeShuffleManager
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.util.MutablePair
+import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
 /**
  * :: DeveloperApi ::
@@ -81,11 +82,7 @@ case class Exchange(
       shuffleManager.isInstanceOf[UnsafeShuffleManager]
     val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
     val serializeMapOutputs = conf.getBoolean("spark.shuffle.sort.serializeMapOutputs", true)
-    if (newOrdering.nonEmpty) {
-      // If a new ordering is required, then records will be sorted with Spark's `ExternalSorter`,
-      // which requires a defensive copy.
-      true
-    } else if (sortBasedShuffleOn) {
+    if (sortBasedShuffleOn) {
       val bypassIsSupported = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
       if (bypassIsSupported && partitioner.numPartitions <= bypassMergeThreshold) {
         // If we're using the original SortShuffleManager and the number of output partitions is
@@ -96,8 +93,11 @@ case class Exchange(
       } else if (serializeMapOutputs && serializer.supportsRelocationOfSerializedObjects) {
         // SPARK-4550 extended sort-based shuffle to serialize individual records prior to sorting
         // them. This optimization is guarded by a feature-flag and is only applied in cases where
-        // shuffle dependency does not specify an ordering and the record serializer has certain
-        // properties. If this optimization is enabled, we can safely avoid the copy.
+        // shuffle dependency does not specify an aggregator or ordering and the record serializer
+        // has certain properties. If this optimization is enabled, we can safely avoid the copy.
+        //
+        // Exchange never configures its ShuffledRDDs with aggregators or key orderings, so we only
+        // need to check whether the optimization is enabled and supported by our serializer.
         //
         // This optimization also applies to UnsafeShuffleManager (added in SPARK-7081).
         false
@@ -108,9 +108,12 @@ case class Exchange(
         // both cases, we must copy.
         true
       }
-    } else {
+    } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
       // We're using hash-based shuffle, so we don't need to copy.
       false
+    } else {
+      // Catch-all case to safely handle any future ShuffleManager implementations.
+      true
     }
   }
 
@@ -157,7 +160,7 @@ case class Exchange(
     serializer
   }
 
-  protected override def doExecute(): RDD[Row] = attachTree(this , "execute") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         val keySchema = expressions.map(_.dataType).toArray
@@ -173,11 +176,11 @@ case class Exchange(
         } else {
           child.execute().mapPartitions { iter =>
             val hashExpressions = newMutableProjection(expressions, child.output)()
-            val mutablePair = new MutablePair[Row, Row]()
+            val mutablePair = new MutablePair[InternalRow, InternalRow]()
             iter.map(r => mutablePair.update(hashExpressions(r), r))
           }
         }
-        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
+        val shuffled = new ShuffledRDD[InternalRow, InternalRow, InternalRow](rdd, part)
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 
@@ -190,7 +193,7 @@ case class Exchange(
           // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
           // partition bounds. To get accurate samples, we need to copy the mutable keys.
           val rddForSampling = childRdd.mapPartitions { iter =>
-            val mutablePair = new MutablePair[Row, Null]()
+            val mutablePair = new MutablePair[InternalRow, Null]()
             iter.map(row => mutablePair.update(row.copy(), null))
           }
           // TODO: RangePartitioner should take an Ordering.
@@ -202,12 +205,12 @@ case class Exchange(
           childRdd.mapPartitions { iter => iter.map(row => (row.copy(), null))}
         } else {
           childRdd.mapPartitions { iter =>
-            val mutablePair = new MutablePair[Row, Null]()
+            val mutablePair = new MutablePair[InternalRow, Null]()
             iter.map(row => mutablePair.update(row, null))
           }
         }
 
-        val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
+        val shuffled = new ShuffledRDD[InternalRow, Null, Null](rdd, part)
         shuffled.setSerializer(serializer)
         shuffled.map(_._1)
 
@@ -217,14 +220,16 @@ case class Exchange(
         val partitioner = new HashPartitioner(1)
 
         val rdd = if (needToCopyObjectsBeforeShuffle(partitioner, serializer)) {
-          child.execute().mapPartitions { iter => iter.map(r => (null, r.copy())) }
+          child.execute().mapPartitions {
+            iter => iter.map(r => (null, r.copy()))
+          }
         } else {
           child.execute().mapPartitions { iter =>
-            val mutablePair = new MutablePair[Null, Row]()
+            val mutablePair = new MutablePair[Null, InternalRow]()
             iter.map(r => mutablePair.update(null, r))
           }
         }
-        val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
+        val shuffled = new ShuffledRDD[Null, InternalRow, InternalRow](rdd, partitioner)
         shuffled.setSerializer(serializer)
         shuffled.map(_._2)
 

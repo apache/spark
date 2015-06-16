@@ -672,13 +672,13 @@ trait HiveTypeCoercion {
         findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>
           val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
           val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
-          i.makeCopy(Array(pred, newLeft, newRight))
+          If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
 
       // Convert If(null literal, _, _) into boolean type.
       // In the optimizer, we should short-circuit this directly into false value.
-      case i @ If(pred, left, right) if pred.dataType == NullType =>
-        i.makeCopy(Array(Literal.create(null, BooleanType), left, right))
+      case If(pred, left, right) if pred.dataType == NullType =>
+        If(Literal.create(null, BooleanType), left, right)
     }
   }
 

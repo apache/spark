@@ -366,7 +366,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => {
         if (o != null) {
           val struct = soi.create()
-          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row].toSeq).zipped.foreach {
+          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[InternalRow].toSeq).zipped.foreach {
             (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
           }
           struct
@@ -474,7 +474,7 @@ private[hive] trait HiveInspectors {
     }
     case x: SettableStructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Row]
+      val row = a.asInstanceOf[InternalRow]
       // 1. create the pojo (most likely) object
       val result = x.create()
       var i = 0
@@ -490,7 +490,7 @@ private[hive] trait HiveInspectors {
       result
     case x: StructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Row]
+      val row = a.asInstanceOf[InternalRow]
       val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
       var i = 0
       while (i < fieldRefs.length) {
@@ -517,7 +517,7 @@ private[hive] trait HiveInspectors {
   }
 
   def wrap(
-      row: Row,
+      row: InternalRow,
       inspectors: Seq[ObjectInspector],
       cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0

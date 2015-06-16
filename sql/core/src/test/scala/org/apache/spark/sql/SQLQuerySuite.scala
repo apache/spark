@@ -178,18 +178,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Seq(Row("1"), Row("2")))
   }
 
-  test("SPARK-3176 Added Parser of SQL ABS()") {
-    checkAnswer(
-      sql("SELECT ABS(-1.3)"),
-      Row(1.3))
-    checkAnswer(
-      sql("SELECT ABS(0.0)"),
-      Row(0.0))
-    checkAnswer(
-      sql("SELECT ABS(2.5)"),
-      Row(2.5))
-  }
-
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
@@ -1376,6 +1364,51 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       .registerTempTable("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+  }
+
+  test("SPARK-6583 order by aggregated function") {
+    Seq("1" -> 3, "1" -> 4, "2" -> 7, "2" -> 8, "3" -> 5, "3" -> 6, "4" -> 1, "4" -> 2)
+      .toDF("a", "b").registerTempTable("orderByData")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row("4") :: Row("1") :: Row("3") :: Row("2") :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a, sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT a, sum(b)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b) + 1
+          """.stripMargin),
+      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
