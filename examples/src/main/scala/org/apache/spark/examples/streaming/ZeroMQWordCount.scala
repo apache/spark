@@ -17,17 +17,18 @@
 
 package org.apache.spark.examples.streaming
 
+import scala.language.implicitConversions
+
 import akka.actor.ActorSystem
 import akka.actor.actorRef2Scala
 import akka.zeromq._
 import akka.zeromq.Subscribe
 import akka.util.ByteString
+import com.typesafe.config.ConfigFactory
 
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.zeromq._
-
-import scala.language.implicitConversions
-import org.apache.spark.SparkConf
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
@@ -89,11 +90,29 @@ object ZeroMQWordCount {
     def bytesToStringIterator(x: Seq[ByteString]): Iterator[String] = x.map(_.utf8String).iterator
 
     // For this stream, a zeroMQ publisher should be running.
-    val lines = ZeroMQUtils.createStream(ssc, url, Subscribe(topic), bytesToStringIterator _)
+    val lines = ZeroMQUtils.createStream(
+      ssc, () => ZeroMQGlobalActorSystem.actorSystem,
+      url, Subscribe(topic), bytesToStringIterator _)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()
     ssc.start()
     ssc.awaitTermination()
   }
+}
+
+
+/**
+ * A global `ActorSystem` to avoid creating multiple `ActorSystem`s in an executor.
+ */
+object ZeroMQGlobalActorSystem {
+
+  lazy val actorSystem = {
+    val akkaConf = ConfigFactory.parseString(
+      s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+         |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+          """.stripMargin)
+    ActorSystem("test", akkaConf)
+  }
+
 }

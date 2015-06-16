@@ -19,15 +19,17 @@ package org.apache.spark.streaming.zeromq
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
-import akka.actor.{Props, SupervisorStrategy}
+
+import akka.actor.{ActorSystem, Props, SupervisorStrategy}
 import akka.util.ByteString
 import akka.zeromq.Subscribe
+
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{ReceiverInputDStream}
-import org.apache.spark.streaming.receiver.ActorSupervisorStrategy
+import org.apache.spark.streaming.akka.{ActorSystemFactory, ActorSupervisorStrategy, AkkaUtils}
 
 object ZeroMQUtils {
   /**
@@ -44,13 +46,16 @@ object ZeroMQUtils {
    */
   def createStream[T: ClassTag](
       ssc: StreamingContext,
+      actorSystemCreator: () => ActorSystem,
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
     ): ReceiverInputDStream[T] = {
-    ssc.actorStream(Props(new ZeroMQReceiver(publisherUrl, subscribe, bytesToObjects)),
+    val cleanF = ssc.sc.clean(bytesToObjects)
+    AkkaUtils.createStream[T](ssc, actorSystemCreator,
+      Props(new ZeroMQReceiver(publisherUrl, subscribe, cleanF)),
       "ZeroMQReceiver", storageLevel, supervisorStrategy)
   }
 
@@ -67,6 +72,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
+      actorSystemFactory: ActorSystemFactory,
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
@@ -76,7 +82,8 @@ object ZeroMQUtils {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
-    createStream[T](jssc.ssc, publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
+    createStream[T](jssc.ssc, () => actorSystemFactory.create(),
+      publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
   }
 
   /**
@@ -92,6 +99,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
+      actorSystemFactory: ActorSystemFactory,
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
@@ -100,7 +108,8 @@ object ZeroMQUtils {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
-    createStream[T](jssc.ssc, publisherUrl, subscribe, fn, storageLevel)
+    createStream[T](
+      jssc.ssc, () => actorSystemFactory.create(), publisherUrl, subscribe, fn, storageLevel)
   }
 
   /**
@@ -116,6 +125,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
+      actorSystemFactory: ActorSystemFactory,
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
@@ -123,6 +133,6 @@ object ZeroMQUtils {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
-    createStream[T](jssc.ssc, publisherUrl, subscribe, fn)
+    createStream[T](jssc.ssc, () => actorSystemFactory.create(), publisherUrl, subscribe, fn)
   }
 }
