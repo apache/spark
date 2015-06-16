@@ -334,7 +334,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enable profiling in Python worker, the profile result will show up by `sc.show_profiles()`,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
+    `sc.dump_profiles(path)`. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
     By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
