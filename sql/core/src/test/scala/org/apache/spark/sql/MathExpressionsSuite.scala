@@ -69,7 +69,7 @@ class MathExpressionsSuite extends QueryTest {
     if (f(-1) === math.log1p(-1)) {
       checkAnswer(
         nnDoubleData.select(c('b)),
-        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
+        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     } else {
       checkAnswer(
