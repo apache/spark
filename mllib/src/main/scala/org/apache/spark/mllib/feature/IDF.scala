@@ -49,12 +49,14 @@ class IDF(val minDocFreq: Int) {
    * @param dataset an RDD of term frequency vectors
    */
   def fit(dataset: RDD[Vector]): IDFModel = {
-    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
+    val dfAggregator = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
           minDocFreq = minDocFreq))(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
-    ).idf()
-    new IDFModel(idf)
+    )
+    val idf = dfAggregator.idf()
+    val avgDl = dfAggregator.avgDl()
+    new IDFModel(idf, Some(avgDl))
   }
 
   /**
@@ -75,6 +77,8 @@ private object IDF {
     private var m = 0L
     /** document frequency vector */
     private var df: BDV[Long] = _
+    /** total document length */
+    private var totalDl: Long = 0L
 
 
     def this() = this(0)
@@ -91,6 +95,7 @@ private object IDF {
           while (k < nnz) {
             if (values(k) > 0) {
               df(indices(k)) += 1L
+              totalDl += 1L
             }
             k += 1
           }
@@ -100,6 +105,7 @@ private object IDF {
           while (j < n) {
             if (values(j) > 0.0) {
               df(j) += 1L
+              totalDl += 1L
             }
             j += 1
           }
@@ -115,6 +121,7 @@ private object IDF {
     def merge(other: DocumentFrequencyAggregator): this.type = {
       if (!other.isEmpty) {
         m += other.m
+        totalDl += other.totalDl
         if (df == null) {
           df = other.df.copy
         } else {
@@ -125,6 +132,9 @@ private object IDF {
     }
 
     private def isEmpty: Boolean = m == 0L
+
+    /** Returns the average document length */
+    def avgDl(): Double = if (m > 0) totalDl.toDouble / m else 0
 
     /** Returns the current IDF vector. */
     def idf(): Vector = {
@@ -159,7 +169,9 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Experimental
-class IDFModel private[mllib] (val idf: Vector) extends Serializable {
+class IDFModel private[mllib] (
+    val idf: Vector,
+    val avgDl: Option[Double] = None) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
