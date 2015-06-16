@@ -23,10 +23,10 @@ import java.util.Properties
 import scala.collection.mutable
 import scala.util.matching.Regex
 
-import org.apache.spark.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
 
-private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
+private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
 
   private val DEFAULT_PREFIX = "*"
   private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
@@ -46,23 +46,14 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
-    // If spark.metrics.conf is not set, try to get file in class path
-    val isOpt: Option[InputStream] = configFile.map(new FileInputStream(_)).orElse {
-      try {
-        Option(Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME))
-      } catch {
-        case e: Exception =>
-          logError("Error loading default configuration file", e)
-          None
-      }
-    }
+    loadPropertiesFromFile(conf.getOption("spark.metrics.conf"))
 
-    isOpt.foreach { is =>
-      try {
-        properties.load(is)
-      } finally {
-        is.close()
-      }
+    // Also look for the properties in provided Spark configuration
+    val prefix = "spark.metrics.conf."
+    conf.getAll.foreach {
+      case (k, v) if k.startsWith(prefix) =>
+        properties.setProperty(k.substring(prefix.length()), v)
+      case _ =>
     }
 
     propertyCategories = subProperties(properties, INSTANCE_REGEX)
@@ -97,5 +88,31 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
       case None => propertyCategories.getOrElse(DEFAULT_PREFIX, new Properties)
     }
   }
-}
 
+  /**
+   * Loads configuration from a config file. If no config file is provided, try to get file
+   * in class path.
+   */
+  private[this] def loadPropertiesFromFile(path: Option[String]): Unit = {
+    var is: InputStream = null
+    try {
+      is = path match {
+        case Some(f) => new FileInputStream(f)
+        case None => Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME)
+      }
+
+      if (is != null) {
+        properties.load(is)
+      }
+    } catch {
+      case e: Exception =>
+        val file = path.getOrElse(DEFAULT_METRICS_CONF_FILENAME)
+        logError(s"Error loading configuration file $file", e)
+    } finally {
+      if (is != null) {
+        is.close()
+      }
+    }
+  }
+
+}

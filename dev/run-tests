@@ -80,18 +80,19 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 # Only run Hive tests if there are SQL changes.
 # Partial solution for SPARK-1455.
 if [ -n "$AMPLAB_JENKINS" ]; then
-  git fetch origin master:master
+  target_branch="$ghprbTargetBranch"
+  git fetch origin "$target_branch":"$target_branch"
 
   # AMP_JENKINS_PRB indicates if the current build is a pull request build.
   if [ -n "$AMP_JENKINS_PRB" ]; then
     # It is a pull request build.
     sql_diffs=$(
-      git diff --name-only master \
+      git diff --name-only "$target_branch" \
       | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
     )
 
     non_sql_diffs=$(
-      git diff --name-only master \
+      git diff --name-only "$target_branch" \
       | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
     )
 

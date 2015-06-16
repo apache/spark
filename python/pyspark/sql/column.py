@@ -315,6 +315,14 @@ class Column(object):
         """
         A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
+
+        >>> df.select(df.name, df.age.between(2, 4)).show()
+        +-----+--------------------------+
+        | name|((age >= 2) && (age <= 4))|
+        +-----+--------------------------+
+        |Alice|                      true|
+        |  Bob|                     false|
+        +-----+--------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 
@@ -328,12 +336,20 @@ class Column(object):
 
         :param condition: a boolean :class:`Column` expression.
         :param value: a literal value, or a :class:`Column` expression.
+
+        >>> from pyspark.sql import functions as F
+        >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
+        +-----+--------------------------------------------------------+
+        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0|
+        +-----+--------------------------------------------------------+
+        |Alice|                                                      -1|
+        |  Bob|                                                       1|
+        +-----+--------------------------------------------------------+
         """
-        sc = SparkContext._active_spark_context
         if not isinstance(condition, Column):
             raise TypeError("condition should be a Column")
         v = value._jc if isinstance(value, Column) else value
-        jc = sc._jvm.functions.when(condition._jc, v)
+        jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
     @since(1.4)
@@ -345,9 +361,18 @@ class Column(object):
         See :func:`pyspark.sql.functions.when` for example usage.
 
         :param value: a literal value, or a :class:`Column` expression.
+
+        >>> from pyspark.sql import functions as F
+        >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
+        +-----+---------------------------------+
+        | name|CASE WHEN (age > 3) THEN 1 ELSE 0|
+        +-----+---------------------------------+
+        |Alice|                                0|
+        |  Bob|                                1|
+        +-----+---------------------------------+
         """
         v = value._jc if isinstance(value, Column) else value
-        jc = self._jc.otherwise(value)
+        jc = self._jc.otherwise(v)
         return Column(jc)
 
     @since(1.4)

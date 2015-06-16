@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml
 
+import java.{util => ju}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
@@ -174,6 +177,11 @@ class PipelineModel private[ml] (
     override val uid: String,
     val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
+
+  /** A Java/Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, stages: ju.List[Transformer]) = {
+    this(uid, stages.asScala.toArray)
+  }
 
   override def validateParams(): Unit = {
     super.validateParams()

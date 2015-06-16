@@ -874,15 +874,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
-    // current TestSerDe.jar is from 0.12.0
-    if (HiveShim.version == "0.12.0") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-          |WITH serdeproperties('s1'='9')
-        """.stripMargin)
-    }
     sql("DROP TABLE alter1")
   }
 
@@ -890,15 +881,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // this is a test case from mapjoin_addjar.q
     val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
-    if (HiveShim.version == "0.13.1") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """CREATE TABLE t1(a string, b string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-      sql("select * from src join t1 on src.key = t1.a")
-      sql("DROP TABLE t1")
-    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """CREATE TABLE t1(a string, b string)
+      |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
   }
 
   test("ADD FILE command") {

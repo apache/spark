@@ -23,6 +23,7 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -79,11 +80,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Returns the result of this query as an RDD[Row] by delegating to doExecute
+   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
    * after adding query plan information to created RDDs for visualization.
    * Concrete implementations of SparkPlan should override doExecute instead.
    */
-  final def execute(): RDD[Row] = {
+  final def execute(): RDD[InternalRow] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       doExecute()
     }
@@ -91,9 +92,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * Overridden by concrete implementations of SparkPlan.
-   * Produces the result of the query as an RDD[Row]
+   * Produces the result of the query as an RDD[InternalRow]
    */
-  protected def doExecute(): RDD[Row]
+  protected def doExecute(): RDD[InternalRow]
 
   /**
    * Runs this query returning the result as an array.
@@ -117,7 +118,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val childRDD = execute().map(_.copy())
 
-    val buf = new ArrayBuffer[Row]
+    val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var partsScanned = 0
     while (buf.size < n && partsScanned < totalParts) {
@@ -140,7 +141,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
       val sc = sqlContext.sparkContext
       val res =
-        sc.runJob(childRDD, (it: Iterator[Row]) => it.take(left).toArray, p, allowLocal = false)
+        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p,
+          allowLocal = false)
 
       res.foreach(buf ++= _.take(n - buf.size))
       partsScanned += numPartsToTry
@@ -154,7 +156,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
+    if (codegenEnabled && expressions.forall(_.isThreadSafe)) {
       GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
@@ -166,7 +168,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if(codegenEnabled) {
+    if(codegenEnabled && expressions.forall(_.isThreadSafe)) {
+
       GenerateMutableProjection.generate(expressions, inputSchema)
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
@@ -175,15 +178,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
 
   protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
-    if (codegenEnabled) {
+      expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+    if (codegenEnabled && expression.isThreadSafe) {
       GeneratePredicate.generate(expression, inputSchema)
     } else {
       InterpretedPredicate.create(expression, inputSchema)
     }
   }
 
-  protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
+  protected def newOrdering(
+      order: Seq[SortOrder],
+      inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
     if (codegenEnabled) {
       GenerateOrdering.generate(order, inputSchema)
     } else {

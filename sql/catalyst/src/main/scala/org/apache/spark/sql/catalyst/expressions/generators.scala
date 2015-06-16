@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.types._
 
@@ -53,13 +54,13 @@ abstract class Generator extends Expression {
   def elementTypes: Seq[(DataType, Boolean)]
 
   /** Should be implemented by child classes to perform specific Generators. */
-  override def eval(input: Row): TraversableOnce[Row]
+  override def eval(input: InternalRow): TraversableOnce[InternalRow]
 
   /**
    * Notifies that there are no more rows to process, clean up code, and additional
    * rows can be made here.
    */
-  def terminate(): TraversableOnce[Row] = Nil
+  def terminate(): TraversableOnce[InternalRow] = Nil
 }
 
 /**
@@ -67,16 +68,27 @@ abstract class Generator extends Expression {
  */
 case class UserDefinedGenerator(
     elementTypes: Seq[(DataType, Boolean)],
-    function: Row => TraversableOnce[Row],
+    function: InternalRow => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator {
 
-  override def eval(input: Row): TraversableOnce[Row] = {
-    // TODO(davies): improve this
+  @transient private[this] var inputRow: InterpretedProjection = _
+  @transient private[this] var convertToScala: (InternalRow) => InternalRow = _
+
+  private def initializeConverters(): Unit = {
+    inputRow = new InterpretedProjection(children)
+    convertToScala = {
+      val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+      CatalystTypeConverters.createToScalaConverter(inputSchema)
+    }.asInstanceOf[(InternalRow => InternalRow)]
+  }
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    if (inputRow == null) {
+      initializeConverters()
+    }
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
-    val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
-    val inputRow = new InterpretedProjection(children)
-    function(CatalystTypeConverters.convertToScala(inputRow(input), inputSchema).asInstanceOf[Row])
+    function(convertToScala(inputRow(input)))
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
@@ -97,7 +109,7 @@ case class Explode(child: Expression)
     case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
   }
 
-  override def eval(input: Row): TraversableOnce[Row] = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     child.dataType match {
       case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]

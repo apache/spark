@@ -18,7 +18,6 @@
 package org.apache.spark.sql.json
 
 import java.io.ByteArrayOutputStream
-import java.sql.Timestamp
 
 import scala.collection.Map
 
@@ -29,12 +28,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
 
 private[sql] object JacksonParser {
   def apply(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
     parseJson(json, schema, columnNameOfCorruptRecords)
   }
 
@@ -55,7 +56,7 @@ private[sql] object JacksonParser {
         convertField(factory, parser, schema)
 
       case (VALUE_STRING, StringType) =>
-        UTF8String(parser.getText)
+        UTF8String.fromString(parser.getText)
 
       case (VALUE_STRING, _) if parser.getTextLength < 1 =>
         // guard the non string type
@@ -65,17 +66,17 @@ private[sql] object JacksonParser {
         DateUtils.millisToDays(DateUtils.stringToTime(parser.getText).getTime)
 
       case (VALUE_STRING, TimestampType) =>
-        new Timestamp(DateUtils.stringToTime(parser.getText).getTime)
+        DateUtils.stringToTime(parser.getText).getTime * 10000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        new Timestamp(parser.getLongValue)
+        parser.getLongValue * 10000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
         val generator = factory.createGenerator(writer, JsonEncoding.UTF8)
         generator.copyCurrentStructure(parser)
         generator.close()
-        UTF8String(writer.toByteArray)
+        UTF8String.fromBytes(writer.toByteArray)
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, FloatType) =>
         parser.getFloatValue
@@ -129,7 +130,10 @@ private[sql] object JacksonParser {
    *
    * Fields in the json that are not defined in the requested schema will be dropped.
    */
-  private def convertObject(factory: JsonFactory, parser: JsonParser, schema: StructType): Row = {
+  private def convertObject(
+      factory: JsonFactory,
+      parser: JsonParser,
+      schema: StructType): InternalRow = {
     val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
@@ -153,7 +157,8 @@ private[sql] object JacksonParser {
       valueType: DataType): Map[UTF8String, Any] = {
     val builder = Map.newBuilder[UTF8String, Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      builder += UTF8String(parser.getCurrentName) -> convertField(factory, parser, valueType)
+      builder +=
+        UTF8String.fromString(parser.getCurrentName) -> convertField(factory, parser, valueType)
     }
 
     builder.result()
@@ -174,14 +179,14 @@ private[sql] object JacksonParser {
   private def parseJson(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
 
-    def failedRecord(record: String): Seq[Row] = {
+    def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
         require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String(record))
+        row.update(corruptIndex, UTF8String.fromString(record))
       }
 
       Seq(row)
@@ -200,7 +205,7 @@ private[sql] object JacksonParser {
           // convertField wrap an object into a single value array when necessary.
           convertField(factory, parser, ArrayType(schema)) match {
             case null => failedRecord(record)
-            case list: Seq[Row @unchecked] => list
+            case list: Seq[InternalRow @unchecked] => list
             case _ =>
               sys.error(
                 s"Failed to parse record $record. Please make sure that each line of the file " +

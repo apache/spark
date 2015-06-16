@@ -69,14 +69,10 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     }
   }
 
-  /**
-   * Creates a param pair with the given value (for Java).
-   */
+  /** Creates a param pair with the given value (for Java). */
   def w(value: T): ParamPair[T] = this -> value
 
-  /**
-   * Creates a param pair with the given value (for Scala).
-   */
+  /** Creates a param pair with the given value (for Scala). */
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
   override final def toString: String = s"${parent}__$name"
@@ -190,6 +186,7 @@ class DoubleParam(parent: String, name: String, doc: String, isValid: Double => 
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
@@ -209,6 +206,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
@@ -228,6 +226,7 @@ class FloatParam(parent: String, name: String, doc: String, isValid: Float => Bo
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
@@ -247,6 +246,7 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
@@ -260,6 +260,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
+  /** Creates a param pair with the given value (for Java). */
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
@@ -273,8 +274,6 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
-
-  override def w(value: Array[String]): ParamPair[Array[String]] = super.w(value)
 
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
   def w(value: java.util.List[String]): ParamPair[Array[String]] = w(value.asScala.toArray)
@@ -291,10 +290,9 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
 
-  override def w(value: Array[Double]): ParamPair[Array[Double]] = super.w(value)
-
   /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
-  def w(value: java.util.List[Double]): ParamPair[Array[Double]] = w(value.asScala.toArray)
+  def w(value: java.util.List[java.lang.Double]): ParamPair[Array[Double]] =
+    w(value.asScala.map(_.asInstanceOf[Double]).toArray)
 }
 
 /**

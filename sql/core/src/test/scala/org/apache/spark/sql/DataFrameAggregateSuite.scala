@@ -19,12 +19,13 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.DecimalType
 
 
 class DataFrameAggregateSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("groupBy") {
     checkAnswer(
@@ -67,12 +68,12 @@ class DataFrameAggregateSuite extends QueryTest {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    TestSQLContext.conf.setConf("spark.sql.retainGroupColumns", "false")
+    ctx.conf.setConf("spark.sql.retainGroupColumns", "false")
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    TestSQLContext.conf.setConf("spark.sql.retainGroupColumns", "true")
+    ctx.conf.setConf("spark.sql.retainGroupColumns", "true")
   }
 
   test("agg without groups") {

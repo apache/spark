@@ -21,40 +21,42 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  val originalColumnBatchSize = conf.columnBatchSize
-  val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+
+  private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
+  private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
-    setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
+    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
 
-    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
+    val pruningData = ctx.sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning
-    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
+    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
     // Enable in-memory table scan accumulators
-    setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    ctx.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
   }
 
   override protected def afterAll(): Unit = {
-    setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
-    setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
+    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
+    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
   }
 
   before {
-    cacheTable("pruningData")
+    ctx.cacheTable("pruningData")
   }
 
   after {
-    uncacheTable("pruningData")
+    ctx.uncacheTable("pruningData")
   }
 
   // Comparisons
@@ -108,7 +110,7 @@ class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll wi
       expectedQueryResult: => Seq[Int]): Unit = {
 
     test(query) {
-      val df = sql(query)
+      val df = ctx.sql(query)
       val queryExecution = df.queryExecution
 
       assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {

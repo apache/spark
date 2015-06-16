@@ -41,8 +41,8 @@ if __name__ == "__main__":
 
     # prepare training data.
     # We create an RDD of LabeledPoints and convert them into a DataFrame.
-    # Spark DataFrames can automatically infer the schema from named tuples
-    # and LabeledPoint implements __reduce__ to behave like a named tuple.
+    # A LabeledPoint is an Object with two fields named label and features
+    # and Spark SQL identifies these fields and creates the schema appropriately.
     training = sc.parallelize([
         LabeledPoint(1.0, DenseVector([0.0, 1.1, 0.1])),
         LabeledPoint(0.0, DenseVector([2.0, 1.0, -1.0])),
