@@ -19,9 +19,11 @@ class BaseHook(object):
 
     def get_connections(self, conn_id):
         session = settings.Session()
-        db = session.query(
-            Connection).filter(
-                Connection.conn_id == conn_id).all()
+        db = (
+            session.query(Connection)
+            .filter(Connection.conn_id == conn_id)
+            .all()
+        )
         if not db:
             raise AirflowException(
                 "The conn_id `{0}` isn't defined".format(conn_id))
