@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import getpass
 import imp
 import jinja2
+import json
 import logging
 import os
 import dill
@@ -1783,6 +1784,15 @@ class Variable(Base):
 
     def __repr__(self):
         return '{} : {}'.format(self.key, self.val)
+
+    @classmethod
+    @provide_session
+    def get(cls, key, session, deserialize_json=False):
+        obj = session.query(cls).filter(cls.key == key).first()
+        v = obj.val
+        if deserialize_json and v:
+            v = json.loads(v)
+        return v
 
 
 class Pool(Base):
