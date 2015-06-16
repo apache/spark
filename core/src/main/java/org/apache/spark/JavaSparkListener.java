@@ -22,6 +22,7 @@ import org.apache.spark.scheduler.SparkListenerApplicationEnd;
 import org.apache.spark.scheduler.SparkListenerApplicationStart;
 import org.apache.spark.scheduler.SparkListenerBlockManagerAdded;
 import org.apache.spark.scheduler.SparkListenerBlockManagerRemoved;
+import org.apache.spark.scheduler.SparkListenerContextStop;
 import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate;
 import org.apache.spark.scheduler.SparkListenerExecutorAdded;
 import org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate;
@@ -94,4 +95,7 @@ public class JavaSparkListener implements SparkListener {
 
   @Override
   public void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) { }
+
+  @Override
+  public void onContextStop(SparkListenerContextStop contextStop) { }
 }

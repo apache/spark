@@ -1624,6 +1624,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("SparkContext already stopped.")
       return
     }
+    if (_listenerBusStarted) {
+      listenerBus.post(new SparkListenerContextStop)
+    }
+
     if (_shutdownHookRef != null) {
       Utils.removeShutdownHook(_shutdownHookRef)
     }

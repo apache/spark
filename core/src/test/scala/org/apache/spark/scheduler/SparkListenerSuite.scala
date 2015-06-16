@@ -125,7 +125,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   test("basic creation of StageInfo") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
     rdd2.setName("Target RDD")
@@ -142,12 +144,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.submissionTime should be ('defined)
     stageInfo.completionTime should be ('defined)
     taskInfoMetrics.length should be {4}
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("basic creation of StageInfo with shuffle") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.filter(_ % 2 == 0).map(i => (i, i))
     val rdd3 = rdd2.reduceByKey(_ + _)
@@ -180,12 +187,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
     stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("StageInfo with fewer tasks than partitions") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
     sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
@@ -197,13 +209,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.numTasks should be {2}
     stageInfo.rddInfos.size should be {2}
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("local metrics") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
+    sc.addSparkListener(stopListener)
     // just to make sure some of the tasks take a noticeable amount of time
     val w = { i: Int =>
       if (i == 0) {
@@ -265,12 +282,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         }
       }
     }
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveTaskEvents
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
 
     // Make a task whose result is larger than the akka frame size
     System.setProperty("spark.akka.frameSize", "1")
@@ -286,12 +308,17 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
     assert(listener.endedTasks.contains(TASK_INDEX))
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("onTaskGettingResult() not called when result sent directly") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveTaskEvents
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
 
     // Make a task whose result is larger than the akka frame size
     val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
@@ -302,13 +329,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)
     assert(listener.endedTasks.contains(TASK_INDEX))
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val WAIT_TIMEOUT_MILLIS = 10000
     val listener = new SaveTaskEvents
+    val stopListener = new ContextStopListener
     sc.addSparkListener(listener)
+    sc.addSparkListener(stopListener)
 
     val numTasks = 10
     val f = sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.countAsync()
@@ -336,6 +368,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
       assert(listener.endedTasks.size === listener.startedTasks.size)
     }
+
+    sc.stop()
+    stopListener.called should be (true)
   }
 
   test("SparkListener moves on if a listener throws an exception") {
@@ -427,6 +462,14 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
    */
   private class BadListener extends SparkListener {
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = { throw new Exception }
+  }
+
+  /**
+   * Called for context.stop
+   */
+  private class ContextStopListener extends SparkListener {
+    var called: Boolean = false
+    override def onContextStop(jobEnd: SparkListenerContextStop): Unit = called = true
   }
 
 }
