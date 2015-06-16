@@ -114,3 +114,25 @@ resource perspective (for say very lightweight tasks where one worker
 could take thousands of task without a problem), or from an environment
 perspective (you want a worker running from within the Spark cluster 
 itself because it needs a very specific environment and security rights).
+
+
+Variables
+'''''''''
+
+Variables are a generic way to store and retrieve arbitrary content or 
+settings as a simple key value store within Airflow. Variable can be 
+listed, created, updated and deleted from the UI ``Admin -> Variables``
+or from code. While your pipeline code definition and most of your constants
+and variables should be defined in code and stored in source control,
+it can be useful to have some variables or configuration items
+accessible and modifiable through the UI.
+
+
+.. code:: python
+    from airflow.models import Variable
+    foo = Variable.get("foo")
+    bar = Variable.get("foo", deser_json=True)
+
+The second call assumes ``json`` content and will be deserialized into
+``bar``. Note that ``Variable`` is a sqlalchemy model and can be used 
+as such.
