@@ -576,6 +576,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
     val codegenEnabled = this.codegenEnabled
+    val needConversion = this.needConversion
 
     val requiredOutput = requiredColumns.map { col =>
       val field = dataSchema(col)
@@ -590,7 +591,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rdd.map(_.asInstanceOf[InternalRow])
       }
     converted.mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled) {
+      val buildProjection = if (codegenEnabled && requiredOutput.forall(_.isThreadSafe)) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)

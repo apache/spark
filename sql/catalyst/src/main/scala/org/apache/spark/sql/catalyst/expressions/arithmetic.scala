@@ -341,31 +341,29 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isNativeType(left.dataType)) {
-      val eval1 = left.gen(ctx)
-      val eval2 = right.gen(ctx)
-      eval1.code + eval2.code + s"""
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(left.dataType)} ${ev.primitive} =
-          ${ctx.defaultValue(left.dataType)};
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
-        if (${eval1.isNull}) {
-          ${ev.isNull} = ${eval2.isNull};
-          ${ev.primitive} = ${eval2.primitive};
-        } else if (${eval2.isNull}) {
-          ${ev.isNull} = ${eval1.isNull};
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
+
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode > 0) {
           ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitive} > ${eval2.primitive}) {
-            ${ev.primitive} = ${eval1.primitive};
-          } else {
-            ${ev.primitive} = ${eval2.primitive};
-          }
+          ${ev.primitive} = ${eval2.primitive};
         }
-      """
-    } else {
-      super.genCode(ctx, ev)
-    }
+      }
+    """
   }
   override def toString: String = s"MaxOf($left, $right)"
 }
@@ -395,33 +393,29 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isNativeType(left.dataType)) {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
-      val eval1 = left.gen(ctx)
-      val eval2 = right.gen(ctx)
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
 
-      eval1.code + eval2.code + s"""
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(left.dataType)} ${ev.primitive} =
-          ${ctx.defaultValue(left.dataType)};
-
-        if (${eval1.isNull}) {
-          ${ev.isNull} = ${eval2.isNull};
-          ${ev.primitive} = ${eval2.primitive};
-        } else if (${eval2.isNull}) {
-          ${ev.isNull} = ${eval1.isNull};
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode < 0) {
           ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitive} < ${eval2.primitive}) {
-            ${ev.primitive} = ${eval1.primitive};
-          } else {
-            ${ev.primitive} = ${eval2.primitive};
-          }
+          ${ev.primitive} = ${eval2.primitive};
         }
-      """
-    } else {
-      super.genCode(ctx, ev)
-    }
+      }
+    """
   }
 
   override def toString: String = s"MinOf($left, $right)"

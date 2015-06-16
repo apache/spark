@@ -21,7 +21,6 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -75,7 +74,7 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {
-  import ScalaReflection._
+  import org.apache.spark.sql.catalyst.ScalaReflection._
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
