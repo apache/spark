@@ -162,9 +162,9 @@ def run_python_style_checks():
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
     os.environ["PRODUCTION"] = "1 jekyll build"
-    
-    os.chdir(os.path.join(SPARK_HOME, "docs"))    
-    
+
+    os.chdir(os.path.join(SPARK_HOME, "docs"))
+
     run_cmd(["jekyll", "build"])
 
     os.chdir(SPARK_HOME)
