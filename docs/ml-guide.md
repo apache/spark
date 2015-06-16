@@ -205,7 +205,7 @@ val lr = new LogisticRegression()
 // Fit the model
 val lrModel = lr.fit(training)
 
-// Print the weights and intercept for logistic regression.
+// Print the weights and intercept for logistic regression
 println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
 
 {% endhighlight %}
@@ -216,6 +216,7 @@ println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
 The following code illustrates how to load a sample dataset and use logistic regression with elastic net regularization to fit a model.
 
 {% highlight java %}
+
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -244,8 +245,11 @@ public class LogisticRegressionWithElasticNetExample {
       .setThreshold(0.6)
       .setProbabilityCol("myProbability");
 
-    // Fit the model      
+    // Fit the model
     LogisticRegressionModel lrModel = lr.fit(training);
+
+    // Print the weights and intercept for logistic regression
+    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
   }
 }
 {% endhighlight %}
@@ -256,6 +260,22 @@ The following code illustrates how to load a sample dataset and use logistic reg
 
 {% highlight python %}
 
+from pyspark.ml.classification import LogisticRegression
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import MLUtils
+
+# Load training data
+training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+lr = LogisticRegression(maxIter=10, regParam=0.3)
+lr.setElasticNetParam(0.8)
+
+# Fit the model
+lrModel = lr.fit(training)
+
+# Print the weights and intercept for logistic regression
+print("Weights: " + str(lrModel.weights))
+print("Intercept: " + str(lrModel.intercept))
 {% endhighlight %}
 
 </div>
