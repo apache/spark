@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 
@@ -261,5 +262,11 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(
       ctx.sql("SELECT negative(1), negative(0), negative(-1)"),
       Row(-1, 0, 1))
+  }
+
+  test("positive") {
+    checkAnswer(
+      ctx.sql("""SELECT positive(1), positive(-1), positive("abc")"""),
+      Row(1, -1, "abc"))
   }
 }
