@@ -71,10 +71,6 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
     iterator
   }
 
-  override def writablePartitionedIterator(): WritablePartitionedIterator = {
-    WritablePartitionedIterator.fromIterator(iterator)
-  }
-
   private def iterator(): Iterator[((Int, K), V)] = new Iterator[((Int, K), V)] {
     var pos = 0
 

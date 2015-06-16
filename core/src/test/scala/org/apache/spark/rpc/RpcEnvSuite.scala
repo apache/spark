@@ -24,15 +24,15 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkException, SparkConf}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
 /**
  * Common tests for an RpcEnv implementation.
  */
-abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
+abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
 
@@ -42,7 +42,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    if(env != null) {
+    if (env != null) {
       env.shutdown()
     }
   }
@@ -75,7 +75,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote" ,13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "send-remotely")
     try {
@@ -338,7 +338,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("call receive in sequence") {
     // If a RpcEnv implementation breaks the `receive` contract, hope this test can expose it
-    for(i <- 0 until 100) {
+    for (i <- 0 until 100) {
       @volatile var result = 0
       val endpointRef = env.setupEndpoint(s"receive-in-sequence-$i", new ThreadSafeRpcEndpoint {
         override val rpcEnv = env

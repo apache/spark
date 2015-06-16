@@ -18,22 +18,21 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import org.mockito.Mockito._
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
-class MemoryUtilsSuite extends FunSuite with MockitoSugar {
+class MemoryUtilsSuite extends SparkFunSuite with MockitoSugar {
   test("MesosMemoryUtils should always override memoryOverhead when it's set") {
     val sparkConf = new SparkConf
 
     val sc = mock[SparkContext]
     when(sc.conf).thenReturn(sparkConf)
-    
+
     // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(sc.executorMemory).thenReturn(512)
     assert(MemoryUtils.calculateTotalMemory(sc) === 896)
-    
+
     // 384 < sc.executorMemory * 0.1 => 4096 + (4096 * 0.1) = 4505.6
     when(sc.executorMemory).thenReturn(4096)
     assert(MemoryUtils.calculateTotalMemory(sc) === 4505)

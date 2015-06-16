@@ -17,14 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
 
-class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
+class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
@@ -60,5 +60,40 @@ class VectorAssemblerSuite extends FunSuite with MLlibTestSparkContext {
       case Row(v: Vector) =>
         assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
     }
+  }
+
+  test("ML attributes") {
+    val browser = NominalAttribute.defaultAttr.withValues("chrome", "firefox", "safari")
+    val hour = NumericAttribute.defaultAttr.withMin(0.0).withMax(24.0)
+    val user = new AttributeGroup("user", Array(
+      NominalAttribute.defaultAttr.withName("gender").withValues("male", "female"),
+      NumericAttribute.defaultAttr.withName("salary")))
+    val row = (1.0, 0.5, 1, Vectors.dense(1.0, 1000.0), Vectors.sparse(2, Array(1), Array(2.0)))
+    val df = sqlContext.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
+      .select(
+        col("browser").as("browser", browser.toMetadata()),
+        col("hour").as("hour", hour.toMetadata()),
+        col("count"), // "count" is an integer column without ML attribute
+        col("user").as("user", user.toMetadata()),
+        col("ad")) // "ad" is a vector column without ML attribute
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("browser", "hour", "count", "user", "ad"))
+      .setOutputCol("features")
+    val output = assembler.transform(df)
+    val schema = output.schema
+    val features = AttributeGroup.fromStructField(schema("features"))
+    assert(features.size === 7)
+    val browserOut = features.getAttr(0)
+    assert(browserOut === browser.withIndex(0).withName("browser"))
+    val hourOut = features.getAttr(1)
+    assert(hourOut === hour.withIndex(1).withName("hour"))
+    val countOut = features.getAttr(2)
+    assert(countOut === NumericAttribute.defaultAttr.withName("count").withIndex(2))
+    val userGenderOut = features.getAttr(3)
+    assert(userGenderOut === user.getAttr("gender").withName("user_gender").withIndex(3))
+    val userSalaryOut = features.getAttr(4)
+    assert(userSalaryOut === user.getAttr("salary").withName("user_salary").withIndex(4))
+    assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5))
+    assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6))
   }
 }

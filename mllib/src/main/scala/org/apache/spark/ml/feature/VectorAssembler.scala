@@ -20,8 +20,9 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
@@ -30,14 +31,14 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
-@AlphaComponent
+@Experimental
 class VectorAssembler(override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol {
 
-  def this() = this(Identifiable.randomUID("va"))
+  def this() = this(Identifiable.randomUID("vecAssembler"))
 
   /** @group setParam */
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
@@ -46,19 +47,59 @@ class VectorAssembler(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    // Schema transformation.
+    val schema = dataset.schema
+    lazy val first = dataset.first()
+    val attrs = $(inputCols).flatMap { c =>
+      val field = schema(c)
+      val index = schema.fieldIndex(c)
+      field.dataType match {
+        case DoubleType =>
+          val attr = Attribute.fromStructField(field)
+          // If the input column doesn't have ML attribute, assume numeric.
+          if (attr == UnresolvedAttribute) {
+            Some(NumericAttribute.defaultAttr.withName(c))
+          } else {
+            Some(attr.withName(c))
+          }
+        case _: NumericType | BooleanType =>
+          // If the input column type is a compatible scalar type, assume numeric.
+          Some(NumericAttribute.defaultAttr.withName(c))
+        case _: VectorUDT =>
+          val group = AttributeGroup.fromStructField(field)
+          if (group.attributes.isDefined) {
+            // If attributes are defined, copy them with updated names.
+            group.attributes.get.map { attr =>
+              if (attr.name.isDefined) {
+                // TODO: Define a rigorous naming scheme.
+                attr.withName(c + "_" + attr.name.get)
+              } else {
+                attr
+              }
+            }
+          } else {
+            // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
+            // from metadata, check the first row.
+            val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
+            Array.fill(numAttrs)(NumericAttribute.defaultAttr)
+          }
+      }
+    }
+    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
+
+    // Data transformation.
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(r.toSeq: _*)
     }
-    val schema = dataset.schema
-    val inputColNames = $(inputCols)
-    val args = inputColNames.map { c =>
+    val args = $(inputCols).map { c =>
       schema(c).dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol)))
+
+    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {

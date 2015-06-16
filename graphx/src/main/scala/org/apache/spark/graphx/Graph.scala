@@ -316,7 +316,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * satisfy the predicates
    */
   def subgraph(
-      epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+      epred: EdgeTriplet[VD, ED] => Boolean = (x => true),
       vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
 

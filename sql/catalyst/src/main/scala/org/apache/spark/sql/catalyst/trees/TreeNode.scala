@@ -254,7 +254,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -311,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           Some(arg)
         }
-      case m: Map[_,_] => m
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -344,11 +344,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
-    val defaultCtor =
-      getClass.getConstructors
-        .find(_.getParameterTypes.size != 0)
-        .headOption
-        .getOrElse(sys.error(s"No valid constructor for $nodeName"))
+    val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
+    if (ctors.isEmpty) {
+      sys.error(s"No valid constructor for $nodeName")
+    }
+    val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
 
     try {
       CurrentOrigin.withOrigin(origin) {

@@ -219,7 +219,7 @@ class RowMatrix(
 
     val computeMode = mode match {
       case "auto" =>
-        if(k > 5000) {
+        if (k > 5000) {
           logWarning(s"computing svd with k=$k and n=$n, please check necessity")
         }
 

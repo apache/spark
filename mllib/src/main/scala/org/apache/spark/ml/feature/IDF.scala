@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -58,10 +58,10 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
-@AlphaComponent
+@Experimental
 final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase {
 
   def this() = this(Identifiable.randomUID("idf"))
@@ -85,10 +85,10 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[IDF]].
  */
-@AlphaComponent
+@Experimental
 class IDFModel private[ml] (
     override val uid: String,
     idfModel: feature.IDFModel)

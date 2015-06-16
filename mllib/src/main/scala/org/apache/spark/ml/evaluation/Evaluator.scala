@@ -17,15 +17,15 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  * Abstract class for evaluators that compute metrics from predictions.
  */
-@AlphaComponent
+@DeveloperApi
 abstract class Evaluator extends Params {
 
   /**

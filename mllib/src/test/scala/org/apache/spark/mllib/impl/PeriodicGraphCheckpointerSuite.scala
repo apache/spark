@@ -17,18 +17,16 @@
 
 package org.apache.spark.mllib.impl
 
-import org.scalatest.FunSuite
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 
-class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext {
+class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import PeriodicGraphCheckpointerSuite._
 

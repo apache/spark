@@ -19,15 +19,14 @@ package org.apache.spark.ml.feature
 
 import scala.beans.BeanInfo
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 
-class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
+class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.RegexTokenizerSuite._
 
   test("RegexTokenizer") {
@@ -60,7 +59,7 @@ class RegexTokenizerSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object RegexTokenizerSuite extends FunSuite {
+object RegexTokenizerSuite extends SparkFunSuite {
 
   def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
     t.transform(dataset)

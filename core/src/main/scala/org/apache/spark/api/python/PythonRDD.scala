@@ -723,7 +723,7 @@ private[spark] object PythonRDD extends Logging {
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
     val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
-    converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec=codec)
+    converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec = codec)
   }
 
   /**
@@ -797,10 +797,10 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
-  /** 
+  /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
    * by the DAGScheduler's single-threaded actor anyway.
-   */ 
+   */
   @transient var socket: Socket = _
 
   def openSocket(): Socket = synchronized {
@@ -843,6 +843,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
  * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
  * write the data into disk after deserialization, then Python can read it from disks.
  */
+// scalastyle:off no.finalize
 private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
 
   /**
@@ -884,3 +885,4 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     }
   }
 }
+// scalastyle:on no.finalize

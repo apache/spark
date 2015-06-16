@@ -1314,9 +1314,8 @@ setMethod("except",
 #' write.df(df, "myfile", "parquet", "overwrite")
 #' }
 setMethod("write.df",
-          signature(df = "DataFrame", path = 'character', source = 'character',
-                    mode = 'character'),
-          function(df, path = NULL, source = NULL, mode = "append", ...){
+          signature(df = "DataFrame", path = 'character'),
+          function(df, path, source = NULL, mode = "append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
@@ -1338,9 +1337,8 @@ setMethod("write.df",
 #' @aliases saveDF
 #' @export
 setMethod("saveDF",
-          signature(df = "DataFrame", path = 'character', source = 'character',
-                    mode = 'character'),
-          function(df, path = NULL, source = NULL, mode = "append", ...){
+          signature(df = "DataFrame", path = 'character'),
+          function(df, path, source = NULL, mode = "append", ...){
             write.df(df, path, source, mode, ...)
           })
 
@@ -1429,5 +1427,130 @@ setMethod("describe",
           function(x) {
             colList <- as.list(c(columns(x)))
             sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            dataFrame(sdf)
+          })
+
+#' dropna
+#'
+#' Returns a new DataFrame omitting rows with null values.
+#'
+#' @param x A SparkSQL DataFrame.
+#' @param how "any" or "all".
+#'            if "any", drop a row if it contains any nulls.
+#'            if "all", drop a row only if all its values are null.
+#'            if minNonNulls is specified, how is ignored.
+#' @param minNonNulls If specified, drop rows that have less than
+#'                    minNonNulls non-null values.
+#'                    This overwrites the how parameter.
+#' @param cols Optional list of column names to consider.
+#' @return A DataFrame
+#' 
+#' @rdname nafunctions
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' dropna(df)
+#' }
+setMethod("dropna",
+          signature(x = "DataFrame"),
+          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            how <- match.arg(how)
+            if (is.null(cols)) {
+              cols <- columns(x)
+            }
+            if (is.null(minNonNulls)) {
+              minNonNulls <- if (how == "any") { length(cols) } else { 1 }
+            }
+            
+            naFunctions <- callJMethod(x@sdf, "na")
+            sdf <- callJMethod(naFunctions, "drop",
+                               as.integer(minNonNulls), listToSeq(as.list(cols)))
+            dataFrame(sdf)
+          })
+
+#' @aliases dropna
+#' @export
+setMethod("na.omit",
+          signature(x = "DataFrame"),
+          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            dropna(x, how, minNonNulls, cols)
+          })
+
+#' fillna
+#'
+#' Replace null values.
+#'
+#' @param x A SparkSQL DataFrame.
+#' @param value Value to replace null values with.
+#'              Should be an integer, numeric, character or named list.
+#'              If the value is a named list, then cols is ignored and
+#'              value must be a mapping from column name (character) to 
+#'              replacement value. The replacement value must be an
+#'              integer, numeric or character.
+#' @param cols optional list of column names to consider.
+#'             Columns specified in cols that do not have matching data
+#'             type are ignored. For example, if value is a character, and 
+#'             subset contains a non-character column, then the non-character
+#'             column is simply ignored.
+#' @return A DataFrame
+#' 
+#' @rdname nafunctions
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' fillna(df, 1)
+#' fillna(df, list("age" = 20, "name" = "unknown"))
+#' }
+setMethod("fillna",
+          signature(x = "DataFrame"),
+          function(x, value, cols = NULL) {
+            if (!(class(value) %in% c("integer", "numeric", "character", "list"))) {
+              stop("value should be an integer, numeric, charactor or named list.")
+            }
+            
+            if (class(value) == "list") {
+              # Check column names in the named list
+              colNames <- names(value)
+              if (length(colNames) == 0 || !all(colNames != "")) {
+                stop("value should be an a named list with each name being a column name.")
+              }
+              
+              # Convert to the named list to an environment to be passed to JVM
+              valueMap <- new.env()
+              for (col in colNames) {
+                # Check each item in the named list is of valid type
+                v <- value[[col]]
+                if (!(class(v) %in% c("integer", "numeric", "character"))) {
+                  stop("Each item in value should be an integer, numeric or charactor.")
+                }
+                valueMap[[col]] <- v
+              }
+              
+              # When value is a named list, caller is expected not to pass in cols
+              if (!is.null(cols)) {
+                warning("When value is a named list, cols is ignored!")
+                cols <- NULL
+              }
+              
+              value <- valueMap
+            } else if (is.integer(value)) {
+              # Cast an integer to a numeric
+              value <- as.numeric(value)
+            }
+            
+            naFunctions <- callJMethod(x@sdf, "na")
+            sdf <- if (length(cols) == 0) {
+              callJMethod(naFunctions, "fill", value)
+            } else {
+              callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
+            }
             dataFrame(sdf)
           })

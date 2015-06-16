@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
+class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("StringIndexer") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
@@ -60,5 +59,13 @@ class StringIndexerSuite extends FunSuite with MLlibTestSparkContext {
     // 100 -> 0, 200 -> 2, 300 -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
+  }
+
+  test("StringIndexerModel should keep silent if the input column does not exist.") {
+    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+    val df = sqlContext.range(0L, 10L)
+    assert(indexerModel.transform(df).eq(df))
   }
 }

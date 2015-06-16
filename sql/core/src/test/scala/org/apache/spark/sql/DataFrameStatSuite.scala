@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.SparkFunSuite
 
-class DataFrameStatSuite extends FunSuite  {
-  
-  val sqlCtx = TestSQLContext
-  def toLetter(i: Int): String = (i + 97).toChar.toString
+class DataFrameStatSuite extends SparkFunSuite  {
+
+  private val sqlCtx = org.apache.spark.sql.test.TestSQLContext
+  import sqlCtx.implicits._
+
+  private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
@@ -74,10 +74,10 @@ class DataFrameStatSuite extends FunSuite  {
     val rows: Array[Row] = crosstab.collect().sortBy(_.getString(0))
     assert(rows(0).get(0).toString === "0")
     assert(rows(0).getLong(1) === 2L)
-    assert(rows(0).get(2) === null)
+    assert(rows(0).get(2) === 0L)
     assert(rows(1).get(0).toString === "1")
     assert(rows(1).getLong(1) === 1L)
-    assert(rows(1).get(2) === null)
+    assert(rows(1).get(2) === 0L)
     assert(rows(2).get(0).toString === "2")
     assert(rows(2).getLong(1) === 2L)
     assert(rows(2).getLong(2) === 1L)

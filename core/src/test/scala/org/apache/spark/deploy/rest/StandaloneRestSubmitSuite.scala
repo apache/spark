@@ -25,7 +25,7 @@ import scala.collection.mutable
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.google.common.base.Charsets
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterEach
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -38,7 +38,7 @@ import org.apache.spark.deploy.master.DriverState._
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.
  */
-class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
+class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var actorSystem: Option[ActorSystem] = None
   private var server: Option[RestSubmissionServer] = None
 

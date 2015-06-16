@@ -189,7 +189,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }
   }
 
-  case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -253,8 +253,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
       runSqlHive(

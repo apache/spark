@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
@@ -28,6 +29,7 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.util.Utils
 
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -48,29 +50,27 @@ private[hive] object IsolatedClientLoader {
   def hiveVersion(version: String): HiveVersion = version match {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
+    case "14" | "0.14" | "0.14.0" => hive.v14
   }
 
   private def downloadVersion(version: HiveVersion): Seq[URL] = {
-    val hiveArtifacts =
-      (Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde") ++
-        (if (version.hasBuiltinsJar) "hive-builtins" :: Nil else Nil))
-        .map(a => s"org.apache.hive:$a:${version.fullVersion}") :+
-        "com.google.guava:guava:14.0.1" :+
-        "org.apache.hadoop:hadoop-client:2.4.0"
+    val hiveArtifacts = version.extraDeps ++
+      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
+        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
+      Seq("com.google.guava:guava:14.0.1",
+        "org.apache.hadoop:hadoop-client:2.4.0")
 
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         Some("http://www.datanucleus.org/downloads/maven2"),
-        None)
+        None,
+        exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
 
     // TODO: Remove copy logic.
-    val tempDir = File.createTempFile("hive", "v" + version.toString)
-    tempDir.delete()
-    tempDir.mkdir()
-
+    val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
     tempDir.listFiles().map(_.toURL)
   }
@@ -90,14 +90,14 @@ private[hive] object IsolatedClientLoader {
  *    `ClientInterface`, unless `isolationOn` is set to `false`.
  *
  * @param version The version of hive on the classpath.  used to pick specific function signatures
- *                that are not compatibile accross versions.
+ *                that are not compatible across versions.
  * @param execJars A collection of jar files that must include hive and hadoop.
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
- * @param rootClassLoader The system root classloader.  Must not know about hive classes.
- * @param baseClassLoader The spark classloader that is used to load shared classes.
- *
+ * @param rootClassLoader The system root classloader.
+ * @param baseClassLoader The spark classloader that is used to load shared classes.  Must not know
+ *                        about Hive classes.
  */
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
@@ -110,7 +110,7 @@ private[hive] class IsolatedClientLoader(
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
-  // Check to make sure that the root classloader does not know about Hive.
+  // Check to make sure that the base classloader does not know about Hive.
   assert(Try(baseClassLoader.loadClass("org.apache.hive.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
@@ -129,7 +129,7 @@ private[hive] class IsolatedClientLoader(
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
     name.startsWith(classOf[ClientWrapper].getName) ||
-    name.startsWith(classOf[ReflectionMagic].getName) ||
+    name.startsWith(classOf[Shim].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
   protected def classToPath(name: String): String =
@@ -170,11 +170,16 @@ private[hive] class IsolatedClientLoader(
       .newInstance(version, config)
       .asInstanceOf[ClientInterface]
   } catch {
-    case ReflectionException(cnf: NoClassDefFoundError) =>
-      throw new ClassNotFoundException(
-        s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-         "Please make sure that jars for your version of hive and hadoop are included in the " +
-        s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+    case e: InvocationTargetException =>
+      if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
+        val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
+        throw new ClassNotFoundException(
+          s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
+           "Please make sure that jars for your version of hive and hadoop are included in the " +
+          s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+      } else {
+        throw e
+      }
   } finally {
     Thread.currentThread.setContextClassLoader(baseClassLoader)
   }

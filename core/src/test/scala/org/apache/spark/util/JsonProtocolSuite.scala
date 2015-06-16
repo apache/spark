@@ -25,7 +25,6 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -33,7 +32,7 @@ import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
-class JsonProtocolSuite extends FunSuite {
+class JsonProtocolSuite extends SparkFunSuite {
 
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L

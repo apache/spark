@@ -140,7 +140,8 @@ function renderDagViz(forJob) {
 
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
-    var nodeId = VizConstants.nodePrefix + d3.select(this).text();
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
@@ -150,7 +151,7 @@ function renderDagViz(forJob) {
 /* Render the RDD DAG visualization on the stage page. */
 function renderDagVizForStage(svgContainer) {
   var metadata = metadataContainer().select(".stage-metadata");
-  var dot = metadata.select(".dot-file").text();
+  var dot = metadata.select(".dot-file").text().trim();
   var containerId = VizConstants.graphPrefix + metadata.attr("stage-id");
   var container = svgContainer.append("g").attr("id", containerId);
   renderDot(dot, container, false);
@@ -193,7 +194,7 @@ function renderDagVizForJob(svgContainer) {
       // Use the link from the stage table so it also works for the history server
       var attemptId = 0
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
-        .select("a")
+        .select("a.name-link")
         .attr("href") + "&expandDagViz=true";
       container = svgContainer
         .append("a")
@@ -235,7 +236,7 @@ function renderDagVizForJob(svgContainer) {
     // them separately later. Note that we cannot draw them now because we need to
     // put these edges in a separate container that is on top of all stage graphs.
     metadata.selectAll(".incoming-edge").each(function(v) {
-      var edge = d3.select(this).text().split(","); // e.g. 3,4 => [3, 4]
+      var edge = d3.select(this).text().trim().split(","); // e.g. 3,4 => [3, 4]
       crossStageEdges.push(edge);
     });
   });

@@ -71,8 +71,12 @@ private[spark] object SQLConf {
   // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = "spark.sql.sources.partitionDiscovery.enabled"
 
+  // Whether to perform partition column type inference. Default to true.
+  val PARTITION_COLUMN_TYPE_INFERENCE = "spark.sql.sources.partitionColumnTypeInference.enabled"
+
   // The output committer class used by FSBasedRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
+  // NOTE: This property should be set in Hadoop `Configuration` rather than Spark `SQLConf`
   val OUTPUT_COMMITTER_CLASS = "spark.sql.sources.outputCommitterClass"
 
   // Whether to perform eager analysis when constructing a dataframe.
@@ -157,7 +161,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(HIVE_VERIFY_PARTITIONPATH, "true").toBoolean
 
   /** When true the planner will use the external sort, which may spill to disk. */
-  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
+  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "true").toBoolean
 
   /**
    * Sort merge join would sort the two side of join first, and then iterate both sides together
@@ -167,15 +171,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
 
   /**
-   * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
+   * When set to true, Spark SQL will use the Janino at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
-   * than interpreted evaluation, but there are significant start-up costs due to compilation.
-   * As a result codegen is only beneficial when queries run for a long time, or when the same
-   * expressions are used multiple times.
-   *
-   * Defaults to false as this feature is currently experimental.
+   * than interpreted evaluation, but there are some start-up costs (5-10ms) due to compilation.
    */
-  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "true").toBoolean
 
   /**
    * caseSensitive analysis true by default
@@ -249,6 +249,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def partitionDiscoveryEnabled() =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED, "true").toBoolean
+
+  private[spark] def partitionColumnTypeInferenceEnabled() =
+    getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE, "true").toBoolean
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

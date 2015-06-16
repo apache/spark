@@ -149,7 +149,7 @@ private[spark] abstract class YarnSchedulerBackend(
       }
     }
 
-    override def onStop(): Unit ={
+    override def onStop(): Unit = {
       askAmThreadPool.shutdownNow()
     }
   }

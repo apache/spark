@@ -25,11 +25,9 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 trait SQLTestUtils {
-  val sqlContext: SQLContext
+  def sqlContext: SQLContext
 
-  import sqlContext.{conf, sparkContext}
-
-  protected def configuration = sparkContext.hadoopConfiguration
+  protected def configuration = sqlContext.sparkContext.hadoopConfiguration
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
@@ -39,12 +37,12 @@ trait SQLTestUtils {
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(conf.getConf(key)).toOption)
-    (keys, values).zipped.foreach(conf.setConf)
+    val currentValues = keys.map(key => Try(sqlContext.conf.getConf(key)).toOption)
+    (keys, values).zipped.foreach(sqlContext.conf.setConf)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConf(key, value)
-        case (key, None) => conf.unsetConf(key)
+        case (key, Some(value)) => sqlContext.conf.setConf(key, value)
+        case (key, None) => sqlContext.conf.unsetConf(key)
       }
     }
   }
@@ -75,14 +73,18 @@ trait SQLTestUtils {
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sqlContext.dropTempTable(tableName)
+  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+    try f finally tableNames.foreach(sqlContext.dropTempTable)
   }
 
   /**
    * Drops table `tableName` after calling `f`.
    */
-  protected def withTable(tableName: String)(f: => Unit): Unit = {
-    try f finally sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
+  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        sqlContext.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
   }
 }

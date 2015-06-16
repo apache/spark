@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InternalRow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
@@ -130,7 +130,7 @@ private[sql] class DDLParser(
         }
     }
 
-  protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+  protected lazy val tableCols: Parser[Seq[StructField]] = "(" ~> repsep(column, ",") <~ ")"
 
   /*
    * describe [extended] table avroTable
@@ -138,7 +138,7 @@ private[sql] class DDLParser(
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
-      case e ~ db ~ tbl  =>
+      case e ~ db ~ tbl =>
         val tblIdentifier = db match {
           case Some(dbName) =>
             Seq(dbName, tbl)
@@ -166,12 +166,16 @@ private[sql] class DDLParser(
     }
   )
 
-  protected lazy val optionName: Parser[String] = "[_a-zA-Z][a-zA-Z0-9]*".r ^^ {
+  protected lazy val optionPart: Parser[String] = "[_a-zA-Z][_a-zA-Z0-9]*".r ^^ {
     case name => name
   }
 
+  protected lazy val optionName: Parser[String] = repsep(optionPart, ".") ^^ {
+    case parts => parts.mkString(".")
+  }
+
   protected lazy val pair: Parser[(String, String)] =
-    optionName ~ stringLit ^^ { case k ~ v => (k,v) }
+    optionName ~ stringLit ^^ { case k ~ v => (k, v) }
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
@@ -239,7 +243,7 @@ private[sql] object ResolvedDataSource {
             Some(partitionColumnsSchema(schema, partitionColumns))
           }
 
-          val caseInsensitiveOptions= new CaseInsensitiveMap(options)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPath = new Path(caseInsensitiveOptions("path"))
             SparkHadoopUtil.get.globPath(patternPath).map(_.toString).toArray
@@ -322,19 +326,13 @@ private[sql] object ResolvedDataSource {
           Some(partitionColumnsSchema(data.schema, partitionColumns)),
           caseInsensitiveOptions)
 
-        // For partitioned relation r, r.schema's column ordering is different with the column
-        // ordering of data.logicalPlan. We need a Project to adjust the ordering.
-        // So, inside InsertIntoHadoopFsRelation, we can safely apply the schema of r.schema to
-        // the data.
-        val project =
-          Project(
-            r.schema.map(field => new UnresolvedAttribute(Seq(field.name))),
-            data.logicalPlan)
-
+        // For partitioned relation r, r.schema's column ordering can be different from the column
+        // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+        // will be adjusted within InsertIntoHadoopFsRelation.
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
-            project,
+            data.logicalPlan,
             mode)).toRdd
         r
       case _ =>
@@ -410,7 +408,7 @@ private[sql] case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val resolved = ResolvedDataSource(
       sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
     sqlContext.registerDataFrameAsTable(
@@ -427,7 +425,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
     sqlContext.registerDataFrameAsTable(
@@ -440,7 +438,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
 private[sql] case class RefreshTable(databaseName: String, tableName: String)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     // Refresh the given table's metadata first.
     sqlContext.catalog.refreshTable(databaseName, tableName)
 
@@ -459,7 +457,7 @@ private[sql] case class RefreshTable(databaseName: String, tableName: String)
       sqlContext.cacheManager.cacheQuery(df, Some(tableName))
     }
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 }
 

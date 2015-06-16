@@ -93,7 +93,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved: Boolean =
     childrenResolved &&
-    left.output.zip(right.output).forall { case (l,r) => l.dataType == r.dataType }
+    left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
@@ -226,7 +226,7 @@ case class Window(
  * @param child       Child operator
  */
 case class Expand(
-    projections: Seq[GroupExpression],
+    projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def statistics: Statistics = {
@@ -339,6 +339,9 @@ case class Sample(
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * Returns a new logical plan that dedups input rows.
+ */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
