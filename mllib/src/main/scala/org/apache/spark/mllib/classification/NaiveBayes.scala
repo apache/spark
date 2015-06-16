@@ -142,11 +142,9 @@ class NaiveBayesModel private[mllib] (
   }
 
   private def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
-    val maxLogs = max(prob.toBreeze)
-    val minLogs = min(prob.toBreeze)
-    val normalized = prob.toArray.map(e => (e - minLogs) / (maxLogs - minLogs))
-    val total = normalized.sum
-    (for ((v, i) <- normalized.map(_ / total).zipWithIndex) yield (labels(i), v)).toMap
+    val probabilities = prob.toArray.map(p => math.exp(p / 1000))
+    val probSum = probabilities.sum
+    labels.zip(probabilities.map(_ / probSum)).toMap
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
