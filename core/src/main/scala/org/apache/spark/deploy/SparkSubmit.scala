@@ -736,8 +736,14 @@ private[spark] object SparkSubmitUtils {
   }
 
   /** Path of the local Maven cache. */
-  private[spark] def m2Path: File = new File(System.getProperty("user.home"),
-    ".m2" + File.separator + "repository")
+  private[spark] def m2Path: File = {
+    if (Utils.isTesting) {
+      // test builds delete the maven cache, and this can cause flakiness
+      new File(Utils.createTempDir("mvn2"), ".m2" + File.separator + "repository")
+    } else {
+      new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
+    }
+  }
 
   /**
    * Extracts maven coordinates from a comma-delimited string
