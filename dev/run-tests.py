@@ -107,7 +107,7 @@ def determine_java_executable():
     java_home = os.environ.get("JAVA_HOME")
 
     # check if there is an executable at $JAVA_HOME/bin/java
-    java_exe = which(os.path.join(java_home, "bin/java"))
+    java_exe = which(os.path.join(java_home, "bin", "java"))
     # if the java_exe wasn't set, check for a `java` version on the $PATH
     return java_exe if java_exe else which("java")
 
@@ -146,36 +146,42 @@ def set_title_and_block(title, err_block):
 
 def run_apache_rat_checks():
     set_title_and_block("Running Apache RAT checks", "BLOCK_RAT")
-    run_cmd(["./dev/check-license"])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
 def run_scala_style_checks():
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
-    run_cmd(["./dev/lint-scala"])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
 
 
 def run_python_style_checks():
     set_title_and_block("Running Python style checks", "BLOCK_PYTHON_STYLE")
-    run_cmd(["./dev/lint-python"])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
 
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
     os.environ["PRODUCTION"] = "1 jekyll build"
+    
+    os.chdir(os.path.join(SPARK_HOME, "docs"))    
+    
+    run_cmd(["jekyll", "build"])
+
+    os.chdir(SPARK_HOME)
 
 
 def exec_maven(mvn_args=[]):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    run_cmd(["./build/mvn"] + mvn_args)
+    run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
 
 
 def exec_sbt(sbt_args=[]):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    sbt_cmd = ["./build/sbt"] + sbt_args
+    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
     sbt_output_filter = re.compile("^.*[info].*Resolving" + "|" +
                                    "^.*[warn].*Merging" + "|" +
@@ -285,7 +291,7 @@ def build_apache_spark(build_tool, hadoop_version, changed_modules):
 
 def detect_binary_inop_with_mima():
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd(["./dev/mima"])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")])
 
 
 def identify_changed_modules(test_env):
@@ -435,15 +441,15 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 def run_python_tests():
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    run_cmd(["./python/run-tests"])
+    run_cmd([os.path.join(SPARK_HOME, "python", "run-tests")])
 
 
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
     if which("R"):
-        run_cmd(["./R/install-dev.sh"])
-        run_cmd(["./R/run-tests.sh"])
+        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+        run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
         print "Ignoring SparkR tests as R was not found in PATH"
 
@@ -458,8 +464,8 @@ def main():
     os.chdir(SPARK_HOME)
 
     rm_r(os.path.join(SPARK_HOME, "work"))
-    rm_r(os.path.join(USER_HOME, ".ivy2/local/org.apache.spark"))
-    rm_r(os.path.join(USER_HOME, ".ivy2/cache/org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
 
     os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
 
