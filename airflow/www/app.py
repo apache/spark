@@ -1042,8 +1042,8 @@ class Airflow(BaseView):
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        width = request.args.get('width') or "100%"
-        height = request.args.get('height') or "800"
+        width = request.args.get('width', None) or "100%"
+        height = request.args.get('height', None) or "800"
         blur = conf.getboolean('webserver', 'demo_mode')
         arrange = request.args.get('arrange', "LR")
         dag = dagbag.get_dag(dag_id)
