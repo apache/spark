@@ -20,9 +20,17 @@ package org.apache.spark.sql.catalyst.expressions
 import java.lang.{Long => JLong}
 
 import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
+
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.types._
+
+import scala.math.BigDecimal.RoundingMode
+import scala.math.BigDecimal.RoundingMode._
 
 /**
  * A leaf expression specifically for math constants. Math constants expect no input.
@@ -308,6 +316,118 @@ case class Logarithm(left: Expression, right: Expression)
     logCode + s"""
       if (Double.valueOf(${ev.primitive}).isNaN()) {
         ${ev.isNull} = true;
+        """
+  }
+}
+
+case class Round(left: Expression, right: Expression)
+  extends Expression with trees.BinaryNode[Expression] with Serializable {
+
+  def this(left: Expression) = {
+    this(left, Literal(0))
+  }
+
+  override def nullable: Boolean = left.nullable || right.nullable
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if ((left.dataType.isInstanceOf[NumericType] || left.dataType.isInstanceOf[NullType])
+      && (right.dataType.isInstanceOf[IntegerType] || right.dataType.isInstanceOf[NullType])) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"round accepts numeric types as the value and integer type as the scale")
+    }
+  }
+
+  override def toString: String = s"round($left, $right)"
+
+  override def dataType: DataType = left.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val value = left.eval(input)
+    val scale = right.eval(input)
+    if (value == null || scale == null) {
+      null
+    } else {
+      dataType match {
+        case _: DecimalType => {
+          val result = value.asInstanceOf[Decimal]
+          result.set(result.toBigDecimal, result.precision, scale.asInstanceOf[Integer])
+          result
+        }
+        case FloatType => {
+          BigDecimal.valueOf(value.asInstanceOf[Float].toDouble)
+            .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).floatValue()
+        }
+        case DoubleType => {
+          BigDecimal.valueOf(value.asInstanceOf[Double])
+            .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).doubleValue()
+        }
+        case LongType => {
+          BigDecimal.valueOf(value.asInstanceOf[Long])
+            .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).longValue()
+        }
+        case IntegerType => {
+            BigDecimal.valueOf(value.asInstanceOf[Integer].toInt)
+              .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).intValue()
+          }
+        case ShortType => {
+          BigDecimal.valueOf(value.asInstanceOf[Short])
+            .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).shortValue()
+        }
+        case ByteType => {
+          BigDecimal.valueOf(value.asInstanceOf[Byte])
+            .setScale(scale.asInstanceOf[Integer], RoundingMode.HALF_UP).byteValue()
+        }
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
+    case dt: DecimalType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"$c1.set($c1.toBigDecimal(), $c1.precision(), $c2)")
+    case FloatType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf((double)$c1)" +
+        s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).floatValue()")
+    case DoubleType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf((double)$c1)" +
+      s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).doubleValue()")
+    case LongType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf($c1)" +
+        s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).longValue()")
+    case IntegerType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf((long)$c1)" +
+        s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).intValue()")
+    case ShortType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf((long)$c1)" +
+        s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).shortValue()")
+    case ByteType => defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.math.BigDecimal.valueOf((long)$c1)" +
+        s".setScale(Integer.valueOf($c2), java.math.RoundingMode.HALF_UP).byteValue()")
+  }
+
+  protected def defineCodeGen(
+                               ctx: CodeGenContext,
+                               ev: GeneratedExpressionCode,
+                               f: (String, String) => String): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val resultCode = f(eval1.primitive, eval2.primitive)
+
+    s"""
+      ${eval1.code}
+      boolean ${ev.isNull} = ${eval1.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${eval2.code}
+        if (!${eval2.isNull}) {
+          ${ev.primitive} = $resultCode;
+        } else {
+          ${ev.isNull} = true;
+        }
       }
     """
   }
