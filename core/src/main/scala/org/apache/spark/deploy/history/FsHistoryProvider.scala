@@ -160,7 +160,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
 
-          appInfo.map { app => ui.setAppName(s"${app.name} ($appId)") }
+          appInfo.foreach { app => ui.setAppName(s"${app.name} ($appId)") }
 
           val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
           ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -283,7 +283,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       try {
         val res = replay(fileStatus, bus)
         res match {
-          case Some(r) => logInfo(s"Application log ${r.logPath} loaded successfully.")
+          case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
           case None => logWarning(s"Failed to load application log ${fileStatus.getPath}." +
             "The application may have not started.")
         }
