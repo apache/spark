@@ -24,6 +24,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
@@ -82,13 +83,12 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
     row.setString(1, "Hello")
-    row.setDate(2, Date.valueOf("1970-01-01"))
-    row.setTimestamp(3, Timestamp.valueOf("2015-05-08 08:10:25"))
+    row.update(2, DateUtils.fromJavaDate(Date.valueOf("1970-01-01")))
+    row.update(3, DateUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
     sizeRequired should be (8 + (8 * 4) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length + 8) +
-      16)
+      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length + 8))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
     numBytesWritten should be (sizeRequired)
@@ -97,8 +97,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getString(1) should be ("Hello")
-    unsafeRow.getDate(2) should be (Date.valueOf("1970-01-01"))
-    unsafeRow.getTimestamp(3) should be (Timestamp.valueOf("2015-05-08 08:10:25"))
+    // Date is represented as Int in unsafeRow
+    DateUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("1970-01-01"))
+    // Timestamp is represented as Long in unsafeRow
+    DateUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
+      (Timestamp.valueOf("2015-05-08 08:10:25"))
   }
 
   test("null handling") {

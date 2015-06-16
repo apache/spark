@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
-
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types.StructType
 
 object Row {

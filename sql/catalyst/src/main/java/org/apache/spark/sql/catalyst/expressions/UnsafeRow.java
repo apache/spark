@@ -18,9 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import javax.annotation.Nullable;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -29,7 +26,6 @@ import java.util.Set;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
-import org.apache.spark.sql.catalyst.util.DateUtils;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
@@ -231,16 +227,6 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public void setDate(int ordinal, Date value) {
-    setInt(ordinal, DateUtils.fromJavaDate(value));
-  }
-
-  @Override
-  public void setTimestamp(int ordinal, Timestamp value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public int size() {
     return numFields;
   }
@@ -345,30 +331,6 @@ public final class UnsafeRow extends BaseMutableRow {
   @Override
   public String getString(int i) {
     return getUTF8String(i).toString();
-  }
-
-  @Override
-  public BigDecimal getDecimal(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Date getDate(int i) {
-    final int daysSinceEpoch = getInt(i);
-    return DateUtils.toJavaDate(daysSinceEpoch);
-  }
-
-  @Override
-  public Timestamp getTimestamp(int i) {
-    assertIndexIsValid(i);
-    final long offsetToTimestampSize = getLong(i);
-    final long time =
-      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToTimestampSize);
-    final int nanos =
-      PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offsetToTimestampSize + 8);
-    final Timestamp timestamp = new Timestamp(time);
-    timestamp.setNanos(nanos);
-    return timestamp;
   }
 
   @Override

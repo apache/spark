@@ -275,16 +275,14 @@ private class DateUnsafeColumnWriter private() extends UnsafeColumnWriter {
       target: UnsafeRow,
       column: Int,
       appendCursor: Int): Int = {
-    target.setDate(column, source.getDate(column))
+    target.setInt(column, source.getInt(column))
     0
   }
 }
 
 private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
   def getSize(source: InternalRow, column: Int): Int = {
-    // Although Timestamp is fixed length, it needs 12-byte that is more than 8-byte word per field.
-    // So we need to store it at the variable-length section.
-    16
+    0
   }
 
   override def write(
@@ -292,16 +290,7 @@ private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
       target: UnsafeRow,
       column: Int,
       appendCursor: Int): Int = {
-    val value = DateUtils.toJavaTimestamp(source.get(column).asInstanceOf[Long])
-    val time = value.getTime()
-    val nanos = value.getNanos()
-
-    val baseObject = target.getBaseObject
-    val baseOffset = target.getBaseOffset
-
-    PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + appendCursor, time)
-    PlatformDependent.UNSAFE.putInt(baseObject, baseOffset + appendCursor + 8, nanos)
-    target.setLong(column, appendCursor)
-    16
+    target.setLong(column, source.getLong(column))
+    0
   }
 }

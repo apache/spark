@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
-
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -246,20 +243,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def setString(ordinal: Int, value: String): Unit =
     update(ordinal, UTF8String.fromString(value))
-
-  override def setDate(ordinal: Int, value: java.sql.Date): Unit =
-    setInt(ordinal, DateUtils.fromJavaDate(value))
-
-  override def getDate(i: Int): java.sql.Date = {
-    DateUtils.toJavaDate(values(i).asInstanceOf[MutableInt].value)
-  }
-
-  override def setTimestamp(ordinal: Int, value: java.sql.Timestamp): Unit =
-    setLong(ordinal, DateUtils.fromJavaTimestamp(value))
-
-  override def getTimestamp(i: Int): java.sql.Timestamp = {
-    DateUtils.toJavaTimestamp(values(i).asInstanceOf[MutableLong].value)
-  }
 
   override def getString(ordinal: Int): String = apply(ordinal).toString
 
