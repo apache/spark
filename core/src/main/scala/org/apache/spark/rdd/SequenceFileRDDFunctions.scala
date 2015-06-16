@@ -101,18 +101,17 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
     logInfo("Saving as sequence file of type (" + keyWritableClass.getSimpleName + "," +
       valueWritableClass.getSimpleName + ")" )
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
-    val jobConf = new JobConf(self.context.hadoopConfiguration)
     if (!convertKey && !convertValue) {
-      self.saveAsHadoopFile(path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+      self.saveAsHadoopFile(path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (!convertKey && convertValue) {
       self.map(x => (x._1,anyToWritable(x._2))).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (convertKey && !convertValue) {
       self.map(x => (anyToWritable(x._1),x._2)).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (convertKey && convertValue) {
       self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     }
   }
 }
