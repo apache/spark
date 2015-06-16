@@ -282,7 +282,7 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
-def build_apache_spark(build_tool, hadoop_version, changed_modules):
+def build_apache_spark(build_tool, hadoop_version):
     """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
 
@@ -522,7 +522,7 @@ def main():
     #    build_spark_documentation()
 
     # spark build
-    build_apache_spark(build_tool, hadoop_version, changed_modules)
+    build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
     detect_binary_inop_with_mima()
