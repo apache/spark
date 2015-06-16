@@ -616,9 +616,10 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
             return str(self._model)
 
     def setInitialWeights(self, initialWeights):
-        """Set the initial value of weights.
+        """
+        Set the initial value of weights.
 
-        This must be set before running trainOn and predicOn
+        This must be set before running trainOn and predictOn
         """
         initialWeights = _convert_to_vector(initialWeights)
         self._model = LinearRegressionModel(initialWeights, 0)
@@ -643,25 +644,21 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
         dstream.foreachRDD(update)
 
     def predictOn(self, dstream):
-        """Make predictions on a dstream of Vectors.
+        """
+        Make predictions on a dstream of Vectors.
 
         Returns a transformed dstream object.
         """
-        def predict(ds):
-            return self._model.predict(ds)
-
         self._validate_dstream(dstream)
-        return dstream.map(predict)
+        return dstream.map(lambda x: self._model.predict(x))
 
     def predictOnValues(self, dstream):
         """Make predictions on a keyed dstream where the values are Vectors.
 
         Returns a transformed dstream object.
         """
-        def predict(ds):
-            return self._model.predict(ds)
         self._validate_dstream(dstream)
-        return dstream.mapValues(predict)
+        return dstream.mapValues(lambda x: self._model.predict(x))
 
 
 def _test():
