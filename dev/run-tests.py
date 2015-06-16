@@ -107,7 +107,7 @@ def determine_java_executable():
     java_home = os.environ.get("JAVA_HOME")
 
     # check if there is an executable at $JAVA_HOME/bin/java
-    java_exe = which(os.path.join(java_home, "bin", "java"))
+    java_exe = which(os.path.join(java_home, "bin", "java")) if java_home else None
     # if the java_exe wasn't set, check for a `java` version on the $PATH
     return java_exe if java_exe else which("java")
 
