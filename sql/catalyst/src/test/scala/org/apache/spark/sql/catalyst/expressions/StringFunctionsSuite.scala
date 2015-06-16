@@ -237,14 +237,15 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("base64/unbase64 for string") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
+    val bytes = Array[Byte](1, 2, 3, 4)
 
-    checkEvaluation(Base64(Literal(Array[Byte](1,2,3,4))), "AQIDBA==", create_row("abdef"))
+    checkEvaluation(Base64(Literal(bytes)), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal.create(null, StringType))), null, create_row("abdef"))
     checkEvaluation(Base64(UnBase64(a)), "AQIDBA==", create_row("AQIDBA=="))
 
-    checkEvaluation(Base64(b), "AQIDBA==", create_row(Array[Byte](1,2,3,4)))
+    checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
     checkEvaluation(Base64(b), "", create_row(Array[Byte]()))
     checkEvaluation(Base64(b), null, create_row(null))
     checkEvaluation(Base64(Literal.create(null, StringType)), null, create_row("abdef"))
@@ -256,14 +257,15 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("encode/decode for string") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
-
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(
       Decode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
     checkEvaluation(
       Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
       Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
-
+    // scalastyle:on
     checkEvaluation(Encode(a, Literal("utf-8")), null, create_row(null))
     checkEvaluation(Encode(Literal.create(null, StringType), Literal("utf-8")), null)
     checkEvaluation(Encode(a, Literal.create(null, StringType)), null, create_row(""))

@@ -251,6 +251,8 @@ class DataFrameFunctionsSuite extends QueryTest {
 
   test("string encode/decode function") {
     val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
+    // scalastyle:off  
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
     checkAnswer(
       df.select(encode($"a", $"b"), encode("a", "b"), decode($"c", $"b"), decode("c", "b")),
@@ -259,5 +261,6 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("encode(a, b)", "decode(c, b)"),
       Row(bytes, "大千世界"))
+    // scalastyle:on
   }
 }
