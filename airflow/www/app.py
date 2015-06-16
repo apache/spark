@@ -1577,7 +1577,7 @@ class ChartModelView(DataProfilingMixin, ModelView):
     form_columns = (
         'label',
         'owner',
-        'db',
+        'conn_id',
         'chart_type',
         'show_datatable',
         'x_is_date',
@@ -1600,6 +1600,7 @@ class ChartModelView(DataProfilingMixin, ModelView):
         'chart_type': "The type of chart to be displayed",
         'sql': "Can include {{ templated_fields }} and {{ macros }}.",
         'height': "Height of the chart, in pixels.",
+        'conn_id': "Source database to run the query against",
         'x_is_date': (
             "Whether the X axis should be casted as a date field. Expect most "
             "intelligible date formats to get casted properly."
@@ -1627,7 +1628,6 @@ class ChartModelView(DataProfilingMixin, ModelView):
         ),
     }
     column_labels = {
-        'db': "Source Database",
         'sql': "SQL",
         'height': "Chart Height",
         'sql_layout': "SQL Layout",
@@ -1651,6 +1651,13 @@ class ChartModelView(DataProfilingMixin, ModelView):
             ('series', 'SELECT series, x, y FROM ...'),
             ('columns', 'SELECT x, y (series 1), y (series 2), ... FROM ...'),
         ],
+        'conn_id': [
+            (c.conn_id, c.conn_id)
+            for c in (
+                Session().query(models.Connection.conn_id)
+                .group_by(models.Connection.conn_id)
+                )
+            ]
     }
 
     def on_model_change(self, form, model, is_created=True):
