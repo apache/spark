@@ -41,8 +41,8 @@ import org.apache.spark.util.StatCounter
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
-    with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol with
-    HasIntercept
+    with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
+    with HasOptionalIntercept
 
 /**
  * :: Experimental ::
