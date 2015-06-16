@@ -198,7 +198,8 @@ class LinearRegressionWithSGD(object):
               initialWeights=None, regParam=0.0, regType=None, intercept=False,
               validateData=True):
         """
-        Train a linear regression model using Stochastic Gradient Descent.
+        Train a linear regression model using Stochastic Gradient
+        Descent (SGD).
         This solves the least squares regression formulation
                 f(weights) = 1/n ||A weights-y||^2^
         (which is the mean squared error).
