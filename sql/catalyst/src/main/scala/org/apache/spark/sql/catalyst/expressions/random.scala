@@ -36,7 +36,11 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize it.
    */
-  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
+  @transient protected lazy val partitionId = TaskContext.get() match {
+    case null => 0
+    case _ => TaskContext.get().partitionId()
+  }
+  @transient protected lazy val rng = new XORShiftRandom(seed + partitionId)
 
   override type EvaluatedType = Double
 
