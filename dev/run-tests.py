@@ -165,7 +165,13 @@ def build_spark_documentation():
 
     os.chdir(os.path.join(SPARK_HOME, "docs"))
 
-    run_cmd(["jekyll", "build"])
+    jekyll_bin = which("jekyll")
+
+    if not jekyll_bin:
+        print "[warn] Cannot find a version of `jekyll` on the system; please",
+        print "install one and retry to build documentation."
+    else:
+        run_cmd([jekyll_bin, "build"])
 
     os.chdir(SPARK_HOME)
 
@@ -498,16 +504,16 @@ def main():
     print "[info] Using build tool", build_tool, "with profile", hadoop_version,
     print "under environment", test_env
 
+    # determine high level changes
+    changed_modules = identify_changed_modules(test_env)
+    print "[info] Found the following changed modules:", ", ".join(changed_modules)
+
     # license checks
     run_apache_rat_checks()
 
     # style checks
     run_scala_style_checks()
     run_python_style_checks()
-
-    # determine high level changes
-    changed_modules = identify_changed_modules(test_env)
-    print "[info] Found the following changed modules:", ", ".join(changed_modules)
 
     # determine if docs were changed and if we're inside the amplab environment
     if "DOCS" in changed_modules and test_env == "amplab_jenkins":
