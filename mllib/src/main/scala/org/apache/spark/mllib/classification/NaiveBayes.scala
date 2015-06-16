@@ -144,7 +144,7 @@ class NaiveBayesModel private[mllib] (
   private def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
     val probArray = prob.toArray
     val maxLog = probArray.max
-    val probabilities = probArray.map(lp => math.exp(lp / math.abs(maxLog)))
+    val probabilities = probArray.map(lp => math.exp(lp - maxLog))
     val probSum = probabilities.sum
     labels.zip(probabilities.map(_ / probSum)).toMap
   }
