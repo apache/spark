@@ -72,12 +72,9 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
   }
 
   /** Return all the node which are cached. */
-  def getCachedNode: Seq[RDDOperationNode] = {
-    var cachedNodes = new ListBuffer[RDDOperationNode]
-    cachedNodes ++= (_childNodes.filter(_.cached))
-    for(cluster <- _childClusters) {
-      cachedNodes ++= (cluster._childNodes.filter(_.cached))
-    }
+  def getCachedNodes: Seq[RDDOperationNode] = {
+    val cachedNodes = _childNodes.filter(_.cached)
+    _childClusters.foreach(cluster => cachedNodes ++= cluster._childNodes.filter(_.cached))
     cachedNodes
   }
 }
