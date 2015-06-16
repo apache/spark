@@ -429,6 +429,7 @@ class BackfillJob(BaseJob):
             dag, start_date=None, end_date=None, mark_success=False,
             include_adhoc=False,
             donot_pickle=False,
+            ignore_dependencies=False,
             *args, **kwargs):
         self.dag = dag
         dag.override_start_date(start_date)
@@ -438,6 +439,7 @@ class BackfillJob(BaseJob):
         self.mark_success = mark_success
         self.include_adhoc = include_adhoc
         self.donot_pickle = donot_pickle
+        self.ignore_dependencies = ignore_dependencies
         super(BackfillJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
@@ -503,7 +505,8 @@ class BackfillJob(BaseJob):
                         ti,
                         mark_success=self.mark_success,
                         task_start_date=self.bf_start_date,
-                        pickle_id=pickle_id)
+                        pickle_id=pickle_id,
+                        ignore_dependencies=self.ignore_dependencies)
                     ti.state = State.RUNNING
                     if key not in started:
                         started.append(key)

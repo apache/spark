@@ -59,7 +59,8 @@ def backfill(args):
         end_date=args.end_date,
         mark_success=args.mark_success,
         include_adhoc=args.include_adhoc,
-        local=args.local)
+        local=args.local,
+        ignore_dependencies=args.ignore_dependencies)
 
 
 def run(args):
