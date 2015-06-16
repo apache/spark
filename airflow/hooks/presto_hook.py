@@ -1,10 +1,7 @@
-from airflow import settings
-from airflow.utils import AirflowException
-from airflow.models import Connection
-from airflow.hooks.base_hook import BaseHook
-
 from pyhive import presto
 from pyhive.exc import DatabaseError
+
+from airflow.hooks.base_hook import BaseHook
 
 import logging
 logging.getLogger("pyhive").setLevel(logging.INFO)
@@ -23,39 +20,21 @@ class PrestoHook(BaseHook):
     >>> ph.get_records(sql)
     [[340698]]
     """
-    def __init__(self, host=None, db=None, port=None,
-                 presto_conn_id='presto_default'):
-        self.user = 'airflow'
-        if not presto_conn_id:
-            self.host = host
-            self.db = db
-            self.port = port
-        else:
-            session = settings.Session()
-            db = session.query(
-                Connection).filter(
-                    Connection.conn_id == presto_conn_id)
-            if db.count() == 0:
-                raise AirflowException("The presto_conn_id provided isn't defined")
-            else:
-                db = db.all()[0]
-            self.host = db.host
-            self.db = db.schema
-            self.catalog = 'hive'
-            self.port = db.port
-            self.cursor = presto.connect(host=db.host, port=db.port,
-                                         username=self.user,
-                                         catalog=self.catalog,
-                                         schema=db.schema).cursor()
-            session.close()    # currently only a pass in pyhive
+    def __init__(self, presto_conn_id='presto_default'):
+        self.presto_conn_id = presto_conn_id
+    def get_conn(self):
+        """Returns a connection object"""
+        db = self.get_connection(self.presto_conn_id)
+        return presto.connect(
+            host=db.host,
+            port=db.port,
+            username=db.login,
+            catalog=db.extra_dejson.get('catalog', 'hive'),
+            schema=db.schema)
 
     def get_cursor(self):
-        """
-
-        Returns a cursor.
-        """
-
-        return self.cursor
+        """Returns a cursor"""
+        return self.get_conn().cursor()
 
     @staticmethod
     def _strip_sql(sql):
@@ -63,13 +42,12 @@ class PrestoHook(BaseHook):
 
     def get_records(self, hql, parameters=None):
         """
-
         Get a set of records from Presto
         """
-
+        cursor = self.get_cursor()
         try:
-            self.cursor.execute(self._strip_sql(hql), parameters)
-            records = self.cursor.fetchall()
+            cursor.execute(self._strip_sql(hql), parameters)
+            records = cursor.fetchall()
         except DatabaseError as e:
             obj = eval(str(e))
             raise PrestoException(obj['message'])
@@ -77,14 +55,13 @@ class PrestoHook(BaseHook):
 
     def get_first(self, hql, parameters=None):
         """
-
         Returns only the first row, regardless of how many rows the query
         returns.
         """
-
+        cursor = self.get_cursor()
         try:
-            self.cursor.execute(self._strip_sql(hql), parameters)
-            record = self.cursor.fetchone()
+            cursor.execute(self._strip_sql(hql), parameters)
+            record = cursor.fetchone()
         except DatabaseError as e:
             obj = eval(str(e))
             raise PrestoException(obj['message'])
@@ -92,10 +69,8 @@ class PrestoHook(BaseHook):
 
     def get_pandas_df(self, hql, parameters=None):
         """
-
         Get a pandas dataframe from a sql query.
         """
-
         import pandas
         cursor = self.get_cursor()
         cursor.execute(self._strip_sql(hql), parameters)
@@ -114,8 +89,7 @@ class PrestoHook(BaseHook):
 
     def run(self, hql, parameters=None):
         """
-
         Execute the statement against Presto. Can be used to create views.
         """
-
-        self.cursor.execute(self._strip_sql(hql), parameters)
+        cursor = self.get_cursor()
+        cursor.execute(self._strip_sql(hql), parameters)

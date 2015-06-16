@@ -325,6 +325,18 @@ class Connection(Base):
     def __repr__(self):
         return self.conn_id
 
+    @property
+    def extra_dejson(self):
+        """Returns the extra property by deserializing json"""
+        obj = {}
+        try:
+            obj = json.loads(self.extra)
+        except Exception as e:
+            logging.exception(e)
+            logging.error(
+                "Failed parsing the json for conn_id {}".format(self.conn_id))
+        return obj
+
 
 class DagPickle(Base):
     """
