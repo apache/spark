@@ -1736,9 +1736,6 @@ class Chart(Base):
     owner = relationship(
         "User", cascade=False, cascade_backrefs=False, backref='charts')
     x_is_date = Column(Boolean, default=True)
-    db = relationship(
-        "Connection",
-        primaryjoin='Chart.conn_id == foreign(Connection.conn_id)')
     iteration_no = Column(Integer, default=0)
     last_modified = Column(DateTime, default=datetime.now())
 
