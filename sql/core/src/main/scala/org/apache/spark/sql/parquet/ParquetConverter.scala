@@ -79,7 +79,7 @@ private[sql] object CatalystConverter {
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
   type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = Row
+  type StructScalaType[T] = InternalRow
   type MapScalaType[K, V] = Map[K, V]
 
   protected[parquet] def createConverter(
@@ -240,7 +240,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    *
    * @return
    */
-  def getCurrentRecord: Row = throw new UnsupportedOperationException
+  def getCurrentRecord: InternalRow = throw new UnsupportedOperationException
 
   /**
    * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
@@ -275,7 +275,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
 
 /**
  * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
+ * to a [[org.apache.spark.sql.catalyst.expressions.InternalRow]] object.
  *
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
@@ -284,7 +284,7 @@ private[parquet] class CatalystGroupConverter(
     protected[parquet] val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var current: ArrayBuffer[Any],
-    protected[parquet] var buffer: ArrayBuffer[Row])
+    protected[parquet] var buffer: ArrayBuffer[InternalRow])
   extends CatalystConverter {
 
   def this(schema: Array[FieldType], index: Int, parent: CatalystConverter) =
@@ -293,7 +293,7 @@ private[parquet] class CatalystGroupConverter(
       index,
       parent,
       current = null,
-      buffer = new ArrayBuffer[Row](
+      buffer = new ArrayBuffer[InternalRow](
         CatalystArrayConverter.INITIAL_ARRAY_SIZE))
 
   /**
@@ -309,7 +309,7 @@ private[parquet] class CatalystGroupConverter(
 
   override val size = schema.size
 
-  override def getCurrentRecord: Row = {
+  override def getCurrentRecord: InternalRow = {
     assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
     // TODO: use iterators if possible
     // Note: this will ever only be called in the root converter when the record has been
@@ -347,7 +347,7 @@ private[parquet] class CatalystGroupConverter(
 
 /**
  * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object. Note that his
+ * to a [[org.apache.spark.sql.catalyst.expressions.InternalRow]] object. Note that his
  * converter is optimized for rows of primitive types (non-nested records).
  */
 private[parquet] class CatalystPrimitiveRowConverter(
@@ -373,7 +373,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override val parent = null
 
   // Should be only called in root group converter!
-  override def getCurrentRecord: Row = current
+  override def getCurrentRecord: InternalRow = current
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 

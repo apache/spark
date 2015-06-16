@@ -27,10 +27,10 @@ import org.apache.spark.unsafe.types.UTF8String
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CreateStruct") {
-    val row = Row(1, 2, 3)
+    val row = InternalRow(1, 2, 3)
     val c1 = 'a.int.at(0).as("a")
     val c3 = 'c.int.at(2).as("c")
-    checkEvaluation(CreateStruct(Seq(c1, c3)), Row(1, 3), row)
+    checkEvaluation(CreateStruct(Seq(c1, c3)), InternalRow(1, 3), row)
   }
 
   test("complex type") {

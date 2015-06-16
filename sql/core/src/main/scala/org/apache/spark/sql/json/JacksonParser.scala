@@ -35,7 +35,7 @@ private[sql] object JacksonParser {
   def apply(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
     parseJson(json, schema, columnNameOfCorruptRecords)
   }
 
@@ -130,7 +130,10 @@ private[sql] object JacksonParser {
    *
    * Fields in the json that are not defined in the requested schema will be dropped.
    */
-  private def convertObject(factory: JsonFactory, parser: JsonParser, schema: StructType): Row = {
+  private def convertObject(
+      factory: JsonFactory,
+      parser: JsonParser,
+      schema: StructType): InternalRow = {
     val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
@@ -176,9 +179,9 @@ private[sql] object JacksonParser {
   private def parseJson(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
 
-    def failedRecord(record: String): Seq[Row] = {
+    def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
       val row = new GenericMutableRow(schema.length)
       for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
@@ -202,7 +205,7 @@ private[sql] object JacksonParser {
           // convertField wrap an object into a single value array when necessary.
           convertField(factory, parser, ArrayType(schema)) match {
             case null => failedRecord(record)
-            case list: Seq[Row @unchecked] => list
+            case list: Seq[InternalRow @unchecked] => list
             case _ =>
               sys.error(
                 s"Failed to parse record $record. Please make sure that each line of the file " +

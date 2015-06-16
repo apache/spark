@@ -191,7 +191,7 @@ private[spark] object SQLConf {
       "aggregations.")
 
   val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
       " a specific query. For some queries with complicated expression this option can lead to " +
       "significant speed-ups. However, for simple queries this can actually slow down query " +
@@ -410,13 +410,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
   /**
-   * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
+   * When set to true, Spark SQL will use the Janino at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
-   * than interpreted evaluation, but there are significant start-up costs due to compilation.
-   * As a result codegen is only beneficial when queries run for a long time, or when the same
-   * expressions are used multiple times.
-   *
-   * Defaults to false as this feature is currently experimental.
+   * than interpreted evaluation, but there are some start-up costs (5-10ms) due to compilation.
    */
   private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED)
 

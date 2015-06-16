@@ -38,7 +38,7 @@ private[sql] object JsonRDD extends Logging {
   private[sql] def jsonStringToRow(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
     parseJson(json, columnNameOfCorruptRecords).map(parsed => asRow(parsed, schema))
   }
 
@@ -434,7 +434,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def asRow(json: Map[String, Any], schema: StructType): Row = {
+  private def asRow(json: Map[String, Any], schema: StructType): InternalRow = {
     // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {

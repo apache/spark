@@ -20,9 +20,8 @@ package org.apache.spark.sql.columnar
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, TestData}
+import org.apache.spark.sql.{QueryTest, Row, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
 class InMemoryColumnarQuerySuite extends QueryTest {

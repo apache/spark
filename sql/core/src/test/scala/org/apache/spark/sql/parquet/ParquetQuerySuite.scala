@@ -20,15 +20,13 @@ package org.apache.spark.sql.parquet
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 /**
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
   import sqlContext.sql
 
   test("simple select queries") {

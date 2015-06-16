@@ -18,16 +18,15 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{SQLConf, execution}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLConf, execution}
 
 
 class PlannerSuite extends SparkFunSuite {

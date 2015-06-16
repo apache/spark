@@ -46,7 +46,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InternalRow, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
@@ -54,7 +54,7 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 /**
  * :: DeveloperApi ::
  * Parquet table scan operator. Imports the file that backs the given
- * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
+ * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[InternalRow]``.
  */
 private[sql] case class ParquetTableScan(
     attributes: Seq[Attribute],
@@ -77,7 +77,7 @@ private[sql] case class ParquetTableScan(
     }
   }.toArray
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     import org.apache.parquet.filter2.compat.FilterCompat.FilterPredicateCompat
 
     val sc = sqlContext.sparkContext
@@ -125,7 +125,7 @@ private[sql] case class ParquetTableScan(
         sc,
         classOf[FilteringParquetRowInputFormat],
         classOf[Void],
-        classOf[Row],
+        classOf[InternalRow],
         conf)
 
     if (requestedPartitionOrdinals.nonEmpty) {
@@ -154,9 +154,9 @@ private[sql] case class ParquetTableScan(
             .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
         if (primitiveRow) {
-          new Iterator[Row] {
+          new Iterator[InternalRow] {
             def hasNext: Boolean = iter.hasNext
-            def next(): Row = {
+            def next(): InternalRow = {
               // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
               val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
@@ -173,12 +173,12 @@ private[sql] case class ParquetTableScan(
         } else {
           // Create a mutable row since we need to fill in values from partition columns.
           val mutableRow = new GenericMutableRow(outputSize)
-          new Iterator[Row] {
+          new Iterator[InternalRow] {
             def hasNext: Boolean = iter.hasNext
-            def next(): Row = {
+            def next(): InternalRow = {
               // We are using CatalystGroupConverter and it returns a GenericRow.
               // Since GenericRow is not mutable, we just cast it to a Row.
-              val row = iter.next()._2.asInstanceOf[Row]
+              val row = iter.next()._2.asInstanceOf[InternalRow]
 
               var i = 0
               while (i < row.size) {
@@ -258,7 +258,7 @@ private[sql] case class InsertIntoParquetTable(
   /**
    * Inserts all rows into the Parquet file.
    */
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
     // and incompatible schema the execution will fail. It would be nice
@@ -321,13 +321,13 @@ private[sql] case class InsertIntoParquetTable(
    * @param conf A [[org.apache.hadoop.conf.Configuration]].
    */
   private def saveAsHadoopFile(
-      rdd: RDD[Row],
+      rdd: RDD[InternalRow],
       path: String,
       conf: Configuration) {
     val job = new Job(conf)
     val keyType = classOf[Void]
     job.setOutputKeyClass(keyType)
-    job.setOutputValueClass(classOf[Row])
+    job.setOutputValueClass(classOf[InternalRow])
     NewFileOutputFormat.setOutputPath(job, new Path(path))
     val wrappedConf = new SerializableWritable(job.getConfiguration)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
@@ -342,7 +342,7 @@ private[sql] case class InsertIntoParquetTable(
           .findMaxTaskId(NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration) + 1
       }
 
-    def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
+    def writeShard(context: TaskContext, iter: Iterator[InternalRow]): Int = {
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
         context.attemptNumber)
@@ -381,7 +381,7 @@ private[sql] case class InsertIntoParquetTable(
  * to imported ones.
  */
 private[parquet] class AppendingParquetOutputFormat(offset: Int)
-  extends org.apache.parquet.hadoop.ParquetOutputFormat[Row] {
+  extends org.apache.parquet.hadoop.ParquetOutputFormat[InternalRow] {
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
   var committer: OutputCommitter = null
@@ -434,25 +434,25 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
  * RecordFilter we want to use.
  */
 private[parquet] class FilteringParquetRowInputFormat
-  extends org.apache.parquet.hadoop.ParquetInputFormat[Row] with Logging {
+  extends org.apache.parquet.hadoop.ParquetInputFormat[InternalRow] with Logging {
 
   private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
       inputSplit: InputSplit,
-      taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
+      taskAttemptContext: TaskAttemptContext): RecordReader[Void, InternalRow] = {
 
     import org.apache.parquet.filter2.compat.FilterCompat.NoOpFilter
 
-    val readSupport: ReadSupport[Row] = new RowReadSupport()
+    val readSupport: ReadSupport[InternalRow] = new RowReadSupport()
 
     val filter = ParquetInputFormat.getFilter(ContextUtil.getConfiguration(taskAttemptContext))
     if (!filter.isInstanceOf[NoOpFilter]) {
-      new ParquetRecordReader[Row](
+      new ParquetRecordReader[InternalRow](
         readSupport,
         filter)
     } else {
-      new ParquetRecordReader[Row](readSupport)
+      new ParquetRecordReader[InternalRow](readSupport)
     }
   }
 

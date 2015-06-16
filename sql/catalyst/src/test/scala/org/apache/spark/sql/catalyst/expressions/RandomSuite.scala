@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.expressions.{LeafExpression, InternalRow}
-import org.apache.spark.sql.types.{IntegerType, DataType}
+import org.scalatest.Matchers._
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 
-/**
- * Expression that returns the current partition id of the Spark task.
- */
-private[sql] case object SparkPartitionID extends LeafExpression {
+class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = IntegerType
-
-  override def eval(input: InternalRow): Int = TaskContext.get().partitionId()
+  test("random") {
+    val row = create_row(1.1, 2.0, 3.1, null)
+    checkDoubleEvaluation(Rand(30), (0.7363714192755834 +- 0.001), row)
+  }
 }

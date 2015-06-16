@@ -55,7 +55,7 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd)
@@ -72,8 +72,8 @@ case class ScriptTransformation(
 
       val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
 
-      val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
-        var cacheRow: Row = null
+      val iterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
+        var cacheRow: InternalRow = null
         var curLine: String = null
         var eof: Boolean = false
 
@@ -90,7 +90,7 @@ case class ScriptTransformation(
           }
         }
 
-        def deserialize(): Row = {
+        def deserialize(): InternalRow = {
           if (cacheRow != null) return cacheRow
 
           val mutableRow = new SpecificMutableRow(output.map(_.dataType))
@@ -120,7 +120,7 @@ case class ScriptTransformation(
           }
         }
 
-        override def next(): Row = {
+        override def next(): InternalRow = {
           if (!hasNext) {
             throw new NoSuchElementException
           }
