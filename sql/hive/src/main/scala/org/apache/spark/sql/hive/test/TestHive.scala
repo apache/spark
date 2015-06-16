@@ -82,7 +82,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
-  private lazy val temporaryConfig = newTemporaryConfiguration()
+  private lazy val temporaryConfig = newTemporaryConfiguration()._2
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
