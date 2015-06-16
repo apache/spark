@@ -50,7 +50,7 @@ case class Md5(child: Expression)
     val value = child.eval(input)
     if (value == null) {
       null
-    } else{
+    } else {
       UTF8String.fromString(DigestUtils.md5Hex(value.asInstanceOf[Array[Byte]]))
     }
   }
