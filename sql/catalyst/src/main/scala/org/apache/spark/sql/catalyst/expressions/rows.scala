@@ -37,7 +37,6 @@ trait MutableRow extends InternalRow {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  // TODO(davies): add setDecimal()
 }
 
 /**
