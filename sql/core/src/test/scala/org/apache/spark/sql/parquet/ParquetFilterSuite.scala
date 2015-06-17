@@ -318,7 +318,7 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
@@ -347,7 +347,7 @@ class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with Before
   }
 
   override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("SPARK-6742: don't push down predicates which reference partition columns") {

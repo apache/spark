@@ -432,7 +432,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case (query, joinClass) => assertJoin(query, joinClass)
     }
 
-    ctx.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp)
+    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp)
     ctx.sql("UNCACHE TABLE testData")
   }
 

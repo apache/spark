@@ -21,6 +21,8 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.sql.SQLConf.SQLConfEntry
+
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -79,6 +81,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def setConf(props: Properties): Unit = conf.setConf(props)
 
+  /** Set the given Spark SQL configuration property. */
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+
   /**
    * Set the given Spark SQL configuration property.
    *
@@ -94,6 +99,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.0.0
    */
   def getConf(key: String): String = conf.getConfString(key)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue` in [[SQLConfEntry]].
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * desired one.
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+    conf.getConf(entry, defaultValue)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set

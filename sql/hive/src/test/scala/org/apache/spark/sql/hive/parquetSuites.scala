@@ -206,7 +206,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     super.afterAll()
     sql("DROP TABLE IF EXISTS test_parquet")
 
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("scan an empty parquet table") {
@@ -551,7 +551,7 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("MetastoreRelation in InsertIntoTable will not be converted") {
@@ -697,7 +697,7 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("values in arrays and maps stored in parquet are always nullable") {
@@ -755,7 +755,7 @@ class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }
 

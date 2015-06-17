@@ -23,6 +23,7 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
@@ -366,7 +367,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  /* A catalyst metadata catalog that points to the Hive Metastore. */
+  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+    setConf(entry.key, entry.stringConverter(value))
+  }
+
+    /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
   override protected[sql] lazy val catalog =
     new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog

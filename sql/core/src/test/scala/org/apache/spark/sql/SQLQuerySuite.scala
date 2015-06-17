@@ -180,7 +180,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
-    sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -277,7 +277,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         Row(0, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
-      sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
@@ -470,41 +470,41 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("sorting") {
     val before = sqlContext.conf.externalSortEnabled
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, false)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
     sortTest()
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, before)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
   }
 
   test("external sorting") {
     val before = sqlContext.conf.externalSortEnabled
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, true)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
     sortTest()
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, before)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
   }
 
   test("SPARK-6927 sorting with codegen on") {
     val externalbefore = sqlContext.conf.externalSortEnabled
     val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, false)
-    sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     try{
       sortTest()
     } finally {
-      sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
+      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
     val externalbefore = sqlContext.conf.externalSortEnabled
     val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
-    sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, true)
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
     try {
       sortTest()
     } finally {
-      sqlContext.conf.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
+      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
@@ -1330,12 +1330,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    sqlContext.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    sqlContext.conf.setConf(SQLConf.CASE_SENSITIVE, true)
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
