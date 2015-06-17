@@ -285,7 +285,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = transformChildrenUp(rule);
+    val afterRuleOnChildren = transformChildrenUp(rule)
     if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
