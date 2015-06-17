@@ -122,8 +122,8 @@ private object UnsafeColumnWriter {
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
-      case DateType => DateUnsafeColumnWriter
-      case TimestampType => TimestampUnsafeColumnWriter
+      case DateType => IntUnsafeColumnWriter
+      case TimestampType => LongUnsafeColumnWriter
       case t =>
         throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
     }
@@ -141,8 +141,6 @@ private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
 private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
 private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
-private object DateUnsafeColumnWriter extends DateUnsafeColumnWriter
-private object TimestampUnsafeColumnWriter extends TimestampUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
@@ -262,35 +260,5 @@ private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter {
     )
     target.setLong(column, appendCursor)
     8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
-  }
-}
-
-private class DateUnsafeColumnWriter private() extends UnsafeColumnWriter {
-  def getSize(source: InternalRow, column: Int): Int = {
-    0
-  }
-
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
-    target.setInt(column, source.getInt(column))
-    0
-  }
-}
-
-private class TimestampUnsafeColumnWriter private() extends UnsafeColumnWriter {
-  def getSize(source: InternalRow, column: Int): Int = {
-    0
-  }
-
-  override def write(
-      source: InternalRow,
-      target: UnsafeRow,
-      column: Int,
-      appendCursor: Int): Int = {
-    target.setLong(column, source.getLong(column))
-    0
   }
 }
