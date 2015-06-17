@@ -3,6 +3,7 @@ Imports operators dynamically while keeping the package API clean,
 abstracting the underlying modules
 '''
 from airflow.utils import import_module_attrs as _import_module_attrs
+from airflow.models import BaseOperator as _BaseOperator
 
 _operators = {
     'bash_operator': ['BashOperator'],
@@ -37,3 +38,9 @@ _operators = {
     }
 
 _import_module_attrs(globals(), _operators)
+
+def integrate_plugins():
+    """Integrate plugins to the context"""
+    from airflow.plugins_manager import get_plugins
+    for _plugin in get_plugins(_BaseOperator):
+        globals()[_plugin.__name__] = _plugin

@@ -45,6 +45,19 @@ current_user = login.current_user
 logout_user = login.logout_user
 
 
+from airflow import default_login as login
+if conf.getboolean('webserver', 'AUTHENTICATE'):
+    try:
+        # Environment specific login
+        import airflow_login as login
+    except ImportError:
+        logging.error(
+            "authenticate is set to True in airflow.cfg, "
+            "but airflow_login failed to import")
+login_required = login.login_required
+current_user = login.current_user
+logout_user = login.logout_user
+
 AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
@@ -1762,3 +1775,14 @@ class PoolModelView(SuperUserMixin, ModelView):
     named_filter_urls = True
 mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)
+
+
+
+def integrate_plugins():
+    """Integrate plugins to the context"""
+    from airflow.plugins_manager import get_plugins, register_templates_folders
+    from airflow import AirflowViewPlugin
+    for view in get_plugins(AirflowViewPlugin, expect_class=False):
+        admin.add_view(view)
+    register_templates_folders(app)
+integrate_plugins()

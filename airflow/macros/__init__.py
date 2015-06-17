@@ -44,3 +44,11 @@ def ds_format(ds, input_format, output_format):
     '2015-01-05'
     """
     return datetime.strptime(ds, input_format).strftime(output_format)
+
+
+def integrate_plugins():
+    """Integrate plugins to the context"""
+    from airflow.plugins_manager import get_plugins
+    from airflow import AirflowMacroPlugin
+    for _plugin in get_plugins(AirflowMacroPlugin, expect_class=False):
+        globals()[_plugin.namespace] = _plugin

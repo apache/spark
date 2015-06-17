@@ -35,4 +35,5 @@ Content
     profiling
     cli
     scheduler 
+    plugins
     code
