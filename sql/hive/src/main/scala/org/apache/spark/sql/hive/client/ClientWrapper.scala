@@ -95,6 +95,7 @@ private[hive] class ClientWrapper(
     case hive.v14 => new Shim_v0_14()
   }
 
+  // Create an internal session state for this ClientWrapper.
   val state = {
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
@@ -131,8 +132,15 @@ private[hive] class ClientWrapper(
    */
   private def withHiveState[A](f: => A): A = synchronized {
     val original = Thread.currentThread().getContextClassLoader
+    // This setContextClassLoader is used for Hive 0.12's metastore since Hive 0.12 will not
+    // internally override the context class loader of the current thread with the class loader
+    // associated with the HiveConf in `state`.
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
+    // Set the thread local metastore client to the client associated with this ClientWrapper.
     Hive.set(client)
+    // Starting from Hive 0.13.0, setCurrentSessionState will use the classLoader associated
+    // with the HiveConf in `state` to override the context class loader of the current
+    // thread.
     shim.setCurrentSessionState(state)
     val ret = try f finally {
       Thread.currentThread().setContextClassLoader(original)
