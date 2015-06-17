@@ -165,12 +165,11 @@ private[ui] object RDDOperationGraph extends Logging {
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
   def makeDotFile(graph: RDDOperationGraph): String = {
-    val dotFile = new StringBuilder
-    dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
-    graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
-    dotFile.append("}")
-    val result = dotFile.toString()
+    val header = "digraph G {\n"
+    val subgraph = makeDotSubgraph(graph.rootCluster, indent = "  ")
+    val edges = graph.edges.map { edge => s"""  ${edge.fromId}->${edge.toId};\n""" }.mkString
+    val footer = "}"
+    val result = s"${header}${subgraph}${edges}${footer}"
     logDebug(result)
     result
   }
@@ -182,16 +181,15 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a subgraph in an RDDOperationGraph. */
   private def makeDotSubgraph(cluster: RDDOperationCluster, indent: String): String = {
-    val subgraph = new StringBuilder
-    subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent + s"""  label="${cluster.name}";\n""")
-    cluster.childNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
-    }
-    cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
-    }
-    subgraph.append(indent + "}\n")
-    subgraph.toString()
+    val header = indent + s"subgraph cluster${cluster.id} {\n" +
+      indent + s"""  label="${cluster.name}";\n"""
+    val nodes = cluster.childNodes.map { node =>
+      indent + s"  ${makeDotNode(node)};\n"
+    }.mkString
+    val clusters = cluster.childClusters.map { cscope =>
+      makeDotSubgraph(cscope, indent + "  ")
+    }.mkString
+    val footer = indent + "}\n"
+    s"${header}${nodes}${clusters}${footer}"
   }
 }
