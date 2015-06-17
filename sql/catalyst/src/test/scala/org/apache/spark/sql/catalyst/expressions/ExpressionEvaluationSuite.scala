@@ -1357,6 +1357,11 @@ class ExpressionEvaluationSuite extends ExpressionEvaluationBaseSuite {
   test("atan2") {
     binaryMathFunctionEvaluation(Atan2, math.atan2)
   }
+
+  test("random") {
+    val row = create_row(1.1, 2.0, 3.1, null)
+    checkDoubleEvaluation(Rand(30), (0.7363714192755834 +- 0.001), row)
+  }
 }
 
 // TODO: Make the tests work with codegen.
