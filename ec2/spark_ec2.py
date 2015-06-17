@@ -290,6 +290,9 @@ def parse_args():
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
     parser.add_option(
+        "--additional-tags", type="string", default="",
+        help="Additional tags to set on the machines; tags are comma-separated, while name and value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
+    parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
@@ -685,15 +688,25 @@ def launch_cluster(conn, opts, cluster_name):
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
     time.sleep(5)
-    # Give the instances descriptive names
+    
+    # Give the instances descriptive names and set additional tags    
+    additional_tags = []
+    if opts.additional_tags.strip():
+        additional_tags = [map(str.strip, tag.split(':', 1)) for tag in opts.additional_tags.split(',')]
+
     for master in master_nodes:
         master.add_tag(
             key='Name',
             value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        for tag_name, tag_value in additional_tags:
+            master.add_tag(key=tag_name, value=tag_value)
+
     for slave in slave_nodes:
         slave.add_tag(
             key='Name',
             value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        for tag_name, tag_value in additional_tags:
+            slave.add_tag(key=tag_name, value=tag_value)
 
     # Return all the instances
     return (master_nodes, slave_nodes)
