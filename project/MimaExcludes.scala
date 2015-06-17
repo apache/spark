@@ -52,6 +52,16 @@ object MimaExcludes {
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution")
+          ) ++ Seq(
+            // SPARK-7799
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.zeromq.ZeroMQUtils.createStream"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.zeromq.ZeroMQUtils.createStream"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.streaming.zeromq.ZeroMQUtils.createStream$default$6"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.zeromq.ZeroMQUtils.createStream$default$5")
           )
         case v if v.startsWith("1.4") =>
           Seq(
