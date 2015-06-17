@@ -425,6 +425,11 @@ private[spark] object PythonRDD extends Logging {
     iter.foreach(write)
   }
 
+  /** Create an RDD that has no partitions or elements. */
+  def emptyRDD[T](sc: JavaSparkContext): JavaRDD[T] = {
+    sc.emptyRDD[T]
+  }
+
   /**
    * Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]],
    * key and value class.
