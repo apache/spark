@@ -1647,12 +1647,33 @@ object functions {
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
    *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", callUDF("simpleUdf", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   * @since 1.5.0
+   */
+  def callUDF(udfName: String, cols: Column*): Column = {
+    UnresolvedFunction(udfName, cols.map(_.expr))
+  }
+
+  /**
+   * Call an user-defined function.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlContext = df.sqlContext
+   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
    *  df.select($"id", callUdf("simpleUdf", $"value"))
    * }}}
    *
    * @group udf_funcs
    * @since 1.4.0
+   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF
    */
+  @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }

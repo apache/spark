@@ -306,7 +306,7 @@ class DataFrameSuite extends QueryTest {
     val sqlctx = df.sqlContext
     sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
     checkAnswer(
-      df.select($"id", callUdf("simpleUdf", $"value")),
+      df.select($"id", callUDF("simpleUdf", $"value")),
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
