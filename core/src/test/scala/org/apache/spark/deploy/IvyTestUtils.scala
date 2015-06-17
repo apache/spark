@@ -51,6 +51,7 @@ private[deploy] object IvyTestUtils {
     new File(prefix, artifactPath)
   }
 
+  /** Returns the artifact naming based on standard ivy or maven format. */
   private def artifactName(
       artifact: MavenCoordinate,
       useIvyLayout: Boolean,
@@ -59,6 +60,15 @@ private[deploy] object IvyTestUtils {
       s"${artifact.artifactId}-${artifact.version}$ext"
     } else {
       s"${artifact.artifactId}$ext"
+    }
+  }
+
+  /** Returns the directory for the given groupId based on standard ivy or maven format. */
+  private def getBaseGroupDirectory(artifact: MavenCoordinate, useIvyLayout: Boolean): String = {
+    if (!useIvyLayout) {
+      artifact.groupId.replace(".", File.separator)
+    } else {
+      artifact.groupId
     }
   }
 
@@ -302,10 +312,8 @@ private[deploy] object IvyTestUtils {
       useIvyLayout: Boolean = false,
       withPython: Boolean = false,
       ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
-    try {
-      // delete the artifact from the cache as well if it already exists
-      FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
-    }
+    val deps = dependencies.map(SparkSubmitUtils.extractMavenCoordinates)
+    purgeLocalIvyCache(artifact, deps, ivySettings)
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
       withPython)
     try {
@@ -313,18 +321,29 @@ private[deploy] object IvyTestUtils {
     } finally {
       // Clean up
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2")) {
-        FileUtils.deleteDirectory(new File(repo,
-          artifact.groupId.replace(".", File.separator) + File.separator + artifact.artifactId))
-        dependencies.map(SparkSubmitUtils.extractMavenCoordinates).foreach { seq =>
-          seq.foreach { dep =>
-            FileUtils.deleteDirectory(new File(repo,
-              dep.artifactId.replace(".", File.separator)))
+        val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
+        FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
+        deps.foreach { _.foreach { dep =>
+            FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
           }
         }
       } else {
         FileUtils.deleteDirectory(repo)
       }
-      FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+      purgeLocalIvyCache(artifact, deps, ivySettings)
+    }
+  }
+
+  /** Deletes the test packages from the ivy cache */
+  private def purgeLocalIvyCache(
+      artifact: MavenCoordinate,
+      dependencies: Option[Seq[MavenCoordinate]],
+      ivySettings: IvySettings): Unit = {
+    // delete the artifact from the cache as well if it already exists
+    FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+    dependencies.foreach { _.foreach { dep =>
+        FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
+      }
     }
   }
 }
