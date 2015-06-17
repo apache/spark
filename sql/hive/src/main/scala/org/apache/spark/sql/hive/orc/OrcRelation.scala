@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.util.Properties
+import java.util.{Properties, UUID}
 
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
@@ -106,7 +106,7 @@ private[orc] class OrcOutputWriter(
 
     val conf = context.getConfiguration
     val partition = context.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-r-$partition%05d-${System.currentTimeMillis}%015d.orc"
+    val filename = f"part-r-$partition%05d-${UUID.randomUUID()}.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),

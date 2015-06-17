@@ -35,7 +35,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   import sqlContext.sql
   import sqlContext.implicits._
 
-  val dataSourceName = classOf[SimpleTextSource].getCanonicalName
+  val dataSourceName: String
 
   val dataSchema =
     StructType(
@@ -468,6 +468,33 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
     withTable("t") {
       checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
+    }
+  }
+
+  // NOTE: This test suite is not super deterministic.  On nodes with only relatively few cores
+  // (4 or even 1), it's hard to reproduce the data loss issue.  But on nodes with for example 8 or
+  // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
+  // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
+  // later.
+  test("SPARK-8406") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sqlContext
+        .range(10000)
+        .repartition(250)
+        .write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .save(path)
+
+      assertResult(10000) {
+        sqlContext
+          .read
+          .format(dataSourceName)
+          .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
+          .load(path)
+          .count()
+      }
     }
   }
 }
