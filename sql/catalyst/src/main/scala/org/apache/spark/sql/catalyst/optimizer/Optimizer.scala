@@ -638,7 +638,7 @@ object SimplifyCasts extends Rule[LogicalPlan] {
  */
 object RemovePositive extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case UnaryPositive(data) => data
+    case UnaryPositive(child) => child
   }
 }
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 
@@ -265,8 +264,9 @@ class MathExpressionsSuite extends QueryTest {
   }
 
   test("positive") {
-    checkAnswer(
-      ctx.sql("""SELECT positive(1), positive(-1), positive("abc")"""),
-      Row(1, -1, "abc"))
+    val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("positive(a)"), Row(1))
+    checkAnswer(df.selectExpr("positive(b)"), Row(-1))
+    checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
   }
 }
