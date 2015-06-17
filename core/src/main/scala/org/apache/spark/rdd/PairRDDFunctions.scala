@@ -623,7 +623,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
-   * This is useful in cases where the data on the right (other rdd) has extreme skew.
+   * This is useful in cases where the data has extreme skew.
    * The input param rightReplication controls the replication of the right (other rdd).
    */
   def blockLeftOuterJoin[W](other: RDD[(K, W)], rightReplication: Int,
@@ -636,7 +636,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
-   * This is useful in cases where the data on the right (other rdd) has extreme skew.
+   * This is useful in cases where the data has extreme skew.
    * The input param rightReplication controls the replication of the right (other rdd).
    */
   def blockLeftOuterJoin[W](other: RDD[(K, W)], rightReplication: Int)
@@ -646,7 +646,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
-   * This is useful in cases where the left data (this rdd) has extreme skew.
+   * This is useful in cases where the data has extreme skew.
    * The input param leftReplication controls the replication of the left (this rdd).
    */
   def blockRightOuterJoin[W](other: RDD[(K, W)], leftReplication: Int, 
@@ -659,7 +659,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
-   * This is useful in cases where the left data (this rdd) has extreme skew.
+   * This is useful in cases where the data has extreme skew.
    * The input param leftReplication controls the replication of the left (this rdd).
    */
   def blockRightOuterJoin[W](other: RDD[(K, W)], leftReplication: Int)
