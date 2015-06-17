@@ -43,7 +43,7 @@ ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh")
 
 
 def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", cmd, "; received return code", retcode
+    print "[error] running '", " ".join(cmd), "'; received return code", retcode
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -231,7 +231,7 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def get_build_profiles(hadoop_version="hadoop2.3",
+def get_build_profiles(hadoop_version,
                        enable_base_profiles=True,
                        enable_hive_profiles=False,
                        enable_doc_profiles=False):
@@ -240,7 +240,6 @@ def get_build_profiles(hadoop_version="hadoop2.3",
 
     base_profiles = ["-Pkinesis-asl"]
     hive_profiles = ["-Phive", "-Phive-thriftserver"]
-    doc_profiles = []
     hadoop_profiles = get_hadoop_profiles(hadoop_version)
 
     build_profiles = hadoop_profiles
@@ -250,9 +249,6 @@ def get_build_profiles(hadoop_version="hadoop2.3",
 
     if enable_hive_profiles:
         build_profiles += hive_profiles
-
-    if enable_doc_profiles:
-        build_profiles += doc_profiles
 
     return build_profiles
 
@@ -355,6 +351,7 @@ def identify_changed_modules(test_env):
         changed_core_files = set(changed_files).difference(top_level_project_files)
 
         if changed_core_files:
+            print "[info] Detected changes in core Spark. Will run the full test suite."
             changed_modules.add("CORE")
         if sql_files:
             print "[info] Detected changes in SQL. Will run Hive test suite."
