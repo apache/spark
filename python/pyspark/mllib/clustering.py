@@ -101,6 +101,9 @@ class KMeansModel(Saveable, Loader):
 
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+
         best = 0
         best_distance = float("inf")
         if isinstance(x, RDD):
@@ -114,12 +117,12 @@ class KMeansModel(Saveable, Loader):
                 best_distance = distance
         return best
 
-    def computeCost(self, rdd):
+    def computeCost(self, data):
         """
         Return the K-means cost (sum of squared distances of points to
         their nearest center) for this model on the given data.
         """
-        cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
+        cost = callMLlibFunc("computeCostKmeansModel", data.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
         return cost
 

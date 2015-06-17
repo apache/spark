@@ -45,12 +45,14 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
         else:
             return self.call("predict", _convert_to_vector(x))
 
+    @property
     def numTrees(self):
         """
         Get number of trees in ensemble.
         """
         return self.call("numTrees")
 
+    @property
     def totalNumNodes(self):
         """
         Get total number of nodes, summed over all trees in the
@@ -90,9 +92,11 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         else:
             return self.call("predict", _convert_to_vector(x))
 
+    @property
     def numNodes(self):
         return self._java_model.numNodes()
 
+    @property
     def depth(self):
         return self._java_model.depth()
 
@@ -316,9 +320,9 @@ class RandomForest(object):
         ...     LabeledPoint(1.0, [3.0])
         ... ]
         >>> model = RandomForest.trainClassifier(sc.parallelize(data), 2, {}, 3, seed=42)
-        >>> model.numTrees()
+        >>> model.numTrees
         3
-        >>> model.totalNumNodes()
+        >>> model.totalNumNodes
         7
         >>> print(model)
         TreeEnsembleModel classifier with 3 trees
@@ -396,9 +400,9 @@ class RandomForest(object):
         ... ]
         >>>
         >>> model = RandomForest.trainRegressor(sc.parallelize(sparse_data), {}, 2, seed=42)
-        >>> model.numTrees()
+        >>> model.numTrees
         2
-        >>> model.totalNumNodes()
+        >>> model.totalNumNodes
         4
         >>> model.predict(SparseVector(2, {1: 1.0}))
         1.0
@@ -486,9 +490,9 @@ class GradientBoostedTrees(object):
         ... ]
         >>>
         >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {}, numIterations=10)
-        >>> model.numTrees()
+        >>> model.numTrees
         10
-        >>> model.totalNumNodes()
+        >>> model.totalNumNodes
         30
         >>> print(model)  # it already has newline
         TreeEnsembleModel classifier with 10 trees
@@ -549,9 +553,9 @@ class GradientBoostedTrees(object):
         >>>
         >>> data = sc.parallelize(sparse_data)
         >>> model = GradientBoostedTrees.trainRegressor(data, {}, numIterations=10)
-        >>> model.numTrees()
+        >>> model.numTrees
         10
-        >>> model.totalNumNodes()
+        >>> model.totalNumNodes
         12
         >>> model.predict(SparseVector(2, {1: 1.0}))
         1.0

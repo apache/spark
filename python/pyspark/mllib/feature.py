@@ -111,6 +111,15 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     """
 
     def transform(self, vector):
+        """
+        Applies transformation on a vector or an RDD[Vector].
+
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        """
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
@@ -124,20 +133,6 @@ class StandardScalerModel(JavaVectorTransformer):
 
     Represents a StandardScaler model that can transform vectors.
     """
-    def transform(self, vector):
-        """
-        Applies standardization transformation on a vector.
-
-        Note: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
-
-        :param vector: Vector or RDD of Vector to be standardized.
-        :return: Standardized vector. If the variance of a column is
-                 zero, it will return default `0.0` for the column with
-                 zero variance.
-        """
-        return JavaVectorTransformer.transform(self, vector)
 
     def setWithMean(self, withMean):
         """
@@ -186,7 +181,7 @@ class StandardScaler(object):
         self.withMean = withMean
         self.withStd = withStd
 
-    def fit(self, dataset):
+    def fit(self, data):
         """
         Computes the mean and variance and stores as a model to be used
         for later scaling.
@@ -195,8 +190,8 @@ class StandardScaler(object):
                      to build the transformation model.
         :return: a StandardScalarModel
         """
-        dataset = dataset.map(_convert_to_vector)
-        jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
+        data = data.map(_convert_to_vector)
+        jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, data)
         return StandardScalerModel(jmodel)
 
 
@@ -206,14 +201,6 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 
     Represents a Chi Squared selector model.
     """
-    def transform(self, vector):
-        """
-        Applies transformation on a vector.
-
-        :param vector: Vector or RDD of Vector to be transformed.
-        :return: transformed vector.
-        """
-        return JavaVectorTransformer.transform(self, vector)
 
 
 class ChiSqSelector(object):
@@ -330,7 +317,7 @@ class IDFModel(JavaVectorTransformer):
     """
     Represents an IDF model that can transform term frequency vectors.
     """
-    def transform(self, x):
+    def transform(self, vector):
         """
         Transforms term frequency (TF) vectors to TF-IDF vectors.
 
@@ -346,11 +333,7 @@ class IDFModel(JavaVectorTransformer):
                   vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        if isinstance(x, RDD):
-            return JavaVectorTransformer.transform(self, x)
-
-        x = _convert_to_vector(x)
-        return JavaVectorTransformer.transform(self, x)
+        return JavaVectorTransformer.transform(self, vector)
 
     def idf(self):
         """
@@ -540,16 +523,16 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
-    def fit(self, data):
+    def fit(self, dataset):
         """
         Computes the vector representation of each word in vocabulary.
 
         :param data: training data. RDD of list of string
         :return: Word2VecModel instance
         """
-        if not isinstance(data, RDD):
+        if not isinstance(dataset, RDD):
             raise TypeError("data should be an RDD of list of string")
-        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+        jmodel = callMLlibFunc("trainWord2Vec", dataset, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
                                int(self.minCount))
