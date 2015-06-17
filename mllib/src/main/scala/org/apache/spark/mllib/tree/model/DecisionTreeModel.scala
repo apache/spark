@@ -70,8 +70,8 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features JavaRDD representing data points to be predicted
    * @return JavaRDD of predictions for each of the given data points
    */
-  def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
-    predict(features.rdd)
+  def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
+    predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
   }
 
   /**
