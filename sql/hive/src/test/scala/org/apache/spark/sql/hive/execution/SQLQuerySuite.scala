@@ -906,4 +906,32 @@ class SQLQuerySuite extends QueryTest {
       sql("set hive.exec.dynamic.partition.mode=strict")
     }
   }
+
+  test("Call add jar in a different thread (SPARK-8306)") {
+    @volatile var error: Option[Throwable] = None
+    val thread = new Thread {
+      override def run() {
+        // To make sure this test works, this jar should not be loaded in another place.
+        TestHive.sql(
+          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        try {
+          TestHive.sql(
+            """
+              |CREATE TEMPORARY FUNCTION example_max
+              |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
+            """.stripMargin)
+        } catch {
+          case throwable: Throwable =>
+            error = Some(throwable)
+        }
+      }
+    }
+    thread.start()
+    thread.join()
+    error match {
+      case Some(throwable) =>
+        fail("CREATE TEMPORARY FUNCTION should not fail.", throwable)
+      case None => // OK
+    }
+  }
 }
