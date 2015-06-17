@@ -121,6 +121,9 @@ case class SparkListenerApplicationStart(
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerContextStop() extends SparkListenerEvent
+
 /**
  * An internal class that describes the metadata of an event log.
  * This event is not meant to be posted to listeners downstream.
@@ -215,6 +218,11 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+   * Called when the underlying spark context is stopping
+   */
+  def onContextStop(contextStop: SparkListenerContextStop) { }
 }
 
 /**

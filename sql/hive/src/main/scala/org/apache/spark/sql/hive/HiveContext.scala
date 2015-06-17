@@ -23,6 +23,7 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.spark.scheduler.{SparkListener, SparkListenerContextStop}
 import org.apache.spark.sql.catalyst.ParserDialect
 
 import scala.collection.JavaConversions._
@@ -162,9 +163,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   protected[hive] lazy val executionHive: ClientWrapper = {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
+    val (tempDir, config) = newTemporaryConfiguration()
+    sc.addSparkListener(new SparkListener() {
+      override def onContextStop(contextStop: SparkListenerContextStop) = tempDir.delete()
+    })
     new ClientWrapper(
-      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = newTemporaryConfiguration())
+      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion), config)
   }
   SessionState.setCurrentSessionState(executionHive.state)
 
@@ -522,7 +526,7 @@ private[hive] object HiveContext {
   val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
-  def newTemporaryConfiguration(): Map[String, String] = {
+  def newTemporaryConfiguration(): (File, Map[String, String]) = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore").getAbsolutePath
     val propMap: HashMap[String, String] = HashMap()
@@ -537,7 +541,7 @@ private[hive] object HiveContext {
       s"jdbc:derby:;databaseName=$localMetastore;create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
-    propMap.toMap
+    (tempDir, propMap.toMap)
   }
 
   protected val primitiveTypes =
