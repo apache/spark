@@ -292,7 +292,10 @@ class HiveServer2Hook(BaseHook):
                         'header': cur.getSchema(),
                     }
                 else:
-                    return {}
+                    return {
+                        'data': [],
+                        'header': [],
+                    }
 
     def to_csv(self, hql, csv_filepath, schema='default'):
         schema = schema or 'default'
