@@ -132,4 +132,19 @@ class SQLConfEntrySuite extends SparkFunSuite {
     }
     assert(e.getMessage === s"The value of $key should be one of a, b, c, but was d")
   }
+
+  test("stringSeqConf") {
+    val key = "spark.sql.SQLConfEntrySuite.stringSeq"
+    val confEntry = SQLConfEntry.stringSeqConf("spark.sql.SQLConfEntrySuite.stringSeq",
+      defaultValue = Some(Nil))
+    assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c"))
+
+    conf.setConf(confEntry, Seq("a", "b", "c", "d"))
+    assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c", "d"))
+
+    conf.setConfString(key, "a,b,c,d,e")
+    assert(conf.getConfString(key, "a,b,c") === "a,b,c,d,e")
+    assert(conf.getConfString(key) === "a,b,c,d,e")
+    assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c", "d", "e"))
+  }
 }

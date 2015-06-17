@@ -563,7 +563,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
 
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(
-      "spark.sql.hive.convertMetastoreParquet" -> "true",
+      HiveContext.CONVERT_METASTORE_PARQUET.key -> "true",
       SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
 
       withTempTable("jt") {
