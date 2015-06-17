@@ -44,7 +44,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     val goodMap3 = new OpenHashMap[String, String](256)
     assert(goodMap3.size === 0)
     intercept[IllegalArgumentException] {
-      new OpenHashMap[String, Int](1 << 30) // Invalid map size: bigger than 2^29
+      new OpenHashMap[String, Int](1 << 30 + 1) // Invalid map size: bigger than 2^30
     }
     intercept[IllegalArgumentException] {
       new OpenHashMap[String, Int](-1)
@@ -175,5 +175,15 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     for (i <- 1 to 100) {
       assert(map(i.toString) === i.toString)
     }
+  }
+
+  test("support for more than 12M items") {
+    val cnt = 12000000 // 12M
+    val map = new OpenHashMap[Int, Int](cnt)
+    for (i <- 0 until cnt) {
+      map(i) = 1
+    }
+    val numInvalidValues = map.iterator.count(_._2 == 0)
+    assertResult(0)(numInvalidValues)
   }
 }
