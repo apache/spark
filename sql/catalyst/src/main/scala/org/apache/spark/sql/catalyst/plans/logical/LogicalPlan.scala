@@ -275,12 +275,32 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // More than one match.
       case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
-        throw new AnalysisException(
-          s"Reference '$name' is ambiguous, could be: $referenceNames.")
+        val resolved = resolveAmbiguous(name, resolver, ambiguousReferences)
+        resolved match {
+          case Some(_) => resolved
+          case None =>
+            val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
+            throw new AnalysisException(
+              s"Reference '$name' is ambiguous, could be: $referenceNames.")
+        }
     }
   }
+
+  /**
+   * Attempt to resolve an ambiguous attribute resolution.
+   * Default behavior is no resolution.
+   * Override to implement resolving ambiguous references.
+   * @param name name of the attribute which is ambiguous
+   * @param resolver resolver for comparing attributes
+   * @param ambiguousReferences the references which matched the name
+   * @return Some([[NamedExpression]]) if the ambiguity can be resolved, otherwise None
+   */
+  protected def resolveAmbiguous(
+    name: String,
+    resolver: Resolver,
+    ambiguousReferences: Seq[(Attribute, List[String])]): Option[NamedExpression] = None
 }
+
 
 /**
  * A logical plan node with no children.
