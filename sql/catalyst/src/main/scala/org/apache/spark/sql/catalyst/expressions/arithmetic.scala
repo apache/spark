@@ -58,6 +58,15 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
   protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
 }
 
+case class UnaryPositive(child: Expression) extends UnaryArithmetic {
+  override def toString: String = s"positive($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    defineCodeGen(ctx, ev, c => c)
+
+  protected override def evalInternal(evalE: Any) = evalE
+}
+
 case class Sqrt(child: Expression) extends UnaryArithmetic {
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
