@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.security.MessageDigest
-
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.{BinaryType, StringType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -34,17 +31,6 @@ case class Md5(child: Expression)
   override def dataType: DataType = StringType
 
   override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    if (child.dataType == BinaryType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"types error in ${this.getClass.getSimpleName} " +
-          s"get (${child.dataType}, expect BinaryType).")
-    }
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
