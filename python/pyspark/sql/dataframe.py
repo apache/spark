@@ -226,8 +226,9 @@ class DataFrame(object):
         if self._schema is None:
             try:
                 self._schema = _parse_datatype_json_string(self._jdf.schema().json())
-            except AttributeError:
-                raise Exception("Unable to parse datatype from schema.")
+            except AttributeError as e:
+                raise Exception(
+                    "Unable to parse datatype from schema. %s" % e)
         return self._schema
 
     @since(1.3)

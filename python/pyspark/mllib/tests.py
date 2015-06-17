@@ -516,7 +516,7 @@ class MatrixUDTTests(MLlibTestCase):
     udt = MatrixUDT()
 
     def test_json_schema(self):
-        self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+        self.assertEqual(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
 
     def test_serialization(self):
         for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
