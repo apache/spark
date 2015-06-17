@@ -134,4 +134,21 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(CaseKeyWhen(literalNull, Seq(c2, c5, c1, c6)), "c", row)
   }
 
+  test("greatest/least") {
+    val row = create_row(1, 2, "a", "b", "c")
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.string.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    checkEvaluation(Greatest(c4, c5, c3), "c", row)
+    checkEvaluation(Greatest(c2, c1), 2, row)
+    checkEvaluation(Least(c4, c3, c5), "a", row)
+    checkEvaluation(Least(c1, c2), 1, row)
+    checkEvaluation(Greatest(c1, c2, Literal(2)), 2, row)
+    checkEvaluation(Greatest(c4, c5, c3, Literal("ccc")), "ccc", row)
+    checkEvaluation(Least(c1, c2, Literal(-1)), -1, row)
+    checkEvaluation(Least(c4, c5, c3, c3, Literal("a")), "a", row)
+  }
+
 }

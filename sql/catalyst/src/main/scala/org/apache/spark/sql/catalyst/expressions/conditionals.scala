@@ -312,3 +312,63 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     }.mkString
   }
 }
+
+case class Least(children: Expression*)
+  extends Expression {
+
+  override def nullable: Boolean = children.forall(_.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.map(_.dataType).distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"differing types in Least (${children.map(_.dataType)}).")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def dataType: DataType = children.head.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val cmp = GreaterThan
+    children.foldLeft[Expression](null)((r, c) => {
+      if (c != null) {
+        if (r == null || cmp.apply(r, c).eval(input).asInstanceOf[Boolean]) c else r
+      } else {
+        r
+      }
+    }).eval(input)
+  }
+
+  override def toString: String = s"LEAST(${children.mkString(", ")})"
+}
+
+case class Greatest(children: Expression*)
+  extends Expression {
+
+  override def nullable: Boolean = children.forall(_.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.map(_.dataType).distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"differing types in Greatest (${children.map(_.dataType)}).")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def dataType: DataType = children.head.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val cmp = LessThan
+    children.foldLeft[Expression](null)((r, c) => {
+      if (c != null) {
+        if (r == null || cmp.apply(r, c).eval(input).asInstanceOf[Boolean]) c else r
+      } else {
+        r
+      }
+    }).eval(input)
+  }
+
+  override def toString: String = s"LEAST(${children.mkString(", ")})"
+}
