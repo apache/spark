@@ -24,13 +24,13 @@ import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
 
 /** Testsuite for receiver scheduling */
-class SchedulerSuite extends TestSuiteBase {
+class ReceiverTrackerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
   val ssc = new StreamingContext(sparkConf, Milliseconds(100))
   val tracker = new ReceiverTracker(ssc)
   val launcher = new tracker.ReceiverLauncher()
 
-  test("receiver scheduling - no preferredLocation") {
+  test("receiver scheduling - no preferred location") {
     val numReceivers = 10;
     val receivers = (1 to numReceivers).map(i => new DummyReceiver)
     val executors: List[String] = List("Host1", "Host2", "Host3", "Host4", "Host5")
@@ -41,7 +41,7 @@ class SchedulerSuite extends TestSuiteBase {
     assert(locations(9)(0) === "Host5")
   }
 
-  test("receiver scheduling - no preferredLocation, numExecutors > numReceivers") {
+  test("receiver scheduling - no preferred location, numExecutors > numReceivers") {
     val numReceivers = 3;
     val receivers = (1 to numReceivers).map(i => new DummyReceiver)
     val executors: List[String] = List("Host1", "Host2", "Host3", "Host4", "Host5")
@@ -52,7 +52,7 @@ class SchedulerSuite extends TestSuiteBase {
     assert(locations(1)(1) === "Host5")
   }
 
-  test("receiver scheduling - all have preferredLocation") {
+  test("receiver scheduling - all have preferred location") {
     val numReceivers = 5;
     val receivers = (1 to numReceivers).map(i => new DummyReceiver(host = Some("Host" + i)))
     val executors: List[String] = List("Host1", "Host5", "Host4", "Host3", "Host2")
@@ -61,7 +61,7 @@ class SchedulerSuite extends TestSuiteBase {
     assert(locations(4)(0) === "Host5")
   }
 
-  test("receiver scheduling - some have preferredLocation") {
+  test("receiver scheduling - some have preferred location") {
     val numReceivers = 3;
     val receivers: Seq[Receiver[_]] = Seq(
       new DummyReceiver(host = Some("Host2")),
@@ -79,7 +79,7 @@ class SchedulerSuite extends TestSuiteBase {
 /**
  * Dummy receiver implementation
  */
-class DummyReceiver(host: Option[String] = None) extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+private class DummyReceiver(host: Option[String] = None) extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   def onStart() {
   }
