@@ -23,6 +23,20 @@ import org.apache.spark.sql.types.DoubleType
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /**
+   * Used for testing leaf math expressions.
+   *
+   * @param e expression
+   * @param c The constants in scala.math
+   * @tparam T Generic type for primitives
+   */
+  private def testLeaf[T](
+      e: () => Expression,
+      c: T): Unit = {
+    checkEvaluation(e(), c, EmptyRow)
+    checkEvaluation(e(), c, create_row(null))
+  }
+
+  /**
    * Used for testing unary math expressions.
    *
    * @param c expression
@@ -72,6 +86,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("e") {
+    testLeaf(EulerNumber, math.E)
+  }
+
+  test("pi") {
+    testLeaf(Pi, math.Pi)
   }
 
   test("sin") {
@@ -161,6 +183,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("log1p") {
     testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
     testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
+  }
+
+  test("log2") {
+    def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
+    testUnary(Log2, f, (0 to 20).map(_ * 0.1))
+    testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
   }
 
   test("pow") {

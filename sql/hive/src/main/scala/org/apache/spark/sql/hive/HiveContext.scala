@@ -271,13 +271,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    // TODO: Database support...
-    catalog.refreshTable("default", tableName)
+    catalog.refreshTable(catalog.client.currentDatabase, tableName)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    // TODO: Database support...
-    catalog.invalidateTable("default", tableName)
+    catalog.invalidateTable(catalog.client.currentDatabase, tableName)
   }
 
   /**
@@ -374,7 +372,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry
+    new OverrideFunctionRegistry(new HiveFunctionRegistry(FunctionRegistry.builtin))
 
   /* An analyzer that uses the Hive metastore. */
   @transient

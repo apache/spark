@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{AnalysisException, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.client.{HiveTable, HiveColumn}
@@ -42,7 +42,7 @@ case class CreateTableAsSelect(
   def database: String = tableDesc.database
   def tableName: String = tableDesc.name
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -50,17 +50,25 @@ case class CreateTableAsSelect(
       import org.apache.hadoop.io.Text
       import org.apache.hadoop.mapred.TextInputFormat
 
-      val withSchema =
+      val withFormat =
         tableDesc.copy(
-          schema =
-            query.output.map(c =>
-              HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)),
           inputFormat =
             tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
           outputFormat =
             tableDesc.outputFormat
               .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
           serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
+
+      val withSchema = if (withFormat.schema.isEmpty) {
+        // Hive doesn't support specifying the column list for target table in CTAS
+        // However we don't think SparkSQL should follow that.
+        tableDesc.copy(schema =
+        query.output.map(c =>
+          HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)))
+      } else {
+        withFormat
+      }
+
       hiveContext.catalog.client.createTable(withSchema)
 
       // Get the Metastore Relation
@@ -81,7 +89,7 @@ case class CreateTableAsSelect(
       hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
     }
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 
   override def argString: String = {
