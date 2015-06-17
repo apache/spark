@@ -1941,10 +1941,10 @@ unifiedStream.print();
 {% highlight python %}
 numStreams = 5
 kafkaStreams = []
-for x in range (0, numStreams):
-     kafkaStreams = x.map{ KafkaUtils.createStream(…)}
+for _ in range (numStreams):
+     kafkaStreams.append(KafkaUtils.createStream(...))
 unifiedStream = streamingContext.union(kafkaStreams)
-unifiedStream.show()
+unifiedStream.print()
 {% endhighlight %}
 </div>
 </div>
