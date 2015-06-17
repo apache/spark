@@ -739,7 +739,7 @@ private[spark] object SparkSubmitUtils {
   private[spark] def m2Path: File = {
     if (Utils.isTesting) {
       // test builds delete the maven cache, and this can cause flakiness
-      new File(Utils.createTempDir("mvn2"), ".m2" + File.separator + "repository")
+      new File("dummy", ".m2" + File.separator + "repository")
     } else {
       new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
     }
