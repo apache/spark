@@ -127,7 +127,11 @@ private[tree] class NodeIdCache(
     }
 
     // Keep on persisting new ones.
-    nodeIdsForInstances.persist(StorageLevel.MEMORY_AND_DISK)
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      nodeIdsForInstances.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      nodeIdsForInstances.persist(data.getStorageLevel)
+    }
     rddUpdateCount += 1
 
     // Handle checkpointing if the directory is not None.
