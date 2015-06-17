@@ -104,14 +104,14 @@ public final class UnsafeRow extends BaseMutableRow {
           LongType,
           FloatType,
           DoubleType,
-          DateType
+          DateType,
+          TimestampType
     })));
 
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
       Arrays.asList(new DataType[]{
         StringType,
-        TimestampType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
