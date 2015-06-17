@@ -701,12 +701,12 @@ private[python] class PythonMLLibAPI extends Serializable {
     }
   }
 
-  def elementwiseProductVector(weight: Vector, vector: Vector): Vector = {
-    new ElementwiseProduct(weight).transform(vector)
+  def elementwiseProductVector(scalingVector: Vector, vector: Vector): Vector = {
+    new ElementwiseProduct(scalingVector).transform(vector)
   }
 
-  def elementwiseProductVector(weight: Vector, vector: JavaRDD[Vector]): JavaRDD[Vector] = {
-    new ElementwiseProduct(weight).transform(vector)
+  def elementwiseProductVector(scalingVector: Vector, vector: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new ElementwiseProduct(scalingVector).transform(vector)
   }
 
   /**

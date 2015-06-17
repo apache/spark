@@ -543,11 +543,8 @@ class ElementwiseProduct(VectorTransformer):
     >>> eprod.transform(rdd).collect()
     [DenseVector([2.0, 2.0, 9.0]), DenseVector([9.0, 6.0, 12.0])]
     """
-    def __init__(self, vector):
-        if not isinstance(vector, Vector):
-            raise ValueError(
-                "vector should be a Vector got %s." % type(vector))
-        self.vector = vector
+    def __init__(self, scalingVector):
+        self.scalingVector = _convert_to_vector(scalingVector)
 
     def transform(self, vector):
         """
@@ -558,7 +555,7 @@ class ElementwiseProduct(VectorTransformer):
 
         else:
             vector = _convert_to_vector(vector)
-        return callMLlibFunc("elementwiseProductVector", self.vector, vector)
+        return callMLlibFunc("elementwiseProductVector", self.scalingVector, vector)
 
 
 def _test():
