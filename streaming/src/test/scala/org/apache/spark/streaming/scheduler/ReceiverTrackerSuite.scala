@@ -79,7 +79,8 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 /**
  * Dummy receiver implementation
  */
-private class DummyReceiver(host: Option[String] = None) extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+private class DummyReceiver(host: Option[String] = None)
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   def onStart() {
   }
