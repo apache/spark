@@ -1937,6 +1937,16 @@ JavaPairDStream<String, String> unifiedStream = streamingContext.union(kafkaStre
 unifiedStream.print();
 {% endhighlight %}
 </div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+numStreams = 5
+kafkaStreams = []
+for x in range (0, numStreams):
+     kafkaStreams = x.map{ KafkaUtils.createStream(…)}
+unifiedStream = streamingContext.union(kafkaStreams)
+unifiedStream.show()
+{% endhighlight %}
+</div>
 </div>
 
 Another parameter that should be considered is the receiver's blocking interval,
