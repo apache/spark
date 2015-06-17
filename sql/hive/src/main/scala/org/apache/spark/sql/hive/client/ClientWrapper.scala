@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
-import java.net.URI
 import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
 
 import scala.collection.JavaConversions._
@@ -28,7 +27,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
-import org.apache.hadoop.hive.metastore.api
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata
 import org.apache.hadoop.hive.ql.metadata.Hive
@@ -96,8 +94,9 @@ private[hive] class ClientWrapper(
   }
 
   val state = {
-    val original = Thread.currentThread().getContextClassLoader
-    Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
+    val currentThread: Thread = Thread.currentThread()
+    val original = currentThread.getContextClassLoader
+    currentThread.setContextClassLoader(getClass.getClassLoader)
     val ret = try {
       val oldState = SessionState.get()
       if (oldState == null) {
@@ -115,9 +114,9 @@ private[hive] class ClientWrapper(
         oldState
       }
     } finally {
-      Thread.currentThread().setContextClassLoader(original)
+      currentThread.setContextClassLoader(original)
     }
-    ret
+    (currentThread, ret)
   }
 
   /** Returns the configuration for the current session. */
@@ -133,7 +132,7 @@ private[hive] class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     Hive.set(client)
-    shim.setCurrentSessionState(state)
+    shim.setCurrentSessionState(state._2)
     val ret = try f finally {
       Thread.currentThread().setContextClassLoader(original)
     }
@@ -141,19 +140,19 @@ private[hive] class ClientWrapper(
   }
 
   def setOut(stream: PrintStream): Unit = withHiveState {
-    state.out = stream
+    state._2.out = stream
   }
 
   def setInfo(stream: PrintStream): Unit = withHiveState {
-    state.info = stream
+    state._2.info = stream
   }
 
   def setError(stream: PrintStream): Unit = withHiveState {
-    state.err = stream
+    state._2.err = stream
   }
 
   override def currentDatabase: String = withHiveState {
-    state.getCurrentDatabase
+    state._2.getCurrentDatabase
   }
 
   override def createDatabase(database: HiveDatabase): Unit = withHiveState {
@@ -313,8 +312,8 @@ private[hive] class ClientWrapper(
           results
 
         case _ =>
-          if (state.out != null) {
-            state.out.println(tokens(0) + " " + cmd_1)
+          if (state._2.out != null) {
+            state._2.out.println(tokens(0) + " " + cmd_1)
           }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }
@@ -400,5 +399,15 @@ private[hive] class ClientWrapper(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+  }
+
+  override def shutdown(): Unit = withHiveState {
+    logInfo("Shutting down hive metastore")
+    if (state._1 == Thread.currentThread()) {
+      Hive.closeCurrent()
+    } else {
+      logWarning("Shutdown should be called by init thread.. Possibly happen memory leakage.")
+      client.getMSC.close() // best effort
+    }
   }
 }

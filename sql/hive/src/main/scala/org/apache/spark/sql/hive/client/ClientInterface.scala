@@ -161,4 +161,7 @@ private[hive] trait ClientInterface {
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
+
+  /** shutdown underlying metastore. */
+  def shutdown(): Unit
 }
