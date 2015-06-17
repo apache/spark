@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -83,6 +84,52 @@ class DataFrameFunctionsSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       struct(col("a") * 2)
     }
+  }
+
+  test("concat/concat_ws test") {
+    checkAnswer(
+      testData2.select(concat()).limit(1),
+      Row("")
+    )
+    checkAnswer(
+      testData2.select(
+        concat_ws(lit(","), col("a").cast("String"), col("b").cast("String"))).limit(1),
+      Row("1,1")
+    )
+    checkAnswer(
+      testData2.select(
+        concat_ws(lit("=="), array(col("a").cast("String"), col("b").cast("String")), lit("x"))
+      ).limit(1),
+      Row("1==1==x")
+    )
+    checkAnswer(
+      testData2.select(concat_ws(lit(""), lit("x"), lit("y"))).limit(1),
+      Row("xy")
+    )
+    checkAnswer(
+      testData2.select(concat_ws(lit("=="), array(), lit("x"))).limit(1),
+      Row("==x")
+    )
+    checkAnswer(
+      ctx.sql("""SELECT CONCAT(null, null)"""),
+      Row(null)
+    )
+    checkAnswer(
+      ctx.sql("""SELECT CONCAT("a", null)"""),
+      Row(null)
+    )
+    checkAnswer(
+      ctx.sql("""SELECT CONCAT("a", b, 1) from testData2 limit 1"""),
+      Row("a11")
+    )
+    checkAnswer(
+      ctx.sql("""SELECT CONCAT_WS("==", array("a", "b"), array(null, null), array())"""),
+      Row("a==b==null==null==")
+    )
+    checkAnswer(
+      ctx.sql("""SELECT CONCAT_WS(",", "a", array())"""),
+      Row("a,")
+    )
   }
 
   test("constant functions") {

@@ -914,6 +914,44 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the concat of the given values.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = Concat(exprs.map(_.expr): _*)
+
+  /**
+   * Computes the concat of the given column names.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(columnName: String, columnNames: String*): Column =
+    concat((columnName +: columnNames).map(Column.apply): _*)
+
+  /**
+   * Computes the concat_ws of the given columns with given separator.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sep: Column, exprs: Column*): Column = ConcatWS((sep +: exprs).map(_.expr): _*)
+
+  /**
+   * Computes the concat_ws of the given columns with given separator.
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat_ws(sepName: String, exprNames: String*): Column =
+    concat_ws(Column(sepName), exprNames.map(Column.apply): _*)
+
+  /**
    * Computes the cosine of the given value.
    *
    * @group math_funcs

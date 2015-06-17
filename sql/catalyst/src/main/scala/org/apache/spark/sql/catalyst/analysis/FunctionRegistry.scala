@@ -88,6 +88,8 @@ object FunctionRegistry {
     expression[Abs]("abs"),
     expression[CreateArray]("array"),
     expression[Coalesce]("coalesce"),
+    expression[Concat]("concat"),
+    expression[ConcatWS]("concat_ws"),
     expression[Explode]("explode"),
     expression[If]("if"),
     expression[IsNull]("isnull"),
@@ -172,7 +174,7 @@ object FunctionRegistry {
           case Success(e) =>
             e
           case Failure(e) =>
-            throw new AnalysisException(s"Invalid number of arguments for function $name")
+            throw new AnalysisException(s"Invalid number of arguments for function $name, $params")
         }
         f.newInstance(expressions : _*).asInstanceOf[Expression]
       }
