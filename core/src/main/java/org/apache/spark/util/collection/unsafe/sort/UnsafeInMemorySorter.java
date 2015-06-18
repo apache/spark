@@ -70,12 +70,12 @@ public final class UnsafeInMemorySorter {
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    */
-  private long[] sortBuffer;
+  private long[] pointerArray;
 
   /**
    * The position in the sort buffer where new records can be inserted.
    */
-  private int sortBufferInsertPosition = 0;
+  private int pointerArrayInsertPosition = 0;
 
   public UnsafeInMemorySorter(
       final TaskMemoryManager memoryManager,
@@ -83,39 +83,42 @@ public final class UnsafeInMemorySorter {
       final PrefixComparator prefixComparator,
       int initialSize) {
     assert (initialSize > 0);
-    this.sortBuffer = new long[initialSize * 2];
+    this.pointerArray = new long[initialSize * 2];
     this.memoryManager = memoryManager;
-    this.sorter = new Sorter<RecordPointerAndKeyPrefix, long[]>(UnsafeSortDataFormat.INSTANCE);
+    this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
     this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
   }
 
   public long getMemoryUsage() {
-    return sortBuffer.length * 8L;
+    return pointerArray.length * 8L;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return sortBufferInsertPosition + 2 < sortBuffer.length;
+    return pointerArrayInsertPosition + 2 < pointerArray.length;
   }
 
-  public void expandSortBuffer() {
-    final long[] oldBuffer = sortBuffer;
-    sortBuffer = new long[oldBuffer.length * 2];
-    System.arraycopy(oldBuffer, 0, sortBuffer, 0, oldBuffer.length);
+  public void expandPointerArray() {
+    final long[] oldArray = pointerArray;
+    // Guard against overflow:
+    final int newLength = oldArray.length * 2 > 0 ? (oldArray.length * 2) : Integer.MAX_VALUE;
+    pointerArray = new long[newLength];
+    System.arraycopy(oldArray, 0, pointerArray, 0, oldArray.length);
   }
 
   /**
-   * Insert a record into the sort buffer.
+   * Inserts a record to be sorted.
    *
-   * @param objectAddress pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
+   * @param recordPointer pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
+   * @param keyPrefix a user-defined key prefix
    */
-  public void insertRecord(long objectAddress, long keyPrefix) {
+  public void insertRecord(long recordPointer, long keyPrefix) {
     if (!hasSpaceForAnotherRecord()) {
-      expandSortBuffer();
+      expandPointerArray();
     }
-    sortBuffer[sortBufferInsertPosition] = objectAddress;
-    sortBufferInsertPosition++;
-    sortBuffer[sortBufferInsertPosition] = keyPrefix;
-    sortBufferInsertPosition++;
+    pointerArray[pointerArrayInsertPosition] = recordPointer;
+    pointerArrayInsertPosition++;
+    pointerArray[pointerArrayInsertPosition] = keyPrefix;
+    pointerArrayInsertPosition++;
   }
 
   private static final class SortedIterator extends UnsafeSorterIterator {
@@ -171,7 +174,7 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public UnsafeSorterIterator getSortedIterator() {
-    sorter.sort(sortBuffer, 0, sortBufferInsertPosition / 2, sortComparator);
-    return new SortedIterator(memoryManager, sortBufferInsertPosition, sortBuffer);
+    sorter.sort(pointerArray, 0, pointerArrayInsertPosition / 2, sortComparator);
+    return new SortedIterator(memoryManager, pointerArrayInsertPosition, pointerArray);
   }
 }
