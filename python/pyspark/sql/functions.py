@@ -404,16 +404,21 @@ def when(condition, value):
     return Column(jc)
 
 
-@since(1.4)
-def log(col, base=math.e):
+@since(1.5)
+def log(arg1, arg2=None):
     """Returns the first argument-based logarithm of the second argument.
 
-    >>> df.select(log(df.age, 10.0).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    If there is only one argument, then this takes the natural logarithm of the argument.
+
+    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
     >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
+    if arg2 is None:
+        arg2 = arg1
+        arg1 = math.e
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.log(base, _to_java_column(col))
     return Column(jc)
