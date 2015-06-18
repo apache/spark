@@ -56,6 +56,32 @@ class DataType(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def from_string(self, data_type):
+        assert(isinstance(data_type, str))
+
+        if data_type=="byte":
+            return "ByteType"
+        elif data_type=="long":
+            return "LongType"
+        elif data_type=="float":
+            return "FloatType"
+        elif data_type=="int" or data_type=="integer":
+            return "IntegerType"
+        elif data_type=="double" or data_type=="numeric":
+            return "DoubleType"
+        elif data_type=="string" or data_type=="character":
+            return "StringType"
+        elif data_type=="raw" or data_type=="binary":
+            return "BinaryType"
+        elif data_type=="boolean" or data_type=="logical":
+            return "BooleanType"
+        elif data_type=="timestamp":
+            return "TimestampType"
+        elif data_type=="date":
+            return "DateType"
+        else:
+            raise ValueError("Invalid type: " + data_type)
+
     @classmethod
     def typeName(cls):
         return cls.__name__[:-4].lower()
@@ -398,12 +424,16 @@ class StructType(DataType):
         """
         if isinstance(name_or_struct_field, StructField):
             self.fields.append(name_or_struct_field)
-            return self
         else:
             if isinstance(name_or_struct_field, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
-            self.fields.append(StructField(name_or_struct_field, data_type, nullable, metadata))
-            return self
+
+            if isinstance(data_type, str):
+                data_type_fixed = DataType().from_string(data_type)
+            else:
+                data_type_fixed = data_type
+            self.fields.append(StructField(name_or_struct_field, data_type_fixed, nullable, metadata))
+        return self
 
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
