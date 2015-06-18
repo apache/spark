@@ -319,10 +319,10 @@ final class ShuffleBlockFetcherIterator(
  * Note: the delegate parameter is private[storage] to make it available to tests.
  */
 private class BufferReleasingInputStream(
-    private[storage] val delegate: InputStream,
-    iterator: ShuffleBlockFetcherIterator)
+    private val delegate: InputStream,
+    private val iterator: ShuffleBlockFetcherIterator)
   extends InputStream {
-  private var closed = false
+  private[this] var closed = false
 
   override def read(): Int = delegate.read()
 

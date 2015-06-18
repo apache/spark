@@ -27,6 +27,7 @@ import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkFunSuite, TaskContextImpl}
 import org.apache.spark.network._
@@ -34,7 +35,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.BlockFetchingListener
 
 
-class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodTester {
   // Some of the tests are quite tricky because we are testing the cleanup behavior
   // in the presence of faults.
 
@@ -113,13 +114,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
       val wrappedInputStream = inputStream.get.asInstanceOf[BufferReleasingInputStream]
       verify(mockBuf, times(0)).release()
-      verify(wrappedInputStream.delegate, times(0)).close()
+      val delegateAccess = PrivateMethod[InputStream]('delegate)
+
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
       wrappedInputStream.close()
       verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.delegate, times(1)).close()
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
       wrappedInputStream.close() // close should be idempotent
       verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.delegate, times(1)).close()
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
     }
 
     // 3 local blocks, and 2 remote blocks
