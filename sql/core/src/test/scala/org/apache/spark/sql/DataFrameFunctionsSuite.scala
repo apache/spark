@@ -79,12 +79,6 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
-  }
-
   test("constant functions") {
     checkAnswer(
       testData2.select(e()).limit(1),
