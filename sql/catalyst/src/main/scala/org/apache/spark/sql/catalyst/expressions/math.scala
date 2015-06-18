@@ -255,3 +255,23 @@ case class Pow(left: Expression, right: Expression)
       """
   }
 }
+
+case class Logarithm(left: Expression, right: Expression)
+  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  def this(child: Expression) = {
+    this(EulerNumber(), child)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val logCode = if (left.isInstanceOf[EulerNumber]) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+    }
+    logCode + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+    """
+  }
+}

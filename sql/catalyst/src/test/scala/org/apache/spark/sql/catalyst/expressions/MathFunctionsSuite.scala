@@ -204,4 +204,22 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Atan2, math.atan2)
   }
 
+  test("binary log") {
+    val f = (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
+    val domain = (1 to 20).map(v => (v * 0.1, v * 0.2))
+
+    domain.foreach { case (v1, v2) =>
+      checkEvaluation(Logarithm(Literal(v1), Literal(v2)), f(v1 + 0.0, v2 + 0.0), EmptyRow)
+      checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
+      checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
+    }
+    checkEvaluation(
+      Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal.create(null, DoubleType)),
+      null,
+      create_row(null))
+  }
 }

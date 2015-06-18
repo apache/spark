@@ -1084,6 +1084,22 @@ object functions {
   def log(columnName: String): Column = log(Column(columnName))
 
   /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, a: Column): Column = Logarithm(lit(base).expr, a.expr)
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, columnName: String): Column = log(base, Column(columnName))
+
+  /**
    * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
