@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
@@ -153,9 +151,11 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case Aggregate(groups, aggs, child) if child.resolved =>
+      case Aggregate(groups, aggs, child)
+        if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Aggregate(groups, assignAliases(aggs), child)
-      case Project(projectList, child) if child.resolved =>
+      case Project(projectList, child)
+        if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Project(assignAliases(projectList), child)
     }
   }
@@ -371,12 +371,10 @@ class Analyzer(
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = withPosition(u) {
-              q.resolveChildren(nameParts, resolver).map {
-                case UnresolvedAlias(child) => child
-                case other => other
-              }.getOrElse(u)
-            }
+            val result =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
+              }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -402,6 +400,11 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
+  private def trimUnresolvedAlias(ne: NamedExpression) = ne match {
+    case UnresolvedAlias(child) => child
+    case other => other
+  }
+
   private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
     ordering.map { order =>
       // Resolve SortOrder in one round.
@@ -411,7 +414,7 @@ class Analyzer(
       try {
         val newOrder = order transformUp {
           case u @ UnresolvedAttribute(nameParts) =>
-            plan.resolve(nameParts, resolver).getOrElse(u)
+            plan.resolve(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
           case UnresolvedExtractValue(child, fieldName) if child.resolved =>
             ExtractValue(child, fieldName, resolver)
         }

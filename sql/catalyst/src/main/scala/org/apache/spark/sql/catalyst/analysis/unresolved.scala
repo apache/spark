@@ -222,6 +222,6 @@ case class UnresolvedAlias(child: Expression) extends NamedExpression
 
   override lazy val resolved = false
 
-  override def eval(input: Row = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
