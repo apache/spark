@@ -43,8 +43,9 @@ abstract class InternalRow extends Row {
           val o1 = apply(i)
           val o2 = other.apply(i)
           if (o1.isInstanceOf[Array[Byte]]) {
+            val b1 = o1.asInstanceOf[Array[Byte]]
             if (!o2.isInstanceOf[Array[Byte]] ||
-              !java.util.Arrays.equals(o1.asInstanceOf[Array[Byte]], o2.asInstanceOf[Array[Byte]])) {
+              !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
               return false
             }
           } else if (o1 != o2) {
