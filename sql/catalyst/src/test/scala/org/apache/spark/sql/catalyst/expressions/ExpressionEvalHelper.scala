@@ -55,7 +55,7 @@ trait ExpressionEvalHelper {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if (actual !== expected) {
+    if (actual != expected) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
@@ -83,7 +83,7 @@ trait ExpressionEvalHelper {
     }
 
     val actual = plan(inputRow).apply(0)
-    if (actual !== expected) {
+    if (actual != expected) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }

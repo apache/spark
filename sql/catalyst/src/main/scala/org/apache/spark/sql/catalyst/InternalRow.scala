@@ -26,35 +26,38 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 abstract class InternalRow extends Row {
   // A default implementation to change the return type
-  override def copy(): InternalRow = {this}
+  override def copy(): InternalRow = this
 
-  // A default version (slow), used for tests
-  override def equals(o: Any): Boolean = o match {
-    case other: InternalRow =>
-      if (length != other.length) {
+  override def equals(o: Any): Boolean = {
+    if (!o.isInstanceOf[Row]) {
+      return false
+    }
+
+    val other = o.asInstanceOf[Row]
+    if (length != other.length) {
+      return false
+    }
+
+    for (i <- 0 until length) {
+      if (isNullAt(i) != other.isNullAt(i)) {
         return false
       }
-
-      for (i <- 0 until length) {
-        if (isNullAt(i) != other.isNullAt(i)) {
-          return false
-        }
-        if (!isNullAt(i)) {
-          val o1 = apply(i)
-          val o2 = other.apply(i)
-          if (o1.isInstanceOf[Array[Byte]]) {
-            val b1 = o1.asInstanceOf[Array[Byte]]
-            if (!o2.isInstanceOf[Array[Byte]] ||
-              !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
-              return false
-            }
-          } else if (o1 != o2) {
+      if (!isNullAt(i)) {
+        val o1 = apply(i)
+        val o2 = other.apply(i)
+        if (o1.isInstanceOf[Array[Byte]]) {
+          // handle equality of Array[Byte]
+          val b1 = o1.asInstanceOf[Array[Byte]]
+          if (!o2.isInstanceOf[Array[Byte]] ||
+            !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
             return false
           }
+        } else if (o1 != o2) {
+          return false
         }
       }
-      true
-    case _ => false
+    }
+    true
   }
 
   // Custom hashCode function that matches the efficient code generated version.
