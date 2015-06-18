@@ -92,6 +92,8 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("SPARK-2729 regression: timestamp data type") {
     val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
+    timestamps.registerTempTable("timestamps")
+
     checkAnswer(
       sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
