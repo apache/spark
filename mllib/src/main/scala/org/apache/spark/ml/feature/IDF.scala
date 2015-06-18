@@ -102,9 +102,6 @@ class IDFModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
-  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
-
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val idf = udf { vec: Vector => idfModel.transform(vec) }

@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.param.ParamsSuite
-
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD

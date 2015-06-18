@@ -113,7 +113,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
   }
 
-  test("OneVsRest.copy and OneVsRestMode.copy") {
+  test("OneVsRest.copy and OneVsRestModel.copy") {
     val lr = new LogisticRegression()
       .setMaxIter(1)
 
