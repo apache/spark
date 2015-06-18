@@ -265,7 +265,9 @@ public final class UnsafeExternalSorter {
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     final UnsafeSorterIterator inMemoryIterator = sorter.getSortedIterator();
-    if (!spillWriters.isEmpty()) {
+    if (spillWriters.isEmpty()) {
+      return inMemoryIterator;
+    } else {
       final UnsafeSorterSpillMerger spillMerger =
         new UnsafeSorterSpillMerger(recordComparator, prefixComparator);
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
@@ -276,8 +278,6 @@ public final class UnsafeExternalSorter {
         spillMerger.addSpill(inMemoryIterator);
       }
       return spillMerger.getSortedIterator();
-    } else {
-      return inMemoryIterator;
     }
   }
 }
