@@ -48,7 +48,7 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
 
   override def toString: String = s"DateAdd($startDate, $days)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
     val d = days.eval(input)
     if (start == null || d == null) {
@@ -93,7 +93,7 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
 
   override def toString: String = s"DateSub($startDate, $days)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
     val d = days.eval(input)
     if (start == null || d == null) {

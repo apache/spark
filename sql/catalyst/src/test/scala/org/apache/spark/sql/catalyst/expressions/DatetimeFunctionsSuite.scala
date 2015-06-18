@@ -26,30 +26,30 @@ class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("date_add") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
-      "2016-02-29", Row.empty)
+      "2016-02-29", EmptyRow)
     checkEvaluation(
-      DateAdd(Literal("2016-03-01"), Literal(-1)), "2016-02-29", Row.empty)
+      DateAdd(Literal("2016-03-01"), Literal(-1)), "2016-02-29", EmptyRow)
     checkEvaluation(
       DateAdd(Literal(Timestamp.valueOf("2016-03-01 23:59:59")), Literal(-2)),
-      "2016-02-28", Row.empty)
+      "2016-02-28", EmptyRow)
     checkEvaluation(
       DateAdd(Literal("2016-03-01 23:59:59"), Literal(-3)),
-      "2016-02-27", Row.empty)
-    checkEvaluation(DateAdd(Literal(null), Literal(-1)), null, Row.empty)
+      "2016-02-27", EmptyRow)
+    checkEvaluation(DateAdd(Literal(null), Literal(-1)), null, EmptyRow)
   }
 
   test("date_sub") {
     checkEvaluation(
-      DateSub(Literal("2015-01-01"), Literal(1)), "2014-12-31", Row.empty)
+      DateSub(Literal("2015-01-01"), Literal(1)), "2014-12-31", EmptyRow)
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)), "2015-01-02", Row.empty)
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)), "2015-01-02", EmptyRow)
     checkEvaluation(
       DateSub(Literal(Timestamp.valueOf("2015-01-01 01:00:00")), Literal(-1)),
-      "2015-01-02", Row.empty)
+      "2015-01-02", EmptyRow)
     checkEvaluation(
-      DateSub(Literal("2015-01-01 01:00:00"), Literal(0)), "2015-01-01", Row.empty)
+      DateSub(Literal("2015-01-01 01:00:00"), Literal(0)), "2015-01-01", EmptyRow)
     checkEvaluation(
-      DateSub(Literal("2015-01-01"), Literal.create(null, IntegerType)), null, Row.empty)
+      DateSub(Literal("2015-01-01"), Literal.create(null, IntegerType)), null, EmptyRow)
   }
 
 }
