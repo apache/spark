@@ -716,7 +716,7 @@ object functions {
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 1.5.0
    */
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
