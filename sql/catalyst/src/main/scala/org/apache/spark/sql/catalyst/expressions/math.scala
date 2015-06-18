@@ -145,7 +145,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     }
   }
 
-  def funcName = name.toLowerCase
+  def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${funcName}($c1, $c2)")
