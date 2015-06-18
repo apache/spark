@@ -25,6 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
+
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /**
@@ -93,6 +94,21 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(c(Literal.create(null, DoubleType), Literal(1.0)), null, create_row(null))
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
+  }
+
+  test("conv") {
+    checkEvaluation(Conv(Literal.create("3", StringType), Literal(10), Literal(2)),
+      "11", create_row(null))
+    checkEvaluation(Conv(Literal(3), Literal(10), Literal(2)),
+      "11", create_row(null))
+    checkEvaluation(Conv(Literal(100), Literal(2), Literal(10)),
+      "4", create_row(null))
+    checkEvaluation(Conv(Literal(-10), Literal(16), Literal(-10)),
+      "-16", create_row(null))
+    checkEvaluation(Conv(Literal.create(17.toShort, ShortType), Literal(10), Literal(16)),
+      "11", create_row(null))
+    checkEvaluation(Conv(Literal(3122234455L), Literal(10), Literal(16)),
+      "BA198457", create_row(null))
   }
 
   test("e") {
