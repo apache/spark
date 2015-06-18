@@ -15,8 +15,13 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
+"""
+ Create a queue of RDDs that will be mapped/reduced one at a time in
+ 1 second intervals.
 
+ To run this example use
+    `$ bin/spark-submit examples/src/main/python/streaming/queue_stream.py
+"""
 import sys
 import time
 
@@ -32,7 +37,7 @@ if __name__ == "__main__":
     # a QueueInputDStream
     rddQueue = []
     for i in xrange(5):
-        rddQueue += [ssc.sparkContext.parallelize([j for j in xrange(1,1001)])]
+        rddQueue += [ssc.sparkContext.parallelize([j for j in xrange(1,1001)], 10)]
     
     # Create the QueueInputDStream and use it do some processing
     inputStream = ssc.queueStream(rddQueue)
@@ -41,4 +46,5 @@ if __name__ == "__main__":
     reducedStream.pprint()
     
     ssc.start()
-    ssc.awaitTermination()
+    time.sleep(5)
+    ssc.stop(stopSparkContext = True, stopGraceFully = True)
