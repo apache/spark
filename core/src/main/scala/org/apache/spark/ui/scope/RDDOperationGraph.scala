@@ -165,11 +165,12 @@ private[ui] object RDDOperationGraph extends Logging {
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
   def makeDotFile(graph: RDDOperationGraph): String = {
-    val header = "digraph G {\n"
     val subgraph = makeDotSubgraph(graph.rootCluster, indent = "  ")
-    val edges = graph.edges.map { edge => s"""  ${edge.fromId}->${edge.toId};\n""" }.mkString
-    val footer = "}"
-    val result = s"${header}${subgraph}${edges}${footer}"
+
+    val edges = new StringBuilder
+    graph.edges.foreach { edge => edges.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
+
+    val result = s"digraph G {\n${subgraph}${edges.toString()}}"
     logDebug(result)
     result
   }
@@ -186,10 +187,13 @@ private[ui] object RDDOperationGraph extends Logging {
     val nodes = cluster.childNodes.map { node =>
       indent + s"  ${makeDotNode(node)};\n"
     }.mkString
-    val clusters = cluster.childClusters.map { cscope =>
-      makeDotSubgraph(cscope, indent + "  ")
-    }.mkString
+
+    val clusters = new StringBuilder
+    cluster.childClusters.foreach { cscope =>
+      clusters.append(makeDotSubgraph(cscope, indent + "  "))
+    }
+
     val footer = indent + "}\n"
-    s"${header}${nodes}${clusters}${footer}"
+    s"${header}${nodes}${clusters.toString()}${footer}"
   }
 }
