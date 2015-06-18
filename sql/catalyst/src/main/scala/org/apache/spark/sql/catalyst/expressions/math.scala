@@ -54,27 +54,15 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param f The math function.
  * @param name The short name of the function
  */
-abstract class AbstractUnaryMathExpression[T, U](name: String)
-  extends UnaryExpression with Serializable with ExpectsInputTypes {
-  self: Product =>
-
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
-
-  // name of function in java.lang.Math
-  def funcName: String = name.toLowerCase
-}
-
-/**
- * Base for [[AbstractUnaryMathExpression]] that accepts a Double and returns a Double.
- */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends AbstractUnaryMathExpression[Double, Double](name) {
+  extends UnaryExpression with Serializable with ExpectsInputTypes {
   self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = true
+  override def toString: String = s"$name($child)"
 
   override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
@@ -85,6 +73,9 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
       if (result.isNaN) null else result
     }
   }
+
+  // name of function in java.lang.Math
+  def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
@@ -218,10 +209,18 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 }
 
 case class Bin(child: Expression)
-  extends AbstractUnaryMathExpression[Long, String]("BIN") {
+  extends UnaryExpression with Serializable with ExpectsInputTypes {
+
+  val name: String = "BIN"
+
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = true
+  override def toString: String = s"$name($child)"
 
   override def expectedChildTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
+
+  def funcName: String = name.toLowerCase
 
   override def eval(input: catalyst.InternalRow): Any = {
     val evalE = child.eval(input)
