@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{SQLConf, Row}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.test.TestSQLContext
 
 import scala.util.Random
 
@@ -37,28 +35,23 @@ class UnsafeExternalSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
   }
 
-  private def createRow(values: Any*): Row = {
-    new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
-  }
-
   test("basic sorting") {
-
-    val inputData = Seq(
-      ("Hello", 9),
-      ("World", 4),
-      ("Hello", 7),
-      ("Skinny", 0),
-      ("Constantinople", 9)
+    val input = Seq(
+      ("Hello", 9, 1.0),
+      ("World", 4, 2.0),
+      ("Hello", 7, 8.1),
+      ("Skinny", 0, 2.2),
+      ("Constantinople", 9, 1.1)
     )
-
-    val sortOrder: Seq[SortOrder] = Seq(
-      SortOrder(BoundReference(0, StringType, nullable = false), Ascending),
-      SortOrder(BoundReference(1, IntegerType, nullable = false), Descending))
 
     checkAnswer(
-      Random.shuffle(inputData),
-      (input: SparkPlan) => new UnsafeExternalSort(sortOrder, global = false, input),
-      inputData
-    )
+      Random.shuffle(input).toDF("a", "b", "c"),
+      ExternalSort('a.asc :: 'b.asc :: Nil, global = false, _: SparkPlan),
+      input.sorted)
+
+    checkAnswer(
+      Random.shuffle(input).toDF("a", "b", "c"),
+      ExternalSort('b.asc :: 'a.asc :: Nil, global = false, _: SparkPlan),
+      input.sortBy(t => (t._2, t._1)))
   }
 }
