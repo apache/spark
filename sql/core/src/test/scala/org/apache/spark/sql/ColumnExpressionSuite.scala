@@ -297,12 +297,25 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("in") {
-    var expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2)
-    checkAnswer(testData2.filter($"a" in(1, 2)), expectedAnswer)
-    expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 3)
-    checkAnswer(testData2.filter($"a" in(1, 3)), expectedAnswer)
-    expectedAnswer = testData2.collect().toSeq.filter(r => r.getInt(0) == 2 || r.getInt(0) == 3)
-    checkAnswer(testData2.filter($"a" in(2, 3)), expectedAnswer)
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a" in(1, 2)),
+        df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2)
+      )
+    checkAnswer(df.filter($"a" in(3, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2)
+    )
+    checkAnswer(df.filter($"a" in(3, 1)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1)
+    )
+    checkAnswer(df.filter($"b" in("y", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x")
+    )
+    checkAnswer(df.filter($"b" in("z", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x")
+    )
+    checkAnswer(df.filter($"b" in("z", "y")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y")
+    )
   }
 
   val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
