@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   override lazy val sqlContext: SQLContext = TestHive
@@ -608,5 +609,57 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
           .save(dir.getCanonicalPath)
       }
     }
+  }
+
+  test("SPARK-7943:DF created by hiveContext can create table to specific db by saveAstable") {
+
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+    // use dbname.tablename to specific db
+    sqlContext.sql("""create database if not exists testdb7943""")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("testdb7943.tbl7943_1")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("tbl7943_2")
+
+    intercept[NoSuchDatabaseException] {
+      df.write
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("testdb7943-2.tbl1")
+    }
+
+    sqlContext.sql("""use testdb7943""")
+
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("tbl7943_3")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("default.tbl7943_4")
+
+    checkAnswer(
+      sqlContext.sql("show TABLES in testdb7943"),
+      Seq(Row("tbl7943_1", false), Row("tbl7943_3", false)))
+
+    val result = sqlContext.sql("show TABLES in default")
+    checkAnswer(
+      result.filter("tableName = 'tbl7943_2'"),
+      Row("tbl7943_2", false))
+
+    checkAnswer(
+      result.filter("tableName = 'tbl7943_4'"),
+      Row("tbl7943_4", false))
+
+    sqlContext.sql("""use default""")
+    sqlContext.sql("""drop table if exists tbl7943_2 """)
+    sqlContext.sql("""drop table if exists tbl7943_4 """)
+    sqlContext.sql("""drop database if exists testdb7943 CASCADE""")
   }
 }
