@@ -77,25 +77,6 @@ class SparkPlanTest extends SparkFunSuite {
       case None =>
     }
   }
-
-  /**
-   * Runs the plan and makes sure the answer matches the expected result.
-   * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
-   *                     the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
-   */
-  protected def checkAnswer[A <: Product : TypeTag](
-      input: Seq[A],
-      planFunction: SparkPlan => SparkPlan,
-      expectedAnswer: Seq[A]): Unit = {
-    val inputDf = TestSQLContext.createDataFrame(input)
-    val expectedRows = expectedAnswer.map(Row.fromTuple)
-    SparkPlanTest.checkAnswer(inputDf, planFunction, expectedRows) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
-  }
 }
 
 /**
@@ -128,9 +109,8 @@ object SparkPlanTest {
 
         plan.transformExpressions {
           case UnresolvedAttribute(Seq(u)) =>
-            inputMap.get(u).getOrElse {
-              sys.error(s"Invalid Test: Cannot resolve $u given input ${inputMap}")
-            }
+            inputMap.getOrElse(u,
+              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
         }
     }
 

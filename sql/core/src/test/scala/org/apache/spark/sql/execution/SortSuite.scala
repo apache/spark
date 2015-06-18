@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class SortSuite extends SparkPlanTest {
 
+  // This test was originally added as an example of how to use [[SparkPlanTest]];
+  // it's not designed to be a comprehensive test of ExternalSort.
   test("basic sorting using ExternalSort") {
 
     val input = Seq(
