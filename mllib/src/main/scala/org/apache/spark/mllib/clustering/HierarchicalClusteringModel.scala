@@ -30,9 +30,9 @@ import org.apache.spark.{Logging, SparkContext}
 /**
  * This class is used for the model of the hierarchical clustering
  *
- * @param tree a cluster as a tree node
+ * @param node a cluster as a tree node
  */
-class HierarchicalClusteringModel(val tree: ClusterTree)
+class HierarchicalClusteringModel(val node: ClusterNode)
     extends Serializable with Saveable with Logging {
 
   /** Current version of model save/load format. */
@@ -56,7 +56,7 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
     }
   }
 
-  def getClusters: Array[ClusterTree] = this.tree.getLeavesNodes
+  def getClusters: Array[ClusterNode] = this.node.getLeavesNodes
 
   def getCenters: Array[Vector] = this.getClusters.map(_.center)
 
@@ -113,32 +113,32 @@ class HierarchicalClusteringModel(val tree: ClusterTree)
 
   def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
 
-  def toAdjacencyList(): Array[(Int, Int, Double)] = this.tree.toAdjacencyList()
+  def toAdjacencyList(): Array[(Int, Int, Double)] = this.node.toAdjacencyList()
 
   /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
   def toJavaAdjacencyList(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
     var javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]();
-    this.tree.toAdjacencyList().foreach { x =>
+    this.node.toAdjacencyList().foreach { x =>
       val edge = new java.util.ArrayList[java.lang.Double]()
-      edge.add(x._1)
-      edge.add(x._2)
-      edge.add(x._3)
+      edge.add(x._1.toDouble)
+      edge.add(x._2.toDouble)
+      edge.add(x._3.toDouble)
       javaList.add(edge)
     }
     javaList
   }
 
-  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = this.tree.toLinkageMatrix()
+  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = this.node.toLinkageMatrix()
 
   /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
   def toJavaLinkageMatrix(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
     val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
-    this.tree.toLinkageMatrix().foreach {x =>
+    this.node.toLinkageMatrix().foreach {x =>
       val row = new java.util.ArrayList[java.lang.Double]()
-      row.add(x._1)
-      row.add(x._2)
-      row.add(x._3)
-      row.add(x._4)
+      row.add(x._1.toDouble)
+      row.add(x._2.toDouble)
+      row.add(x._3.toDouble)
+      row.add(x._4.toDouble)
       javaList.add(row)
     }
     javaList

@@ -52,12 +52,12 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
     assert(model.getClusters.size == 123)
-    assert(model.tree.getHeight ~== 702.8641 absTol 10E-4)
+    assert(model.node.getHeight ~== 702.8641 absTol 10E-4)
 
     // check the relations between a parent cluster and its children
-    assert(model.tree.getParent === None)
-    assert(model.tree.getChildren.apply(0).getParent.get === model.tree)
-    assert(model.tree.getChildren.apply(1).getParent.get === model.tree)
+    assert(model.node.getParent === None)
+    assert(model.node.getChildren.apply(0).getParent.get === model.node)
+    assert(model.node.getChildren.apply(1).getParent.get === model.node)
     assert(model.getClusters.forall(_.getParent != None))
   }
 
@@ -67,7 +67,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
     assert(model.getClusters.size == 100)
-    assert(model.tree.getHeight ~== 72.12489 absTol 10E-4)
+    assert(model.node.getHeight ~== 72.12489 absTol 10E-4)
   }
 
   test("initializeData") {
@@ -142,10 +142,10 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
       (3L, Vectors.dense(11.0, 11.0))
     ).map { case (idx, vector) => (idx, vector.toBreeze)}
     val newClusters = Map(
-      4L -> new ClusterTree(Vectors.dense(1.0, 1.0), 3, Vectors.dense(1.0, 1.0)),
-      5L -> new ClusterTree(Vectors.dense(4.0, 4.0), 3, Vectors.dense(1.0, 1.0)),
-      6L -> new ClusterTree(Vectors.dense(7.0, 7.0), 3, Vectors.dense(1.0, 1.0)),
-      7L -> new ClusterTree(Vectors.dense(10.0, 10.0), 3, Vectors.dense(1.0, 1.0))
+      4L -> new ClusterNode(Vectors.dense(1.0, 1.0), 3, Vectors.dense(1.0, 1.0)),
+      5L -> new ClusterNode(Vectors.dense(4.0, 4.0), 3, Vectors.dense(1.0, 1.0)),
+      6L -> new ClusterNode(Vectors.dense(7.0, 7.0), 3, Vectors.dense(1.0, 1.0)),
+      7L -> new ClusterNode(Vectors.dense(10.0, 10.0), 3, Vectors.dense(1.0, 1.0))
     )
     val data = sc.parallelize(seed)
     val result = algo.updateClusterIndex(data, newClusters).collect().toSeq
