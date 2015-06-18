@@ -26,6 +26,7 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
+import org.apache.spark.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +41,7 @@ public final class UnsafeExternalSorter {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
-  private static final int PAGE_SIZE = 1024 * 1024;  // TODO: tune this
+  private static final int PAGE_SIZE = 1 << 27;  // 128 megabytes
 
   private final PrefixComparator prefixComparator;
   private final RecordComparator recordComparator;
@@ -107,6 +108,12 @@ public final class UnsafeExternalSorter {
 
   @VisibleForTesting
   public void spill() throws IOException {
+    logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
+      Thread.currentThread().getId(),
+      Utils.bytesToString(getMemoryUsage()),
+      numSpills,
+      numSpills > 1 ? " times" : " time");
+
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSize, writeMetrics);
     spillWriters.add(spillWriter);
@@ -129,12 +136,11 @@ public final class UnsafeExternalSorter {
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     taskContext.taskMetrics().incDiskBytesSpilled(spillWriter.numberOfSpilledBytes());
     numSpills++;
-    final long threadId = Thread.currentThread().getId();
-    // TODO: messy; log _before_ spill
-    logger.info("Thread " + threadId + " spilling in-memory map of " +
-      org.apache.spark.util.Utils.bytesToString(spillSize) + " to disk (" +
-      (numSpills + ((numSpills > 1) ? " times" : " time")) + " so far)");
     openSorter();
+  }
+
+  private long getMemoryUsage() {
+    return sorter.getMemoryUsage() + (allocatedPages.size() * (long) PAGE_SIZE);
   }
 
   public long freeMemory() {
