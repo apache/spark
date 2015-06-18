@@ -877,7 +877,8 @@ class RDDTests(ReusedPySparkTestCase):
     def test_pipe_functions(self):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
-        self.assertRaises(Exception, rdd.pipe('cc').collect())
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, rdd.pipe('cc').collect())
         result = rdd.pipe('cat').collect().sort()
         [self.assertEqual(x, y) for x, y in zip(data, result)]
 
