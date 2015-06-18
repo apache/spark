@@ -20,7 +20,7 @@ package org.apache.spark.unsafe.types;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
-  @Nonnull
+  @Nullable
   private byte[] bytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -56,16 +56,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Updates the UTF8String with String.
    */
   protected UTF8String set(final String str) {
-    if (str == null) {
-      bytes = new byte[0];
-    } else {
-      try {
-        bytes = str.getBytes("utf-8");
-      } catch (UnsupportedEncodingException e) {
-        // Turn the exception into unchecked so we can find out about it at runtime, but
-        // don't need to add lots of boilerplate code everywhere.
-        PlatformDependent.throwException(e);
-      }
+    try {
+      bytes = str.getBytes("utf-8");
+    } catch (UnsupportedEncodingException e) {
+      // Turn the exception into unchecked so we can find out about it at runtime, but
+      // don't need to add lots of boilerplate code everywhere.
+      PlatformDependent.throwException(e);
     }
     return this;
   }
@@ -74,7 +70,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Updates the UTF8String with byte[], which should be encoded in UTF-8.
    */
   protected UTF8String set(final byte[] bytes) {
-    this.bytes = (bytes != null) ? bytes : new byte[0];
+    this.bytes = bytes;
     return this;
   }
 
@@ -129,7 +125,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public boolean contains(final UTF8String substring) {
-    if (substring == null) return false;
     final byte[] b = substring.getBytes();
     if (b.length == 0) {
       return true;
@@ -143,23 +138,23 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return false;
   }
 
-  private boolean startsWith(final byte[] prefix, int offset) {
-    if (prefix.length + offset > bytes.length || offset < 0) {
+  private boolean startsWith(final byte[] prefix, int offsetInBytes) {
+    if (prefix.length + offsetInBytes > bytes.length || offsetInBytes < 0) {
       return false;
     }
     int i = 0;
-    while (i < prefix.length && prefix[i] == bytes[i + offset]) {
+    while (i < prefix.length && prefix[i] == bytes[i + offsetInBytes]) {
       i++;
     }
     return i == prefix.length;
   }
 
   public boolean startsWith(final UTF8String prefix) {
-    return prefix != null && startsWith(prefix.getBytes(), 0);
+    return startsWith(prefix.getBytes(), 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    return suffix != null && startsWith(suffix.getBytes(), bytes.length - suffix.getBytes().length);
+    return startsWith(suffix.getBytes(), bytes.length - suffix.getBytes().length);
   }
 
   public UTF8String toUpperCase() {
