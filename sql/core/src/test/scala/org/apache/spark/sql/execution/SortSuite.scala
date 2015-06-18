@@ -37,7 +37,7 @@ class SortSuite extends SparkPlanTest {
 
     checkAnswer(
       input,
-      child => new ExternalSort(sortOrder, global = false, child),
+      (child: SparkPlan) => new ExternalSort(sortOrder, global = false, child),
       input.sorted
     )
 

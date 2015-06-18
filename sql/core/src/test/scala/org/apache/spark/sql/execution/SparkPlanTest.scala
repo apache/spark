@@ -26,16 +26,16 @@ import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.catalyst.util._
 
 /**
- * Base class for writing tests for individual physical operators. For an example of how this class
- * can be used, see [[SortSuite]].
+ * Base class for writing tests for individual physical operators. For an example of how this
+ * class's test helper methods can be used, see [[SortSuite]].
  */
 class SparkPlanTest extends SparkFunSuite {
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate the
-   *                     physical operator that's being tested.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
   protected def checkAnswer(
@@ -51,8 +51,8 @@ class SparkPlanTest extends SparkFunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate the
-   *                     physical operator that's being tested.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
    * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
    */
   protected def checkAnswer[A <: Product : TypeTag](
@@ -76,8 +76,8 @@ object SparkPlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param input the input data to be used.
-   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate the
-   *                     physical operator that's being tested.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
   def checkAnswer(
