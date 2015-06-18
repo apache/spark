@@ -62,7 +62,7 @@ class SparkSubmitSuite
     SparkSubmit.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = () => exitedCleanly = true
+    SparkSubmit.exitFn = (_) => exitedCleanly = true
 
     val thread = new Thread {
       override def run() = try {

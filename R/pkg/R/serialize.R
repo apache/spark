@@ -37,6 +37,14 @@ writeObject <- function(con, object, writeType = TRUE) {
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
   type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
+  # Checking types is needed here, since ‘is.na’ only handles atomic vectors,
+  # lists and pairlists
+  if (type %in% c("integer", "character", "logical", "double", "numeric")) {
+    if (is.na(object)) {
+      object <- NULL
+      type <- "NULL"
+    }
+  }
   if (writeType) {
     writeType(con, type)
   }

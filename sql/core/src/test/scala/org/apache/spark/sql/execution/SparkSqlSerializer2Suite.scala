@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Timestamp, Date}
 
+import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.ShuffledRDD
@@ -26,7 +27,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.{ShuffleDependency, SparkFunSuite}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.{MyDenseVectorUDT, QueryTest}
 
 class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
@@ -74,11 +74,13 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   var numShufflePartitions: Int = _
   var useSerializer2: Boolean = _
 
-  override def beforeAll(): Unit = {
-    numShufflePartitions = conf.numShufflePartitions
-    useSerializer2 = conf.useSqlSerializer2
+  protected lazy val ctx = TestSQLContext
 
-    sql("set spark.sql.useSerializer2=true")
+  override def beforeAll(): Unit = {
+    numShufflePartitions = ctx.conf.numShufflePartitions
+    useSerializer2 = ctx.conf.useSqlSerializer2
+
+    ctx.sql("set spark.sql.useSerializer2=true")
 
     val supportedTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
@@ -94,7 +96,7 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
 
     // Create a RDD with all data types supported by SparkSqlSerializer2.
     val rdd =
-      sparkContext.parallelize((1 to 1000), 10).map { i =>
+      ctx.sparkContext.parallelize((1 to 1000), 10).map { i =>
         Row(
           s"str${i}: test serializer2.",
           s"binary${i}: test serializer2.".getBytes("UTF-8"),
@@ -112,15 +114,15 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
           new Timestamp(i))
       }
 
-    createDataFrame(rdd, schema).registerTempTable("shuffle")
+    ctx.createDataFrame(rdd, schema).registerTempTable("shuffle")
 
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    dropTempTable("shuffle")
-    sql(s"set spark.sql.shuffle.partitions=$numShufflePartitions")
-    sql(s"set spark.sql.useSerializer2=$useSerializer2")
+    ctx.dropTempTable("shuffle")
+    ctx.sql(s"set spark.sql.shuffle.partitions=$numShufflePartitions")
+    ctx.sql(s"set spark.sql.useSerializer2=$useSerializer2")
     super.afterAll()
   }
 
@@ -141,16 +143,16 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   }
 
   test("key schema and value schema are not nulls") {
-    val df = sql(s"SELECT DISTINCT ${allColumns} FROM shuffle")
+    val df = ctx.sql(s"SELECT DISTINCT ${allColumns} FROM shuffle")
     checkSerializer(df.queryExecution.executedPlan, serializerClass)
     checkAnswer(
       df,
-      table("shuffle").collect())
+      ctx.table("shuffle").collect())
   }
 
   test("key schema is null") {
     val aggregations = allColumns.split(",").map(c => s"COUNT($c)").mkString(",")
-    val df = sql(s"SELECT $aggregations FROM shuffle")
+    val df = ctx.sql(s"SELECT $aggregations FROM shuffle")
     checkSerializer(df.queryExecution.executedPlan, serializerClass)
     checkAnswer(
       df,
@@ -158,15 +160,14 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   }
 
   test("value schema is null") {
-    val df = sql(s"SELECT col0 FROM shuffle ORDER BY col0")
+    val df = ctx.sql(s"SELECT col0 FROM shuffle ORDER BY col0")
     checkSerializer(df.queryExecution.executedPlan, serializerClass)
-    assert(
-      df.map(r => r.getString(0)).collect().toSeq ===
-      table("shuffle").select("col0").map(r => r.getString(0)).collect().sorted.toSeq)
+    assert(df.map(r => r.getString(0)).collect().toSeq ===
+      ctx.table("shuffle").select("col0").map(r => r.getString(0)).collect().sorted.toSeq)
   }
 
   test("no map output field") {
-    val df = sql(s"SELECT 1 + 1 FROM shuffle")
+    val df = ctx.sql(s"SELECT 1 + 1 FROM shuffle")
     checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
   }
 }
@@ -177,8 +178,8 @@ class SparkSqlSerializer2SortShuffleSuite extends SparkSqlSerializer2Suite {
     super.beforeAll()
     // Sort merge will not be triggered.
     val bypassMergeThreshold =
-      sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-    sql(s"set spark.sql.shuffle.partitions=${bypassMergeThreshold-1}")
+      ctx.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    ctx.sql(s"set spark.sql.shuffle.partitions=${bypassMergeThreshold-1}")
   }
 }
 
@@ -189,7 +190,7 @@ class SparkSqlSerializer2SortMergeShuffleSuite extends SparkSqlSerializer2Suite 
     super.beforeAll()
     // To trigger the sort merge.
     val bypassMergeThreshold =
-      sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-    sql(s"set spark.sql.shuffle.partitions=${bypassMergeThreshold + 1}")
+      ctx.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+    ctx.sql(s"set spark.sql.shuffle.partitions=${bypassMergeThreshold + 1}")
   }
 }

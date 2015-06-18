@@ -134,6 +134,19 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("type coercion for If") {
+    val rule = new HiveTypeCoercion { }.IfCoercion
+    ruleTest(rule,
+      If(Literal(true), Literal(1), Literal(1L)),
+      If(Literal(true), Cast(Literal(1), LongType), Literal(1L))
+    )
+
+    ruleTest(rule,
+      If(Literal.create(null, NullType), Literal(1), Literal(1)),
+      If(Literal.create(null, BooleanType), Literal(1), Literal(1))
+    )
+  }
+
   test("type coercion for CaseKeyWhen") {
     val cwc = new HiveTypeCoercion {}.CaseWhenCoercion
     ruleTest(cwc,
@@ -147,7 +160,8 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion simplification for equal to") {
-    val be = new HiveTypeCoercion {}.BooleanEqualization
+    val be = new HiveTypeCoercion {}.BooleanEquality
+
     ruleTest(be,
       EqualTo(Literal(true), Literal(1)),
       Literal(true)
@@ -163,6 +177,27 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(be,
       EqualNullSafe(Literal(true), Literal(0)),
       And(IsNotNull(Literal(true)), Not(Literal(true)))
+    )
+
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(1L)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(new java.math.BigDecimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(BigDecimal(0)), Literal(true)),
+      Not(Literal(true))
+    )
+    ruleTest(be,
+      EqualTo(Literal(Decimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
+      Literal(true)
     )
   }
 }

@@ -1295,8 +1295,7 @@ private[spark] object Utils extends Logging {
       } catch {
         case t: Throwable =>
           if (originalThrowable != null) {
-            // We could do originalThrowable.addSuppressed(t), but it's
-            // not available in JDK 1.6.
+            originalThrowable.addSuppressed(t)
             logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
             throw originalThrowable
           } else {
@@ -1805,15 +1804,10 @@ private[spark] object Utils extends Logging {
 
   lazy val isInInterpreter: Boolean = {
     try {
-      val interpClass = classForName("spark.repl.Main")
+      val interpClass = classForName("org.apache.spark.repl.Main")
       interpClass.getMethod("interp").invoke(null) != null
     } catch {
-      // Returning true seems to be a mistake.
-      // Currently changing it to false causes tests failures in Streaming.
-      // For a more detailed discussion, please, refer to
-      // https://github.com/apache/spark/pull/5835#issuecomment-101042271 and subsequent comments.
-      // Addressing this changed is tracked as https://issues.apache.org/jira/browse/SPARK-7527
-      case _: ClassNotFoundException => true
+      case _: ClassNotFoundException => false
     }
   }
 
@@ -2225,6 +2219,22 @@ private[spark] object Utils extends Logging {
       sc.setLocalProperty(CallSite.SHORT_FORM, oldShortCallSite)
       sc.setLocalProperty(CallSite.LONG_FORM, oldLongCallSite)
     }
+  }
+
+  /**
+   * Return whether the specified file is a parent directory of the child file.
+   */
+  def isInDirectory(parent: File, child: File): Boolean = {
+    if (child == null || parent == null) {
+      return false
+    }
+    if (!child.exists() || !parent.exists() || !parent.isDirectory()) {
+      return false
+    }
+    if (parent.equals(child)) {
+      return true
+    }
+    isInDirectory(parent, child.getParentFile)
   }
 
 }

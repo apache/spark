@@ -995,11 +995,11 @@ List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>()
 schemaPeople # The DataFrame from the previous example.
 
 # DataFrames can be saved as Parquet files, maintaining the schema information.
-schemaPeople.read.parquet("people.parquet")
+schemaPeople.write.parquet("people.parquet")
 
 # Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a DataFrame.
-parquetFile = sqlContext.write.parquet("people.parquet")
+parquetFile = sqlContext.read.parquet("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerTempTable("parquetFile");
@@ -1102,7 +1102,11 @@ root
 {% endhighlight %}
 
 Notice that the data types of the partitioning columns are automatically inferred.  Currently,
-numeric data types and string type are supported.
+numeric data types and string type are supported. Sometimes users may not want to automatically
+infer the data types of the partitioning columns. For these use cases, the automatic type inference
+can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
+`true`. When type inference is disabled, string type will be used for the partitioning columns.
+
 
 ### Schema merging
 
@@ -1216,7 +1220,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td>false</td>
   <td>
     Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
-    not differentiate between binary data and strings when writing out the Parquet schema.  This
+    not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
 </tr>
@@ -1233,7 +1237,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
   <td>true</td>
   <td>
-    Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
+    Turns on caching of Parquet schema metadata. Can speed up querying of static data.
   </td>
 </tr>
 <tr>
@@ -1475,7 +1479,7 @@ expressed in HiveQL.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc);
+HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc.sc);
 
 sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
 sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
@@ -1785,6 +1789,13 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
+   <tr>
+    <td><code>spark.sql.planner.externalSort</code></td>
+    <td>false</td>
+    <td>
+      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
+    </td>
+  </tr>
 </table>
 
 # Distributed SQL Engine
@@ -1805,7 +1816,7 @@ To start the JDBC/ODBC server, run the following in the Spark directory:
 This script accepts all `bin/spark-submit` command line options, plus a `--hiveconf` option to
 specify Hive properties.  You may run `./sbin/start-thriftserver.sh --help` for a complete list of
 all available options.  By default, the server listens on localhost:10000. You may override this
-bahaviour via either environment variables, i.e.:
+behaviour via either environment variables, i.e.:
 
 {% highlight bash %}
 export HIVE_SERVER2_THRIFT_PORT=<listening-port>

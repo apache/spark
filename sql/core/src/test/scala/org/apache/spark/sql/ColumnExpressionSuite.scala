@@ -21,12 +21,13 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
+
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
@@ -184,12 +185,20 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
+
+    checkAnswer(
+      ctx.sql("select isnull(null), isnull(1)"),
+      Row(true, false))
   }
 
   test("isNotNull") {
     checkAnswer(
       nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
+
+    checkAnswer(
+      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      Row(false, true))
   }
 
   test("===") {
@@ -213,7 +222,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+    val nullData = ctx.createDataFrame(ctx.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -274,7 +283,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("between") {
-    val testData = TestSQLContext.sparkContext.parallelize(
+    val testData = ctx.sparkContext.parallelize(
       (0, 1, 2) ::
       (1, 2, 3) ::
       (2, 1, 0) ::
@@ -287,7 +296,7 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
-  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -360,23 +369,6 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key.asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key.desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(lit(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
@@ -392,6 +384,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      Row("AB", "CDE"))
   }
 
   test("lower") {
@@ -409,11 +405,15 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      Row("ab", "cde"))
   }
 
   test("monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+    val df = ctx.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -423,7 +423,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("sparkPartitionId") {
-    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    val df = ctx.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
     checkAnswer(
       df.select(sparkPartitionId()),
       Row(0)
