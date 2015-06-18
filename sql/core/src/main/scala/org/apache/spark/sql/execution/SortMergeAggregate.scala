@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
 
 /**
  * :: DeveloperApi ::
- * SortMerge group input data by `groupingExpressions` and computes the `aggregateExpressions` for each
- * group.
+ * SortMerge group input data by `groupingExpressions` and computes the `aggregateExpressions`
+ * for each group.
  *
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
