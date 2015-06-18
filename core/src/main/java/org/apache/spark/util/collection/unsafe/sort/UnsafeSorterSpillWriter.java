@@ -17,7 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 
 import scala.Tuple2;
 
@@ -31,15 +32,18 @@ import org.apache.spark.unsafe.PlatformDependent;
 
 final class UnsafeSorterSpillWriter {
 
-  private static final int SER_BUFFER_SIZE = 1024 * 1024;  // TODO: tune this
+  static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
   static final int EOF_MARKER = -1;
 
-  private byte[] arr = new byte[SER_BUFFER_SIZE];
+  // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
+  // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
+  // data through a byte array. This array does not need to be large enough to hold a single
+  // record;
+  private byte[] writeBuffer = new byte[DISK_WRITE_BUFFER_SIZE];
 
   private final File file;
   private final BlockId blockId;
   private BlockObjectWriter writer;
-  private DataOutputStream dos;
 
   public UnsafeSorterSpillWriter(
       BlockManager blockManager,
@@ -55,7 +59,26 @@ final class UnsafeSorterSpillWriter {
     // around this, we pass a dummy no-op serializer.
     writer = blockManager.getDiskWriter(
       blockId, file, DummySerializerInstance.INSTANCE, fileBufferSize, writeMetrics);
-    dos = new DataOutputStream(writer);
+  }
+
+  // Based on DataOutputStream.writeLong.
+  private void writeLongToBuffer(long v, int offset) throws IOException {
+    writeBuffer[offset + 0] = (byte)(v >>> 56);
+    writeBuffer[offset + 1] = (byte)(v >>> 48);
+    writeBuffer[offset + 2] = (byte)(v >>> 40);
+    writeBuffer[offset + 3] = (byte)(v >>> 32);
+    writeBuffer[offset + 4] = (byte)(v >>> 24);
+    writeBuffer[offset + 5] = (byte)(v >>> 16);
+    writeBuffer[offset + 6] = (byte)(v >>>  8);
+    writeBuffer[offset + 7] = (byte)(v >>>  0);
+  }
+
+  // Based on DataOutputStream.writeInt.
+  private void writeIntToBuffer(int v, int offset) throws IOException {
+    writeBuffer[offset + 0] = (byte)(v >>> 24);
+    writeBuffer[offset + 1] = (byte)(v >>> 16);
+    writeBuffer[offset + 2] = (byte)(v >>>  8);
+    writeBuffer[offset + 3] = (byte)(v >>>  0);
   }
 
   public void write(
@@ -63,24 +86,33 @@ final class UnsafeSorterSpillWriter {
       long baseOffset,
       int recordLength,
       long keyPrefix) throws IOException {
-    dos.writeInt(recordLength);
-    dos.writeLong(keyPrefix);
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset + 4,
-      arr,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      recordLength);
-    writer.write(arr, 0, recordLength);
+    writeIntToBuffer(recordLength, 0);
+    writeLongToBuffer(keyPrefix, 4);
+    int dataRemaining = recordLength;
+    int freeSpaceInWriteBuffer = DISK_WRITE_BUFFER_SIZE - 4 - 8;
+    long recordReadPosition = baseOffset + 4; // skip over record length
+    while (dataRemaining > 0) {
+      final int toTransfer = Math.min(freeSpaceInWriteBuffer, dataRemaining);
+      PlatformDependent.copyMemory(
+        baseObject,
+        recordReadPosition,
+        writeBuffer,
+        PlatformDependent.BYTE_ARRAY_OFFSET + (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer),
+        toTransfer);
+      writer.write(writeBuffer, 0, (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer) + toTransfer);
+      recordReadPosition += toTransfer;
+      dataRemaining -= toTransfer;
+      freeSpaceInWriteBuffer = DISK_WRITE_BUFFER_SIZE;
+    }
     writer.recordWritten();
   }
 
   public void close() throws IOException {
-    dos.writeInt(EOF_MARKER);
+    writeIntToBuffer(EOF_MARKER, 0);
+    writer.write(writeBuffer, 0, 4);
     writer.commitAndClose();
     writer = null;
-    dos = null;
-    arr = null;
+    writeBuffer = null;
   }
 
   public long numberOfSpilledBytes() {
