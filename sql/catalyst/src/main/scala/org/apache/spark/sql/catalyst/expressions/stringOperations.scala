@@ -304,7 +304,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
  */
 case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
@@ -320,7 +320,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTyp
     }
   }
 
-  override def toString: String = s"ascii($child)"
+  override def toString: String = s"ASCII($child)"
 }
 
 /**
@@ -328,7 +328,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTyp
  */
 case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override def eval(input: InternalRow): Any = {
     val bytes = child.eval(input)
@@ -341,7 +341,7 @@ case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTy
     }
   }
 
-  override def toString: String = s"base64($child)"
+  override def toString: String = s"BASE64($child)"
 }
 
 /**
@@ -349,7 +349,7 @@ case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTy
  */
 case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = BinaryType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
@@ -360,7 +360,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInput
     }
   }
 
-  override def toString: String = s"unbase64($child)"
+  override def toString: String = s"UNBASE64($child)"
 }
 
 /**
@@ -368,13 +368,12 @@ case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInput
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null. (As of Hive 0.12.0.).
  */
-case class Decode(bin: Expression, charset: Expression)
-  extends Expression with ExpectsInputTypes {
+case class Decode(bin: Expression, charset: Expression) extends Expression with ExpectsInputTypes {
   override def children: Seq[Expression] = bin :: charset :: Nil
   override def foldable: Boolean = bin.foldable && charset.foldable
   override def nullable: Boolean = bin.nullable || charset.nullable
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val l = bin.eval(input)
@@ -391,11 +390,11 @@ case class Decode(bin: Expression, charset: Expression)
     }
   }
 
-  override def toString: String = s"decode($bin, $charset)"
+  override def toString: String = s"DECODE($bin, $charset)"
 }
 
 /**
-* Encodes the first argument into a BINARY using the provided character set
+ * Encodes the first argument into a BINARY using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null. (As of Hive 0.12.0.)
 */
@@ -405,7 +404,7 @@ case class Encode(value: Expression, charset: Expression)
   override def foldable: Boolean = value.foldable && charset.foldable
   override def nullable: Boolean = value.nullable || charset.nullable
   override def dataType: DataType = BinaryType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val l = value.eval(input)
@@ -422,7 +421,7 @@ case class Encode(value: Expression, charset: Expression)
     }
   }
 
-  override def toString: String = s"encode($value, $charset)"
+  override def toString: String = s"ENCODE($value, $charset)"
 }
 
 
