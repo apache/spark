@@ -143,6 +143,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)
               (b ^ (b >>> 32)).toInt
+            case a: Array[Byte] => a.map(_.toInt).fold(0)(_ * 37 + _)
             case other => other.hashCode()
           }
         }
@@ -163,8 +164,19 @@ class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
         if (isNullAt(i) != other.isNullAt(i)) {
           return false
         }
-        if (apply(i) != other.apply(i)) {
-          return false
+        if (!isNullAt(i)) {
+          val o1 = apply(i)
+          val o2 = other.apply(i)
+          if (o1.isInstanceOf[Array[Byte]]) {
+            val b1 = o1.asInstanceOf[Array[Byte]]
+            if (!o2.isInstanceOf[Array[Byte]] ||
+              java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              return false
+            }
+
+          } else if (apply(i) != other.apply(i)) {
+            return false
+          }
         }
         i += 1
       }
