@@ -17,13 +17,4 @@
 # limitations under the License.
 #
 
-# Note that this will not necessarily work as intended with non-GNU sed (e.g. OS X)
-BASEDIR=$(dirname $0)/..
-find $BASEDIR -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.11/\1_2.10/g' {}
-
-# Also update <scala.binary.version> in parent POM
-$SED -i -e '0,/<scala\.binary\.version>2.11</s//<scala.binary.version>2.10</' $BASEDIR/pom.xml
-
-# Update source of scaladocs
-$SED -i -e 's/scala\-2.11/scala\-2.10/' $BASEDIR/docs/_plugins/copy_api_dirs.rb
+$(dirname $0)/change-scala-version.sh 2.11 2.10
