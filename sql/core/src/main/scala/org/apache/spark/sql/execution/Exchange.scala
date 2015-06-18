@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.serializer.Serializer
@@ -304,16 +302,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         }
 
         val withSort = if (needSort) {
-          // TODO(josh): this is a hack. Need a better way to determine whether UnsafeRow
-          // supports the given schema.
-          val supportsUnsafeRowConversion: Boolean = try {
-            new UnsafeRowConverter(withShuffle.schema.map(_.dataType).toArray)
-            true
-          } catch {
-            case NonFatal(e) =>
-              false
-          }
-          if (sqlContext.conf.unsafeEnabled && supportsUnsafeRowConversion) {
+          if (sqlContext.conf.unsafeEnabled
+              && UnsafeRowConverter.supportsSchema(withShuffle.schema)) {
             UnsafeExternalSort(rowOrdering, global = false, withShuffle)
           } else if (sqlContext.conf.externalSortEnabled) {
             ExternalSort(rowOrdering, global = false, withShuffle)
