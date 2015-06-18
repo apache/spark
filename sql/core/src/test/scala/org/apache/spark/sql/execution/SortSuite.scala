@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType}
-
 class SortSuite extends SparkPlanTest {
-  import TestSQLContext.implicits.localSeqToDataFrameHolder
 
   test("basic sorting using ExternalSort") {
 

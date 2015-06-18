@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import scala.util.control.NonFatal
+import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
 
@@ -27,13 +28,20 @@ import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.util._
 
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.{DataFrameHolder, Row, DataFrame}
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
 class SparkPlanTest extends SparkFunSuite {
+
+  /**
+   * Creates a DataFrame from a local Seq of Product.
+   */
+  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
+    TestSQLContext.implicits.localSeqToDataFrameHolder(data)
+  }
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
