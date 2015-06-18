@@ -17,44 +17,18 @@
 
 package org.apache.spark.mllib.clustering
 
-import java.io.File
-
 import breeze.linalg.{Vector => BV, norm => breezeNorm}
-import org.apache.commons.io.FilenameUtils
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.Logging
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{Logging, SparkContext}
 
 /**
  * This class is used for the model of the hierarchical clustering
  *
  * @param node a cluster as a tree node
  */
-class HierarchicalClusteringModel(val node: ClusterNode)
-    extends Serializable with Saveable with Logging {
-
-  /** Current version of model save/load format. */
-  override protected def formatVersion: String = "1.0"
-
-  override def save(sc: SparkContext, path: String): Unit = this.save(path)
-
-  def save(sc: JavaSparkContext, path: String): Unit = this.save(path)
-
-  private def save(path: String): Unit = {
-    val pathObj = new File(HierarchicalClusteringModel.getModelFilePath(path)).getParentFile
-    if (! pathObj.exists()) {
-      pathObj.mkdirs();
-    }
-    val modelFilePath = HierarchicalClusteringModel.getModelFilePath(path)
-    val oos = new java.io.ObjectOutputStream(new java.io.FileOutputStream(modelFilePath))
-    try {
-      oos.writeObject(this)
-    } finally {
-      oos.close()
-    }
-  }
+class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable with Logging {
 
   def getClusters: Array[ClusterNode] = this.node.getLeavesNodes
 
@@ -145,27 +119,3 @@ class HierarchicalClusteringModel(val node: ClusterNode)
   }
 }
 
-
-object HierarchicalClusteringModel extends Loader[HierarchicalClusteringModel] {
-
-  override def load(sc: SparkContext, path: String): HierarchicalClusteringModel = {
-    this.load(path)
-  }
-
-  def load(sc: JavaSparkContext, path: String): HierarchicalClusteringModel = {
-    this.load(path)
-  }
-
-  def load(path: String): HierarchicalClusteringModel = {
-    val modelFilePath = getModelFilePath(path)
-    val stream = new java.io.ObjectInputStream(new java.io.FileInputStream(modelFilePath))
-    try {
-      stream.readObject().asInstanceOf[HierarchicalClusteringModel]
-    } finally {
-      stream.close()
-    }
-  }
-
-  private[clustering]
-  def getModelFilePath(path: String): String = FilenameUtils.concat(path, "model")
-}

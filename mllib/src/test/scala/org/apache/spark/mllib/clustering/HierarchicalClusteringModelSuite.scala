@@ -17,14 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.reflect.io.Path
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.commons.io.FilenameUtils
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.scalatest.BeforeAndAfterEach
 
 class HierarchicalClusteringModelSuite
     extends SparkFunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
@@ -171,33 +167,5 @@ class HierarchicalClusteringModelSuite
       assert(sparseModel.getCenters.size === numClusters)
       assert(sparseModel.getClusters.forall(_.variancesNorm == 0.0))
     }
-  }
-
-  test("save a model, and then load the model") {
-    val app = new HierarchicalClustering().setNumClusters(5).setSeed(1)
-
-    val localData = (1 to 100).toSeq.map { i =>
-      val label = i % 5
-      val vector = Vectors.dense(label, label, label)
-      (label, vector)
-    }
-    val data = sc.parallelize(localData.map(_._2))
-    val model = app.run(data)
-
-    // create a temporary directory for the test
-    val tmpBaseDir = System.getProperty("java.io.tmpdir")
-    val tmpDir = this.getClass.getSimpleName + this.hashCode().toString
-    val tmpPath = FilenameUtils.concat(tmpBaseDir, tmpDir)
-
-    model.save(sc, tmpPath)
-    val sameModel = HierarchicalClusteringModel.load(sc, tmpPath)
-    assert(sameModel.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
-    localData.foreach { case (label, vector) =>
-      assert(model.predict(vector) === sameModel.predict(vector))
-    }
-
-    // delete the temporary directory
-    val path = Path(tmpPath)
-    path.deleteRecursively()
   }
 }

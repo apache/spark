@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.clustering;
 
 import com.google.common.collect.Lists;
-import jodd.io.FileUtil;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
@@ -27,11 +26,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
 import java.io.Serializable;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,24 +61,6 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
     HierarchicalClusteringModel model = algo.run(data.rdd());
     assertEquals(1, model.getCenters().length);
     assertEquals(expectedCenter, model.getCenters()[0]);
-
-    // save & load
-    try {
-      // create a temporary directory
-      String tempDir = System.getProperty("java.io.tmpdir");
-      Path pathObj = Paths.get(tempDir, String.valueOf(this.hashCode()));
-      String path = pathObj.toAbsolutePath().toString();
-
-      model.save(sc, path);
-      HierarchicalClusteringModel savedModel = HierarchicalClusteringModel.load(sc, path);
-      assertEquals(1, savedModel.getCenters().length);
-      assertEquals(expectedCenter, savedModel.getCenters()[0]);
-
-      // delete the temporary directory
-      FileUtil.delete(new File(path));
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
   }
 
   @Test
