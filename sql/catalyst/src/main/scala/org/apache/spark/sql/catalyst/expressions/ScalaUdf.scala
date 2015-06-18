@@ -958,4 +958,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
   override def eval(input: InternalRow): Any = converter(f(input))
 
+  // TODO(davies): make ScalaUdf work with codegen
+  override def isThreadSafe: Boolean = false
 }

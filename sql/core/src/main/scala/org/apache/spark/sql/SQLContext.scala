@@ -31,14 +31,13 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, _}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -537,12 +536,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
         Class.forName(className, true, Utils.getContextOrSparkClassLoader))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
       iter.map { row =>
         new GenericRow(
-          extractors.zip(attributeSeq).map { case (e, attr) =>
-            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
-          }.toArray[Any]
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
         ) : InternalRow
       }
     }

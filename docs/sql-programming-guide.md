@@ -1816,7 +1816,7 @@ To start the JDBC/ODBC server, run the following in the Spark directory:
 This script accepts all `bin/spark-submit` command line options, plus a `--hiveconf` option to
 specify Hive properties.  You may run `./sbin/start-thriftserver.sh --help` for a complete list of
 all available options.  By default, the server listens on localhost:10000. You may override this
-bahaviour via either environment variables, i.e.:
+behaviour via either environment variables, i.e.:
 
 {% highlight bash %}
 export HIVE_SERVER2_THRIFT_PORT=<listening-port>

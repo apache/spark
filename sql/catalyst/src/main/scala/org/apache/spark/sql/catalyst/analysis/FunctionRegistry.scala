@@ -120,6 +120,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),

@@ -196,7 +196,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
     testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
 
-    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val inputSequence = (1 to (1<<10) by 50).map(_ * (1<<5))
     val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
     val rowSequence = inputSequence.map(l => create_row(l.toDouble))
     val d = 'a.double.at(0)
