@@ -184,7 +184,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int compareTo(final UTF8String other) {
-    if (other == null) return 1;
     final byte[] b = other.getBytes();
     for (int i = 0; i < bytes.length && i < b.length; i++) {
       int res = bytes[i] - b[i];
