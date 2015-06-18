@@ -24,18 +24,18 @@ class SortSuite extends SparkPlanTest {
   test("basic sorting using ExternalSort") {
 
     val input = Seq(
-      ("Hello", 4),
-      ("Hello", 1),
-      ("World", 8)
+      ("Hello", 4, 2.0),
+      ("Hello", 1, 1.0),
+      ("World", 8, 3.0)
     )
 
     checkAnswer(
-      input.toDF("a", "b"),
+      input.toDF("a", "b", "c"),
       ExternalSort('a.asc :: 'b.asc :: Nil, global = false, _: SparkPlan),
       input.sorted)
 
     checkAnswer(
-      input.toDF("a", "b"),
+      input.toDF("a", "b", "c"),
       ExternalSort('b.asc :: 'a.asc :: Nil, global = false, _: SparkPlan),
       input.sortBy(t => (t._2, t._1)))
   }
