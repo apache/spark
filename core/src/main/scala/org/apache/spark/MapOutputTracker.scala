@@ -305,7 +305,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
     if (mapStatuses.contains(shuffleId)) {
       val statuses = mapStatuses(shuffleId)
-      if (statuses.nonEmpty) {
+      if (statuses.nonEmpty && statuses.exists(_ != null)) {
         // HashMap to add up sizes of all blocks at the same location
         val locs = new HashMap[BlockManagerId, Long]
         var totalOutputSize = 0L

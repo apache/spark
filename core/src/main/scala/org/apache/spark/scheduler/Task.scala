@@ -141,11 +141,8 @@ private[spark] abstract class Task[T](
     31 * stageId.hashCode() + partitionId.hashCode()
   }
 
-  def canEqual(other: Any): Boolean = other.isInstanceOf[Task[_]]
-
   override def equals(other: Any): Boolean = other match {
     case that: Task[_] =>
-      (that canEqual this) &&
         stageId == that.stageId &&
         partitionId == that.partitionId
     case _ => false

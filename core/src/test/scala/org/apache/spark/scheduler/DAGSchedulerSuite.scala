@@ -739,51 +739,47 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
-  test("Make sure mapStage.pendingtasks is set() " +
-    "while MapStage.isAvailable is true while stage was retry ") {
-    val firstRDD = new MyRDD(sc, 6, Nil)
+  test("run with ShuffleMapStage retry") {
+    val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, null)
-    val firstShuyffleId = firstShuffleDep.shuffleId
-    val shuffleMapRdd = new MyRDD(sc, 6, List(firstShuffleDep))
+    val firstShuffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostB", 1)),
-      (Success, makeMapStatus("hostB", 2)),
-      (Success, makeMapStatus("hostC", 3)),
-      (Success, makeMapStatus("hostB", 4)),
-      (Success, makeMapStatus("hostB", 5)),
-      (Success, makeMapStatus("hostC", 6))
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
+      (Success, makeMapStatus("hostC", shuffleMapRdd.partitions.size))
     ))
+
     complete(taskSets(1), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 2)),
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 2)),
-      (Success, makeMapStatus("hostA", 1))
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.size))
     ))
     runEvent(ExecutorLost("exec-hostA"))
+    // Resubmit already succcessd in hostA task
     runEvent(CompletionEvent(taskSets(1).tasks(0), Resubmitted,
       null, null, createFakeTaskInfo(), null))
-    runEvent(CompletionEvent(taskSets(1).tasks(2), Resubmitted,
-      null, null, createFakeTaskInfo(), null))
+
+    // Cause mapOutTracker remove hostA outputs for taskset(0).
+    // Task that resubmitted will fetch matadata failed.
     runEvent(CompletionEvent(taskSets(1).tasks(0),
-      FetchFailed(null, firstShuyffleId, -1, 0, "Fetch Mata data failed"),
+      FetchFailed(null, firstShuffleId, -1, 0, "Fetch matadata failed"),
       null, null, createFakeTaskInfo(), null))
+    //FetchFailed cause resubmit failed Stages.
     scheduler.resubmitFailedStages()
+
     runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
-      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
+      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     runEvent(CompletionEvent(taskSets(1).tasks(2), Success,
-      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
-    runEvent(CompletionEvent(taskSets(1).tasks(4), Success,
-      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
-    runEvent(CompletionEvent(taskSets(1).tasks(5), Success,
-      makeMapStatus("hostB", 2), null, createFakeTaskInfo(), null))
-    val stage = scheduler.stageIdToStage(taskSets(1).stageId)
-    assert(stage.attemptId == 2)
+      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
+
+    val stage = scheduler.stageIdToStage(taskSets(1).stageId).asInstanceOf[ShuffleMapStage]
+    assert(stage.attemptId === 2)
     assert(stage.isAvailable)
-    assert(stage.pendingTasks.size == 0)
+    assert(stage.pendingTasks.isEmpty)
   }
 
   /**
