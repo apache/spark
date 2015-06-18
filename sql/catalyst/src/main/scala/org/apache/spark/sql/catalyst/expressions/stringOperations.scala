@@ -319,7 +319,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
 case class ConcatWS(children: Expression*) extends Expression {
   // return type is always String
   override def dataType: DataType = StringType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = sep.nullable
   override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"""CONCAT_WS($children)"""
   private def sep = children.head
