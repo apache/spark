@@ -18,9 +18,7 @@
 package org.apache.spark.streaming.kafka;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Arrays;
+import java.util.*;
 
 import scala.Tuple2;
 
@@ -116,7 +114,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     );
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
-    final HashSet<String> result = new HashSet<String>();
+    final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
     unifiedStream.foreachRDD(
         new Function<JavaRDD<String>, Void>() {
           @Override
