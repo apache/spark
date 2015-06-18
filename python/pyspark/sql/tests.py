@@ -528,7 +528,7 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True)])
-        self.assertEqual(struct1, struct2)
+        self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
         try:
