@@ -878,7 +878,7 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, rdd.pipe('cc').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('cc').collect)
         result = rdd.pipe('cat').collect().sort()
         [self.assertEqual(x, y) for x, y in zip(data, result)]
 
