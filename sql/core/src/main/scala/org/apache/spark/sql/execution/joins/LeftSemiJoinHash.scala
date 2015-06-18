@@ -34,7 +34,8 @@ case class LeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode with HashJoin {
 
   override val buildSide: BuildSide = BuildRight
 
@@ -43,27 +44,44 @@ case class LeftSemiJoinHash(
 
   override def output: Seq[Attribute] = left.output
 
+  @transient private lazy val boundCondition =
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+
   protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashSet = new java.util.HashSet[InternalRow]()
-      var currentRow: InternalRow = null
-
-      // Create a Hash set of buildKeys
-      while (buildIter.hasNext) {
-        currentRow = buildIter.next()
-        val rowKey = buildSideKeyGenerator(currentRow)
-        if (!rowKey.anyNull) {
-          val keyExists = hashSet.contains(rowKey)
-          if (!keyExists) {
-            hashSet.add(rowKey)
-          }
-        }
-      }
-
       val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
-      })
+      val joinedRow = new JoinedRow
+
+      condition match {
+        case None =>
+          val hashSet = new java.util.HashSet[InternalRow]()
+          var currentRow: InternalRow = null
+
+          // Create a Hash set of buildKeys
+          while (buildIter.hasNext) {
+            currentRow = buildIter.next()
+            val rowKey = buildSideKeyGenerator(currentRow)
+            if (!rowKey.anyNull) {
+              val keyExists = hashSet.contains(rowKey)
+              if (!keyExists) {
+                hashSet.add(rowKey)
+              }
+            }
+          }
+
+          val joinKeys = streamSideKeyGenerator()
+          streamIter.filter(current => {
+            !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
+          })
+        case _ =>
+          val hashRelation = HashedRelation(buildIter, buildSideKeyGenerator)
+          streamIter.filter(current => {
+            val rowBuffer = hashRelation.get(joinKeys.currentValue)
+            !joinKeys(current).anyNull && rowBuffer != null && rowBuffer.exists {
+              (build: InternalRow) => boundCondition(joinedRow(current, build))
+            }
+          })
+      }
     }
   }
 }
