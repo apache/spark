@@ -474,14 +474,12 @@ def get_hadoop_profiles(hadoop_version):
 
 def get_build_profiles(hadoop_version,
                        enable_base_profiles=True,
-                       enable_hive_profiles=False,
-                       enable_doc_profiles=False):
+                       enable_hive_profiles=False):
     """Returns a list of hadoop profiles to be used as looked up from the passed in hadoop profile
     key with the option of adding on the base and hive profiles."""
 
     base_profiles = ["-Pkinesis-asl"]
     hive_profiles = ["-Phive", "-Phive-thriftserver"]
-    doc_profiles = []
     hadoop_profiles = get_hadoop_profiles(hadoop_version)
 
     build_profiles = hadoop_profiles
@@ -491,9 +489,6 @@ def get_build_profiles(hadoop_version,
 
     if enable_hive_profiles:
         build_profiles += hive_profiles
-
-    if enable_doc_profiles:
-        build_profiles += doc_profiles
 
     return build_profiles
 
