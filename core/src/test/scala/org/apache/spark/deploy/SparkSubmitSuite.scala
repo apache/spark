@@ -499,9 +499,13 @@ class SparkSubmitSuite
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-    failAfter(60 seconds) { process.waitFor() }
+    val exitCode = failAfter(60 seconds) { process.waitFor() }
     // Ensure we still kill the process in case it timed out
     process.destroy()
+    // If the process did not return cleanly, fail the test
+    if (exitCode != 0) {
+      fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
+    }
   }
 
   private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
