@@ -110,6 +110,9 @@ public class ExternalShuffleBlockResolver {
       return getHashBasedShuffleBlockData(executor, blockId);
     } else if ("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executor.shuffleManager)) {
       return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+    } else if ("org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(
+            executor.shuffleManager)) {
+        return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
     } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager: " + executor.shuffleManager);
