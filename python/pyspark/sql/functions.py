@@ -416,11 +416,11 @@ def log(arg1, arg2=None):
     >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
-    if arg2 is None:
-        arg2 = arg1
-        arg1 = math.e
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
+    if arg2 is None:
+        jc = sc._jvm.functions.log(_to_java_column(arg1))
+    else:
+        jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
 
 
