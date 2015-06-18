@@ -19,14 +19,17 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorBlacklistTracker.ExecutorFailureStatus
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.ManualClock
 
-class ExecutorBlacklistTrackerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter {
+class ExecutorBlacklistTrackerSuite
+  extends SparkFunSuite
+  with LocalSparkContext
+  with BeforeAndAfter {
   import ExecutorBlacklistTrackerSuite._
 
   before {
@@ -153,4 +156,3 @@ private object ExecutorBlacklistTrackerSuite extends PrivateMethodTester {
     tracker invokePrivate _expireTimeoutExecutorBlacklist()
   }
 }
-
