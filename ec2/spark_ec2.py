@@ -291,7 +291,8 @@ def parse_args():
         help="Additional security group to place the machines in")
     parser.add_option(
         "--additional-tags", type="string", default="",
-        help="Additional tags to set on the machines; tags are comma-separated, while name and value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
+        help="Additional tags to set on the machines; tags are comma-separated, while name and " +
+             "value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
     parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
@@ -688,8 +689,8 @@ def launch_cluster(conn, opts, cluster_name):
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
     time.sleep(15)
-    
-    # Give the instances descriptive names and set additional tags    
+
+    # Give the instances descriptive names and set additional tags
     additional_tags = {}
     if opts.additional_tags.strip():
         additional_tags = dict(
