@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.DoubleType
 
@@ -189,6 +190,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
     testUnary(Log2, f, (0 to 20).map(_ * 0.1))
     testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
+  }
+
+  test("sqrt") {
+    testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(Sqrt(Literal(-1.0)), null, EmptyRow)
+    checkEvaluation(Sqrt(Literal(-1.5)), null, EmptyRow)
   }
 
   test("pow") {
