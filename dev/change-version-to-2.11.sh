@@ -23,4 +23,7 @@ find $BASEDIR -name 'pom.xml' | grep -v target \
   | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.10/\1_2.11/g' {}
 
 # Also update <scala.binary.version> in parent POM
-sed -i -e '0,/<scala\.binary\.version>2.10</s//<scala.binary.version>2.11</' $BASEDIR/pom.xml
+$SED -i -e '0,/<scala\.binary\.version>2.10</s//<scala.binary.version>2.11</' $BASEDIR/pom.xml
+
+# Update source of scaladocs
+$SED -i -e 's/scala\-2.10/scala\-2.11/' $BASEDIR/docs/_plugins/copy_api_dirs.rb
