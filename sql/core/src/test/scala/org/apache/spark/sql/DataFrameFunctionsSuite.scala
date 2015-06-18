@@ -79,11 +79,48 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row.getAs[Row](0) === Row(2, "str"))
   }
 
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
+  test("struct with column expression to be automatically named") {
+    val df = Seq((1, "str")).toDF("a", "b")
+    val row = df.select(struct((col("a") * 2), col("b"))).first()
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("b", StringType)
+    ))
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getAs[Row](0) === Row(2, "str"))
   }
+
+  test("struct with literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val row = df.select(
+      struct((col("a") * 2), lit(5.0))).take(2)
+
+    val expectedType = StructType(Seq(
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(row(0).schema(0).dataType === expectedType)
+    assert(row(0).getAs[Row](0) === Row(2, 5.0))
+    assert(row(1).getAs[Row](0) === Row(4, 5.0))
+  }
+
+  test("struct with all literal columns") {
+    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
+    val row = df.select(
+      struct(lit("v"), lit(5.0))).take(2)
+
+    val expectedType = StructType(Seq(
+      StructField("col1", StringType, nullable = false),
+      StructField("col2", DoubleType, nullable = false)
+    ))
+
+    assert(row(0).schema(0).dataType === expectedType)
+    assert(row(0).getAs[Row](0) === Row("v", 5.0))
+    assert(row(1).getAs[Row](0) === Row("v", 5.0))
+  }
+
 
   test("named_struct with column expression") {
     val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")

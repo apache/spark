@@ -747,9 +747,7 @@ object functions {
    */
   @scala.annotation.varargs
   def struct(cols: Column*): Column = {
-    require(cols.forall(_.expr.isInstanceOf[NamedExpression]),
-      s"struct input columns must all be named or aliased ($cols)")
-    CreateStruct(cols.map(_.expr.asInstanceOf[NamedExpression]))
+    CreateStruct(cols.map(_.expr))
   }
 
   /**
