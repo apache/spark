@@ -18,9 +18,13 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class SortSuite extends SparkPlanTest {
+  import TestSQLContext.implicits.localSeqToDataFrameHolder
 
   test("basic sorting using ExternalSort") {
 
@@ -30,16 +34,14 @@ class SortSuite extends SparkPlanTest {
       ("World", 8)
     )
 
-    val sortOrder = Seq(
-      SortOrder(BoundReference(0, StringType, nullable = false), Ascending),
-      SortOrder(BoundReference(1, IntegerType, nullable = false), Ascending)
-    )
+    checkAnswer(
+      input.toDF("a", "b"),
+      ExternalSort('a.asc :: 'b.asc :: Nil, global = false, _: SparkPlan),
+      input.sorted)
 
     checkAnswer(
-      input,
-      (child: SparkPlan) => new ExternalSort(sortOrder, global = false, child),
-      input.sorted
-    )
-
+      input.toDF("a", "b"),
+      ExternalSort('b.asc :: 'a.asc :: Nil, global = false, _: SparkPlan),
+      input.sortBy(t => (t._2, t._1)))
   }
 }
