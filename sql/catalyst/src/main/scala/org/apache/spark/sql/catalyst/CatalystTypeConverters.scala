@@ -336,16 +336,6 @@ object CatalystTypeConverters {
   }
 
   /**
-   * Converts Scala objects to catalyst rows / types. This method is slow, and for batch
-   * conversion you should be using converter produced by createToCatalystConverter.
-   * Note: This is always called after schemaFor has been called.
-   *       This ordering is important for UDT registration.
-   */
-  def convertToCatalyst(scalaValue: Any, dataType: DataType): Any = {
-    getConverterForType(dataType).toCatalyst(scalaValue)
-  }
-
-  /**
    * Creates a converter function that will convert Scala objects to the specified Catalyst type.
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.

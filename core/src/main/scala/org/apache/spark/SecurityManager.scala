@@ -192,7 +192,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
 
-  private val authOn = sparkConf.getBoolean("spark.authenticate", false)
+  private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
@@ -365,10 +365,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       cookie
     } else {
       // user must have set spark.authenticate.secret config
-      sparkConf.getOption("spark.authenticate.secret") match {
+      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
+      sys.env.get(SecurityManager.ENV_AUTH_SECRET)
+        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
         case None => throw new Exception("Error: a secret key must be specified via the " +
-          "spark.authenticate.secret config")
+          SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
       }
     }
     sCookie
@@ -448,4 +450,13 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
   override def getSecretKey(appId: String): String = getSecretKey()
+}
+
+private[spark] object SecurityManager {
+
+  val SPARK_AUTH_CONF: String = "spark.authenticate"
+  val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
+  // This is used to set auth secret to an executor's env variable. It should have the same
+  // value as SPARK_AUTH_SECERET_CONF set in SparkConf
+  val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
 }
