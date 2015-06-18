@@ -276,6 +276,20 @@ case class Pow(left: Expression, right: Expression)
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
 
+  override def eval(input: InternalRow): Any = {
+    val evalE1 = left.eval(input)
+    if (evalE1 == null || evalE1.asInstanceOf[Double] <= 0.0) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null || evalE2.asInstanceOf[Double] <= 0.0) {
+        null
+      } else {
+        math.log(evalE2.asInstanceOf[Double]) / math.log(evalE1.asInstanceOf[Double])
+      }
+    }
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
@@ -296,4 +310,40 @@ case class Logarithm(left: Expression, right: Expression)
       }
     """
   }
+
+  // TODO: Hive's UDFLog doesn't support base in range (0.0, 1.0]
+  // If we want just behaves like Hive, use the code below and turn `udf_7` on
+
+//  override def eval(input: InternalRow): Any = {
+//    val evalE1 = left.eval(input)
+//    val evalE2 = right.eval(input)
+//    if (evalE1 == null || evalE2 == null) {
+//      null
+//    } else {
+//      if (evalE1.asInstanceOf[Double] <= 1.0 || evalE2.asInstanceOf[Double] <= 0.0) {
+//        null
+//      } else {
+//        math.log(evalE2.asInstanceOf[Double]) / math.log(evalE1.asInstanceOf[Double])
+//      }
+//    }
+//  }
+//
+//  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+//    val eval1 = left.gen(ctx)
+//    val eval2 = right.gen(ctx)
+//    s"""
+//      ${eval1.code}
+//      ${eval2.code}
+//      boolean ${ev.isNull} = ${eval1.isNull} || ${eval2.isNull};
+//      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+//      if (!${ev.isNull}) {
+//        if (${eval2.primitive} <= 1.0 || ${eval2.primitive} <= 0.0) {
+//          ${ev.isNull} = true;
+//        } else {
+//          ${ev.primitive} = java.lang.Math.${funcName}(${eval2.primitive}) /
+//           java.lang.Math.${funcName}(${eval1.primitive});
+//        }
+//      }
+//    """
+//  }
 }

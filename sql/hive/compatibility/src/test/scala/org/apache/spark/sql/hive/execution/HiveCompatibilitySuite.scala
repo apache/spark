@@ -819,7 +819,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf2",
     "udf5",
     "udf6",
-    "udf7",
+    // "udf7", TODO if we don't allow log base in (0, 1.0], we should turn this on
     "udf8",
     "udf9",
     "udf_10_trims",
