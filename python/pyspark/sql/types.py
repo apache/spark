@@ -400,7 +400,7 @@ class StructType(DataType):
             self.fields.append(name_or_struct_field)
             return self
         else:
-            if isinstance(name_or_struct_field, str) and data_type==None:
+            if isinstance(name_or_struct_field, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
             self.fields.append(StructField(name_or_struct_field, data_type, nullable, metadata))
             return self
