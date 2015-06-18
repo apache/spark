@@ -26,7 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasFitIntercept, HasMaxIter, HasRegParam, HasTol}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -42,7 +42,7 @@ import org.apache.spark.util.StatCounter
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-    with HasOptionalIntercept
+    with HasFitIntercept
 
 /**
  * :: Experimental ::
@@ -122,8 +122,8 @@ class LinearRegression(override val uid: String)
       })
 
     val numFeatures = summarizer.mean.size
-    val yMean = if (hasIntercept) statCounter.mean else 0.0
-    val yStd = if (hasIntercept) math.sqrt(statCounter.variance) else
+    val yMean = if ($(fitIntercept)) statCounter.mean else 0.0
+    val yStd = math.sqrt(statCounter.variance)
       // look at glmnet6.m L761 maaaybe that has info
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
@@ -135,7 +135,11 @@ class LinearRegression(override val uid: String)
       return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
-    val featuresMean = summarizer.mean.toArray
+    val featuresMean = if ($(fitIntercept)) {
+      summarizer.mean.toArray
+    } else {
+      new Array[Double](numFeatures)
+    }
     val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 
     // Since we implicitly do the feature scaling when we compute the cost function
@@ -235,6 +239,7 @@ class LinearRegressionModel private[ml] (
  * See this discussion for detail.
  * http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
  *
+ * When training with intercept enabled,
  * The objective function in the scaled space is given by
  * {{{
  * L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
@@ -242,7 +247,11 @@ class LinearRegressionModel private[ml] (
  * where \bar{x_i} is the mean of x_i, \hat{x_i} is the standard deviation of x_i,
  * \bar{y} is the mean of label, and \hat{y} is the standard deviation of label.
  *
- * This can be rewritten as
+ * If we are training with intercept disabled (that is forced through 0.0),
+ * we can use the same equation except \bar{y} and \bar{x_i} are 0 instead of the
+ * respective means.
+ *
+ * With the intercept, this can be rewritten as
  * {{{
  * L = 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
  *     + \bar{y} / \hat{y}||^2
@@ -255,6 +264,7 @@ class LinearRegressionModel private[ml] (
  * {{{
  * \sum_i w_i^\prime x_i - y / \hat{y} + offset
  * }}}
+ *
  *
  * Note that the effective weights and offset don't depend on training dataset,
  * so they can be precomputed.
