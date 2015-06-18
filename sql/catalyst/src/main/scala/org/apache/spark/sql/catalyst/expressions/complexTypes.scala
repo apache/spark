@@ -63,12 +63,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
     assert(resolved,
       s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
       val fields = children.zipWithIndex.map { case (child, idx) =>
-        child match {
-          case ne: NamedExpression =>
-            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-          case _ =>
-            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-        }
+        StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
       }
     StructType(fields)
   }
