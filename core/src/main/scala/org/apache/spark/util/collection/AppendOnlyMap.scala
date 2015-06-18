@@ -32,7 +32,7 @@ import org.apache.spark.annotation.DeveloperApi
  * size, which is guaranteed to explore all spaces for each key (see
  * http://en.wikipedia.org/wiki/Quadratic_probing).
  *
- * The map can support up to `536870912 (2 ^ 29)` elements.
+ * The map can support up to `375809638 (0.7 * 2 ^ 29)` elements.
  *
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
