@@ -635,11 +635,13 @@ def main():
     print "[info] Using build tool", build_tool, "with profile", hadoop_version,
     print "under environment", test_env
 
-    changed_modules = [root]
+    changed_modules = None
     if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_modules = identify_changed_modules_from_git_commits("HEAD",
                                                                     target_branch=target_branch)
+    if not changed_modules:
+        changed_modules = ['root']
     print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
 
     test_modules = determine_modules_to_test(changed_modules)
