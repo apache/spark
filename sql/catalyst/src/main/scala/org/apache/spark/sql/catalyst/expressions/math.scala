@@ -107,7 +107,7 @@ abstract class UnaryLogarithmExpression(f: Double => Double, name: String, yAsym
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull} || Double.valueOf(${eval.primitive}) <= $yAsymptote;
+      boolean ${ev.isNull} = ${eval.isNull} || ${eval.primitive} <= $yAsymptote;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
@@ -200,7 +200,7 @@ case class Log2(child: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = child.gen(ctx)
     eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull} || Double.valueOf(${eval.primitive}) <= 0.0;
+      boolean ${ev.isNull} = ${eval.isNull} || ${eval.primitive} <= 0.0;
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
