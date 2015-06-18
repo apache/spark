@@ -155,39 +155,6 @@ public abstract class BaseRow extends InternalRow {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * A generic version of Row.equals(Row), which is used for tests.
-   */
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof Row) {
-      Row row = (Row) other;
-      int n = size();
-      if (n != row.size()) {
-        return false;
-      }
-      for (int i = 0; i < n; i ++) {
-        if (isNullAt(i) != row.isNullAt(i)) {
-          return false;
-        }
-        if (!isNullAt(i)) {
-          Object o1 = get(i);
-          Object o2 = row.get(i);
-          if (o1 instanceof byte[]) {
-            // handle equals() of byte[]
-            if (!(o2 instanceof byte[]) || !java.util.Arrays.equals((byte[])o1, (byte[])o2)) {
-              return false;
-            }
-          } else if (!o1.equals(o2)) {
-            return false;
-          }
-        }
-      }
-      return true;
-    }
-    return false;
-  }
-
   @Override
   public InternalRow copy() {
     final int n = size();
@@ -226,16 +193,5 @@ public abstract class BaseRow extends InternalRow {
   @Override
   public String mkString(String start, String sep, String end) {
     return toSeq().mkString(start, sep, end);
-  }
-
-  /*
-   * Returns hash code based on bytes in `arr`
-   * */
-  protected int bytesHashCode(byte[] arr) {
-    int hash = 0;
-    for (int i = 0; i < arr.length; i++) {
-      hash = hash * 37 + (int)arr[i];
-    }
-    return hash;
   }
 }
