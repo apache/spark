@@ -60,7 +60,7 @@ class SparkPlanTest extends SparkFunSuite {
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[A]): Unit = {
     val inputDf = TestSQLContext.createDataFrame(input)
-    val expectedRows = expectedAnswer.map(t => Row.apply(t))
+    val expectedRows = expectedAnswer.map(Row.fromTuple)
     SparkPlanTest.checkAnswer(inputDf, planFunction, expectedRows) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>

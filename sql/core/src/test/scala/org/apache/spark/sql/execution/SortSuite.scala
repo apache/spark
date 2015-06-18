@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Ascending, SortOrder}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class SortSuite extends SparkPlanTest {
 
@@ -31,8 +31,8 @@ class SortSuite extends SparkPlanTest {
     )
 
     val sortOrder = Seq(
-      SortOrder('_1, Ascending),
-      SortOrder('_2, Ascending)
+      SortOrder(BoundReference(0, StringType, nullable = false), Ascending),
+      SortOrder(BoundReference(1, IntegerType, nullable = false), Ascending)
     )
 
     checkAnswer(
