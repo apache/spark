@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -120,6 +122,8 @@ private object UnsafeColumnWriter {
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
+      case DateType => IntUnsafeColumnWriter
+      case TimestampType => LongUnsafeColumnWriter
       case t =>
         throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
     }

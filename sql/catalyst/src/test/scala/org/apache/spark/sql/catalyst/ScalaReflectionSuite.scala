@@ -21,7 +21,6 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -75,7 +74,7 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {
-  import ScalaReflection._
+  import org.apache.spark.sql.catalyst.ScalaReflection._
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -259,7 +258,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
@@ -269,7 +268,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
       InternalRow(1, 1, 1, 1, 1, 1, true))
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("infer schema from case class with multiple constructors") {

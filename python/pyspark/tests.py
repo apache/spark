@@ -458,6 +458,14 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
 
+    def test_empty_rdd(self):
+        rdd = self.sc.emptyRDD()
+        self.assertTrue(rdd.isEmpty())
+
+    def test_sum(self):
+        self.assertEqual(0, self.sc.emptyRDD().sum())
+        self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
+
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"

@@ -117,6 +117,8 @@ case class Alias(child: Expression, name: String)(
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
+  override def isThreadSafe: Boolean = child.isThreadSafe
+
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
 
   override def dataType: DataType = child.dataType

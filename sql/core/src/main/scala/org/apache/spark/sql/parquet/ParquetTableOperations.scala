@@ -113,12 +113,12 @@ private[sql] case class ParquetTableScan(
       .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(
-      SQLConf.PARQUET_CACHE_METADATA,
-      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true"))
+    conf.setBoolean(
+      SQLConf.PARQUET_CACHE_METADATA.key,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, true))
 
     // Use task side metadata in parquet
-    conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true);
+    conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
 
     val baseRDD =
       new org.apache.spark.rdd.NewHadoopRDD(
