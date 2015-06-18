@@ -62,14 +62,11 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override lazy val dataType: StructType = {
     assert(resolved,
       s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
-      val fields = children.zipWithIndex.map { case (child, idx) =>
-        child match {
-          case ne: NamedExpression =>
-            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-          case _ =>
-            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-        }
-      }
+
+    // Like the GenericUDFStruct of Hive, we will give the default names for each of its fields.
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+    }
     StructType(fields)
   }
 

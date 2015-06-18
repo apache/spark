@@ -60,8 +60,8 @@ class DataFrameFunctionsSuite extends QueryTest {
     val row = df.select(struct("a", "b")).first()
 
     val expectedType = StructType(Seq(
-      StructField("a", IntegerType, nullable = false),
-      StructField("b", StringType)
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", StringType)
     ))
     assert(row.schema(0).dataType === expectedType)
     assert(row.getAs[Row](0) === Row(1, "str"))
@@ -72,17 +72,11 @@ class DataFrameFunctionsSuite extends QueryTest {
     val row = df.select(struct((col("a") * 2).as("c"), col("b"))).first()
 
     val expectedType = StructType(Seq(
-      StructField("c", IntegerType, nullable = false),
-      StructField("b", StringType)
+      StructField("col1", IntegerType, nullable = false),
+      StructField("col2", StringType)
     ))
     assert(row.schema(0).dataType === expectedType)
     assert(row.getAs[Row](0) === Row(2, "str"))
-  }
-
-  test("struct: must use named column expression") {
-    intercept[IllegalArgumentException] {
-      struct(col("a") * 2)
-    }
   }
 
   test("constant functions") {
