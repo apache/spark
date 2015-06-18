@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.functions._
 import org.scalatest.BeforeAndAfterAll
@@ -39,40 +39,29 @@ class DatetimeExpressionsSuite extends QueryTest with BeforeAndAfterAll {
   test("function date_add") {
     checkAnswer(
       df.select(date_add("day", "num")),
-      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-05"))))
+      Seq(Row("2015-06-02"), Row("2015-06-05")))
     checkAnswer(
       df.select(date_add(column("day"), lit(null))).limit(1), Row(null))
 
-    checkAnswer(ctx.sql("""SELECT DATE_ADD("2015-06-12", -1)"""), Row(Date.valueOf("2015-06-11")))
+    checkAnswer(ctx.sql("""SELECT DATE_ADD("2015-06-12", -1)"""), Row("2015-06-11"))
     checkAnswer(ctx.sql("SELECT DATE_ADD(null, 1)"), Row(null))
     checkAnswer(
       ctx.sql("""SELECT DATE_ADD(day, 11) FROM dttable LIMIT 1"""),
-      Row(Date.valueOf("2015-06-12")))
+      Row("2015-06-12"))
   }
 
   test("function date_sub") {
     checkAnswer(
       df.select(date_sub("day", "num")),
-      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-05-30"))))
+      Seq(Row("2015-05-31"), Row("2015-05-30")))
     checkAnswer(
       df.select(date_sub(lit(null), column("num"))).limit(1), Row(null))
 
-    checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12", 31)"""), Row(Date.valueOf("2015-05-12")))
+    checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12 14:00:00", 31)"""), Row("2015-05-12"))
     checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12", null)"""), Row(null))
     checkAnswer(
       ctx.sql("""SELECT DATE_SUB(day, num) FROM dttable LIMIT 1"""),
-      Row(Date.valueOf("2015-05-31")))
+      Row("2015-05-31"))
   }
 
-  test("function datediff") {
-    checkAnswer(
-      df.select(datediff(lit("2015-06-12"), lit("2011-06-12"))).limit(1), Row(1461))
-    checkAnswer(df.select(datediff(lit(null), lit(null))).limit(1), Row(null))
-
-    checkAnswer(ctx.sql("""SELECT DATEDIFF("2015-06-12", "2014-06-12")"""), Row(365))
-    checkAnswer(ctx.sql("""SELECT DATEDIFF("2015-06-12", null)"""), Row(null))
-    checkAnswer(
-      ctx.sql("""SELECT DATEDIFF(day, "2015-06-01") FROM dttable LIMIT 1"""),
-      Row(0))
-  }
 }

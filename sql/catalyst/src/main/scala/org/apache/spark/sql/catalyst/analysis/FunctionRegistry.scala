@@ -156,8 +156,7 @@ object FunctionRegistry {
 
     // datetime functions
     expression[DateAdd]("date_add"),
-    expression[DateSub]("date_sub"),
-    expression[DateDiff]("datediff")
+    expression[DateSub]("date_sub")
   )
 
   val builtin: FunctionRegistry = {

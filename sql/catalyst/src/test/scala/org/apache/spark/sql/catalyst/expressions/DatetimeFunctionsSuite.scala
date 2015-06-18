@@ -17,43 +17,39 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.types.IntegerType
 
 class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("date_add") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
-      DateUtils.fromJavaDate(Date.valueOf("2016-02-29")), create_row(null))
+      "2016-02-29", Row.empty)
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-03-01")), Literal(-1)),
-      DateUtils.fromJavaDate(Date.valueOf("2016-02-29")), create_row(null))
-    checkEvaluation(DateAdd(Literal(null), Literal(-1)), null, create_row(null))
+      DateAdd(Literal("2016-03-01"), Literal(-1)), "2016-02-29", Row.empty)
+    checkEvaluation(
+      DateAdd(Literal(Timestamp.valueOf("2016-03-01 23:59:59")), Literal(-2)),
+      "2016-02-28", Row.empty)
+    checkEvaluation(
+      DateAdd(Literal("2016-03-01 23:59:59"), Literal(-3)),
+      "2016-02-27", Row.empty)
+    checkEvaluation(DateAdd(Literal(null), Literal(-1)), null, Row.empty)
   }
 
   test("date_sub") {
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1)),
-      DateUtils.fromJavaDate(Date.valueOf("2014-12-31")), create_row(null))
+      DateSub(Literal("2015-01-01"), Literal(1)), "2014-12-31", Row.empty)
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)),
-      DateUtils.fromJavaDate(Date.valueOf("2015-01-02")), create_row(null))
+      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(-1)), "2015-01-02", Row.empty)
     checkEvaluation(
-      DateSub(Literal(Date.valueOf("2015-01-01")), Literal(null)), null, create_row(null))
+      DateSub(Literal(Timestamp.valueOf("2015-01-01 01:00:00")), Literal(-1)),
+      "2015-01-02", Row.empty)
+    checkEvaluation(
+      DateSub(Literal("2015-01-01 01:00:00"), Literal(0)), "2015-01-01", Row.empty)
+    checkEvaluation(
+      DateSub(Literal("2015-01-01"), Literal.create(null, IntegerType)), null, Row.empty)
   }
 
-  test("date_diff") {
-    checkEvaluation(
-      DateDiff(Literal(Date.valueOf("2015-01-01")), Literal(Date.valueOf("2015-01-01"))),
-      0, create_row(null))
-    checkEvaluation(
-      DateDiff(Literal(Date.valueOf("2015-06-01")), Literal(Date.valueOf("2015-06-12"))),
-      -11, create_row(null))
-    checkEvaluation(
-      DateDiff(Literal(Date.valueOf("2015-06-01")), Literal(Date.valueOf("2015-05-31"))),
-      1, create_row(null))
-    checkEvaluation(DateDiff(Literal(null), Literal(null)), null, create_row(null))
-  }
 }
