@@ -17,8 +17,13 @@
 
 import sys
 import numpy as np
-import scipy.sparse as sp
 import warnings
+try:
+    import scipy.sparse
+    _have_scipy = True
+except:
+    # No SciPy in environment, but that's okay
+    _have_scipy = False
 
 if sys.version > '3':
     xrange = range
@@ -178,7 +183,12 @@ class MLUtils(object):
         """
         vec = _convert_to_vector(data)
         if isinstance(vec, SparseVector):
-            return sp.csc_matrix(np.append(vec.toArray(), 1.0))
+            if _have_scipy:
+                l = scipy.sparse.csc_matrix(np.append(vec.toArray(), 1.0))
+                return _convert_to_vector(l.T)
+            else:
+                raise TypeError("Cannot append bias %s into sparce "
+                                "vector because of lack of scipy" % type(vec))
         elif isinstance(vec, Vector):
             vec = vec.toArray()
         return np.append(vec, 1.0).tolist()

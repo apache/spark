@@ -835,11 +835,11 @@ class MLUtilsTests(MLlibTestCase):
 
     def test_append_bias_with_sp_vector(self):
         data = Vectors.sparse(3, {0: 2.0, 2: 2.0})
-        # Returned value must be scipy.sparse matrix
+        expected = Vectors.sparse(4, {0: 2.0, 2: 2.0, 3: 1.0})
+        # Returned value must be SparseVector
         ret = MLUtils.appendBias(data)
-        self.assertEqual(ret.shape, (1, 4))
-        self.assertEqual(ret.toarray()[0][3], 1.0)
-        self.assertEqual(type(ret), sp.csc_matrix)
+        self.assertEqual(ret, expected)
+        self.assertEqual(type(ret), SparseVector)
 
     def test_load_vectors(self):
         import shutil
