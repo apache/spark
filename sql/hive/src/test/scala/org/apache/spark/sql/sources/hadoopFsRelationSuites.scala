@@ -615,55 +615,51 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
     // use dbname.tablename to specific db
-    sqlContext.sql("""create database if not exists testdb""")
+    sqlContext.sql("""create database if not exists testdb7943""")
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
-      .saveAsTable("testdb.ttt1")
+      .saveAsTable("testdb7943.tbl7943_1")
 
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
-      .saveAsTable("ttt2")
+      .saveAsTable("tbl7943_2")
 
     intercept[NoSuchDatabaseException] {
       df.write
         .format("parquet")
         .mode(SaveMode.Overwrite)
-        .saveAsTable("testdb2.ttt1")
+        .saveAsTable("testdb7943-2.tbl1")
     }
 
-    sqlContext.sql("""use testdb""")
+    sqlContext.sql("""use testdb7943""")
 
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
-      .saveAsTable("ttt3")
+      .saveAsTable("tbl7943_3")
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
-      .saveAsTable("default.ttt4")
-    sqlContext.sql("""use default""")
+      .saveAsTable("default.tbl7943_4")
 
     checkAnswer(
-      sqlContext.sql("show TABLES in testdb"),
-      Row("ttt1", false))
+      sqlContext.sql("show TABLES in testdb7943"),
+      Seq(Row("tbl7943_1", false), Row("tbl7943_3", false)))
 
     val result = sqlContext.sql("show TABLES in default")
     checkAnswer(
-      result.filter("tableName = 'ttt2'"),
-      Row("ttt2", false))
-    checkAnswer(
-      result.filter("tableName = 'ttt3'"),
-      Row("ttt3", false))
-    checkAnswer(
-      result.filter("tableName = 'ttt4'"),
-      Row("ttt4", false))
+      result.filter("tableName = 'tbl7943_2'"),
+      Row("tbl7943_2", false))
 
+    checkAnswer(
+      result.filter("tableName = 'tbl7943_4'"),
+      Row("tbl7943_4", false))
 
-    sqlContext.sql("""drop table if exists ttt2 """)
-    sqlContext.sql("""drop table if exists ttt3 """)
-    sqlContext.sql("""drop table if exists ttt4 """)
-    sqlContext.sql("""drop database if exists testdb CASCADE""")
+    sqlContext.sql("""use default""")
+    sqlContext.sql("""drop table if exists tbl7943_2 """)
+    sqlContext.sql("""drop table if exists tbl7943_4 """)
+    sqlContext.sql("""drop database if exists testdb7943 CASCADE""")
   }
 }
