@@ -127,7 +127,7 @@ private[spark] object SerializationDebugger extends Logging {
 
     /**
      * Visit an externalizable object.
-     * Since writeExternal() can choose add arbitrary objects at the time of serialization,
+     * Since writeExternal() can choose to add arbitrary objects at the time of serialization,
      * the only way to capture all the objects it will serialize is by using a
      * dummy ObjectOutput that collects all the relevant objects for further testing.
      */
@@ -158,7 +158,7 @@ private[spark] object SerializationDebugger extends Logging {
         return visit(finalObj, s"writeReplace data (class: ${finalObj.getClass.getName})" :: stack)
       }
 
-      // Every class is associated with one or more "slots", each slot is related to the parent
+      // Every class is associated with one or more "slots", each slot refers to the parent
       // classes of this class. These slots are used by the ObjectOutputStream
       // serialization code to recursively serialize the fields of an object and
       // its parent classes. For example, if there are the following classes.
@@ -166,15 +166,15 @@ private[spark] object SerializationDebugger extends Logging {
       //     class ParentClass(parentField: Int)
       //     class ChildClass(childField: Int) extends ParentClass(1)
       //
-      // Then serializing the an object Obj of type ChildClass requires for serializing the fields
+      // Then serializing the an object Obj of type ChildClass requires first serializing the fields
       // of ParentClass (that is, parentField), and then serializing the fields of ChildClass
       // (that is, childField). Correspondingly, there will be two slots related to this object:
       //
       // 1. ParentClass slot, which will be used to serialize parentField of Obj
       // 2. ChildClass slot, which will be used to serialize childField fields of Obj
       //
-      // The following code uses the description of each slot related to the object to get the
-      // corresponding field objects and then visits them to test their serializability.
+      // The following code uses the description of each slot to find the fields in the
+      // corresponding object to visit.
       //
       val slotDescs = desc.getSlotDescs
       var i = 0
@@ -216,9 +216,10 @@ private[spark] object SerializationDebugger extends Logging {
 
     /**
      * Visit a serializable object which has the writeObject() defined.
-     * Since writeObject() can choose add arbitrary objects at the time of serialization,
+     * Since writeObject() can choose to add arbitrary objects at the time of serialization,
      * the only way to capture all the objects it will serialize is by using a
      * dummy ObjectOutputStream that collects all the relevant fields for further testing.
+     * This is similar to how externalizable objects are visited.
      */
     private def visitSerializableWithWriteObjectMethod(
         o: Object, stack: List[String]): List[String] = {
