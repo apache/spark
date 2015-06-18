@@ -234,7 +234,7 @@ case class Bin(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c) =>
-      s"org.apache.spark.unsafe.types.UTF8String.fromString(java.lang.Long.toBinaryString($c))")
+      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
 

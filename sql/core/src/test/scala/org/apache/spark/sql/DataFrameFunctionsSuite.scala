@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.{Long => JLong}
-
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

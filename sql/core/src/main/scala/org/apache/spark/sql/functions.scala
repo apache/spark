@@ -886,7 +886,7 @@ object functions {
    * column. For example, bin("12") returns "1100".
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 1.5.0
    */
   def bin(e: Column): Column = Bin(e.expr)
 
@@ -895,7 +895,7 @@ object functions {
    * column. For example, bin("12") returns "1100".
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 1.5.0
    */
   def bin(columnName: String): Column = bin(Column(columnName))
 
