@@ -265,7 +265,7 @@ class LinearDataGenerator(object):
                             nPoints, seed, eps):
         """
         :param: intercept bias factor, the term c in X'w + c
-        :param: weights   feature vector the term w in X'w + c
+        :param: weights   feature vector, the term w in X'w + c
         :param: xMean     Point around which the data X is centered.
         :param: xVariance Variance of the given data
         :param: nPoints   Number of points to be generated

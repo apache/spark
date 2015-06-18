@@ -961,7 +961,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def estimateKernelDensity(
       sample: JavaRDD[Double],
       bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
-    return new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
+    new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
       points.asScala.toArray)
   }
 
@@ -985,20 +985,28 @@ private[python] class PythonMLLibAPI extends Serializable {
    */
   def generateLinearInputWrapper(
       intercept: Double,
-      weights: JArrayList[Double], xMean: JArrayList[Double],
-      xVariance: JArrayList[Double], nPoints: Int, seed: Int, eps: Double): Array[LabeledPoint] = {
-    return LinearDataGenerator.generateLinearInput(
-        intercept, weights.asScala.toArray, xMean.asScala.toArray,
-        xVariance.asScala.toArray, nPoints, seed, eps).toArray
+      weights: JList[Double],
+      xMean: JList[Double],
+      xVariance: JList[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Array[LabeledPoint] = {
+    LinearDataGenerator.generateLinearInput(
+      intercept, weights.asScala.toArray, xMean.asScala.toArray,
+      xVariance.asScala.toArray, nPoints, seed, eps).toArray
   }
 
   /**
    * Wrapper around the generateLinearRDD method of LinearDataGenerator.
    */
   def generateLinearRDDWrapper(
-      sc: JavaSparkContext, nexamples: Int, nfeatures: Int,
-      eps: Double, nparts: Int, intercept: Double): JavaRDD[LabeledPoint] = {
-    return LinearDataGenerator.generateLinearRDD(
+      sc: JavaSparkContext,
+      nexamples: Int,
+      nfeatures: Int,
+      eps: Double,
+      nparts: Int,
+      intercept: Double): JavaRDD[LabeledPoint] = {
+    LinearDataGenerator.generateLinearRDD(
       sc, nexamples, nfeatures, eps, nparts, intercept)
   }
 }
