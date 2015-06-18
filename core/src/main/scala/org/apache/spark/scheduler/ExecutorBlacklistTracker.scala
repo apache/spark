@@ -17,13 +17,29 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.{TimeUnit, ConcurrentLinkedQueue}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.util.{SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
+/**
+ * ExecutorBlacklistTracker blacklists the executors by tracking the status of running tasks with
+ * heuristic algorithm.
+ *
+ * A executor will be considered bad enough only when:
+ * 1. The failure task number on this executor is more than
+ *    spark.scheduler.blacklist.executorFaultThreshold.
+ * 2. The failure task number on this executor is
+ *    spark.scheduler.blacklist.averageBlacklistThreshold more than average failure task number
+ *    of this cluster.
+ *
+ * Also max number of blacklisted executors will not exceed the
+ * spark.scheduler.blacklist.maxBlacklistFraction of whole cluster, and blacklisted executors
+ * will be forgiven when there is no failure tasks in the
+ * spark.scheduler.blacklist.executorFaultTimeoutWindowInMinutes.
+ */
 private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkListener {
   import ExecutorBlacklistTracker._
 
@@ -37,19 +53,13 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
     "spark.scheduler.blacklist.executorFaultTimeoutWindowInMinutes", EXECUTOR_FAULT_TIMEOUT_WINDOW)
 
   // Count the number of executors registered
-  private var numExecutorsRegistered: Int = 0
+  var numExecutorsRegistered: Int = 0
 
-  // Track the number of failure tasks to executor id
-  private val executorIdToTaskFailures = new mutable.HashMap[String, Int]()
-
-  // Track the executor id to host mapping relation
-  private val executorIdToHosts = new mutable.HashMap[String, String]()
-
-  // Maintain the executor blacklist
-  private val executorBlacklist = new ConcurrentLinkedQueue[(String, Long)]()
+  // Track the number of failure tasks and time of latest failure to executor id
+  val executorIdToTaskFailures = new mutable.HashMap[String, ExecutorFailureStatus]()
 
   // Clock used to update and exclude the executors which are out of time window.
-  private val clock = new SystemClock()
+  private var clock: Clock = new SystemClock()
 
   // Executor that handles the scheduling task
   private val executor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
@@ -69,23 +79,23 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
     executor.awaitTermination(10, TimeUnit.SECONDS)
   }
 
-  def getExecutorBlacklist: Set[String] = {
-    val executors = new Array[(String, Long)](executorBlacklist.size())
-    executorBlacklist.toArray(executors).map(_._1).toSet
+  def setClock(newClock: Clock): Unit = {
+    clock = newClock
   }
 
-  def getHostBlacklist: Set[String] = {
-    val executorBlacklist = getExecutorBlacklist
-    executorBlacklist.map(executorIdToHosts.get(_)).flatMap(x => x).toSet
+  def getExecutorBlacklist: Set[String] = synchronized {
+    executorIdToTaskFailures.filter(_._2.isBlackListed).keys.toSet
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     taskEnd.reason match {
       case _: FetchFailed | _: ExceptionFailure | TaskResultLost |
           _: ExecutorLostFailure | UnknownReason =>
-        val numFailures = executorIdToTaskFailures.getOrElseUpdate(
-          taskEnd.taskInfo.executorId, 0) + 1
-        executorIdToTaskFailures.put(taskEnd.taskInfo.executorId, numFailures)
+        val failureStatus = executorIdToTaskFailures.getOrElseUpdate(taskEnd.taskInfo.executorId,
+          new ExecutorFailureStatus)
+        failureStatus.numFailures += 1
+        failureStatus.updatedTime = clock.getTimeMillis()
+
         // Update the executor blacklist
         updateExecutorBlacklist()
       case _ => Unit
@@ -94,45 +104,45 @@ private[spark] class ExecutorBlacklistTracker(conf: SparkConf) extends SparkList
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
     numExecutorsRegistered += 1
-    executorIdToHosts(executorAdded.executorId) = executorAdded.executorInfo.executorHost
   }
 
-  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+  override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved
+      ): Unit = synchronized {
     numExecutorsRegistered -= 1
-    executorIdToHosts -= executorRemoved.executorId
+    executorIdToTaskFailures -= executorRemoved.executorId
   }
 
   private def updateExecutorBlacklist(): Unit = {
-    // Filter out the executor Ids where task failure number is larger than executorFaultThreshold
-    val failedExecutors = executorIdToTaskFailures.filter(_._2 >= executorFaultThreshold)
-    if (!failedExecutors.isEmpty) {
-      val avgNumFailed = executorIdToTaskFailures.values.sum.toDouble / executorBlacklist.size
-      for ((executorId, numFailed) <- failedExecutors) {
+    // Filter out the executor Ids where task failure number is larger than
+    // executorFaultThreshold and not blacklisted
+    val failedExecutors = executorIdToTaskFailures.filter { case(_, e) =>
+      e.numFailures >= executorFaultThreshold && !e.isBlackListed
+    }
+
+    val blacklistedExecutorNum = executorIdToTaskFailures.filter(_._2.isBlackListed).size
+
+    if (failedExecutors.nonEmpty) {
+      val avgNumFailed = executorIdToTaskFailures.values.map(_.numFailures).sum.toDouble /
+        numExecutorsRegistered
+      for ((executorId, failureStatus) <- failedExecutors) {
         // If the number of failure task is more than average blacklist threshold of average
         // failed number and current executor blacklist is less than the max fraction of number
         // executors
-        if ((numFailed.toDouble > avgNumFailed * (1 + avgBlacklistThreshold)) &&
-          (executorBlacklist.size.toDouble < numExecutorsRegistered * maxBlacklistFraction)) {
-          executorBlacklist.add((executorId, clock.getTimeMillis()))
-          executorIdToTaskFailures -= executorId
+        if ((failureStatus.numFailures.toDouble > avgNumFailed * (1 + avgBlacklistThreshold)) &&
+          (blacklistedExecutorNum.toDouble < numExecutorsRegistered * maxBlacklistFraction)) {
+          failureStatus.isBlackListed = true
         }
       }
     }
   }
 
-  private def expireTimeoutExecutorBlacklist(): Unit = {
+  private def expireTimeoutExecutorBlacklist(): Unit = synchronized {
     val now = clock.getTimeMillis()
-    var loop = true
 
-    while (loop) {
-      Option(executorBlacklist.peek()) match {
-        case Some((executorId, addedTime)) =>
-          if ((now - addedTime) > executorFaultTimeoutWindowInMinutes * 60 * 1000) {
-            executorBlacklist.poll()
-          } else {
-            loop = false
-          }
-        case None => loop = false
+    executorIdToTaskFailures.foreach { case (id, failureStatus) =>
+      if ((now - failureStatus.updatedTime) > executorFaultTimeoutWindowInMinutes * 60 * 1000
+        && failureStatus.isBlackListed) {
+        failureStatus.isBlackListed = false
       }
     }
   }
@@ -154,6 +164,12 @@ private[spark] object ExecutorBlacklistTracker {
   val EXECUTOR_FAULT_THRESHOLD = 4
 
   // Width of overall fault-tracking sliding window (in minutes), that was used to forgive a
-  // single fault if no others occurred in the interval.)
+  // single fault if no others occurred in the interval.
   val EXECUTOR_FAULT_TIMEOUT_WINDOW = 180
+
+  final class ExecutorFailureStatus {
+    var numFailures: Int = 0
+    var updatedTime: Long = 0L
+    var isBlackListed: Boolean = false
+  }
 }

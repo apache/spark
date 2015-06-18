@@ -53,9 +53,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    val blacklist = scheduler.sc.executorBlacklistTracker
-      .map(_.getHostBlacklist.toSeq).getOrElse(Nil)
-    yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal, blacklist))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
   }
 
   /**
