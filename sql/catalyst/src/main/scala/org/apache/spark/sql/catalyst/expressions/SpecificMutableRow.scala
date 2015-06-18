@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -191,7 +192,7 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
+final class SpecificMutableRow(val values: Array[MutableValue]) extends Row with MutableRow {
 
   def this(dataTypes: Seq[DataType]) =
     this(
@@ -222,7 +223,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
-  override def copy(): InternalRow = {
+  override def copy(): Row = {
     val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {

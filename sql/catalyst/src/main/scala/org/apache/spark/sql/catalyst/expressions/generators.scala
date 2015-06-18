@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.types._
 
@@ -68,19 +68,19 @@ abstract class Generator extends Expression {
  */
 case class UserDefinedGenerator(
     elementTypes: Seq[(DataType, Boolean)],
-    function: InternalRow => TraversableOnce[InternalRow],
+    function: Row => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator {
 
   @transient private[this] var inputRow: InterpretedProjection = _
-  @transient private[this] var convertToScala: (InternalRow) => InternalRow = _
+  @transient private[this] var convertToScala: InternalRow => Row = _
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
       CatalystTypeConverters.createToScalaConverter(inputSchema)
-    }.asInstanceOf[(InternalRow => InternalRow)]
+    }.asInstanceOf[InternalRow => Row]
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {

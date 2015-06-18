@@ -135,12 +135,6 @@ class JoinedRow extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -235,12 +229,6 @@ class JoinedRow2 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -328,12 +316,6 @@ class JoinedRow3 extends InternalRow {
 
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
-
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
@@ -423,12 +405,6 @@ class JoinedRow4 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -517,12 +493,6 @@ class JoinedRow5 extends InternalRow {
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
 
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
-
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length
     val copiedValues = new Array[Any](totalSize)
@@ -610,12 +580,6 @@ class JoinedRow6 extends InternalRow {
 
   override def getFloat(i: Int): Float =
     if (i < row1.length) row1.getFloat(i) else row2.getFloat(i - row1.length)
-
-  override def getString(i: Int): String =
-    if (i < row1.length) row1.getString(i) else row2.getString(i - row1.length)
-
-  override def getAs[T](i: Int): T =
-    if (i < row1.length) row1.getAs[T](i) else row2.getAs[T](i - row1.length)
 
   override def copy(): InternalRow = {
     val totalSize = row1.length + row2.length

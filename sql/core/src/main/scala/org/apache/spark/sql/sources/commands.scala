@@ -44,7 +44,7 @@ private[sql] case class InsertIntoDataSource(
     overwrite: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = DataFrame(sqlContext, query)
     // Apply the schema of the existing table to the new data.
@@ -54,7 +54,7 @@ private[sql] case class InsertIntoDataSource(
     // Invalidate the cache.
     sqlContext.cacheManager.invalidateCache(logicalRelation)
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -64,7 +64,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     require(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
@@ -116,7 +116,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       }
     }
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 
   private def insert(writerContainer: BaseWriterContainer, df: DataFrame): Unit = {
@@ -143,14 +143,15 @@ private[sql] case class InsertIntoHadoopFsRelation(
       try {
         writerContainer.executorSideSetup(taskContext)
 
-        val converter = if (needsConversion) {
-          CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
-        } else {
-          r: InternalRow => r.asInstanceOf[Row]
-        }
+        val converter = CatalystTypeConverters.createToScalaConverter(dataSchema)
+          .asInstanceOf[InternalRow => Row]
         while (iterator.hasNext) {
-          val row = converter(iterator.next())
-          writerContainer.outputWriterForRow(row).write(row)
+          val row = iterator.next()
+          val converted = converter(row)
+          writerContainer.outputWriterForRow(converted) match {
+            case w: InternalOutputWriter => w.write(row)
+            case w: OutputWriter => w.write(converted)
+          }
         }
 
         writerContainer.commitTask()
@@ -212,21 +213,21 @@ private[sql] case class InsertIntoHadoopFsRelation(
         val partitionProj = newProjection(codegenEnabled, partitionOutput, output)
         val dataProj = newProjection(codegenEnabled, dataOutput, output)
 
-        val dataConverter: InternalRow => Row = if (needsConversion) {
+        val dataConverter =
           CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
-        } else {
-          r: InternalRow => r.asInstanceOf[Row]
-        }
         val partitionSchema = StructType.fromAttributes(partitionOutput)
         val partConverter: InternalRow => Row =
           CatalystTypeConverters.createToScalaConverter(partitionSchema)
             .asInstanceOf[InternalRow => Row]
-
         while (iterator.hasNext) {
           val row = iterator.next()
-          val partitionPart = partConverter(partitionProj(row))
-          val dataPart = dataConverter(dataProj(row))
-          writerContainer.outputWriterForRow(partitionPart).write(dataPart)
+          val part = partConverter(partitionProj(row))
+          val dataPart = dataProj(row)
+          val writer = writerContainer.outputWriterForRow(part)
+          writer match {
+            case w: InternalOutputWriter => w.write(dataPart)
+            case w: OutputWriter => w.write(dataConverter(dataPart))
+          }
         }
 
         writerContainer.commitTask()

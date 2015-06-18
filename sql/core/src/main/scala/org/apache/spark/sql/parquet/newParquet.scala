@@ -58,7 +58,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
-  extends OutputWriter {
+  extends InternalOutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
     val conf = context.getConfiguration
@@ -112,7 +112,7 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
     outputFormat.getRecordWriter(context)
   }
 
-  override def write(row: Row): Unit = recordWriter.write(null, row.asInstanceOf[InternalRow])
+  override def write(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)
 }
