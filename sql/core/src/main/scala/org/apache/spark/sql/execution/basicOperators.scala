@@ -269,7 +269,7 @@ case class UnsafeExternalSort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    assert (codegenEnabled)
+    assert(codegenEnabled, "UnsafeExternalSort requires code generation to be enabled")
     def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
       val prefixComparator = new PrefixComparator {
