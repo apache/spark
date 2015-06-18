@@ -79,6 +79,11 @@ class MLLibStreamingTestCase(unittest.TestCase):
     def tearDown(self):
         self.ssc.stop(False)
 
+    @staticmethod
+    def _ssc_wait(start_time, end_time, sleep_time):
+        while time() - start_time < end_time:
+            sleep(0.01)
+
 
 def _squared_distance(a, b):
     if isinstance(a, Vector):
@@ -878,25 +883,23 @@ class ElementwiseProductTests(MLlibTestCase):
 
 class StreamingKMeansTest(MLLibStreamingTestCase):
     def test_model_params(self):
+        """Test that the model params are set correctly"""
         stkm = StreamingKMeans()
         stkm.setK(5).setDecayFactor(0.0)
         self.assertEquals(stkm._k, 5)
         self.assertEquals(stkm._decayFactor, 0.0)
 
         # Model not set yet.
-        self.assertIsNone(stkm.latestModel)
+        self.assertIsNone(stkm.latestModel())
         self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
 
         stkm.setInitialCenters([[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0])
-        self.assertEquals(stkm.latestModel.centers, [[0.0, 0.0], [1.0, 1.0]])
-        self.assertEquals(stkm.latestModel.getClusterWeights, [1.0, 1.0])
-
-    @staticmethod
-    def _ssc_wait(start_time, end_time, sleep_time):
-        while time() - start_time < end_time:
-            sleep(0.01)
+        self.assertEquals(
+            stkm.latestModel().centers, [[0.0, 0.0], [1.0, 1.0]])
+        self.assertEquals(stkm.latestModel().clusterWeights, [1.0, 1.0])
 
     def test_accuracy_for_single_center(self):
+        """Test that the parameters obtained are correct for a single center."""
         numBatches, numPoints, k, d, r, seed = 5, 5, 1, 5, 0.1, 0
         centers, batches = self.streamingKMeansDataGenerator(
             numBatches, numPoints, k, d, r, seed)
@@ -905,13 +908,14 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         input_stream = self.ssc.queueStream(
             [self.sc.parallelize(batch, 1) for batch in batches])
         stkm.trainOn(input_stream)
+
         t = time()
         self.ssc.start()
         self._ssc_wait(t, 10.0, 0.01)
-        self.assertEquals(stkm.latestModel.getClusterWeights, [25.0])
+        self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
         realCenters = array_sum(array(centers), axis=0)
         for i in range(d):
-            modelCenters = stkm.latestModel.centers[0][i]
+            modelCenters = stkm.latestModel().centers[0][i]
             self.assertAlmostEqual(centers[0][i], modelCenters, 1)
             self.assertAlmostEqual(realCenters[i], modelCenters, 1)
 
@@ -927,7 +931,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
                          for i in range(batches)]
 
     def test_trainOn_model(self):
-        # Test the model on toy data with four clusters.
+        """Test the model on toy data with four clusters."""
         stkm = StreamingKMeans()
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
         weights = [1.0, 1.0, 1.0, 1.0]
@@ -948,15 +952,16 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         # Give enough time to train the model.
         self._ssc_wait(t, 6.0, 0.01)
-        finalModel = stkm.latestModel
+        finalModel = stkm.latestModel()
         self.assertTrue(all(finalModel.centers == array(initCenters)))
-        self.assertEquals(finalModel.getClusterWeights, [5.0, 5.0, 5.0, 5.0])
+        self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
 
     def test_predictOn_model(self):
+        """Test that the model predicts correctly on toy data."""
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
         weights = [1.0, 1.0, 1.0, 1.0]
         stkm = StreamingKMeans()
-        stkm.latestModel = StreamingKMeansModel(initCenters, weights)
+        stkm._model = StreamingKMeansModel(initCenters, weights)
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
         predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
@@ -975,6 +980,35 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 6.0, 0.01)
         self.assertEquals(result, [[0], [1], [2], [3]])
+
+    def test_trainOn_predictOn(self):
+        """Test that prediction happens on the updated model."""
+        stkm = StreamingKMeans(decayFactor=0.0, k=2)
+        stkm.setInitialCenters([[0.0], [1.0]], [1.0, 1.0])
+
+        # Since decay factor is set to zero, once the first batch
+        # is passed the clusterCenters are updated to [-0.5, 0.7]
+        # which causes 0.2 & 0.3 to be classified as 1, even though the
+        # classification based in the initial model would have been 0
+        # proving that the model is updated.
+        batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
+        batches = [sc.parallelize(batch) for batch in batches]
+        input_stream = self.ssc.queueStream(batches)
+        predict_results = []
+
+        def collect(rdd):
+            rdd_collect = rdd.collect()
+            if rdd_collect:
+                predict_results.append(rdd_collect)
+
+        stkm.trainOn(input_stream)
+        predict_stream = stkm.predictOn(input_stream)
+        predict_stream.foreachRDD(collect)
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 6.0, 0.01)
+        self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
 
 
 if __name__ == "__main__":

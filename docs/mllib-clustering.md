@@ -599,11 +599,9 @@ ssc.awaitTermination()
 First we import the neccessary classes.
 
 {% highlight python %}
-
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.clustering import StreamingKMeans
-
 {% endhighlight %}
 
 Then we make an input stream of vectors for training, as well as a stream of labeled data
@@ -611,36 +609,30 @@ points for testing. We assume a StreamingContext `ssc` has been created, see
 [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.
 
 {% highlight python %}
+def parse(lp):
+    label = float(lp[lp.find('(') + 1: lp.find(',')])
+    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+    return LabeledPoint(label, vec)
 
 trainingData = ssc.textFileStream("/training/data/dir").map(Vectors.parse)
-testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
-
+testData = ssc.textFileStream("/testing/data/dir").map(parse)
 {% endhighlight %}
 
 We create a model with random clusters and specify the number of clusters to find
 
 {% highlight python %}
-
-numDimensions = 3
-numClusters = 2
-model = StreamingKMeans()
-model.setK(numClusters)
-model.setDecayFactor(1.0)
-model.setRandomCenters(numDimensions, 0.0)
-
+model = StreamingKMeans(k=2, decayFactor=1.0).setRandomCenters(3, 1.0, 0)
 {% endhighlight %}
 
 Now register the streams for training and testing and start the job, printing
 the predicted cluster assignments on new data points as they arrive.
 
 {% highlight python %}
-
 model.trainOn(trainingData)
 model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features)))
 
 ssc.start()
 ssc.awaitTermination()
-
 {% endhighlight %}
 </div>
 
