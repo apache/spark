@@ -18,10 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Adds a number of days to startdate: date_add('2008-12-31', 1) = '2009-01-01'.
+ */
 case class DateAdd(startDate: Expression, days: Expression) extends Expression {
   override def children: Seq[Expression] = startDate :: days :: Nil
 
@@ -69,8 +73,35 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val evalStart = startDate.gen(ctx)
+    val evalDays = days.gen(ctx)
+    val dateUtils = "org.apache.spark.sql.catalyst.util.DateUtils"
+    val uTF8StringClass = "org.apache.spark.unsafe.types.UTF8String"
+    val startToDay: String = startDate.dataType match {
+      case StringType =>
+        s"""$dateUtils.millisToDays(
+          $dateUtils.stringToTime(${evalStart.primitive}.toString()).getTime())"""
+      case TimestampType =>
+        s"$dateUtils.millisToDays($dateUtils.toJavaTimestamp(${evalStart.primitive}).getTime())"
+      case DateType => evalStart.primitive
+      case _ => "" // for NullType
+    }
+    evalStart.code + evalDays.code + s"""
+      boolean ${ev.isNull} = ${evalStart.isNull} || ${evalDays.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = $uTF8StringClass.fromString(
+          $dateUtils.toString($startToDay + ${evalDays.primitive}));
+      }
+    """
+  }
 }
 
+/**
+ * Subtracts a number of days to startdate: date_sub('2008-12-31', 1) = '2008-12-30'.
+ */
 case class DateSub(startDate: Expression, days: Expression) extends Expression {
   override def children: Seq[Expression] = startDate :: days :: Nil
 
@@ -117,5 +148,29 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
         UTF8String.fromString(DateUtils.toString(resultDays))
       }
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val evalStart = startDate.gen(ctx)
+    val evalDays = days.gen(ctx)
+    val dateUtils = "org.apache.spark.sql.catalyst.util.DateUtils"
+    val uTF8StringClass = "org.apache.spark.unsafe.types.UTF8String"
+    val startToDay: String = startDate.dataType match {
+      case StringType =>
+        s"""$dateUtils.millisToDays(
+          $dateUtils.stringToTime(${evalStart.primitive}.toString()).getTime())"""
+      case TimestampType =>
+        s"$dateUtils.millisToDays($dateUtils.toJavaTimestamp(${evalStart.primitive}).getTime())"
+      case DateType => evalStart.primitive
+      case _ => "" // for NullType
+    }
+    evalStart.code + evalDays.code + s"""
+      boolean ${ev.isNull} = ${evalStart.isNull} || ${evalDays.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = $uTF8StringClass.fromString(
+          $dateUtils.toString($startToDay - ${evalDays.primitive}));
+      }
+    """
   }
 }
