@@ -37,11 +37,11 @@ trait SQLTestUtils {
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(sqlContext.conf.getConf(key)).toOption)
-    (keys, values).zipped.foreach(sqlContext.conf.setConf)
+    val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
+    (keys, values).zipped.foreach(sqlContext.conf.setConfString)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => sqlContext.conf.setConf(key, value)
+        case (key, Some(value)) => sqlContext.conf.setConfString(key, value)
         case (key, None) => sqlContext.conf.unsetConf(key)
       }
     }

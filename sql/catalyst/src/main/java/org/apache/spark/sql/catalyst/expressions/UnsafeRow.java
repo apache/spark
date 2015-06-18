@@ -26,11 +26,11 @@ import java.util.Set;
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 
@@ -103,7 +103,9 @@ public final class UnsafeRow extends BaseMutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
+          DoubleType,
+          DateType,
+          TimestampType
     })));
 
     // We support get() on a superset of the types for which we support set():
@@ -331,10 +333,8 @@ public final class UnsafeRow extends BaseMutableRow {
     return getUTF8String(i).toString();
   }
 
-
-
   @Override
-  public Row copy() {
+  public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
 
