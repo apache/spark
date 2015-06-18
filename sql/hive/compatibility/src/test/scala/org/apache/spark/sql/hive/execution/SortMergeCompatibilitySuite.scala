@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.TestSQLContext._
 
 /**
  * Runs the test cases that are included in the hive distribution with sort merge join is true.
