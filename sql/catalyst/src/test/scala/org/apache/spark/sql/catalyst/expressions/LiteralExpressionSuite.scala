@@ -74,7 +74,6 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("string literals") {
     checkEvaluation(Literal(""), "")
     checkEvaluation(Literal("test"), "test")
-    checkEvaluation(Literal("世界"), "世界")
     checkEvaluation(Literal("\0"), "\0")
   }
 
