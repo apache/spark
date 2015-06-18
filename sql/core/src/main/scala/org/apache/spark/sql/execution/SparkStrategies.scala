@@ -121,6 +121,31 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
 
+      // Cases where all aggregates can be sortmerged and codegened.
+      case PartialAggregation(
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            groupingExpressions,
+            partialComputation,
+            child)
+            if canBeCodeGened(
+                allAggregates(partialComputation) ++
+                allAggregates(rewrittenAggregateExpressions)) &&
+              codegenEnabled &&
+              sqlContext.conf.sortMergeAggregateEnabled &&
+              namedGroupingAttributes != Nil =>
+        execution.SortMergeGeneratedAggregate(
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          unsafeEnabled,
+          false,
+          execution.HashGeneratedAggregate(
+            partial = true,
+            groupingExpressions,
+            partialComputation,
+            unsafeEnabled,
+            planLater(child))) :: Nil
+
       // Cases where all aggregates can be codegened.
       case PartialAggregation(
              namedGroupingAttributes,
@@ -132,17 +157,35 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
                codegenEnabled =>
-          execution.GeneratedAggregate(
+          execution.HashGeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
             unsafeEnabled,
-            execution.GeneratedAggregate(
+            execution.HashGeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
               unsafeEnabled,
               planLater(child))) :: Nil
+
+      // Cases where some aggregate can not be codegened but can be sortmerged
+      case PartialAggregation(
+             namedGroupingAttributes,
+             rewrittenAggregateExpressions,
+             groupingExpressions,
+             partialComputation,
+             child)
+             if sqlContext.conf.sortMergeAggregateEnabled &&
+               namedGroupingAttributes != Nil =>
+        execution.SortMergeAggregate(
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          execution.Aggregate(
+            partial = true,
+            groupingExpressions,
+            partialComputation,
+            planLater(child))) :: Nil
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(

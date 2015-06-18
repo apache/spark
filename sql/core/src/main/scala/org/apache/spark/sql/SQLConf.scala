@@ -54,6 +54,7 @@ private[spark] object SQLConf {
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
   val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
+  val SORTMERGE_AGGREGATE = "spark.sql.planner.sortMergeAggregate"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -169,6 +170,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    * to HashJoin.
    */
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN, "false").toBoolean
+
+  /**
+   * Sort merge aggregate would sort the group key first, then iterate a group to get aggregation,
+   * then move to next group. Using sort merge aggregate can save a lot of memory usage compared
+   * to HashAggregate.
+   */
+  private[spark] def sortMergeAggregateEnabled: Boolean =
+    getConf(SORTMERGE_AGGREGATE, "false").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Janino at runtime to generate custom bytecode

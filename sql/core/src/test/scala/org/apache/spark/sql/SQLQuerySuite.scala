@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.GeneratedAggregate
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -192,7 +192,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       // First, check if we have GeneratedAggregate.
       var hasGeneratedAgg = false
       df.queryExecution.executedPlan.foreach {
-        case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
+        case generatedAgg: HashGeneratedAggregate => hasGeneratedAgg = true
         case _ =>
       }
       if (!hasGeneratedAgg) {
@@ -278,6 +278,161 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     } finally {
       sqlContext.dropTempTable("testData3x")
       sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+    }
+  }
+
+  test("sortmerge aggregation with codegen") {
+    val originalValue = sqlContext.conf.codegenEnabled
+    val originalValue2 = sqlContext.conf.sortMergeAggregateEnabled
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sqlContext.setConf(SQLConf.SORTMERGE_AGGREGATE, "true")
+    // Prepare a table that we can group some rows.
+    sqlContext.table("testData")
+      .unionAll(sqlContext.table("testData"))
+      .unionAll(sqlContext.table("testData"))
+      .registerTempTable("testData3x")
+
+    def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
+      val df = sql(sqlText)
+      // First, check if we have SortMergeGeneratedAggregate.
+      var hasGeneratedAgg = false
+      df.queryExecution.executedPlan.foreach {
+        case generatedAgg: SortMergeGeneratedAggregate => hasGeneratedAgg = true
+        case _ =>
+      }
+      if (!hasGeneratedAgg) {
+        fail(
+          s"""
+             |Codegen is enabled, but query $sqlText does not have SortMergeGeneratedAggregate
+             |in the plan.
+             |${df.queryExecution.simpleString}
+           """.stripMargin)
+      }
+      // Then, check results.
+      checkAnswer(df, expectedResults)
+    }
+
+    try {
+      // COUNT
+      testCodeGen(
+        "SELECT key, count(value) FROM testData3x GROUP BY key",
+        (1 to 100).map(i => Row(i, 3)))
+      // COUNT DISTINCT ON int
+      testCodeGen(
+        "SELECT value, count(distinct key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 1)))
+      // SUM
+      testCodeGen(
+        "SELECT value, sum(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 3 * i)))
+      // AVERAGE
+      testCodeGen(
+        "SELECT value, avg(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // MAX
+      testCodeGen(
+        "SELECT value, max(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // MIN
+      testCodeGen(
+        "SELECT value, min(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // Some combinations.
+      testCodeGen(
+        """
+          |SELECT
+          |  value,
+          |  sum(key),
+          |  max(key),
+          |  min(key),
+          |  avg(key),
+          |  count(key),
+          |  count(distinct key)
+          |FROM testData3x
+          |GROUP BY value
+        """.stripMargin,
+        (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
+    } finally {
+      sqlContext.dropTempTable("testData3x")
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+      sqlContext.setConf(SQLConf.SORTMERGE_AGGREGATE, originalValue2.toString)
+    }
+  }
+
+  test("sortmerge aggregation without codegen") {
+    val originalValue = sqlContext.conf.codegenEnabled
+    val originalValue2 = sqlContext.conf.sortMergeAggregateEnabled
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "false")
+    sqlContext.setConf(SQLConf.SORTMERGE_AGGREGATE, "true")
+    // Prepare a table that we can group some rows.
+    sqlContext.table("testData")
+      .unionAll(sqlContext.table("testData"))
+      .unionAll(sqlContext.table("testData"))
+      .registerTempTable("testData3x")
+
+    def testSortMergeAggreate(sqlText: String, expectedResults: Seq[Row]): Unit = {
+      val df = sql(sqlText)
+      // First, check if we have SortMergeAggregate.
+      var hasGeneratedAgg = false
+      df.queryExecution.executedPlan.foreach {
+        case generatedAgg: SortMergeAggregate => hasGeneratedAgg = true
+        case _ =>
+      }
+      if (!hasGeneratedAgg) {
+        fail(
+          s"""
+             |Codegen is unabled, but query $sqlText does not have SortMergeAggregate in the plan.
+             |${df.queryExecution.simpleString}
+           """.stripMargin)
+      }
+      // Then, check results.
+      checkAnswer(df, expectedResults)
+    }
+
+    try {
+      // COUNT
+      testSortMergeAggreate(
+        "SELECT key, count(value) FROM testData3x GROUP BY key",
+        (1 to 100).map(i => Row(i, 3)))
+      // COUNT DISTINCT ON int
+      testSortMergeAggreate(
+        "SELECT value, count(distinct key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 1)))
+      // SUM
+      testSortMergeAggreate(
+        "SELECT value, sum(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, 3 * i)))
+      // AVERAGE
+      testSortMergeAggreate(
+        "SELECT value, avg(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // MAX
+      testSortMergeAggreate(
+        "SELECT value, max(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // MIN
+      testSortMergeAggreate(
+        "SELECT value, min(key) FROM testData3x GROUP BY value",
+        (1 to 100).map(i => Row(i.toString, i)))
+      // Some combinations.
+      testSortMergeAggreate(
+        """
+          |SELECT
+          |  value,
+          |  sum(key),
+          |  max(key),
+          |  min(key),
+          |  avg(key),
+          |  count(key),
+          |  count(distinct key)
+          |FROM testData3x
+          |GROUP BY value
+        """.stripMargin,
+        (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
+    } finally {
+      sqlContext.dropTempTable("testData3x")
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+      sqlContext.setConf(SQLConf.SORTMERGE_AGGREGATE, originalValue2.toString)
     }
   }
 
