@@ -20,7 +20,7 @@ package org.apache.spark.unsafe.types;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-import javax.annotation.Nullable;
+import javax.annotation.Nonnull;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
-  @Nullable
+  @Nonnull
   private byte[] bytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
