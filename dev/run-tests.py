@@ -551,6 +551,9 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
+    if not sbt_test_goals:
+        return
+
     profiles_and_goals = test_profiles + list(sbt_test_goals)
 
     print "[info] Running Spark tests using SBT with these arguments:",
