@@ -536,12 +536,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
         Class.forName(className, true, Utils.getContextOrSparkClassLoader))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
       iter.map { row =>
         new GenericRow(
-          extractors.zip(attributeSeq).map { case (e, attr) =>
-            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
-          }.toArray[Any]
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
         ) : InternalRow
       }
     }
