@@ -45,7 +45,32 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           else
             ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
-    }.mkString("\n")
+    }
+    val partitionedProjectionCode = projectionCode.foldLeft(List.empty[String]) {
+      (acc, code) =>
+        acc match {
+          case Nil => List(code)
+          case head::tail =>
+            // code size limit is 64kb and each char takes less or equal to 2 bytes
+            if (head.length < 32 * 1000) {
+              s"$head\n$code"::tail
+            } else {
+              code::acc
+            }
+        }
+    }
+      .zipWithIndex
+      .map {
+        case (body, i) =>
+          s"""
+             private void apply$i(InternalRow i) {
+               $body
+             }
+           """
+      }
+    val projectionCalls = ((partitionedProjectionCode.length - 1) to 0 by -1)
+      .map(i => s"apply$i(i);")
+      .mkString("\n")
     val mutableStates = ctx.mutableStates.map { case (javaType, variableName, initialValue) =>
       s"private $javaType $variableName = $initialValue;"
     }.mkString("\n      ")
@@ -75,9 +100,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
+        ${partitionedProjectionCode.mkString("\n")}
+
         public Object apply(Object _i) {
           InternalRow i = (InternalRow) _i;
-          $projectionCode
+          $projectionCalls
 
           return mutableRow;
         }

@@ -42,4 +42,8 @@ class CodeGenerationSuite extends SparkFunSuite {
 
     futures.foreach(Await.result(_, 10.seconds))
   }
+
+  test("SPARK-8443: code size limit") {
+    GenerateMutableProjection.generate(List.fill(5000)(EqualTo(Literal(1), Literal(1))))
+  }
 }
