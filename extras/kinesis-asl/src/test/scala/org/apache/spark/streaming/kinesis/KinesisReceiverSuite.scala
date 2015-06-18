@@ -20,26 +20,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions.seqAsJavaList
 
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.Milliseconds
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.TestSuiteBase
-import org.apache.spark.util.{ManualClock, Clock}
-
-import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfter
-import org.scalatest.Matchers
-import org.scalatest.mock.MockitoSugar
-
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+import org.mockito.Mockito._
+import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.mock.MockitoSugar
+
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext, TestSuiteBase}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -65,7 +57,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  override def beforeFunction() = {
+  override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
@@ -81,13 +73,26 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
       checkpointStateMock, currentClockMock)
   }
 
-  test("kinesis utils api") {
+  test("KinesisUtils API") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     // Tests the API, does not actually test data receiving
-    val kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
+    val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
       "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2);
+      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
+    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
+    val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
+      "awsAccessKey", "awsSecretKey")
+
     ssc.stop()
+  }
+
+  test("check serializability of SerializableAWSCredentials") {
+    Utils.deserialize[SerializableAWSCredentials](
+      Utils.serialize(new SerializableAWSCredentials("x", "y")))
   }
 
   test("process records including store and checkpoint") {

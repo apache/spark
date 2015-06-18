@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.flume.Channel
 import org.apache.commons.lang3.RandomStringUtils
 
@@ -45,8 +44,7 @@ import org.apache.commons.lang3.RandomStringUtils
 private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
   val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol with Logging {
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
-    new ThreadFactoryBuilder().setDaemon(true)
-      .setNameFormat("Spark Sink Processor Thread - %d").build()))
+    new SparkSinkThreadFactory("Spark Sink Processor Thread - %d")))
   // Protected by `sequenceNumberToProcessor`
   private val sequenceNumberToProcessor = mutable.HashMap[CharSequence, TransactionProcessor]()
   // This sink will not persist sequence numbers and reuses them if it gets restarted.

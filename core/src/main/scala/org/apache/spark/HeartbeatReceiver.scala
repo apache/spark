@@ -29,7 +29,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
- * components to convey liveness or execution information for in-progress tasks. It will also 
+ * components to convey liveness or execution information for in-progress tasks. It will also
  * expire the hosts that have not heartbeated for more than spark.network.timeout.
  */
 private[spark] case class Heartbeat(
@@ -43,8 +43,8 @@ private[spark] case class Heartbeat(
  */
 private[spark] case object TaskSchedulerIsSet
 
-private[spark] case object ExpireDeadHosts 
-    
+private[spark] case object ExpireDeadHosts
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
@@ -62,18 +62,18 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
-  private val slaveTimeoutMs = 
+  private val slaveTimeoutMs =
     sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs", "120s")
-  private val executorTimeoutMs = 
+  private val executorTimeoutMs =
     sc.conf.getTimeAsSeconds("spark.network.timeout", s"${slaveTimeoutMs}ms") * 1000
-  
+
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"
-  private val timeoutIntervalMs = 
+  private val timeoutIntervalMs =
     sc.conf.getTimeAsMs("spark.storage.blockManagerTimeoutIntervalMs", "60s")
-  private val checkTimeoutIntervalMs = 
+  private val checkTimeoutIntervalMs =
     sc.conf.getTimeAsSeconds("spark.network.timeoutInterval", s"${timeoutIntervalMs}ms") * 1000
-  
+
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
   // "eventLoopThread" is used to run some pretty fast actions. The actions running in it should not
@@ -140,7 +140,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
       }
     }
   }
-  
+
   override def onStop(): Unit = {
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel(true)

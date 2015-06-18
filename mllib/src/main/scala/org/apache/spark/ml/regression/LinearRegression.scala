@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
@@ -44,8 +44,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Linear regression.
  *
  * The learning objective is to minimize the squared error, with regularization.
@@ -58,7 +57,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *  - L1 (Lasso)
  *  - L2 + L1 (elastic net)
  */
-@AlphaComponent
+@Experimental
 class LinearRegression(override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
@@ -84,7 +83,7 @@ class LinearRegression(override val uid: String)
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */
@@ -190,11 +189,10 @@ class LinearRegression(override val uid: String)
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Model produced by [[LinearRegression]].
  */
-@AlphaComponent
+@Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
     val weights: Vector,
@@ -323,7 +321,7 @@ private class LeastSquaresAggregator(
     }
     (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
   }
-  
+
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
 
   private val gradientSumArray = Array.ofDim[Double](dim)

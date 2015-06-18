@@ -635,12 +635,11 @@ private[nio] class ConnectionManager(
         val message = securityMsgResp.toBufferMessage
         if (message == null) throw new IOException("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
-      } catch  {
-        case e: Exception => {
+      } catch {
+        case e: Exception =>
           logError("Error handling sasl client authentication", e)
           waitingConn.close()
           throw new IOException("Error evaluating sasl response: ", e)
-        }
       }
     }
   }

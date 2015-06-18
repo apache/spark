@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.net.URL
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
@@ -29,11 +30,12 @@ import com.google.common.io.ByteStreams
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
+  SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -41,7 +43,7 @@ import org.apache.spark.util.Utils
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
-class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
+class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
 
   // log4j configuration for the YARN containers, so that their output is collected
   // by YARN instead of trying to overwrite unit-tests.log.
@@ -54,6 +56,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     """.stripMargin
 
   private val TEST_PYFILE = """
+    |import mod1, mod2
     |import sys
     |from operator import add
     |
@@ -65,13 +68,18 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     |    sc = SparkContext(conf=SparkConf())
     |    status = open(sys.argv[1],'w')
     |    result = "failure"
-    |    rdd = sc.parallelize(range(10))
+    |    rdd = sc.parallelize(range(10)).map(lambda x: x * mod1.func() * mod2.func())
     |    cnt = rdd.count()
     |    if cnt == 10:
     |        result = "success"
     |    status.write(result)
     |    status.close()
     |    sc.stop()
+    """.stripMargin
+
+  private val TEST_PYMODULE = """
+    |def func():
+    |    return 42
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -122,7 +130,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-    hadoopConfDir = new File(tempDir, Client.LOCALIZED_HADOOP_CONF_DIR)
+    hadoopConfDir = new File(tempDir, Client.LOCALIZED_CONF_DIR)
     assert(hadoopConfDir.mkdir())
     File.createTempFile("token", ".txt", hadoopConfDir)
   }
@@ -149,26 +157,12 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     }
   }
 
-  // Enable this once fix SPARK-6700
+  test("run Python application in yarn-client mode") {
+    testPySpark(true)
+  }
+
   test("run Python application in yarn-cluster mode") {
-    val primaryPyFile = new File(tempDir, "test.py")
-    Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
-    val pyFile = new File(tempDir, "test2.py")
-    Files.write(TEST_PYFILE, pyFile, UTF_8)
-    var result = File.createTempFile("result", null, tempDir)
-
-    // The sbt assembly does not include pyspark / py4j python dependencies, so we need to
-    // propagate SPARK_HOME so that those are added to PYTHONPATH. See PythonUtils.scala.
-    val sparkHome = sys.props("spark.test.home")
-    val extraConf = Map(
-      "spark.executorEnv.SPARK_HOME" -> sparkHome,
-      "spark.yarn.appMasterEnv.SPARK_HOME" -> sparkHome)
-
-    runSpark(false, primaryPyFile.getAbsolutePath(),
-      sparkArgs = Seq("--py-files", pyFile.getAbsolutePath()),
-      appArgs = Seq(result.getAbsolutePath()),
-      extraConf = extraConf)
-    checkResult(result)
+    testPySpark(false)
   }
 
   test("user class path first in client mode") {
@@ -182,6 +176,33 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     var result = File.createTempFile("result", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
+      appArgs = Seq(result.getAbsolutePath()))
+    checkResult(result)
+  }
+
+  private def testPySpark(clientMode: Boolean): Unit = {
+    val primaryPyFile = new File(tempDir, "test.py")
+    Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
+
+    val moduleDir =
+      if (clientMode) {
+        // In client-mode, .py files added with --py-files are not visible in the driver.
+        // This is something that the launcher library would have to handle.
+        tempDir
+      } else {
+        val subdir = new File(tempDir, "pyModules")
+        subdir.mkdir()
+        subdir
+      }
+    val pyModule = new File(moduleDir, "mod1.py")
+    Files.write(TEST_PYMODULE, pyModule, UTF_8)
+
+    val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
+    val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
+    val result = File.createTempFile("result", null, tempDir)
+
+    runSpark(clientMode, primaryPyFile.getAbsolutePath(),
+      sparkArgs = Seq("--py-files", pyFiles),
       appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
   }
@@ -290,9 +311,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+  var driverLogs: Option[collection.Map[String, String]] = None
 
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+
+  override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
+    driverLogs = appStart.driverLogs
   }
 }
 
@@ -314,11 +340,12 @@ private object YarnClusterDriver extends Logging with Matchers {
     val sc = new SparkContext(new SparkConf()
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val conf = sc.getConf
     val status = new File(args(0))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
-      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
@@ -334,6 +361,22 @@ private object YarnClusterDriver extends Logging with Matchers {
     assert(executorInfos.nonEmpty)
     executorInfos.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
+    }
+
+    // If we are running in yarn-cluster mode, verify that driver logs links and present and are
+    // in the expected format.
+    if (conf.get("spark.master") == "yarn-cluster") {
+      assert(listener.driverLogs.nonEmpty)
+      val driverLogs = listener.driverLogs.get
+      assert(driverLogs.size === 2)
+      assert(driverLogs.containsKey("stderr"))
+      assert(driverLogs.containsKey("stdout"))
+      val urlStr = driverLogs("stderr")
+      // Ensure that this is a valid URL, else this will throw an exception
+      new URL(urlStr)
+      val containerId = YarnSparkHadoopUtil.get.getContainerId
+      val user = Utils.getCurrentUserName()
+      assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=0"))
     }
   }
 

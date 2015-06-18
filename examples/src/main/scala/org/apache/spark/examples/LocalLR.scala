@@ -39,7 +39,7 @@ object LocalLR {
 
   def generateData: Array[DataPoint] = {
     def generatePoint(i: Int): DataPoint = {
-      val y = if(i % 2 == 0) -1 else 1
+      val y = if (i % 2 == 0) -1 else 1
       val x = DenseVector.fill(D){rand.nextGaussian + y * R}
       DataPoint(x, y)
     }

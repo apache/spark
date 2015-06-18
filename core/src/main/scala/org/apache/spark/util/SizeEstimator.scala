@@ -21,31 +21,47 @@ import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
 
 
 /**
+ * :: DeveloperApi ::
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
  * memory-aware caches.
  *
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
-private[spark] object SizeEstimator extends Logging {
+@DeveloperApi
+object SizeEstimator extends Logging {
+
+  /**
+   * Estimate the number of bytes that the given object takes up on the JVM heap. The estimate
+   * includes space taken up by objects referenced by the given object, their references, and so on
+   * and so forth.
+   *
+   * This is useful for determining the amount of heap space a broadcast variable will occupy on
+   * each executor or the amount of space each object will take when caching objects in
+   * deserialized form. This is not the same as the serialized size of the object, which will
+   * typically be much smaller.
+   */
+  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
 
   // Sizes of primitive types
-  private val BYTE_SIZE    = 1
+  private val BYTE_SIZE = 1
   private val BOOLEAN_SIZE = 1
-  private val CHAR_SIZE    = 2
-  private val SHORT_SIZE   = 2
-  private val INT_SIZE     = 4
-  private val LONG_SIZE    = 8
-  private val FLOAT_SIZE   = 4
-  private val DOUBLE_SIZE  = 8
+  private val CHAR_SIZE = 2
+  private val SHORT_SIZE = 2
+  private val INT_SIZE = 4
+  private val LONG_SIZE = 8
+  private val FLOAT_SIZE = 4
+  private val DOUBLE_SIZE = 8
 
   // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of
   // a pointer is 4 or 8 depending on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
@@ -80,7 +96,7 @@ private[spark] object SizeEstimator extends Logging {
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
-      if(!isCompressedOops) {
+      if (!isCompressedOops) {
         16
       } else {
         12
@@ -161,8 +177,6 @@ private[spark] object SizeEstimator extends Logging {
     val shellSize: Long,
     val pointerFields: List[Field]) {}
 
-  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
-
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
     state.enqueue(obj)
@@ -222,7 +236,7 @@ private[spark] object SizeEstimator extends Logging {
         val s1 = sampleArray(array, state, rand, drawn, length)
         val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
-        state.size += math.max(s1, s2) + 
+        state.size += math.max(s1, s2) +
           (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
       }
     }
@@ -230,7 +244,7 @@ private[spark] object SizeEstimator extends Logging {
 
   private def sampleArray(
       array: AnyRef,
-      state: SearchState, 
+      state: SearchState,
       rand: Random,
       drawn: OpenHashSet[Int],
       length: Int): Long = {

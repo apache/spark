@@ -26,6 +26,7 @@ import scala.collection.Iterator;
 import scala.reflect.ClassTag;
 import scala.runtime.AbstractFunction1;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.HashMultiset;
 import com.google.common.io.ByteStreams;
 import org.junit.After;
@@ -35,7 +36,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-import org.xerial.snappy.buffer.CachedBufferAllocator;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
@@ -97,13 +97,6 @@ public class UnsafeShuffleWriterSuite {
   @After
   public void tearDown() {
     Utils.deleteRecursively(tempDir);
-    // This call is a workaround for SPARK-7660, a snappy-java bug which is exposed by this test
-    // suite. Clearing the cached buffer allocator's pool of reusable buffers masks this bug,
-    // preventing a test failure in JavaAPISuite that would otherwise occur. The underlying bug
-    // needs to be fixed, but in the meantime this workaround avoids spurious Jenkins failures.
-    synchronized (CachedBufferAllocator.class) {
-      CachedBufferAllocator.queueTable.clear();
-    }
     final long leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
     if (leakedMemory != 0) {
       fail("Test leaked " + leakedMemory + " bytes of managed memory");
@@ -263,7 +256,7 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Collections.<Product2<Object, Object>>emptyIterator());
+    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());

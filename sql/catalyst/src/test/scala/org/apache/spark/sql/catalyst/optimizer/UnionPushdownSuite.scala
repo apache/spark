@@ -33,8 +33,8 @@ class UnionPushdownSuite extends PlanTest {
         UnionPushdown) :: Nil
   }
 
-  val testRelation =  LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 =  LocalRelation('d.int, 'e.int, 'f.int)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
   val testUnion = Union(testRelation, testRelation2)
 
   test("union: filter to each side") {

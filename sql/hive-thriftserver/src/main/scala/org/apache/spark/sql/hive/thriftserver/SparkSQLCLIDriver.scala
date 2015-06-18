@@ -32,18 +32,18 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor}
+import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.{HiveContext, HiveShim}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
-  private var transport:TSocket = _
+  private var transport: TSocket = _
 
   installSignalHandler()
 
@@ -267,7 +267,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
 
       if (proc != null) {
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
@@ -276,13 +276,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           driver.init()
           val out = sessionState.out
-          val start:Long = System.currentTimeMillis()
+          val start: Long = System.currentTimeMillis()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
           val rc = driver.run(cmd)
           val end = System.currentTimeMillis()
-          val timeTaken:Double = (end - start) / 1000.0
+          val timeTaken: Double = (end - start) / 1000.0
 
           ret = rc.getResponseCode
           if (ret != 0) {
@@ -310,7 +310,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
               res.clear()
             }
           } catch {
-            case e:IOException =>
+            case e: IOException =>
               console.printError(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${org.apache.hadoop.util.StringUtils.stringifyException(e)}

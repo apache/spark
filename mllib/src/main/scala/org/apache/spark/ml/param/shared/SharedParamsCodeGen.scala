@@ -33,7 +33,7 @@ private[shared] object SharedParamsCodeGen {
     val params = Seq(
       ParamDesc[Double]("regParam", "regularization parameter (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
-      ParamDesc[Int]("maxIter", "max number of iterations (>= 0)",
+      ParamDesc[Int]("maxIter", "maximum number of iterations (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
@@ -49,11 +49,11 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
-      ParamDesc[String]("outputCol", "output column name"),
+      ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
-      ParamDesc[Long]("seed", "random seed", Some("Utils.random.nextLong()")),
+      ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
         isValid = "ParamValidators.inRange(0, 1)"),

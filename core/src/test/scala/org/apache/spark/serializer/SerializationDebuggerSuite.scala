@@ -19,10 +19,12 @@ package org.apache.spark.serializer
 
 import java.io.{ObjectOutput, ObjectInput}
 
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.SparkFunSuite
 
 
-class SerializationDebuggerSuite extends FunSuite with BeforeAndAfterEach {
+class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   import SerializationDebugger.find
 

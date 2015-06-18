@@ -34,7 +34,7 @@ import org.apache.spark.util.CallSite
  * initiated a job (e.g. count(), save(), etc). For shuffle map stages, we also track the nodes
  * that each output partition is on.
  *
- * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
+ * Each Stage also has a firstJobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
  *
@@ -51,7 +51,7 @@ private[spark] abstract class Stage(
     val rdd: RDD[_],
     val numTasks: Int,
     val parents: List[Stage],
-    val jobId: Int,
+    val firstJobId: Int,
     val callSite: CallSite)
   extends Logging {
 

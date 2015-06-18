@@ -17,22 +17,31 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  */
-@AlphaComponent
-class HashingTF(override val uid: String) extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
+@Experimental
+class HashingTF(override val uid: String) extends Transformer with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("hashingTF"))
+
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
    * Number of features.  Should be > 0.
@@ -50,10 +59,19 @@ class HashingTF(override val uid: String) extends UnaryTransformer[Iterable[_], 
   /** @group setParam */
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
-  override protected def createTransformFunc: Iterable[_] => Vector = {
+  override def transform(dataset: DataFrame): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures))
-    hashingTF.transform
+    val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
+    val metadata = outputSchema($(outputCol)).metadata
+    dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
-  override protected def outputDataType: DataType = new VectorUDT()
+  override def transformSchema(schema: StructType): StructType = {
+    val inputType = schema($(inputCol)).dataType
+    require(inputType.isInstanceOf[ArrayType],
+      s"The input column must be ArrayType, but got $inputType.")
+    val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
+  }
 }

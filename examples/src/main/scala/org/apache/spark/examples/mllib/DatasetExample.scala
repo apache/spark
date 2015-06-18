@@ -103,10 +103,10 @@ object DatasetExample {
     tmpDir.deleteOnExit()
     val outputDir = new File(tmpDir, "dataset").toString
     println(s"Saving to $outputDir as Parquet file.")
-    df.saveAsParquetFile(outputDir)
+    df.write.parquet(outputDir)
 
     println(s"Loading Parquet file with UDT from $outputDir.")
-    val newDataset = sqlContext.parquetFile(outputDir)
+    val newDataset = sqlContext.read.parquet(outputDir)
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
     val newFeatures = newDataset.select("features").map { case Row(v: Vector) => v }

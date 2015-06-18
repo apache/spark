@@ -43,7 +43,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
-   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in 
+   * Correlation Coefficient. For Spearman Correlation, consider using RDD methods found in
    * MLlib's Statistics.
    *
    * @param col1 the name of the column
@@ -97,6 +97,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
    * The `support` should be greater than 1e-4.
    *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
+   *
    * @param cols the names of the columns to search frequent items in.
    * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
    *                than 1e-4.
@@ -114,6 +117,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
    * Uses a `default` support of 1%.
    *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
+   *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
    *
@@ -127,6 +133,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -142,6 +151,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * frequent element count algorithm described in
    * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
    * Uses a `default` support of 1%.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting [[DataFrame]].
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.

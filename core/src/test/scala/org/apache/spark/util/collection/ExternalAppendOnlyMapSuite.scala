@@ -19,12 +19,10 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
 
-class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
+class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
   private def createCombiner[T](i: T) = ArrayBuffer[T](i)
   private def mergeValue[T](buffer: ArrayBuffer[T], i: T): ArrayBuffer[T] = buffer += i

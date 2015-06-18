@@ -25,12 +25,12 @@ import org.apache.spark.sql.catalyst.expressions._
  * For lazy computing, be sure the generator.terminate() called in the very last
  * TODO reusing the CompletionIterator?
  */
-private[execution] sealed case class LazyIterator(func: () => TraversableOnce[Row])
-  extends Iterator[Row] {
+private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
+  extends Iterator[InternalRow] {
 
   lazy val results = func().toIterator
   override def hasNext: Boolean = results.hasNext
-  override def next(): Row = results.next()
+  override def next(): InternalRow = results.next()
 }
 
 /**
@@ -58,11 +58,11 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     if (join) {
       child.execute().mapPartitions { iter =>
-        val generatorNullRow = Row.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
+        val generatorNullRow = InternalRow.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
         val joinedRow = new JoinedRow
 
         iter.flatMap { row =>

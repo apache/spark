@@ -153,7 +153,7 @@ private[streaming] class ReceivedBlockTracker(
    * returns only after the files are cleaned up.
    */
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
-    assert(cleanupThreshTime.milliseconds < clock.getTimeMillis())
+    require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
