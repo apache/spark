@@ -1940,9 +1940,7 @@ unifiedStream.print();
 <div data-lang="python" markdown="1">
 {% highlight python %}
 numStreams = 5
-kafkaStreams = []
-for _ in range (numStreams):
-     kafkaStreams.append(KafkaUtils.createStream(...))
+kafkaStreams = [KafkaUtils.createStream(...) for _ in range (numStreams)]
 unifiedStream = streamingContext.union(kafkaStreams)
 unifiedStream.print()
 {% endhighlight %}
