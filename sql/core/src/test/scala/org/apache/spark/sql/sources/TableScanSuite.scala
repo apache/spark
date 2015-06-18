@@ -72,7 +72,7 @@ case class AllDataTypesScan(
 
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
-      InternalRow(
+      Row(
         UTF8String.fromString(s"str_$i"),
         s"str_$i".getBytes(),
         i % 2 == 0,
@@ -88,9 +88,9 @@ case class AllDataTypesScan(
         DateUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
         UTF8String.fromString(s"varchar_$i"),
         Seq(i, i + 1),
-        Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
+        Seq(Map(UTF8String.fromString(s"str_$i") -> Row(i.toLong))),
         Map(i -> i.toString),
-        Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
+        Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
         Row(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
           InternalRow(Seq(DateUtils.fromJavaDate(new Date(1970, 1, i + 1))))))

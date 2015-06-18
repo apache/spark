@@ -86,7 +86,7 @@ package object jdbc {
                   case ShortType => stmt.setInt(i + 1, row.getShort(i))
                   case ByteType => stmt.setInt(i + 1, row.getByte(i))
                   case BooleanType => stmt.setBoolean(i + 1, row.getBoolean(i))
-                  case StringType => stmt.setString(i + 1, row.getString(i))
+                  case StringType => stmt.setString(i + 1, row.getAs[String](i))
                   case BinaryType => stmt.setBytes(i + 1, row.getAs[Array[Byte]](i))
                   case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                   case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))

@@ -23,20 +23,20 @@ import java.util.Date
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.hive.common.FileUtils
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.Row
-import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
+import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -93,7 +93,8 @@ private[hive] class SparkHiveWriterContainer(
     "part-" + numberFormat.format(splitID) + extension
   }
 
-  def getLocalFileWriter(row: Row, schema: StructType): FileSinkOperator.RecordWriter = writer
+  def getLocalFileWriter(row: InternalRow, schema: StructType): FileSinkOperator.RecordWriter =
+    writer
 
   def close() {
     // Seems the boolean value passed into close does not matter.
@@ -164,7 +165,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
 
-  import SparkHiveDynamicPartitionWriterContainer._
+  import org.apache.spark.sql.hive.SparkHiveDynamicPartitionWriterContainer._
 
   private val defaultPartName = jobConf.get(
     ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
@@ -196,7 +197,9 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
-  override def getLocalFileWriter(row: Row, schema: StructType): FileSinkOperator.RecordWriter = {
+  override def getLocalFileWriter(
+      row: InternalRow,
+      schema: StructType): FileSinkOperator.RecordWriter = {
     def convertToHiveRawString(col: String, value: Any): String = {
       val raw = String.valueOf(value)
       schema(col).dataType match {

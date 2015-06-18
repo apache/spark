@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,6 +37,7 @@ trait MutableRow extends InternalRow {
   def setShort(ordinal: Int, value: Short)
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
+  // only used for tests
   def setString(ordinal: Int, value: String)
 }
 
@@ -54,7 +56,6 @@ object EmptyRow extends InternalRow {
   override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
   override def getShort(i: Int): Short = throw new UnsupportedOperationException
   override def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
   override def copy(): InternalRow = this
 }
@@ -64,7 +65,7 @@ object EmptyRow extends InternalRow {
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -114,14 +115,13 @@ class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
   }
 
   override def getString(i: Int): String = {
+    // the objects in values could be internal type or public types, so we need to check that.
     values(i) match {
       case null => null
       case s: String => s
       case utf8: UTF8String => utf8.toString
     }
   }
-
-  // TODO(davies): add getDate and getDecimal
 
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
@@ -173,7 +173,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
     case _ => false
   }
 
-  override def copy(): InternalRow = this
+  override def copy(): Row = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -207,7 +207,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
 
   override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
-  override def copy(): InternalRow = new GenericRow(values.clone())
+  override def copy(): Row = new GenericRow(values.clone())
 }
 
 

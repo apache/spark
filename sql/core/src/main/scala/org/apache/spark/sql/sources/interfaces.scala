@@ -342,6 +342,16 @@ abstract class OutputWriter {
 }
 
 /**
+ * internal only
+ */
+abstract class InternalOutputWriter extends OutputWriter {
+
+  def write(row: Row): Unit = throw new UnsupportedOperationException
+
+  def write(row: InternalRow): Unit
+}
+
+/**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their
  * data to an HDFS compatible filesystem.

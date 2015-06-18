@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -62,7 +61,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { e =>
-      InternalRow(UTF8String.fromString(s"people$e"), e * 2)
+      Row(UTF8String.fromString(s"people$e"), e * 2)
     }
   }
 }

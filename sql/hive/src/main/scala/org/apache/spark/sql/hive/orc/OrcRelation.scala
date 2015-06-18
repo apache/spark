@@ -63,7 +63,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
+  extends InternalOutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -115,7 +115,7 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit = {
+  override def write(row: InternalRow): Unit = {
     var i = 0
     while (i < row.length) {
       reusableOutputBuffer(i) = wrappers(i)(row(i))
@@ -188,7 +188,7 @@ private[sql] class OrcRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus]): RDD[Row] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute()
+    OrcTableScan(output, this, filters, inputPaths).execute().map(_.asInstanceOf[Row])
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
@@ -222,13 +222,13 @@ private[orc] case class OrcTableScan(
     HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
   }
 
-  // Transform all given raw `Writable`s into `Row`s.
+  // Transform all given raw `Writable`s into `InternalRow`s.
   private def fillObject(
       path: String,
       conf: Configuration,
       iterator: Iterator[Writable],
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
-      mutableRow: MutableRow): Iterator[Row] = {
+      mutableRow: MutableRow): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
     val soi = OrcFileOperator.getObjectInspector(path, Some(conf))
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
@@ -249,11 +249,11 @@ private[orc] case class OrcTableScan(
         }
         i += 1
       }
-      mutableRow: Row
+      mutableRow: InternalRow
     }
   }
 
-  def execute(): RDD[Row] = {
+  def execute(): RDD[InternalRow] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
 

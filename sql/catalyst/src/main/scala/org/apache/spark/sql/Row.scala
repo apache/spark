@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.util.hashing.MurmurHash3
-
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -118,17 +117,17 @@ object Row {
  *
  * @group row
  */
-trait Row extends Serializable {
+trait Row extends InternalRow {
   /** Number of elements in the Row. */
-  def size: Int = length
+  override def size: Int = length
 
   /** Number of elements in the Row. */
-  def length: Int
+  override def length: Int
 
   /**
    * Schema for the row.
    */
-  def schema: StructType = null
+  override def schema: StructType = null
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -153,7 +152,7 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def apply(i: Int): Any
+  override def apply(i: Int): Any
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -178,10 +177,10 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def get(i: Int): Any = apply(i)
+  override def get(i: Int): Any = apply(i)
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean
+  override def isNullAt(i: Int): Boolean
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -189,7 +188,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getBoolean(i: Int): Boolean
+  override def getBoolean(i: Int): Boolean
 
   /**
    * Returns the value at position i as a primitive byte.
@@ -197,7 +196,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getByte(i: Int): Byte
+  override def getByte(i: Int): Byte
 
   /**
    * Returns the value at position i as a primitive short.
@@ -205,7 +204,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getShort(i: Int): Short
+  override def getShort(i: Int): Short
 
   /**
    * Returns the value at position i as a primitive int.
@@ -213,7 +212,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getInt(i: Int): Int
+  override def getInt(i: Int): Int
 
   /**
    * Returns the value at position i as a primitive long.
@@ -221,7 +220,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getLong(i: Int): Long
+  override def getLong(i: Int): Long
 
   /**
    * Returns the value at position i as a primitive float.
@@ -230,7 +229,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getFloat(i: Int): Float
+  override def getFloat(i: Int): Float
 
   /**
    * Returns the value at position i as a primitive double.
@@ -238,7 +237,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getDouble(i: Int): Double
+  override def getDouble(i: Int): Double
 
   /**
    * Returns the value at position i as a String object.
@@ -246,7 +245,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getString(i: Int): String
+  override def getString(i: Int): String
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
@@ -313,7 +312,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+  override def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
   /**
    * Returns the value of a given fieldName.
@@ -347,70 +346,8 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString(): String = s"[${this.mkString(",")}]"
-
   /**
    * Make a copy of the current [[Row]] object.
    */
-  def copy(): Row
-
-  /** Returns true if there are any NULL values in this row. */
-  def anyNull: Boolean = {
-    val len = length
-    var i = 0
-    while (i < len) {
-      if (isNullAt(i)) { return true }
-      i += 1
-    }
-    false
-  }
-
-  override def equals(that: Any): Boolean = that match {
-    case null => false
-    case that: Row =>
-      if (this.length != that.length) {
-        return false
-      }
-      var i = 0
-      val len = this.length
-      while (i < len) {
-        if (apply(i) != that.apply(i)) {
-          return false
-        }
-        i += 1
-      }
-      true
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    // Using Scala's Seq hash code implementation.
-    var n = 0
-    var h = MurmurHash3.seqSeed
-    val len = length
-    while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
-      n += 1
-    }
-    MurmurHash3.finalizeHash(h, n)
-  }
-
-  /* ---------------------- utility methods for Scala ---------------------- */
-
-  /**
-   * Return a Scala Seq representing the row. ELements are placed in the same order in the Seq.
-   */
-  def toSeq: Seq[Any]
-
-  /** Displays all elements of this sequence in a string (without a separator). */
-  def mkString: String = toSeq.mkString
-
-  /** Displays all elements of this sequence in a string using a separator string. */
-  def mkString(sep: String): String = toSeq.mkString(sep)
-
-  /**
-   * Displays all elements of this traversable or iterator in a string using
-   * start, end, and separator strings.
-   */
-  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+  override def copy(): Row
 }
