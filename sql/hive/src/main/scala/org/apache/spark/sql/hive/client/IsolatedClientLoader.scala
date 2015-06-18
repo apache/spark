@@ -95,7 +95,7 @@ private[hive] object IsolatedClientLoader {
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
- * @param rootClassLoader The system root classloader.  Must not know about hive classes.
+ * @param rootClassLoader The system root classloader. Must not know about Hive classes.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  *
  */
@@ -111,7 +111,7 @@ private[hive] class IsolatedClientLoader(
   extends Logging {
 
   // Check to make sure that the root classloader does not know about Hive.
-  assert(Try(baseClassLoader.loadClass("org.apache.hive.HiveConf")).isFailure)
+  assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -145,6 +145,7 @@ private[hive] class IsolatedClientLoader(
     def doLoadClass(name: String, resolve: Boolean): Class[_] = {
       val classFileName = name.replaceAll("\\.", "/") + ".class"
       if (isBarrierClass(name) && isolationOn) {
+        // For barrier classes, we construct a new copy of the class.
         val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
         logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
         defineClass(name, bytes, 0, bytes.length)
@@ -152,6 +153,7 @@ private[hive] class IsolatedClientLoader(
         logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
         super.loadClass(name, resolve)
       } else {
+        // For shared classes, we delegate to baseClassLoader.
         logDebug(s"shared class: $name")
         baseClassLoader.loadClass(name)
       }
@@ -167,7 +169,7 @@ private[hive] class IsolatedClientLoader(
     classLoader
       .loadClass(classOf[ClientWrapper].getName)
       .getConstructors.head
-      .newInstance(version, config)
+      .newInstance(version, config, classLoader)
       .asInstanceOf[ClientInterface]
   } catch {
     case ReflectionException(cnf: NoClassDefFoundError) =>
