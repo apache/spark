@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
+ * @groupname datetime_funcs DateTime functions
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions

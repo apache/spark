@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.{Calendar, TimeZone}
-
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
@@ -50,21 +48,25 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
 
   override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
-    val d = days.eval(input)
-    if (start == null || d == null) {
+    if (start == null) {
       null
     } else {
-      val offset = d.asInstanceOf[Int]
-      val resultDays = startDate.dataType match {
-        case StringType =>
-          DateUtils.millisToDays(DateUtils.stringToTime(
-            start.asInstanceOf[UTF8String].toString).getTime) + offset
-        case TimestampType =>
-          DateUtils.millisToDays(DateUtils.toJavaTimestamp(
-            start.asInstanceOf[Long]).getTime) + offset
-        case DateType => start.asInstanceOf[Int] + offset
+      val d = days.eval(input)
+      if (d == null) {
+        null
+      } else {
+        val offset = d.asInstanceOf[Int]
+        val resultDays = startDate.dataType match {
+          case StringType =>
+            DateUtils.millisToDays(DateUtils.stringToTime(
+              start.asInstanceOf[UTF8String].toString).getTime) + offset
+          case TimestampType =>
+            DateUtils.millisToDays(DateUtils.toJavaTimestamp(
+              start.asInstanceOf[Long]).getTime) + offset
+          case DateType => start.asInstanceOf[Int] + offset
+        }
+        UTF8String.fromString(DateUtils.toString(resultDays))
       }
-      UTF8String.fromString(DateUtils.toString(resultDays))
     }
   }
 }
@@ -95,21 +97,25 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
 
   override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
-    val d = days.eval(input)
-    if (start == null || d == null) {
+    if (start == null) {
       null
     } else {
-      val offset = d.asInstanceOf[Int]
-      val resultDays = startDate.dataType match {
-        case StringType =>
-          DateUtils.millisToDays(DateUtils.stringToTime(
-            start.asInstanceOf[UTF8String].toString).getTime) - offset
-        case TimestampType =>
-          DateUtils.millisToDays(DateUtils.toJavaTimestamp(
-            start.asInstanceOf[Long]).getTime) - offset
-        case DateType => start.asInstanceOf[Int] - offset
+      val d = days.eval(input)
+      if (d == null) {
+        null
+      } else {
+        val offset = d.asInstanceOf[Int]
+        val resultDays = startDate.dataType match {
+          case StringType =>
+            DateUtils.millisToDays(DateUtils.stringToTime(
+              start.asInstanceOf[UTF8String].toString).getTime) - offset
+          case TimestampType =>
+            DateUtils.millisToDays(DateUtils.toJavaTimestamp(
+              start.asInstanceOf[Long]).getTime) - offset
+          case DateType => start.asInstanceOf[Int] - offset
+        }
+        UTF8String.fromString(DateUtils.toString(resultDays))
       }
-      UTF8String.fromString(DateUtils.toString(resultDays))
     }
   }
 }
