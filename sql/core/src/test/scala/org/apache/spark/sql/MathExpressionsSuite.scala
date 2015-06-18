@@ -245,7 +245,7 @@ class MathExpressionsSuite extends QueryTest {
       Row(math.log(123), math.log(123) / math.log(2), null))
 
     checkAnswer(
-      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
+      df.selectExpr("ln(a)", "log(2.0, a)", "ln(b)"),
       Row(math.log(123), math.log(123) / math.log(2), null))
   }
 
