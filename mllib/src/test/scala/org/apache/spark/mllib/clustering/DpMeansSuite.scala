@@ -47,7 +47,6 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(predictedClusters(6) === predictedClusters(14))
     assert(predictedClusters(8) === predictedClusters(9))
     assert(predictedClusters(0) != predictedClusters(7))
-
   }
 
   test("single cluster with sparse data") {
@@ -76,7 +75,6 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     val dpModel = new DpMeans().setLambda(12).run(data)
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
-
     try {
       dpModel.save(sc, path)
       val sameModel = DpMeansModel.load(sc, path)
@@ -84,6 +82,7 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
  }
+
  object DpMeansSuite extends SparkFunSuite{
 
    val data = Array(
@@ -106,5 +105,3 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
  }
-
-

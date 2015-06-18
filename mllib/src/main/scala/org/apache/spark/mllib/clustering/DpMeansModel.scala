@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -77,6 +78,7 @@ class DpMeansModel
   override protected def formatVersion: String = "1.0"
 
 }
+
 object DpMeansModel extends Loader[DpMeansModel] {
 
   private case class Cluster(id: Int, point: Vector)
@@ -86,7 +88,9 @@ object DpMeansModel extends Loader[DpMeansModel] {
       Cluster(r.getInt(0), r.getAs[Vector](1))
     }
   }
+
   private object SaveLoadV1_0 {
+
     val thisFormatVersion = "1.0"
 
     val thisClassName = "org.apache.spark.mllib.clustering.DpMeansModel"
@@ -105,9 +109,8 @@ object DpMeansModel extends Loader[DpMeansModel] {
       val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
         Cluster(id, point)
       }
-      dataRDD.toDF().saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.toDF().write.parquet(Loader.dataPath(path))
     }
-
 
     def load(sc: SparkContext, path: String): DpMeansModel = {
       implicit val formats = DefaultFormats
@@ -122,6 +125,7 @@ object DpMeansModel extends Loader[DpMeansModel] {
       return new DpMeansModel(localCentroids.sortBy(_.id).map(_.point))
     }
   }
+
     override def load(sc: SparkContext, path: String) : DpMeansModel = {
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       implicit val formats = DefaultFormats

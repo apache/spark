@@ -23,7 +23,6 @@ import org.apache.spark.mllib.clustering.DpMeans
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.{SparkConf, SparkContext}
 
-
 /**
  * An example DP means app. Run with
  * {{{
@@ -62,12 +61,14 @@ object DenseDpMeans {
         .required()
         .action((x, c) => c.copy(input = x))
   }
+
     parser.parse(args, defaultParams).map { params =>
       run(params)
     }.getOrElse {
       sys.exit(1)
     }
   }
+
   private def run(params: Params) {
     val conf = new SparkConf().setAppName("DP means example")
     val sc = new SparkContext(conf)
@@ -98,8 +99,11 @@ object DenseDpMeans {
       print(" " + x)
     }
     println()
+
     val cost = clusters.computeCost(data)
     println(s"Total Cost = $cost.")
+
+    sc.stop()
   }
 }
 
