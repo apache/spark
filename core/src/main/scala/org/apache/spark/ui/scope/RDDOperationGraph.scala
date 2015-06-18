@@ -66,16 +66,9 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
     _childClusters += childCluster
   }
 
-  /** Return all the nodes container in this cluster, including ones nested in other clusters. */
-  def getAllNodes: Seq[RDDOperationNode] = {
-    _childNodes ++ _childClusters.flatMap(_.childNodes)
-  }
-
   /** Return all the nodes which are cached. */
   def getCachedNodes: Seq[RDDOperationNode] = {
-    val cachedNodes = _childNodes.filter(_.cached)
-    _childClusters.foreach(cluster => cachedNodes ++= cluster._childNodes.filter(_.cached))
-    cachedNodes
+    _childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)
   }
 }
 
