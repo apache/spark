@@ -768,7 +768,7 @@ class DAGSchedulerSuite
     runEvent(CompletionEvent(taskSets(1).tasks(0),
       FetchFailed(null, firstShuffleId, -1, 0, "Fetch matadata failed"),
       null, null, createFakeTaskInfo(), null))
-    //FetchFailed cause resubmit failed Stages.
+    // FetchFailed cause resubmit failed Stages.
     scheduler.resubmitFailedStages()
 
     runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
