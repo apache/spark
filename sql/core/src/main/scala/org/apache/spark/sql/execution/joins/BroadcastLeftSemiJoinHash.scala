@@ -44,7 +44,7 @@ case class BroadcastLeftSemiJoinHash(
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
+    val buildIter = buildPlan.execute().map(_.copy()).collect().toIterator
 
     condition match {
       case None =>
