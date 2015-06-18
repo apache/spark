@@ -26,6 +26,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
+  @transient var datasetNR: DataFrame = _
 
   /**
    * In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -35,13 +36,19 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
    * import org.apache.spark.mllib.util.LinearDataGenerator
    * val data =
    *   sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2), 10000, 42), 2)
-   * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).saveAsTextFile("path")
+   * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("path")
+   * val dataNR =
+   *   sc.parallelize(LinearDataGenerator.generateLinearInput(0.0, Array(4.7, 7.2), 10000, 42), 2)
+   * dataNR.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("pathNR")
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
+    datasetNR = sqlContext.createDataFrame(
+      sc.parallelize(LinearDataGenerator.generateLinearInput(
+        0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
   }
 
   test("linear regression with intercept without regularization") {
@@ -77,6 +84,48 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
+
+  test("linear regression without intercept without regularization") {
+    val trainer = (new LinearRegression).setFitIntercept(false)
+    val model = trainer.fit(dataset)
+    val modelNR = trainer.fit(datasetNR)
+
+    /**
+     * Using the following R code to load the data and train the model using glmnet package.
+     *
+     * library("glmnet")
+     * data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+     * features <- as.matrix(data.frame(as.numeric(data$V2), as.numeric(data$V3)))
+     * label <- as.numeric(data$V1)
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0))
+     * > weights
+     *  3 x 1 sparse Matrix of class "dgCMatrix"
+     *                           s0
+     * (Intercept)         .
+     * as.numeric.data.V2. 4.648385
+     * as.numeric.data.V3. 7.462729
+     */
+    val weightsR = Array(4.648385, 7.462729)
+
+    assert(model.intercept ~== 0 relTol 1E-3)
+    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    /**
+     * Then again with the data with no intercept:
+     * > weightsNR
+     * 3 x 1 sparse Matrix of class "dgCMatrix"
+     *                             s0
+     * (Intercept)           .
+     * as.numeric.dataNR.V2. 4.701019
+     * as.numeric.dataNR.V3. 7.198280
+     */
+    val weightsRNR = Array(4.701019, 7.198280)
+
+    assert(modelNR.intercept ~== 0 relTol 1E-3)
+    assert(modelNR.weights(0) ~== weightsRNR(0) relTol 1E-3)
+    assert(modelNR.weights(1) ~== weightsRNR(1) relTol 1E-3)
+  }
+
 
   test("linear regression with intercept with L1 regularization") {
     val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)

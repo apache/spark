@@ -74,6 +74,15 @@ class LinearRegression(override val uid: String)
   setDefault(regParam -> 0.0)
 
   /**
+   * Set if we should fit the intercept
+   * Default is true.
+   * @group setParam
+   */
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+  setDefault(fitIntercept -> true)
+
+
+  /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
@@ -124,7 +133,7 @@ class LinearRegression(override val uid: String)
     val numFeatures = summarizer.mean.size
     val yMean = if ($(fitIntercept)) statCounter.mean else 0.0
     val yStd = math.sqrt(statCounter.variance)
-      // look at glmnet6.m L761 maaaybe that has info
+    // look at glmnet5.m L761 maaaybe that has info
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
@@ -247,11 +256,11 @@ class LinearRegressionModel private[ml] (
  * where \bar{x_i} is the mean of x_i, \hat{x_i} is the standard deviation of x_i,
  * \bar{y} is the mean of label, and \hat{y} is the standard deviation of label.
  *
- * If we are training with intercept disabled (that is forced through 0.0),
- * we can use the same equation except \bar{y} and \bar{x_i} are 0 instead of the
- * respective means.
+ * If we fitting the intercept disabled (that is forced through 0.0),
+ * we can use the same equation except we set \bar{y} and \bar{x_i} to 0 instead
+ * of the respective means.
  *
- * With the intercept, this can be rewritten as
+ * This can be rewritten as
  * {{{
  * L = 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
  *     + \bar{y} / \hat{y}||^2
