@@ -363,7 +363,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     ))
   }
 
-  test("blockReftOuterJoin") {
+  test("blockRightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (2, 2), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
     val joined = rdd1.blockRightOuterJoin(rdd2, 5).collect()
