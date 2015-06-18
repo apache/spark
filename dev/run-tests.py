@@ -28,6 +28,199 @@ SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
 USER_HOME = os.environ.get("HOME")
 
 
+all_modules = []
+
+
+class Module(object):
+
+    def __init__(self, name, dependencies, source_file_regexes, sbt_test_goals=(),
+                 should_run_python_tests=False, should_run_r_tests=False):
+        self.name = name
+        self.dependencies = dependencies
+        self.source_file_prefixes = source_file_regexes
+        self.sbt_test_goals = sbt_test_goals
+        self.should_run_python_tests = should_run_python_tests
+        self.should_run_r_tests = should_run_r_tests
+
+        self.dependent_modules = set()
+        for dep in dependencies:
+            dep.dependent_modules.add(self)
+        all_modules.append(self)
+
+    def contains_file(self, filename):
+        return any(re.match(p, filename) for p in self.source_file_prefixes)
+
+
+root = Module(
+    name="root",
+    dependencies=[],
+    source_file_regexes=[],
+    sbt_test_goals=[
+        "test",
+    ]
+)
+
+
+sql = Module(
+    name="sql",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/(?!hive-thriftserver)",
+        "bin/spark-sql",
+        "examples/src/main/java/org/apache/spark/examples/sql/",
+        "examples/src/main/scala/org/apache/spark/examples/sql/",
+    ],
+    sbt_test_goals=[
+        "catalyst/test",
+        "sql/test",
+        "hive/test",
+    ])
+
+
+hive_thriftserver = Module(
+    name="hive-thriftserver",
+    dependencies=[sql],
+    source_file_regexes=[
+        "sql/hive-thriftserver",
+        "sbin/start-thriftserver.sh",
+    ],
+    sbt_test_goals=[
+        "hive-thriftserver/test",
+    ]
+)
+
+
+mllib = Module(
+    name="mllib",
+    dependencies=[sql],
+    source_file_regexes=[
+        "examples/src/main/java/org/apache/spark/examples/mllib/",
+        "examples/src/main/scala/org/apache/spark/examples/mllib",
+        "data/mllib/",
+        "mllib/",
+    ],
+    sbt_test_goals=[
+        "mllib/test",
+        "examples/test",
+    ]
+)
+
+
+graphx = Module(
+    name="graphx",
+    dependencies=[],
+    source_file_regexes=[
+        "graphx/",
+    ],
+    sbt_test_goals=[
+        "graphx/test"
+    ]
+)
+
+
+streaming = Module(
+    name="streaming",
+    dependencies=[],
+    source_file_regexes=[
+        "external/",
+        "extras/java8-tests/",
+        "extras/kinesis-asl/",
+        "streaming",
+    ],
+    sbt_test_goals=[
+        "streaming/test",
+        "streaming-flume/test",
+        "streaming-flume-sink/test",
+        "streaming-kafka/test",
+        "streaming-mqtt/test",
+        "streaming-twitter/test",
+        "streaming-zeromq/test",
+    ]
+)
+
+
+examples = Module(
+    name="examples",
+    dependencies=[graphx, mllib, streaming, sql],
+    source_file_regexes=[
+        "examples/",
+    ],
+    sbt_test_goals=[
+        "examples/test",
+    ]
+)
+
+
+pyspark = Module(
+    name="pyspark",
+    dependencies=[mllib, streaming, sql],
+    source_file_regexes=[
+        "python/"
+    ],
+    should_run_python_tests=True
+)
+
+
+sparkr = Module(
+    name="sparkr",
+    dependencies=[sql, mllib],
+    source_file_regexes=[
+        "R/",
+    ],
+    should_run_r_tests=True
+)
+
+
+docs = Module(
+    name="docs",
+    dependencies=[],
+    source_file_regexes=[
+        "docs/",
+    ]
+)
+
+
+def determine_modules(filenames):
+    """
+    Given a list of filenames, return the set of modules that contain those files.
+    If a file is not associated with a more specific submodule, then this method will consider that
+    file to belong to the 'root' module.
+
+    >>> sorted(x.name for x in determine_modules(["python/pyspark/a.py", "sql/test/foo"]))
+    ['pyspark', 'sql']
+    >>> [x.name for x in determine_modules(["file_not_matched_by_any_subproject"])]
+    ['root']
+    """
+    changed_modules = set()
+    for filename in filenames:
+        matched_at_least_one_module = False
+        for module in all_modules:
+            if module.contains_file(filename):
+                changed_modules.add(module)
+                matched_at_least_one_module = True
+        if not matched_at_least_one_module:
+            changed_modules.add(root)
+    return changed_modules
+
+
+def determine_modules_to_test(changed_modules):
+    """
+    Given a set of modules that have changed, compute the transitive closure of those modules'
+    dependent modules in order to determine the set of modules that should be tested.
+
+    >>> sorted(x.name for x in determine_modules_to_test([root]))
+    ['root']
+    >>> sorted(x.name for x in determine_modules_to_test([graphx]))
+    ['examples', 'graphx']
+    >>> sorted(x.name for x in determine_modules_to_test([sql]))
+    ['examples', 'hive-thriftserver', 'mllib', 'pyspark', 'sparkr', 'sql']
+    """
+    modules_to_test = set()
+    for module in changed_modules:
+        modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
+    return modules_to_test.union(set(changed_modules))
+
+
 def get_error_codes(err_code_file):
     """Function to retrieve all block numbers from the `run-tests-codes.sh`
     file to maintain backwards compatibility with the `run-tests-jenkins`
@@ -43,7 +236,7 @@ ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh")
 
 
 def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", cmd, "; received return code", retcode
+    print "[error] running", cmd.join(' '), "; received return code", retcode
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -177,14 +370,14 @@ def build_spark_documentation():
     os.chdir(SPARK_HOME)
 
 
-def exec_maven(mvn_args=[]):
+def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
     run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
 
 
-def exec_sbt(sbt_args=[]):
+def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
@@ -231,7 +424,7 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def get_build_profiles(hadoop_version="hadoop2.3",
+def get_build_profiles(hadoop_version,
                        enable_base_profiles=True,
                        enable_hive_profiles=False,
                        enable_doc_profiles=False):
@@ -318,19 +511,6 @@ def identify_changed_modules(test_env):
         # remove any empty strings
         changed_files = [f for f in raw_output.split('\n') if f]
 
-        sql_files = [f for f in changed_files
-                     if any(f.startswith(p) for p in
-                            ["sql/",
-                             "bin/spark-sql",
-                             "sbin/start-thriftserver.sh",
-                             "examples/src/main/java/org/apache/spark/examples/sql/",
-                             "examples/src/main/scala/org/apache/spark/examples/sql/"])]
-        mllib_files = [f for f in changed_files
-                       if any(f.startswith(p) for p in
-                              ["examples/src/main/java/org/apache/spark/examples/mllib/",
-                               "examples/src/main/scala/org/apache/spark/examples/mllib",
-                               "data/mllib/",
-                               "mllib/"])]
         streaming_files = [f for f in changed_files
                            if any(f.startswith(p) for p in
                                   ["examples/scala-2.10/",
@@ -356,12 +536,6 @@ def identify_changed_modules(test_env):
 
         if changed_core_files:
             changed_modules.add("CORE")
-        if sql_files:
-            print "[info] Detected changes in SQL. Will run Hive test suite."
-            changed_modules.add("SQL")
-        if mllib_files:
-            print "[info] Detected changes in MLlib. Will run MLlib test suite."
-            changed_modules.add("MLLIB")
         if streaming_files:
             print "[info] Detected changes in Streaming. Will run Streaming test suite."
             changed_modules.add("STREAMING")
@@ -416,8 +590,6 @@ def run_scala_tests_sbt(test_modules, test_profiles):
                                "streaming-twitter/test",
                                "streaming-zeromq/test",
                                "examples/test"]
-        if "GRAPHX" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals += ["graphx/test", "examples/test"]
         if not sbt_test_goals:
             sbt_test_goals = ["test"]
 
@@ -532,5 +704,13 @@ def main():
     run_python_tests()
     run_sparkr_tests()
 
+
+def _test():
+    import doctest
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)
+
 if __name__ == "__main__":
+    _test()
     main()
