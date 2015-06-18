@@ -278,3 +278,38 @@ sparkRHive.init <- function(jsc = NULL) {
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
   hiveCtx
 }
+
+#' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+#' different value or cleared.
+#'
+#' @param sc The existing 
+#' @param groupid the ID to be assigned to job groups
+#' @param description description for the the job group ID
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+
+setJobGroup <- function(groupId, description, interruptOnCancel) {
+  if (exists(".sparkRjsc", envir = env)) {
+    sc <- get(".sparkRjsc", envir = env)
+    callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  }
+}
+
+#' Clear current job group ID and its description
+
+clearJobGroup <- function() {
+  if (exists(".sparkRjsc", envir = env)) {
+    sc <- get(".sparkRjsc", envir = env)
+    callJMethod(sc, "clearJobGroup")
+  }
+}
+
+#' Cancel active jobs for the specified group
+#'
+#' @param groupId the ID of job group to be cancelled
+
+cancelJobGroup <- function(groupId) {
+  if (exists(".sparkRjsc", envir = env)) {
+    sc <- get(".sparkRjsc", envir = env)
+    callJMethod(sc, "cancelJobGroup", groupId)
+  }
+}
