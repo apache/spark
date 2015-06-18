@@ -551,7 +551,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
-    profiles_and_goals = test_profiles + sbt_test_goals
+    profiles_and_goals = test_profiles + list(sbt_test_goals)
 
     print "[info] Running Spark tests using SBT with these arguments:",
     print " ".join(profiles_and_goals)
@@ -641,7 +641,7 @@ def main():
         changed_modules = identify_changed_modules_from_git_commits("HEAD",
                                                                     target_branch=target_branch)
     if not changed_modules:
-        changed_modules = ['root']
+        changed_modules = [root]
     print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
 
     test_modules = determine_modules_to_test(changed_modules)
