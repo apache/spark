@@ -68,7 +68,7 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
     int numClusters = 5;
     List<Vector> points = Lists.newArrayList();
     for (int i = 0; i < 99; i++) {
-      Double elm = new Double(i % numClusters);
+      Double elm = (double)(i % numClusters);
       Vector point = Vectors.dense(elm, elm);
       points.add(point);
     }

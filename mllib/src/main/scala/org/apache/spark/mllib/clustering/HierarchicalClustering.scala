@@ -40,7 +40,7 @@ object HierarchicalClustering extends Logging {
    * @return an index of the array of clusters
    */
   private[mllib]
-  def findClosestCenter(metric: Function2[BV[Double], BV[Double], Double])
+  def findClosestCenter(metric: (BV[Double], BV[Double]) => Double)
         (centers: Seq[BV[Double]])(point: BV[Double]): Int = {
     val (closestCenter, closestIndex) =
       centers.zipWithIndex.map { case (center, idx) => (metric(center, point), idx)}.minBy(_._1)
@@ -152,7 +152,7 @@ class HierarchicalClustering private (
         data = newData
 
         // keep recent 2 cached RDDs in order to run more quickly
-        if (rddArray.size > 1) {
+        if (rddArray.length > 1) {
           val head = rddArray.head
           head.unpersist()
           rddArray = rddArray.filterNot(_.hashCode() == head.hashCode())
@@ -184,8 +184,8 @@ class HierarchicalClustering private (
     // make a hierarchical clustering model
     val model = new HierarchicalClusteringModel(root.get)
     val leavesNodes = model.getClusters
-    if (leavesNodes.size < this.numClusters) {
-      log.warn(s"# clusters is less than you have expected: ${leavesNodes.size} / ${numClusters}. ")
+    if (leavesNodes.length < this.numClusters) {
+      log.warn(s"# clusters is less than you want: ${leavesNodes.length} / ${numClusters}")
     }
     model
   }
@@ -195,7 +195,7 @@ class HierarchicalClustering private (
    */
   private[clustering]
   def initData(data: RDD[Vector]): RDD[(Long, BV[Double])] = {
-    data.map { v: Vector => (HierarchicalClustering.ROOT_INDEX_KEY, v.toBreeze)}.cache
+    data.map { v: Vector => (HierarchicalClustering.ROOT_INDEX_KEY, v.toBreeze)}
   }
 
   /**
@@ -227,8 +227,8 @@ class HierarchicalClustering private (
       val map = mutable.Map.empty[Long, (BV[Double], Double, BV[Double])]
       iter.foreach { case (idx: Long, point: BV[Double]) =>
         // get a map value or else get a sparse vector
-        val (sumBV, n, sumOfSquares) = map.get(idx)
-            .getOrElse(BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size))
+        val (sumBV, n, sumOfSquares) = map
+            .getOrElse(idx, (BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size)))
         map(idx) = (sumBV + point, n + 1.0, sumOfSquares + (point :* point))
       }
       map.toIterator
@@ -258,16 +258,15 @@ class HierarchicalClustering private (
 
     // divide input data
     var dividableData = data.filter { case (idx, point) => dividableKeys.contains(idx)}
-    var dividableClusters = dividedClusters.filter { case (k, v) => dividableKeys.contains(k)}
+    val dividableClusters = dividedClusters.filter { case (k, v) => dividableKeys.contains(k)}
     val idealIndexes = dividableKeys.flatMap(idx => Array(2 * idx, 2 * idx + 1).toIterator)
     var stats = divide(data, dividableClusters)
 
-    // if there is clusters which is failed to be divided,
-    // retry to divide only failed clusters again and again
+    // if there are clusters which failed to be divided, retry to split the failed clusters
     var tryTimes = 1
     while (stats.size < dividableKeys.size * 2 && tryTimes <= this.maxRetries) {
       // get the indexes of clusters which is failed to be divided
-      val failedIndexes = idealIndexes.filterNot(stats.keySet.contains).map(idx => (idx / 2).toLong)
+      val failedIndexes = idealIndexes.filterNot(stats.keySet.contains).map(idx => idx / 2)
       val failedCenters = dividedClusters.filter { case (idx, clstr) => failedIndexes.contains(idx)}
       log.info(s"# failed clusters is ${failedCenters.size} of ${dividableKeys.size}" +
           s"at ${tryTimes} times in ${appName}")
@@ -332,15 +331,18 @@ class HierarchicalClustering private (
         iter.foreach { case (idx, point) =>
           // calculate next index number
           val childrenCenters = Array(2 * idx, 2 * idx + 1)
-              .filter(bcNewCenters.value.keySet.contains(_)).map(bcNewCenters.value(_)).toArray
-          if (childrenCenters.size >= 1) {
+              .filter(x => bcNewCenters.value.contains(x)).map(bcNewCenters.value(_))
+          if (childrenCenters.length >= 1) {
             val closestIndex =
               HierarchicalClustering.findClosestCenter(bcMetric.value)(childrenCenters)(point)
             val nextIndex = 2 * idx + closestIndex
 
             // get a map value or else get a sparse vector
-            val (sumBV, n, sumOfSquares) = map.get(nextIndex)
-                .getOrElse(BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size))
+            val (sumBV, n, sumOfSquares) = map
+                .getOrElse(
+                  nextIndex,
+                  (BSV.zeros[Double](point.size), 0.0, BSV.zeros[Double](point.size))
+                )
             map(nextIndex) = (sumBV + point, n + 1.0, sumOfSquares + (point :* point))
           }
         }
@@ -426,7 +428,7 @@ class HierarchicalClustering private (
         mostScatteredCluster.setLocalHeight(localHeight)
 
         // update the queue
-        leavesQueue = leavesQueue ++ childrenIndexes.map(i => (i -> treeMap(i))).toMap
+        leavesQueue = leavesQueue ++ childrenIndexes.map(i => i -> treeMap(i)).toMap
         numLeavesClusters += 1
       }
 
@@ -457,8 +459,8 @@ class HierarchicalClustering private (
 
     // update the indexes to their children indexes
     data.map { case (idx, point) =>
-      val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(bcCenters.value.keySet.contains(_))
-      childrenIndexes.size match {
+      val childrenIndexes = Array(2 * idx, 2 * idx + 1).filter(c => bcCenters.value.contains(c))
+      childrenIndexes.length match {
         // stay the index if the number of children is not enough
         case s if s < 2 => (idx, point)
         // update the indexes
@@ -525,10 +527,10 @@ class ClusterNode private (
    *
    * @return an Array class which the cluster tree is expanded
    */
-  def toArray(): Array[ClusterNode] = {
+  def toArray: Array[ClusterNode] = {
     val array = this.children.size match {
       case 0 => Array(this)
-      case _ => Array(this) ++ this.children.flatMap(child => child.toArray().toIterator)
+      case _ => Array(this) ++ this.children.flatMap(child => child.toArray.toIterator)
     }
     array.sortWith { case (a, b) =>
       a.getDepth < b.getDepth && a.variances.toArray.sum < b.variances.toArray.sum
@@ -551,7 +553,7 @@ class ClusterNode private (
    * Gets the leaves nodes in the cluster tree
    */
   def getLeavesNodes: Array[ClusterNode] = {
-    this.toArray().filter(_.isLeaf).sortBy(_.center.toArray.sum)
+    this.toArray.filter(_.isLeaf).sortBy(_.center.toArray.sum)
   }
 
   def isLeaf: Boolean = (this.children.size == 0)
@@ -583,8 +585,8 @@ class ClusterNode private (
    *
    * @return List[(fromNodeId, toNodeId, distance)]
    */
-  def toAdjacencyList(): Array[(Int, Int, Double)] = {
-    val nodes = toArray()
+  def toAdjacencyList: Array[(Int, Int, Double)] = {
+    val nodes = toArray
 
     var adjacencyList = Array.empty[(Int, Int, Double)]
     nodes.foreach { parent =>
@@ -605,8 +607,8 @@ class ClusterNode private (
    *
    * @return List[(node1, node2, distance, tree size)]
    */
-  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = {
-    val nodes = toArray().sortWith { case (a, b) => a.getHeight < b.getHeight}
+  def toLinkageMatrix: Array[(Int, Int, Double, Int)] = {
+    val nodes = toArray.sortWith { case (a, b) => a.getHeight < b.getHeight}
     val leaves = nodes.filter(_.isLeaf)
     val notLeaves = nodes.filterNot(_.isLeaf).filter(_.getChildren.size > 1)
     val clusters = leaves ++ notLeaves
@@ -617,15 +619,15 @@ class ClusterNode private (
     // ==> A merge list is (B, D), not (B, C).
     def getIndex(map: Map[ClusterNode, Int], node: ClusterNode): Int = {
       node.children.size match {
-        case 1 => getIndex(map, node.children(0))
+        case 1 => getIndex(map, node.children.head)
         case _ => map(node)
       }
     }
     clusters.filterNot(_.isLeaf).map { node =>
-      (getIndex(treeMap, node.children(0)),
+      (getIndex(treeMap, node.children.head),
           getIndex(treeMap, node.children(1)),
           node.getHeight,
-          node.toArray().filter(_.isLeaf).size)
+          node.toArray.filter(_.isLeaf).length)
     }
   }
 }

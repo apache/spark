@@ -38,10 +38,10 @@ class HierarchicalClusteringModelSuite
 
     val clusters = model.getClusters
     assert(clusters.isInstanceOf[Array[ClusterNode]])
-    assert(clusters.size === 5)
+    assert(clusters.length === 5)
 
     val centers = model.getCenters.sortBy(_.toArray.sum)
-    assert(centers.size === 5)
+    assert(centers.length === 5)
     assert(centers(0) === Vectors.dense(0.0, 0.0, 0.0))
     assert(centers(1) === Vectors.dense(1.0, 1.0, 1.0))
     assert(centers(2) === Vectors.dense(2.0, 2.0, 2.0))
@@ -64,9 +64,9 @@ class HierarchicalClusteringModelSuite
     assert(model.WSSSE(data) === 0.0)
 
     // adjacency list
-    val adjacencyList = model.toAdjacencyList()
+    val adjacencyList = model.toAdjacencyList
         .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3))
-    assert(adjacencyList.size === 8)
+    assert(adjacencyList.length === 8)
     assert(adjacencyList(0) === (0, 1, 2.5981))
     assert(adjacencyList(1) === (0, 6, 2.5981))
     assert(adjacencyList(2) === (1, 2, 1.7321))
@@ -77,9 +77,9 @@ class HierarchicalClusteringModelSuite
     assert(adjacencyList(7) === (6, 8, 0.866))
 
     // linkage matrix
-    val linkageMatrix = model.toLinkageMatrix()
+    val linkageMatrix = model.toLinkageMatrix
         .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3, x._4))
-    assert(linkageMatrix.size === 4)
+    assert(linkageMatrix.length === 4)
     assert(linkageMatrix(0) === (0, 1, 0.866, 2))
     assert(linkageMatrix(1) === (3, 4, 0.866, 2))
     assert(linkageMatrix(2) === (5, 2, 2.5981, 3))
@@ -99,10 +99,10 @@ class HierarchicalClusteringModelSuite
 
     val clusters = model.getClusters
     assert(clusters.isInstanceOf[Array[ClusterNode]])
-    assert(clusters.size === 5)
+    assert(clusters.length === 5)
 
     val centers = model.getCenters.sortBy(_.toArray.sum)
-    assert(centers.size === 5)
+    assert(centers.length === 5)
     assert(centers(0) === Vectors.sparse(5, Array(), Array()))
     assert(centers(1) === Vectors.sparse(5, Array(1), Array(1.0)))
     assert(centers(2) === Vectors.sparse(5, Array(2), Array(2.0)))
@@ -124,9 +124,9 @@ class HierarchicalClusteringModelSuite
     assert(model.WSSSE(data) === 0.0)
 
     // adjacency list
-    val adjacencyList = model.toAdjacencyList()
+    val adjacencyList = model.toAdjacencyList
         .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3))
-    assert(adjacencyList.size === 8)
+    assert(adjacencyList.length === 8)
     assert(adjacencyList(0) === (0, 1, 1.5652))
     assert(adjacencyList(1) === (0, 6, 1.5652))
     assert(adjacencyList(2) === (1, 2, 1.3744))
@@ -137,9 +137,9 @@ class HierarchicalClusteringModelSuite
     assert(adjacencyList(7) === (6, 8, 2.5))
 
     // linkage matrix
-    val linkageMatrix = model.toLinkageMatrix()
+    val linkageMatrix = model.toLinkageMatrix
         .map(x => (x._1, x._2, math.round(10E3 * x._3) / 10E3, x._4))
-    assert(linkageMatrix.size === 4)
+    assert(linkageMatrix.length === 4)
     assert(linkageMatrix(0) === (0, 1, 0.5, 2))
     assert(linkageMatrix(1) === (5, 2, 1.8744, 3))
     assert(linkageMatrix(2) === (3, 4, 2.5, 2))
@@ -158,13 +158,13 @@ class HierarchicalClusteringModelSuite
       // dense version
       val denseData = sc.parallelize(localData.map(_._2), 2)
       val denseModel = app.run(denseData)
-      assert(denseModel.getCenters.size === numClusters)
+      assert(denseModel.getCenters.length === numClusters)
       assert(denseModel.getClusters.forall(_.variancesNorm == 0.0))
 
       // sparse version
       val sparseData = sc.parallelize(localData.map(_._3), 2)
       val sparseModel = app.run(sparseData)
-      assert(sparseModel.getCenters.size === numClusters)
+      assert(sparseModel.getCenters.length === numClusters)
       assert(sparseModel.getClusters.forall(_.variancesNorm == 0.0))
     }
   }

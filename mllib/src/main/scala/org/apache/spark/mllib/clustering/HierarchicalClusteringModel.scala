@@ -69,7 +69,7 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
-   * Computes Within Set Sum of Squeared Error(WSSSE)
+   * Computes Within Set Sum of Squared Error(WSSSE)
    */
   def WSSSE(data: RDD[Vector]): Double = {
     val bvCenters = this.getCenters.map(_.toBreeze)
@@ -87,12 +87,12 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
 
   def WSSSE(data: JavaRDD[Vector]): Double = this.WSSSE(data.rdd)
 
-  def toAdjacencyList(): Array[(Int, Int, Double)] = this.node.toAdjacencyList()
+  def toAdjacencyList: Array[(Int, Int, Double)] = this.node.toAdjacencyList
 
   /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
-  def toJavaAdjacencyList(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
-    var javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]();
-    this.node.toAdjacencyList().foreach { x =>
+  def toJavaAdjacencyList: java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
+    val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
+    this.node.toAdjacencyList.foreach { x =>
       val edge = new java.util.ArrayList[java.lang.Double]()
       edge.add(x._1.toDouble)
       edge.add(x._2.toDouble)
@@ -102,12 +102,12 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
     javaList
   }
 
-  def toLinkageMatrix(): Array[(Int, Int, Double, Int)] = this.node.toLinkageMatrix()
+  def toLinkageMatrix: Array[(Int, Int, Double, Int)] = this.node.toLinkageMatrix
 
   /** Since Java doesn't support tuple, we must support the data structure for java and py4j. */
-  def toJavaLinkageMatrix(): java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
+  def toJavaLinkageMatrix: java.util.ArrayList[java.util.ArrayList[java.lang.Double]] = {
     val javaList = new java.util.ArrayList[java.util.ArrayList[java.lang.Double]]()
-    this.node.toLinkageMatrix().foreach {x =>
+    this.node.toLinkageMatrix.foreach {x =>
       val row = new java.util.ArrayList[java.lang.Double]()
       row.add(x._1.toDouble)
       row.add(x._2.toDouble)

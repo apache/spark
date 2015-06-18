@@ -51,12 +51,12 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
     val localSeed: Seq[Vector] = (0 to 999).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
-    assert(model.getClusters.size == 123)
+    assert(model.getClusters.length == 123)
     assert(model.node.getHeight ~== 702.8641 absTol 10E-4)
 
     // check the relations between a parent cluster and its children
     assert(model.node.getParent === None)
-    assert(model.node.getChildren.apply(0).getParent.get === model.node)
+    assert(model.node.getChildren.head.getParent.get === model.node)
     assert(model.node.getChildren.apply(1).getParent.get === model.node)
     assert(model.getClusters.forall(_.getParent != None))
   }
@@ -66,7 +66,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
     val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
-    assert(model.getClusters.size == 100)
+    assert(model.getClusters.length == 100)
     assert(model.node.getHeight ~== 72.12489 absTol 10E-4)
   }
 
@@ -85,7 +85,6 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
     val data = algo.initData(seed)
 
     val clusters = algo.summarizeAsClusters(data)
-    val center = clusters(1).center
     assert(clusters.size === 1)
     assert(clusters(1).center === Vectors.dense(49.5, 49.5))
     assert(clusters(1).records === 100)
