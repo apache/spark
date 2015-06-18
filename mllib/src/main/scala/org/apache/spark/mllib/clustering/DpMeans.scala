@@ -213,12 +213,14 @@ object DpMeans {
   def cover(points: Iterator[VectorWithNorm], centers: ArrayBuffer[VectorWithNorm],
         lambda: Double): Iterator[VectorWithNorm] = {
     var newCenters = ArrayBuffer.empty[VectorWithNorm]
-    if (centers.length == 0) newCenters += points.next
-    points.foreach { z =>
-      val dist = newCenters.union(centers)
-        .map { center => squaredDistance(z, center)
+    if(!points.isEmpty){
+      if (centers.length == 0) newCenters += points.next
+      points.foreach { z =>
+        val dist = newCenters.union(centers)
+          .map { center => squaredDistance(z, center)
+        }
+        if (dist.min > lambda) newCenters += z
       }
-      if (dist.min > lambda) newCenters += z
     }
     newCenters.iterator
   }
