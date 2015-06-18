@@ -687,7 +687,7 @@ def launch_cluster(conn, opts, cluster_name):
 
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
-    time.sleep(5)
+    time.sleep(15)
     
     # Give the instances descriptive names and set additional tags    
     additional_tags = []
