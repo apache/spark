@@ -562,7 +562,8 @@ private[spark] class ExecutorAllocationManager(
         }
 
         // If this is the last pending task, mark the scheduler queue as empty
-        stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[String]) += (taskIndex + "." + attemptId)
+        stageIdToTaskIndices
+          .getOrElseUpdate(stageId, new mutable.HashSet[String]) += (taskIndex + "." + attemptId)
         val numTasksScheduled = stageIdToTaskIndices(stageId).size
         val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
         if (numTasksScheduled == numTasksTotal) {
