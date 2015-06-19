@@ -211,16 +211,16 @@ def determine_modules_for_files(filenames):
     return changed_modules
 
 
-def identify_changed_modules_from_git_commits(patch_sha, target_branch=None, target_ref=None):
+def identify_changed_files_from_git_commits(patch_sha, target_branch=None, target_ref=None):
     """
     Given a git commit and target ref, use the set of files changed in the diff in order to
     determine which modules' tests should be run.
 
-    >>> [x.name for x in \
-         identify_changed_modules_from_git_commits("fc0a1475ef", target_ref="5da21f07")]
+    >>> [x.name for x in determine_modules_for_files( \
+            identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
     ['graphx']
-    >>> 'root' in [x.name for x in \
-         identify_changed_modules_from_git_commits("50a0496a43", target_ref="6765ef9")]
+    >>> 'root' in [x.name for x in determine_modules_for_files( \
+         identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
     True
     """
     if target_branch is None and target_ref is None:
@@ -234,8 +234,7 @@ def identify_changed_modules_from_git_commits(patch_sha, target_branch=None, tar
         diff_target = target_ref
     raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target])
     # Remove any empty strings
-    changed_files = [f for f in raw_output.split('\n') if f]
-    return determine_modules_for_files(changed_files)
+    return [f for f in raw_output.split('\n') if f]
 
 
 def determine_modules_to_test(changed_modules):
@@ -639,10 +638,11 @@ def main():
     print "under environment", test_env
 
     changed_modules = None
+    changed_files = None
     if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
-        changed_modules = identify_changed_modules_from_git_commits("HEAD",
-                                                                    target_branch=target_branch)
+        changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
+        changed_modules = determine_modules_for_files(changed_files)
     if not changed_modules:
         changed_modules = [root]
     print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
@@ -653,9 +653,9 @@ def main():
     run_apache_rat_checks()
 
     # style checks
-    if changed_modules != [docs]:
+    if not changed_files or any(f.endsWith(".scala") for f in changed_files):
         run_scala_style_checks()
-    if any(m.should_run_python_tests for m in changed_modules):
+    if not changed_files or any(f.endsWith(".py") for f in changed_files):
         run_python_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
