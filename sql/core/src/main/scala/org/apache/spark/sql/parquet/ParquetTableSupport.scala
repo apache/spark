@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.{ByteOrder, ByteBuffer}
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
@@ -29,6 +30,7 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -312,8 +314,16 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
+  // array used to write Timestamp as Int96 (fixed-length binary)
+  private val int96buf = new Array[Byte](12)
+
   private[parquet] def writeTimestamp(ts: Long): Unit = {
-    writer.addBinary(CatalystTimestampConverter.convertFromTimestamp(ts))
+    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
+    val buf = ByteBuffer.wrap(int96buf)
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    writer.addBinary(Binary.fromByteArray(int96buf))
   }
 }
 

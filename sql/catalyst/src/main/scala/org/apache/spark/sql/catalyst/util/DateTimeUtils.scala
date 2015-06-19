@@ -24,8 +24,11 @@ import java.util.{Calendar, TimeZone}
 import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
- * Helper function to convert between Int value of days since epoch and java.sql.Date,
- * also convert Long value of 100 nanoseconds and java.sql.Timestamp
+ * Helper functions for converting between internal and external date and time representations.
+ * Dates are exposed externally as java.sql.Date and are represented internally as the number of
+ * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as java.sql.Timestamp
+ * and are stored internally as longs, which are capable of storing timestamps with 100 nanosecond
+ * precision.
  */
 object DateTimeUtils {
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
@@ -126,19 +129,17 @@ object DateTimeUtils {
   }
 
   /**
-   * Return the number of 100ns (hundred of nanoseconds) since epoch from julian day
+   * Return the number of 100ns (hundred of nanoseconds) since epoch from Julian day
    * and nanoseconds in a day
    */
   def fromJulianDay(day: Int, nanoseconds: Long): Long = {
-    // use integer to avoid rounding errors
+    // use Long to avoid rounding errors
     val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY - SECONDS_PER_DAY / 2
     seconds * HUNDRED_NANOS_PER_SECOND + nanoseconds / 100L
   }
 
   /**
-   * Return julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
-   * @param num100ns
-   * @return
+   * Return Julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
    */
   def toJulianDay(num100ns: Long): (Int, Long) = {
     val seconds = num100ns / HUNDRED_NANOS_PER_SECOND + SECONDS_PER_DAY / 2

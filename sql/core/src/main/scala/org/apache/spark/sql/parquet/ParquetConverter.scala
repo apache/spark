@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.ByteOrder
 
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
@@ -267,7 +267,12 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    * Read a Timestamp value from a Parquet Int96Value
    */
   protected[parquet] def readTimestamp(value: Binary): Long = {
-    CatalystTimestampConverter.convertToTimestamp(value)
+    Preconditions.checkArgument(value.length() == 12, "Must be 12 bytes")
+    val buf = value.toByteBuffer
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    val timeOfDayNanos = buf.getLong
+    val julianDay = buf.getInt
+    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
   }
 }
 
@@ -494,27 +499,6 @@ private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverte
 
 private[parquet] object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
-}
-
-private[parquet] object CatalystTimestampConverter {
-  def convertToTimestamp(value: Binary): Long = {
-    Preconditions.checkArgument(value.length() == 12, "Must be 12 bytes")
-    val buf = value.toByteBuffer
-    buf.order(ByteOrder.LITTLE_ENDIAN)
-    val timeOfDayNanos = buf.getLong
-    val julianDay = buf.getInt
-    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-  }
-
-  def convertFromTimestamp(ts: Long): Binary = {
-    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
-    val buf = ByteBuffer.allocate(12)
-    buf.order(ByteOrder.LITTLE_ENDIAN)
-    buf.putLong(timeOfDayNanos)
-    buf.putInt(julianDay)
-    buf.flip()
-    Binary.fromByteBuffer(buf)
-  }
 }
 
 /**
