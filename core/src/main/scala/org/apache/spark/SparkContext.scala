@@ -978,7 +978,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = withScope {
     assertNotStopped()
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
-    val confBroadcast = broadcast(new SerializableWritable(conf))
+    val confBroadcast = broadcast(new SerializableConfiguration(conf))
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
