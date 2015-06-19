@@ -9,4 +9,4 @@ fi
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
 export HADOOP_OPTIONS="$(cat $FWDIR/SHOPIFY_HADOOP_OPTIONS)"
-build/mvn $HADOOP_OPTIONS -DskipTests -Prepackage -Djar.tool=$(/usr/libexec/java_home -v 1.6)/bin/jar clean package
+build/mvn $HADOOP_OPTIONS -DskipTests clean package
