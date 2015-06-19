@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.shuffle.MetadataFetchFailedException
+
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -776,9 +778,11 @@ class DAGSchedulerSuite
     runEvent(CompletionEvent(taskSets(0).tasks(2), Success,
       makeMapStatus("hostC", shuffleMapRdd.partitions.size), null, createFakeTaskInfo(), null))
 
-    val thrown = intercept[Exception] { mapOutputTracker.getServerStatuses(0, 2) }
-    // Assert not throw MetadataFetchFailedException: Missing an output location for shuffle 0
-    assert(thrown == null)
+    try {
+      mapOutputTracker.getServerStatuses(0, 2)
+    } catch {
+      case e: MetadataFetchFailedException => fail("Should not throw metadataFetchFailedException")
+    }
 
     runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
       makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
