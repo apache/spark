@@ -61,11 +61,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-hadoop</artifactId>
     </dependency>
     <dependency>

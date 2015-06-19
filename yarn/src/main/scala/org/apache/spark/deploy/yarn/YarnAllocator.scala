@@ -146,11 +146,16 @@ private[yarn] class YarnAllocator(
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
    * the requested total is smaller than the current number of running executors, no executors will
    * be killed.
+   *
+   * @return Whether the new requested total is different than the old value.
    */
-  def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
+  def requestTotalExecutors(requestedTotal: Int): Boolean = synchronized {
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
+      true
+    } else {
+      false
     }
   }
 

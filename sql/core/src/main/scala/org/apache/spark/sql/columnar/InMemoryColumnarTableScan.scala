@@ -19,21 +19,16 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
-import org.apache.spark.sql.catalyst.expressions
-
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 
 private[sql] object InMemoryRelation {
   def apply(
@@ -45,7 +40,7 @@ private[sql] object InMemoryRelation {
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
 
-private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
+private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
@@ -56,12 +51,12 @@ private[sql] case class InMemoryRelation(
     tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
     private var _statistics: Statistics = null,
-    private var _batchStats: Accumulable[ArrayBuffer[Row], Row] = null)
+    private var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  private val batchStats: Accumulable[ArrayBuffer[Row], Row] =
+  private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
-      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[InternalRow])
     } else {
       _batchStats
     }
@@ -151,7 +146,7 @@ private[sql] case class InMemoryRelation(
             rowCount += 1
           }
 
-          val stats = Row.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
+          val stats = InternalRow.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)
@@ -267,7 +262,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     if (enableAccumulators) {
       readPartitions.setValue(0)
       readBatches.setValue(0)
@@ -296,7 +291,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
       val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
 
-      def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]): Iterator[Row] = {
+      def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]): Iterator[InternalRow] = {
         val rows = cacheBatches.flatMap { cachedBatch =>
           // Build column accessors
           val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
@@ -306,15 +301,15 @@ private[sql] case class InMemoryColumnarTableScan(
           }
 
           // Extract rows via column accessors
-          new Iterator[Row] {
+          new Iterator[InternalRow] {
             private[this] val rowLen = nextRow.length
-            override def next(): Row = {
+            override def next(): InternalRow = {
               var i = 0
               while (i < rowLen) {
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
-              if (attributes.isEmpty) Row.empty else nextRow
+              if (attributes.isEmpty) InternalRow.empty else nextRow
             }
 
             override def hasNext: Boolean = columnAccessors(0).hasNext

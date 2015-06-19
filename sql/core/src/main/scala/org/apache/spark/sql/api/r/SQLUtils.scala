@@ -139,4 +139,19 @@ private[r] object SQLUtils {
       case "ignore" => SaveMode.Ignore
     }
   }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).options(options).load()
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).schema(schema).options(options).load()
+  }
 }

@@ -176,7 +176,7 @@ class DStream(object):
                 print(record)
             if len(taken) > num:
                 print("...")
-            print()
+            print("")
 
         self.foreachRDD(takeAndPrint)
 

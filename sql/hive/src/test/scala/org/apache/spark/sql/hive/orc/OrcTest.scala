@@ -22,13 +22,11 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql._
 
 private[sql] trait OrcTest extends SQLTestUtils {
-  protected def hiveContext = sqlContext.asInstanceOf[HiveContext]
+  lazy val sqlContext = org.apache.spark.sql.hive.test.TestHive
 
   import sqlContext.sparkContext
   import sqlContext.implicits._
@@ -53,7 +51,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(hiveContext.read.format("orc").load(path)))
+    withOrcFile(data)(path => f(sqlContext.read.format("orc").load(path)))
   }
 
   /**
@@ -65,7 +63,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      hiveContext.registerDataFrameAsTable(df, tableName)
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }

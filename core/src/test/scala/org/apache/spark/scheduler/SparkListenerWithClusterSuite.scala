@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import scala.collection.mutable
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 /**
  * Unit tests for SparkListener that require a local cluster.
@@ -41,12 +41,16 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
     val listener = new SaveExecutorInfo
     sc.addSparkListener(listener)
 
+    // This test will check if the number of executors received by "SparkListener" is same as the
+    // number of all executors, so we need to wait until all executors are up
+    sc.jobProgressListener.waitUntilExecutorsUp(2, 10000)
+
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
     rdd2.setName("Target RDD")
     rdd2.count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(listener.addedExecutorInfo.size == 2)
     assert(listener.addedExecutorInfo("0").totalCores == 1)
     assert(listener.addedExecutorInfo("1").totalCores == 1)

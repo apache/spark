@@ -67,7 +67,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
     writeFile(newAppComplete, true, None,
-      SparkListenerApplicationStart("new-app-complete", None, 1L, "test", None),
+      SparkListenerApplicationStart(
+        "new-app-complete", Some("new-app-complete"), 1L, "test", None),
       SparkListenerApplicationEnd(5L)
       )
 
@@ -75,13 +76,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val newAppCompressedComplete = newLogFile("new1compressed", None, inProgress = false,
       Some("lzf"))
     writeFile(newAppCompressedComplete, true, None,
-      SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test", None),
+      SparkListenerApplicationStart(
+        "new-app-compressed-complete", Some("new-app-compressed-complete"), 1L, "test", None),
       SparkListenerApplicationEnd(4L))
 
     // Write an unfinished app, new-style.
     val newAppIncomplete = newLogFile("new2", None, inProgress = true)
     writeFile(newAppIncomplete, true, None,
-      SparkListenerApplicationStart("new-app-incomplete", None, 1L, "test", None)
+      SparkListenerApplicationStart(
+        "new-app-incomplete", Some("new-app-incomplete"), 1L, "test", None)
       )
 
     // Write an old-style application log.
@@ -89,7 +92,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     oldAppComplete.mkdir()
     createEmptyFile(new File(oldAppComplete, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldAppComplete, provider.LOG_PREFIX + "1"), false, None,
-      SparkListenerApplicationStart("old-app-complete", None, 2L, "test", None),
+      SparkListenerApplicationStart(
+        "old-app-complete", Some("old-app-complete"), 2L, "test", None),
       SparkListenerApplicationEnd(3L)
       )
     createEmptyFile(new File(oldAppComplete, provider.APPLICATION_COMPLETE))
@@ -103,7 +107,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     oldAppIncomplete.mkdir()
     createEmptyFile(new File(oldAppIncomplete, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldAppIncomplete, provider.LOG_PREFIX + "1"), false, None,
-      SparkListenerApplicationStart("old-app-incomplete", None, 2L, "test", None)
+      SparkListenerApplicationStart(
+        "old-app-incomplete", Some("old-app-incomplete"), 2L, "test", None)
       )
 
     // Force a reload of data from the log directory, and check that both logs are loaded.
@@ -124,16 +129,16 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
       }
 
-      list(0) should be (makeAppInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,
+      list(0) should be (makeAppInfo("new-app-complete", "new-app-complete", 1L, 5L,
         newAppComplete.lastModified(), "test", true))
-      list(1) should be (makeAppInfo(newAppCompressedComplete.getName(),
+      list(1) should be (makeAppInfo("new-app-compressed-complete",
         "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test",
         true))
-      list(2) should be (makeAppInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
+      list(2) should be (makeAppInfo("old-app-complete", "old-app-complete", 2L, 3L,
         oldAppComplete.lastModified(), "test", true))
-      list(3) should be (makeAppInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L, -1L,
+      list(3) should be (makeAppInfo("old-app-incomplete", "old-app-incomplete", 2L, -1L,
         oldAppIncomplete.lastModified(), "test", false))
-      list(4) should be (makeAppInfo(newAppIncomplete.getName(), "new-app-incomplete", 1L, -1L,
+      list(4) should be (makeAppInfo("new-app-incomplete", "new-app-incomplete", 1L, -1L,
         newAppIncomplete.lastModified(), "test", false))
 
       // Make sure the UI can be rendered.
@@ -157,7 +162,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       logDir.mkdir()
       createEmptyFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
       writeFile(new File(logDir, provider.LOG_PREFIX + "1"), false, Option(codec),
-        SparkListenerApplicationStart("app2", None, 2L, "test", None),
+        SparkListenerApplicationStart("app2", Some("app2"), 2L, "test", None),
         SparkListenerApplicationEnd(3L)
         )
       createEmptyFile(new File(logDir, provider.COMPRESSION_CODEC_PREFIX + codecName))
@@ -180,12 +185,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("SPARK-3697: ignore directories that cannot be read.") {
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
-      SparkListenerApplicationStart("app1-1", None, 1L, "test", None),
+      SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
     val logFile2 = newLogFile("new2", None, inProgress = false)
     writeFile(logFile2, true, None,
-      SparkListenerApplicationStart("app1-2", None, 1L, "test", None),
+      SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
@@ -215,6 +220,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.size should be (1)
       list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should not
         endWith(EventLoggingListener.IN_PROGRESS)
+    }
+  }
+
+  test("Parse logs that application is not started") {
+    val provider = new FsHistoryProvider((createTestConf()))
+
+    val logFile1 = newLogFile("app1", None, inProgress = true)
+    writeFile(logFile1, true, None,
+      SparkListenerLogStart("1.4")
+    )
+    updateAndCheck(provider) { list =>
+      list.size should be (0)
     }
   }
 

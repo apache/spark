@@ -90,9 +90,7 @@ abstract class Predictor[
     copyValues(train(dataset).setParent(this))
   }
 
-  override def copy(extra: ParamMap): Learner = {
-    super.copy(extra).asInstanceOf[Learner]
-  }
+  override def copy(extra: ParamMap): Learner
 
   /**
    * Train a model using the given dataset and parameters.

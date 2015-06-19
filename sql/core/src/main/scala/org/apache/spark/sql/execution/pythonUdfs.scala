@@ -24,18 +24,19 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.{Accumulator, Logging => SparkLogging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.{Accumulator, Logging => SparkLogging}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -56,8 +57,8 @@ private[spark] case class PythonUDF(
 
   def nullable: Boolean = true
 
-  override def eval(input: Row): Any = {
-    sys.error("PythonUDFs can not be directly evaluated.")
+  override def eval(input: InternalRow): Any = {
+    throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
   }
 }
 
@@ -71,43 +72,49 @@ private[spark] case class PythonUDF(
 private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Skip EvaluatePython nodes.
-    case p: EvaluatePython => p
+    case plan: EvaluatePython => plan
 
-    case l: LogicalPlan =>
+    case plan: LogicalPlan =>
       // Extract any PythonUDFs from the current operator.
-      val udfs = l.expressions.flatMap(_.collect { case udf: PythonUDF => udf})
+      val udfs = plan.expressions.flatMap(_.collect { case udf: PythonUDF => udf })
       if (udfs.isEmpty) {
         // If there aren't any, we are done.
-        l
+        plan
       } else {
         // Pick the UDF we are going to evaluate (TODO: Support evaluating multiple UDFs at a time)
         // If there is more than one, we will add another evaluation operator in a subsequent pass.
-        val udf = udfs.head
+        udfs.find(_.resolved) match {
+          case Some(udf) =>
+            var evaluation: EvaluatePython = null
 
-        var evaluation: EvaluatePython = null
+            // Rewrite the child that has the input required for the UDF
+            val newChildren = plan.children.map { child =>
+              // Check to make sure that the UDF can be evaluated with only the input of this child.
+              // Other cases are disallowed as they are ambiguous or would require a cartesian
+              // product.
+              if (udf.references.subsetOf(child.outputSet)) {
+                evaluation = EvaluatePython(udf, child)
+                evaluation
+              } else if (udf.references.intersect(child.outputSet).nonEmpty) {
+                sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+              } else {
+                child
+              }
+            }
 
-        // Rewrite the child that has the input required for the UDF
-        val newChildren = l.children.map { child =>
-          // Check to make sure that the UDF can be evaluated with only the input of this child.
-          // Other cases are disallowed as they are ambiguous or would require a cartisian product.
-          if (udf.references.subsetOf(child.outputSet)) {
-            evaluation = EvaluatePython(udf, child)
-            evaluation
-          } else if (udf.references.intersect(child.outputSet).nonEmpty) {
-            sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
-          } else {
-            child
-          }
+            assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
+
+            // Trim away the new UDF value if it was only used for filtering or something.
+            logical.Project(
+              plan.output,
+              plan.transformExpressions {
+                case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
+              }.withNewChildren(newChildren))
+
+          case None =>
+            // If there is no Python UDF that is resolved, skip this round.
+            plan
         }
-
-        assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
-
-        // Trim away the new UDF value if it was only used for filtering or something.
-        logical.Project(
-          l.output,
-          l.transformExpressions {
-            case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
-          }.withNewChildren(newChildren))
       }
   }
 }
@@ -142,6 +149,7 @@ object EvaluatePython {
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
     case (date: Int, DateType) => DateUtils.toJavaDate(date)
+    case (t: Long, TimestampType) => DateUtils.toJavaTimestamp(t)
     case (s: UTF8String, StringType) => s.toString
 
     // Pyrolite can handle Timestamp and Decimal
@@ -180,10 +188,12 @@ object EvaluatePython {
       }): Row
 
     case (c: java.util.Calendar, DateType) =>
-      DateUtils.fromJavaDate(new java.sql.Date(c.getTime().getTime()))
+      DateUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
 
     case (c: java.util.Calendar, TimestampType) =>
-      new java.sql.Timestamp(c.getTime().getTime())
+      c.getTimeInMillis * 10000L
+    case (t: java.sql.Timestamp, TimestampType) =>
+      DateUtils.fromJavaTimestamp(t)
 
     case (_, udt: UserDefinedType[_]) =>
       fromJava(obj, udt.sqlType)
@@ -195,8 +205,10 @@ object EvaluatePython {
     case (c: Long, IntegerType) => c.toInt
     case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
-    case (c: String, StringType) => UTF8String(c)
-    case (c, StringType) if !c.isInstanceOf[String] => UTF8String(c.toString)
+    case (c: String, StringType) => UTF8String.fromString(c)
+    case (c, StringType) =>
+      // If we get here, c is not a string. Call toString on it.
+      UTF8String.fromString(c.toString)
 
     case (c, _) => c
   }
@@ -230,7 +242,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     val childResults = child.execute().map(_.copy())
 
     val parent = childResults.mapPartitions { iter =>
@@ -265,7 +277,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val row = new GenericMutableRow(1)
       iter.map { result =>
         row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        row: Row
+        row: InternalRow
       }
     }
 

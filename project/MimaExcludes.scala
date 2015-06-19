@@ -49,7 +49,12 @@ object MimaExcludes {
               "org.apache.spark.streaming.kafka.KafkaUtils.org$apache$spark$streaming$kafka$KafkaUtils$$leadersForRanges"),
             // Mima false positive (was a private[spark] class)
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.util.collection.PairIterator")
+              "org.apache.spark.util.collection.PairIterator"),
+            // Removing a testing method from a private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
+            // SQL execution is considered private.
+            excludePackage("org.apache.spark.sql.execution")
           )
         case v if v.startsWith("1.4") =>
           Seq(

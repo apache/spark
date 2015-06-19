@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.scheduler.{ResultTask, ShuffleMapTask}
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Enumeration to manage state transitions of an RDD through checkpointing
@@ -91,7 +92,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
 
     // Save to file, and reload it as an RDD
     val broadcastedConf = rdd.context.broadcast(
-      new SerializableWritable(rdd.context.hadoopConfiguration))
+      new SerializableConfiguration(rdd.context.hadoopConfiguration))
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
       rdd.context.cleaner.foreach { cleaner =>
