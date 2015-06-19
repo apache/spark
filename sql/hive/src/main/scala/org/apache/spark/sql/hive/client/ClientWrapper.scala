@@ -54,7 +54,8 @@ import org.apache.spark.sql.execution.QueryExecutionException
  * @param version the version of hive used when pick function calls that are not compatible.
  * @param config  a collection of configuration options that will be added to the hive conf before
  *                opening the hive client.
- * @param initClassLoader the classloader used when creating the `state` field of this ClientWrapper.
+ * @param initClassLoader the classloader used when creating the `state` field of
+ *                        this ClientWrapper.
  */
 private[hive] class ClientWrapper(
     version: HiveVersion,
