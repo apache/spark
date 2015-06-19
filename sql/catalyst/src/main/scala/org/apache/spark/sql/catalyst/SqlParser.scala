@@ -68,7 +68,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
   protected val HAVING = Keyword("HAVING")
-  protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
@@ -277,6 +276,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       lexical.normalizeKeyword(udfName) match {
         case "sum" => SumDistinct(exprs.head)
         case "count" => CountDistinct(exprs)
+        case _ => throw new AnalysisException(s"function $udfName does not support DISTINCT")
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>

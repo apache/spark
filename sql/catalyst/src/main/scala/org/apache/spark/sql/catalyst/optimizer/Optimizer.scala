@@ -38,21 +38,21 @@ object DefaultOptimizer extends Optimizer {
       EliminateSubQueries) ::
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
-    Batch("Operator Reordering", FixedPoint(100),
+    Batch("Operator Optimizations", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
-      PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
       ProjectCollapsing,
-      CombineLimits) ::
-    Batch("ConstantFolding", FixedPoint(100),
+      CombineLimits,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      PushPredicateThroughJoin,
+      RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -630,6 +630,15 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+  }
+}
+
+/**
+ * Removes [[UnaryPositive]] identify function
+ */
+object RemovePositive extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case UnaryPositive(child) => child
   }
 }
 

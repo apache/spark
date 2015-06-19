@@ -334,7 +334,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enable profiling in Python worker, the profile result will show up by `sc.show_profiles()`,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
+    `sc.dump_profiles(path)`. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
     By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
@@ -1491,6 +1491,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+</table>
+
+#### SparkR
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.r.numRBackendThreads</code></td>
+  <td>2</td>
+  <td>
+    Number of threads used by RBackend to handle RPC calls from SparkR package.
   </td>
 </tr>
 </table>
