@@ -44,7 +44,7 @@ import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -296,6 +296,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = self.withScope {
+    val cleanedF = self.sparkContext.clean(func)
 
     if (keyClass.isArray) {
       throw new SparkException("reduceByKeyLocally() does not support array keys")
@@ -305,7 +306,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val map = new JHashMap[K, V]
       iter.foreach { pair =>
         val old = map.get(pair._1)
-        map.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
+        map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       Iterator(map)
     } : Iterator[JHashMap[K, V]]
@@ -313,7 +314,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.foreach { pair =>
         val old = m1.get(pair._1)
-        m1.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
+        m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       m1
     } : JHashMap[K, V]
@@ -327,7 +328,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     reduceByKeyLocally(func)
   }
 
-  /** 
+  /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
@@ -466,7 +467,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
     val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
     val bufs = combineByKey[CompactBuffer[V]](
-      createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine=false)
+      createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
 
@@ -1001,7 +1002,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
@@ -1010,7 +1011,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       jobFormat.checkOutputSpecs(job)
     }
 
-    val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
+    val writeShard = (context: TaskContext, iter: Iterator[(K, V)]) => {
       val config = wrappedConf.value
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
@@ -1026,7 +1027,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
-      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K, V]]
       require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
       Utils.tryWithSafeFinally {
@@ -1064,7 +1065,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val wrappedConf = new SerializableWritable(hadoopConf)
+    val wrappedConf = new SerializableConfiguration(hadoopConf)
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass

@@ -19,11 +19,11 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
@@ -33,17 +33,18 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
  * classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
-final class RandomForestClassifier
+@Experimental
+final class RandomForestClassifier(override val uid: String)
   extends Predictor[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
+
+  def this() = this(Identifiable.randomUID("rfc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -98,6 +99,7 @@ final class RandomForestClassifier
   }
 }
 
+@Experimental
 object RandomForestClassifier {
   /** Accessor for supported impurity settings: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
@@ -108,17 +110,16 @@ object RandomForestClassifier {
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
-@AlphaComponent
+@Experimental
 final class RandomForestClassificationModel private[ml] (
-    override val parent: RandomForestClassifier,
+    override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel])
   extends PredictionModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
@@ -146,7 +147,7 @@ final class RandomForestClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    copyValues(new RandomForestClassificationModel(parent, _trees), extra)
+    copyValues(new RandomForestClassificationModel(uid, _trees), extra)
   }
 
   override def toString: String = {
@@ -169,9 +170,10 @@ private[ml] object RandomForestClassificationModel {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
-      // parent, fittingParamMap for each tree is null since there are no good ways to set these.
+      // parent for each tree is null since there is no good way to set this.
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
-    new RandomForestClassificationModel(parent, newTrees)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
+    new RandomForestClassificationModel(uid, newTrees)
   }
 }

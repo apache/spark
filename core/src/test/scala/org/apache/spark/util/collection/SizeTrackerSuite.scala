@@ -20,11 +20,10 @@ package org.apache.spark.util.collection
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class SizeTrackerSuite extends FunSuite {
+class SizeTrackerSuite extends SparkFunSuite {
   val NORMAL_ERROR = 0.20
   val HIGH_ERROR = 0.30
 

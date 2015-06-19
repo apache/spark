@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
+
 /**
- * :: DeveloperApi ::
  * Utils for handling schemas.
  */
-@DeveloperApi
-object SchemaUtils {
+private[spark] object SchemaUtils {
 
   // TODO: Move the utility methods to SQL.
 

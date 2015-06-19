@@ -28,10 +28,10 @@ import scala.language.postfixOps
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
@@ -39,7 +39,7 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite
-  extends FunSuite
+  extends SparkFunSuite
   with BeforeAndAfter
   with BeforeAndAfterAll
   with Eventually
@@ -99,7 +99,8 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, topics)
     }
 
-    val allReceived = new ArrayBuffer[(String, String)]
+    val allReceived =
+      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
 
     stream.foreachRDD { rdd =>
     // Get the offset ranges in the RDD
@@ -162,7 +163,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]()
+    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -208,7 +209,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]()
+    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -324,7 +325,8 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, Set(topic))
     }
 
-    val allReceived = new ArrayBuffer[(String, String)]
+    val allReceived =
+      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
 
     stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
     ssc.start()
@@ -350,8 +352,8 @@ class DirectKafkaStreamSuite
 }
 
 object DirectKafkaStreamSuite {
-  val collectedData = new mutable.ArrayBuffer[String]()
-  var total = -1L
+  val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
+  @volatile var total = -1L
 
   class InputInfoCollector extends StreamingListener {
     val numRecordsSubmitted = new AtomicLong(0L)

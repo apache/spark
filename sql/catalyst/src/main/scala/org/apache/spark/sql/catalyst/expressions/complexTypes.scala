@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.types._
 
 
@@ -24,10 +25,9 @@ import org.apache.spark.sql.types._
  * Returns an Array containing the evaluation of all children expressions.
  */
 case class CreateArray(children: Seq[Expression]) extends Expression {
-  override type EvaluatedType = Any
-  
+
   override def foldable: Boolean = children.forall(_.foldable)
-  
+
   lazy val childTypes = children.map(_.dataType).distinct
 
   override lazy val resolved =
@@ -42,7 +42,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     children.map(_.eval(input))
   }
 
@@ -53,8 +53,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * Returns a Row containing the evaluation of all children expressions.
  * TODO: [[CreateStruct]] does not support codegen.
  */
-case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
-  override type EvaluatedType = Row
+case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -63,15 +62,20 @@ case class CreateStruct(children: Seq[NamedExpression]) extends Expression {
   override lazy val dataType: StructType = {
     assert(resolved,
       s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
-    val fields = children.map { child =>
-      StructField(child.name, child.dataType, child.nullable, child.metadata)
-    }
+      val fields = children.zipWithIndex.map { case (child, idx) =>
+        child match {
+          case ne: NamedExpression =>
+            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+          case _ =>
+            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+        }
+      }
     StructType(fields)
   }
 
   override def nullable: Boolean = false
 
-  override def eval(input: Row): EvaluatedType = {
-    Row(children.map(_.eval(input)): _*)
+  override def eval(input: InternalRow): Any = {
+    InternalRow(children.map(_.eval(input)): _*)
   }
 }

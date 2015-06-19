@@ -122,11 +122,47 @@ hashCode <- function(key) {
     intBits <- packBits(rawToBits(rawVec), "integer")
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
-    .Call("stringHashCode", key)
+    # TODO: SPARK-7839 means we might not have the native library available
+    if (is.loaded("stringHashCode")) {
+      .Call("stringHashCode", key)
+    } else {
+      n <- nchar(key)
+      if (n == 0) {
+        0L
+      } else {
+        asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+        hashC <- 0
+        for (k in 1:length(asciiVals)) {
+          hashC <- mult31AndAdd(hashC, asciiVals[k])
+        }
+        as.integer(hashC)
+      }
+    }
   } else {
     warning(paste("Could not hash object, returning 0", sep = ""))
     as.integer(0)
   }
+}
+
+# Helper function used to wrap a 'numeric' value to integer bounds.
+# Useful for implementing C-like integer arithmetic
+wrapInt <- function(value) {
+  if (value > .Machine$integer.max) {
+    value <- value - 2 * .Machine$integer.max - 2
+  } else if (value < -1 * .Machine$integer.max) {
+    value <- 2 * .Machine$integer.max + value + 2
+  }
+  value
+}
+
+# Multiply `val` by 31 and add `addVal` to the result. Ensures that
+# integer-overflows are handled at every step.
+mult31AndAdd <- function(val, addVal) {
+  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  Reduce(function(a, b) {
+          wrapInt(as.numeric(a) + as.numeric(b))
+         },
+         vec)
 }
 
 # Create a new RDD with serializedMode == "byte".

@@ -37,6 +37,14 @@ writeObject <- function(con, object, writeType = TRUE) {
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
   type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
+  # Checking types is needed here, since ‘is.na’ only handles atomic vectors,
+  # lists and pairlists
+  if (type %in% c("integer", "character", "logical", "double", "numeric")) {
+    if (is.na(object)) {
+      object <- NULL
+      type <- "NULL"
+    }
+  }
   if (writeType) {
     writeType(con, type)
   }
@@ -160,6 +168,14 @@ writeList <- function(con, arr) {
   }
 }
 
+# Used to pass arrays where the elements can be of different types
+writeGenericList <- function(con, list) {
+  writeInt(con, length(list))
+  for (elem in list) {
+    writeObject(con, elem)
+  }
+}
+  
 # Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)
@@ -168,7 +184,7 @@ writeEnv <- function(con, env) {
   if (len > 0) {
     writeList(con, as.list(ls(env)))
     vals <- lapply(ls(env), function(x) { env[[x]] })
-    writeList(con, as.list(vals))
+    writeGenericList(con, as.list(vals))
   }
 }
 

@@ -39,6 +39,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 * [Optimization (developer)](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
+* [PMML model export](mllib-pmml-model-export.html)
 
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 

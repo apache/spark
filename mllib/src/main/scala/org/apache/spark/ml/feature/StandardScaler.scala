@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -34,13 +35,13 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /**
    * Centers the data with mean before scaling.
-   * It will build a dense output, so this does not work on sparse input 
+   * It will build a dense output, so this does not work on sparse input
    * and will raise an exception.
    * Default: false
    * @group param
    */
   val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
-  
+
   /**
    * Scales the data to unit standard deviation.
    * Default: true
@@ -50,12 +51,15 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  */
-@AlphaComponent
-class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
+@Experimental
+class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
+  with StandardScalerParams {
+
+  def this() = this(Identifiable.randomUID("stdScal"))
 
   setDefault(withMean -> false, withStd -> true)
 
@@ -64,19 +68,19 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-  
+
   /** @group setParam */
   def setWithMean(value: Boolean): this.type = set(withMean, value)
-  
+
   /** @group setParam */
   def setWithStd(value: Boolean): this.type = set(withStd, value)
-  
+
   override def fit(dataset: DataFrame): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(this, scalerModel))
+    copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -91,12 +95,12 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[StandardScaler]].
  */
-@AlphaComponent
+@Experimental
 class StandardScalerModel private[ml] (
-    override val parent: StandardScaler,
+    override val uid: String,
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 

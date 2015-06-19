@@ -239,7 +239,7 @@ setMethod("cache",
 # @aliases persist,RDD-method
 setMethod("persist",
           signature(x = "RDD", newLevel = "character"),
-          function(x, newLevel) {
+          function(x, newLevel = "MEMORY_ONLY") {
             callJMethod(getJRDD(x), "persist", getStorageLevel(newLevel))
             x@env$isCached <- TRUE
             x

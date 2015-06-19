@@ -45,10 +45,10 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for max number of iterations (>= 0).
+   * Param for maximum number of iterations (>= 0).
    * @group param
    */
-  final val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations (>= 0)", ParamValidators.gtEq(0))
+  final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getMaxIter: Int = $(maxIter)
@@ -185,7 +185,7 @@ private[ml] trait HasInputCols extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param outputCol.
+ * (private[ml]) Trait for shared param outputCol (default: uid + "__output").
  */
 private[ml] trait HasOutputCol extends Params {
 
@@ -194,6 +194,8 @@ private[ml] trait HasOutputCol extends Params {
    * @group param
    */
   final val outputCol: Param[String] = new Param[String](this, "outputCol", "output column name")
+
+  setDefault(outputCol, uid + "__output")
 
   /** @group getParam */
   final def getOutputCol: String = $(outputCol)
@@ -232,7 +234,7 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
- * (private[ml]) Trait for shared param seed (default: Utils.random.nextLong()).
+ * (private[ml]) Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {
 
@@ -242,7 +244,7 @@ private[ml] trait HasSeed extends Params {
    */
   final val seed: LongParam = new LongParam(this, "seed", "random seed")
 
-  setDefault(seed, Utils.random.nextLong())
+  setDefault(seed, this.getClass.getName.hashCode.toLong)
 
   /** @group getParam */
   final def getSeed: Long = $(seed)

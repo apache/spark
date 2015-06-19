@@ -28,6 +28,7 @@ import org.apache.spark.ml.classification.Classifier;
 import org.apache.spark.ml.classification.ClassificationModel;
 import org.apache.spark.ml.param.IntParam;
 import org.apache.spark.ml.param.ParamMap;
+import org.apache.spark.ml.util.Identifiable$;
 import org.apache.spark.mllib.linalg.BLAS;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -103,7 +104,23 @@ public class JavaDeveloperApiExample {
  *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegression
-    extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
+  extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
+
+  public MyJavaLogisticRegression() {
+    init();
+  }
+
+  public MyJavaLogisticRegression(String uid) {
+    this.uid_ = uid;
+    init();
+  }
+
+  private String uid_ = Identifiable$.MODULE$.randomUID("myJavaLogReg");
+
+  @Override
+  public String uid() {
+    return uid_;
+  }
 
   /**
    * Param for max number of iterations
@@ -117,7 +134,7 @@ class MyJavaLogisticRegression
 
   int getMaxIter() { return (Integer) getOrDefault(maxIter); }
 
-  public MyJavaLogisticRegression() {
+  private void init() {
     setMaxIter(100);
   }
 
@@ -137,7 +154,7 @@ class MyJavaLogisticRegression
     Vector weights = Vectors.zeros(numFeatures); // Learning would happen here.
 
     // Create a model, and return it.
-    return new MyJavaLogisticRegressionModel(this, weights);
+    return new MyJavaLogisticRegressionModel(uid(), weights).setParent(this);
   }
 }
 
@@ -149,17 +166,21 @@ class MyJavaLogisticRegression
  *       However, this should still compile and run successfully.
  */
 class MyJavaLogisticRegressionModel
-    extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> {
-
-  private MyJavaLogisticRegression parent_;
-  public MyJavaLogisticRegression parent() { return parent_; }
+  extends ClassificationModel<Vector, MyJavaLogisticRegressionModel> {
 
   private Vector weights_;
   public Vector weights() { return weights_; }
 
-  public MyJavaLogisticRegressionModel(MyJavaLogisticRegression parent_, Vector weights_) {
-    this.parent_ = parent_;
-    this.weights_ = weights_;
+  public MyJavaLogisticRegressionModel(String uid, Vector weights) {
+    this.uid_ = uid;
+    this.weights_ = weights;
+  }
+
+  private String uid_ = Identifiable$.MODULE$.randomUID("myJavaLogReg");
+
+  @Override
+  public String uid() {
+    return uid_;
   }
 
   // This uses the default implementation of transform(), which reads column "features" and outputs
@@ -204,6 +225,6 @@ class MyJavaLogisticRegressionModel
    */
   @Override
   public MyJavaLogisticRegressionModel copy(ParamMap extra) {
-    return copyValues(new MyJavaLogisticRegressionModel(parent_, weights_), extra);
+    return copyValues(new MyJavaLogisticRegressionModel(uid(), weights_), extra);
   }
 }

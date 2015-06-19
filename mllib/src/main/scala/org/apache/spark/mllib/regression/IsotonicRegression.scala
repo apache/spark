@@ -170,26 +170,26 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     case class Data(boundary: Double, prediction: Double)
 
     def save(
-        sc: SparkContext, 
-        path: String, 
-        boundaries: Array[Double], 
-        predictions: Array[Double], 
+        sc: SparkContext,
+        path: String,
+        boundaries: Array[Double],
+        predictions: Array[Double],
         isotonic: Boolean): Unit = {
       val sqlContext = new SQLContext(sc)
 
       val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       sqlContext.createDataFrame(
         boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
-      ).saveAsParquetFile(dataPath(path))
+      ).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(dataPath(path))
+      val dataRDD = sqlContext.read.parquet(dataPath(path))
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
@@ -203,7 +203,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
-    val isotonic =  (metadata \ "isotonic").extract[Boolean]
+    val isotonic = (metadata \ "isotonic").extract[Boolean]
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>

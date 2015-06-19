@@ -163,11 +163,8 @@ object, and make predictions with the resulting model to compute the training
 error.
 
 {% highlight scala %}
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 
 // Load training data in LIBSVM format.
@@ -231,15 +228,13 @@ calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
-import java.util.Random;
-
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.classification.*;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
-import org.apache.spark.mllib.linalg.Vector;
+
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
@@ -282,8 +277,8 @@ public class SVMClassifier {
     System.out.println("Area under ROC = " + auROC);
 
     // Save and load model
-    model.save(sc.sc(), "myModelPath");
-    SVMModel sameModel = SVMModel.load(sc.sc(), "myModelPath");
+    model.save(sc, "myModelPath");
+    SVMModel sameModel = SVMModel.load(sc, "myModelPath");
   }
 }
 {% endhighlight %}
@@ -315,15 +310,12 @@ a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
-The following example shows how to load a sample dataset, build Logistic Regression model,
+The following example shows how to load a sample dataset, build SVM model,
 and make predictions with the resulting model to compute the training error.
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.classification import SVMWithSGD, SVMModel
 from pyspark.mllib.regression import LabeledPoint
-from numpy import array
 
 # Load and parse the data
 def parsePoint(line):
@@ -334,12 +326,16 @@ data = sc.textFile("data/mllib/sample_svm_data.txt")
 parsedData = data.map(parsePoint)
 
 # Build the model
-model = LogisticRegressionWithSGD.train(parsedData)
+model = SVMWithSGD.train(parsedData, iterations=100)
 
 # Evaluating the model on training data
 labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = SVMModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
@@ -785,8 +781,7 @@ gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each o
 all three possible regularizations (none, L1 or L2).
 
 For Logistic Regression, [L-BFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
-version is implemented under [LogisticRegressionWithLBFGS]
-(api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
+version is implemented under [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
 version supports both binary and multinomial Logistic Regression while SGD version only supports
 binary Logistic Regression. However, L-BFGS version doesn't support L1 regularization but SGD one
 supports L1 regularization. When L1 regularization is not required, L-BFGS version is strongly

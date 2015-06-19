@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{TreeClassifierParams, DecisionTreeParams, DecisionTreeModel, Node}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
@@ -31,17 +31,18 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
-final class DecisionTreeClassifier
+@Experimental
+final class DecisionTreeClassifier(override val uid: String)
   extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
+
+  def this() = this(Identifiable.randomUID("dtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
@@ -87,21 +88,21 @@ final class DecisionTreeClassifier
   }
 }
 
+@Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@AlphaComponent
+@Experimental
 final class DecisionTreeClassificationModel private[ml] (
-    override val parent: DecisionTreeClassifier,
+    override val uid: String,
     override val rootNode: Node)
   extends PredictionModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
@@ -114,7 +115,7 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
-    copyValues(new DecisionTreeClassificationModel(parent, rootNode), extra)
+    copyValues(new DecisionTreeClassificationModel(uid, rootNode), extra)
   }
 
   override def toString: String = {
@@ -138,6 +139,7 @@ private[ml] object DecisionTreeClassificationModel {
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
-    new DecisionTreeClassificationModel(parent, rootNode)
+    val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
+    new DecisionTreeClassificationModel(uid, rootNode)
   }
 }

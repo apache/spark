@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.parquet.ParquetTest
-import org.apache.spark.sql.{QueryTest, SQLConf}
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 case class Cases(lower: String, UPPER: String)
 
@@ -55,8 +54,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
 
     test(s"$prefix: Converting Hive to Parquet Table via saveAsParquetFile") {
       withTempPath { dir =>
-        sql("SELECT * FROM src").saveAsParquetFile(dir.getCanonicalPath)
-        parquetFile(dir.getCanonicalPath).registerTempTable("p")
+        sql("SELECT * FROM src").write.parquet(dir.getCanonicalPath)
+        read.parquet(dir.getCanonicalPath).registerTempTable("p")
         withTempTable("p") {
           checkAnswer(
             sql("SELECT * FROM src ORDER BY key"),
@@ -68,8 +67,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
     test(s"$prefix: INSERT OVERWRITE TABLE Parquet table") {
       withParquetTable((1 to 10).map(i => (i, s"val_$i")), "t") {
         withTempPath { file =>
-          sql("SELECT * FROM t LIMIT 1").saveAsParquetFile(file.getCanonicalPath)
-          parquetFile(file.getCanonicalPath).registerTempTable("p")
+          sql("SELECT * FROM t LIMIT 1").write.parquet(file.getCanonicalPath)
+          read.parquet(file.getCanonicalPath).registerTempTable("p")
           withTempTable("p") {
             // let's do three overwrites for good measure
             sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
@@ -82,11 +81,11 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
     }
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
     run("Parquet data source enabled")
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "false") {
     run("Parquet data source disabled")
   }
 }

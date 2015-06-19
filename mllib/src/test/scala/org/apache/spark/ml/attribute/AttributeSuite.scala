@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.attribute
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-class AttributeSuite extends FunSuite {
+class AttributeSuite extends SparkFunSuite {
 
   test("default numeric attribute") {
     val attr: NumericAttribute = NumericAttribute.defaultAttr
