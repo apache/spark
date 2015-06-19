@@ -19,8 +19,6 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
-import breeze.linalg.{max, min}
-
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -103,7 +101,7 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  def predictProbabilities(testData: RDD[Vector]): RDD[Map[Double, Double]] = {
+  def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
       val model = bcModel.value
@@ -111,7 +109,7 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  def predictProbabilities(testData: Vector): Map[Double, Double] = {
+  def predictProbabilities(testData: Vector): Vector = {
     modelType match {
       case Multinomial =>
         val prob = multinomialCalculation(testData)
@@ -141,12 +139,12 @@ class NaiveBayesModel private[mllib] (
     prob
   }
 
-  private def posteriorProbabilities(prob: DenseVector): Map[Double, Double] = {
+  private def posteriorProbabilities(prob: DenseVector): Vector = {
     val probArray = prob.toArray
     val maxLog = probArray.max
     val probabilities = probArray.map(lp => math.exp(lp - maxLog))
     val probSum = probabilities.sum
-    labels.zip(probabilities.map(_ / probSum)).toMap
+    new DenseVector(labels.zip(probabilities.map(_ / probSum)).sortBy(_._1).map(_._2))
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
