@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.sources
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter => MapReduceFileOutputCommitter}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
@@ -70,7 +71,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     val outputPath = new Path(relation.paths.head)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -263,6 +264,13 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val serializableConf = new SerializableConfiguration(ContextUtil.getConfiguration(job))
 
+  // This UUID is used to avoid output file name collision between different appending write jobs.
+  // These jobs may belong to different SparkContext instances. Concrete data source implementations
+  // may use this UUID to generate unique file names (e.g., `part-r-<task-id>-<job-uuid>.parquet`).
+  //  The reason why this ID is used to identify a job rather than a single task output file is
+  // that, speculative tasks must generate the same output file name as the original task.
+  private val uniqueWriteJobId = UUID.randomUUID()
+
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
 
@@ -290,6 +298,9 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
 
+    ContextUtil.getConfiguration(job).set(
+      "spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
     // configurations made in prepareJobForWrite(job) are not populated into the TaskAttemptContext.
@@ -305,7 +316,7 @@ private[sql] abstract class BaseWriterContainer(
     outputCommitter.setupJob(jobContext)
   }
 
-  def executorSideSetup(taskContext: TaskContext): Unit = {
+  def executorSideSetup(taskContext:TaskContext): Unit = {
     setupIDs(taskContext.stageId(), taskContext.partitionId(), taskContext.attemptNumber())
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)

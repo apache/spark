@@ -18,7 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import java.net.URI
-import java.util.{List => JList, UUID}
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 import scala.util.Try
@@ -41,8 +41,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWritable, SparkException}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -72,8 +72,9 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+          val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
           val split = context.getTaskAttemptID.getTaskID.getId
-          new Path(path, f"part-r-$split%05d-${UUID.randomUUID()}$extension")
+          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
         }
       }
     }

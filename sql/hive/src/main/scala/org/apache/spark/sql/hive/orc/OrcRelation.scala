@@ -105,8 +105,9 @@ private[orc] class OrcOutputWriter(
     recordWriterInstantiated = true
 
     val conf = context.getConfiguration
+    val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
     val partition = context.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-r-$partition%05d-${UUID.randomUUID()}.orc"
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),

@@ -476,7 +476,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
   // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
   // later.
-  test("SPARK-8406") {
+  test("SPARK-8406: Avoids name collision while writing Parquet files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       sqlContext
