@@ -203,6 +203,11 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = primitiveTypes.contains(dt)
 }
 
+
+abstract class GeneratedClass {
+  def generate(expressions: Array[Expression]): Any
+}
+
 /**
  * A base class for generators of byte code to perform expression evaluation.  Includes a set of
  * helpers for referring to Catalyst types and building trees that perform evaluation of individual
@@ -234,26 +239,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    *
    * It will track the time used to compile
    */
-  protected def compile(code: String): Class[_] = {
+  protected def compile(code: String): GeneratedClass = {
     val startTime = System.nanoTime()
-    // Current class loader may be ExecutorClassLoader, which will cause fail to find
-    // class in java.lang.  It's also slow, use the default JVM class loader.
-    val currentThread = Thread.currentThread()
-    val oldClassLoader = currentThread.getContextClassLoader
-    currentThread.setContextClassLoader(getClass.getClassLoader)
-    val clazz = try {
-      new ClassBodyEvaluator(code).getClazz()
+    val evaluator = new ClassBodyEvaluator()
+    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setExtendedClass(classOf[GeneratedClass])
+    try {
+      evaluator.cook(code)
     } catch {
       case e: Exception =>
         logError(s"failed to compile:\n $code", e)
         throw e
-    } finally {
-      currentThread.setContextClassLoader(oldClassLoader)
     }
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
     logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
-    clazz
+    evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }
 
   /**
