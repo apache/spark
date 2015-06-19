@@ -17,10 +17,10 @@
 
 package org.apache.spark.unsafe.types;
 
+import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-import javax.annotation.Nullable;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
@@ -196,10 +196,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
       return Arrays.equals(bytes, ((UTF8String) other).getBytes());
-    } else if (other instanceof String) {
-      // Used only in unit tests.
-      String s = (String) other;
-      return bytes.length >= s.length() && length() == s.length() && toString().equals(s);
     } else {
       return false;
     }
