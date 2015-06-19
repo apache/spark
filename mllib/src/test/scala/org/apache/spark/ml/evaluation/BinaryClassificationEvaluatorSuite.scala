@@ -15,35 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 
-/**
- * :: DeveloperApi ::
- * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
- *
- * @tparam M model type
- */
-@DeveloperApi
-abstract class Model[M <: Model[M]] extends Transformer {
-  /**
-   * The parent estimator that produced this model.
-   * Note: For ensembles' component Models, this value can be null.
-   */
-  @transient var parent: Estimator[M] = _
+class BinaryClassificationEvaluatorSuite extends SparkFunSuite {
 
-  /**
-   * Sets the parent of this model (Java API).
-   */
-  def setParent(parent: Estimator[M]): M = {
-    this.parent = parent
-    this.asInstanceOf[M]
+  test("params") {
+    ParamsSuite.checkParams(new BinaryClassificationEvaluator)
   }
-
-  /** Indicates whether this [[Model]] has a corresponding parent. */
-  def hasParent: Boolean = parent != null
-
-  override def copy(extra: ParamMap): M
 }
