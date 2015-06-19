@@ -116,11 +116,13 @@ sealed trait Matrix extends Serializable {
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
 
   override def hashCode(): Int = {
-    var result: Int = numRows * numCols + 31
+    var result: Int = 31 + numRows
+    result = 31 * result + numCols
     this.foreachActive { case (rowInd, colInd, value) =>
       // ignore explict 0 for comparison between sparse and dense
       if (value != 0) {
-        result = 31 * result + rowInd + (numRows * colInd)
+        result = 31 * result + rowInd
+        result = 31 * result + colInd
         // refer to {@link java.util.Arrays.equals} for hash algorithm
         val bits = java.lang.Double.doubleToLongBits(value)
         result = 31 * result + (bits ^ (bits >>> 32)).toInt

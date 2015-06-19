@@ -454,6 +454,7 @@ class MatricesSuite extends SparkFunSuite {
 
     lines = mat.toString(5, 100).lines.toArray
     assert(lines.size == 5 && lines.forall(_.size <= 100))
+  }
 
   test("equals") {
     // A == (A.T).T
