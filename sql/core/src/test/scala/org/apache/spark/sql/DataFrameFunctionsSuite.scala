@@ -133,6 +133,17 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("x", "y", null))
   }
 
+  test("misc md5 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(md5($"a"), md5("b")),
+      Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
+
+    checkAnswer(
+      df.selectExpr("md5(a)", "md5(b)"),
+      Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
+  }
+
   test("string length function") {
     checkAnswer(
       nullStrings.select(strlen($"s"), strlen("s")),
