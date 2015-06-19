@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
 
-class MinMaxScalerSuite extends FunSuite with MLlibTestSparkContext {
+class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("MinMaxScaler fit basic case") {
     val sqlContext = new SQLContext(sc)

@@ -150,7 +150,7 @@ class MinMaxScalerModel private[ml] (
       var i = 0
       while (i < size) {
         val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) =  raw * scale + $(min)
+        values(i) = raw * scale + $(min)
         i += 1
       }
       Vectors.dense(values)
