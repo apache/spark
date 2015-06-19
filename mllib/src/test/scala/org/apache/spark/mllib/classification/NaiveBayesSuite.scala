@@ -116,6 +116,22 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  def validatePredictionsProbabilities(predictionsProbabilities: Seq[Array[Double]], input: Seq[LabeledPoint]) = {
+    predictionsProbabilities.foreach { probabilities =>
+      val sum = probabilities.sum
+      // Check that prediction probabilities sum up to one
+      // with an epsilon of 10^-2
+      assert(sum > 0.99 && sum < 1.01)
+    }
+
+    val wrongPredictions = predictionsProbabilities.zip(input).count {
+      case (prediction, expected) =>
+        prediction.indexOf(prediction.max).toDouble != expected.label
+    }
+    // At least 80% of the predictions should be on.
+    assert(wrongPredictions < input.length / 5)
+  }
+
   test("model types") {
     assert(Multinomial === "multinomial")
     assert(Bernoulli === "bernoulli")
@@ -154,6 +170,12 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test prediction probabilities on RDD.
+    validatePredictionsProbabilities(model.predictProbabilities(validationRDD.map(_.features)).map(_.toArray).collect(), validationData)
+
+    // Test prediction probabilities on Array.
+    validatePredictionsProbabilities(validationData.map(row => model.predictProbabilities(row.features)).map(_.toArray), validationData)
   }
 
   test("Naive Bayes Bernoulli") {
@@ -182,6 +204,12 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test prediction probabilities on RDD.
+    validatePredictionsProbabilities(model.predictProbabilities(validationRDD.map(_.features)).map(_.toArray).collect(), validationData)
+
+    // Test prediction probabilities on Array.
+    validatePredictionsProbabilities(validationData.map(row => model.predictProbabilities(row.features)).map(_.toArray), validationData)
   }
 
   test("detect negative values") {
