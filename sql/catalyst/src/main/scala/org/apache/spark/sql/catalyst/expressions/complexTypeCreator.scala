@@ -28,14 +28,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  lazy val childTypes = children.map(_.dataType).distinct
-
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForSameTypeInputExpr(childTypes, "function array")
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
 
   override def dataType: DataType = {
     ArrayType(
-      childTypes.headOption.getOrElse(NullType),
+      children.headOption.map(_.dataType).getOrElse(NullType),
       containsNull = children.exists(_.nullable))
   }
 

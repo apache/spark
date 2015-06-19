@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.StringType
 
@@ -136,6 +136,28 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(
       CaseWhen(Seq('booleanField, 'intField, 'intField, 'intField)),
       "WHEN expressions in CaseWhen should all be boolean type")
+  }
 
+  test("check types for aggregates") {
+    // We will cast String to Double for sum and average
+    assertSuccess(Sum('stringField))
+    assertSuccess(SumDistinct('stringField))
+    assertSuccess(Average('stringField))
+
+    assertError(Min('complexField), "function min accepts non-complex type")
+    assertError(Max('complexField), "function max accepts non-complex type")
+    assertError(Sum('booleanField), "function sum accepts numeric type")
+    assertError(SumDistinct('booleanField), "function sumDistinct accepts numeric type")
+    assertError(Average('booleanField), "function average accepts numeric type")
+  }
+
+  test("check types for others") {
+    assertError(CreateArray(Seq('intField, 'booleanField)),
+      "input to function array should all be the same type")
+    assertError(Coalesce(Seq('intField, 'booleanField)),
+      "input to function coalesce should all be the same type")
+    assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
+    assertError(Explode('intField),
+      "input to function explode should be array or map type")
   }
 }
