@@ -122,6 +122,8 @@ class ExternalTaskSensor(BaseSensorOperator):
             '{self.execution_date} ... '.format(**locals()))
         TI = TaskInstance
         session = settings.Session()
+        import dateutil.parser
+        self.execution_date = dateutil.parser.parse(self.execution_date)
         count = session.query(TI).filter(
             TI.dag_id == self.external_dag_id,
             TI.task_id == self.external_task_id,
