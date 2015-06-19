@@ -114,6 +114,16 @@ sealed trait Matrix extends Serializable {
    *          corresponding value in the matrix with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+
+  /**
+   * Find the number of non-zero active values.
+   */
+  def numNonzeros: Int
+
+  /**
+   * Find the number of values stored explicitly. These values can be zero as well.
+   */
+  def numActives: Int
 }
 
 @DeveloperApi
@@ -322,6 +332,18 @@ class DenseMatrix(
       }
     }
   }
+
+  override def numNonzeros: Int = {
+    var nnz = 0
+    values.foreach { value =>
+      if (value != 0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  override def numActives: Int = values.length
 
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
@@ -592,6 +614,19 @@ class SparseMatrix(
   def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
+
+  override def numNonzeros: Int = {
+    var nnz = 0
+    values.foreach { value =>
+      if (value != 0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  override def numActives: Int = values.length
+
 }
 
 /**
