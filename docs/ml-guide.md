@@ -15,6 +15,7 @@ Developers should contribute new algorithms to `spark.mllib` and can optionally 
 to `spark.ml`.
 
 Guides for sub-packages of `spark.ml` include:
+
 * [Feature Extraction, Transformation, and Selection](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
 * [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
 

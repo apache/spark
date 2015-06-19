@@ -11,6 +11,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 Guides for individual algorithms are listed below.
 
 The API is divided into 2 parts:
+
 * [The original `spark.mllib` API](mllib-guide.html#mllib-types-algorithms-and-utilities) is the primary API.
 * [The "Pipelines" `spark.ml` API](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) is a higher-level API for constructing ML workflows.
 
@@ -70,6 +71,7 @@ Developers should contribute new algorithms to `spark.mllib` and can optionally 
 to `spark.ml`.
 
 More detailed guides for `spark.ml` include:
+
 * **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
 * [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
 * [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
@@ -109,9 +111,9 @@ For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.h
 In the `spark.mllib` package, there were several breaking changes, but all in `DeveloperApi` or `Experimental` APIs:
 
 * Gradient-Boosted Trees
-    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss.gradient) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
+    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
     * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
-* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA.run) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
+* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
 
 ## Previous Spark Versions
 
