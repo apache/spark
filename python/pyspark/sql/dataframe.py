@@ -1152,6 +1152,30 @@ class DataFrame(object):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
+    @since(1.5)
+    def freqItemsFrame(self, cols, support=None):
+        """
+        Finding frequent items for columns, possibly with false positives. Using the
+        frequent element count algorithm described in
+        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
+
+        .. note::  This function is meant for exploratory data analysis, as we make no \
+        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
+        :param cols: Names of the columns to calculate frequent items for as a list or tuple of
+            strings.
+        :param support: The frequency with which to consider an item 'frequent'. Default is 1%.
+            The support must be greater than 1e-4.
+        """
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise ValueError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame(self._jdf.stat().freqItemsFrame(_to_seq(self._sc, cols), support), self.sql_ctx)
+
     @since(1.4)
     def freqItems(self, cols, support=None):
         """
@@ -1322,6 +1346,11 @@ class DataFrameStatFunctions(object):
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
+    def freqItemsFrame(self, cols, support=None):
+        return self.df.freqItemsFrame(cols, support)
+
+    freqItemsFrame.__doc__ = DataFrame.freqItemsFrame.__doc__
+    
 
 def _test():
     import doctest
