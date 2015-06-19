@@ -172,7 +172,7 @@ case class ScriptTransformation(
           }
           outputStream.close()
         }
-      }).start()
+      }, "Thread-ScriptTransformation-Feed").start()
 
       // Consume the error stream from the pipeline, otherwise it will be blocked if
       // the pipeline is full.
@@ -185,7 +185,7 @@ case class ScriptTransformation(
 
           errorStream.close()
         }
-      }).start()
+      }, "Thread-ScriptTransformation-STDERR-Consumer").start()
 
       iterator
     }
