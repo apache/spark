@@ -143,6 +143,9 @@ configuring Flume agents.
 
 		addresses = [([sink machine hostname 1], [sink port 1]), ([sink machine hostname 2], [sink port 2])]
 		flumeStream = FlumeUtils.createPollingStream(streamingContext, addresses)
+
+	By default, the Python API will decode Flume event body as UTF8 encoded strings. You can specify your custom decoding function to decode the body byte arrays in Flume events to any arbitrary data type.
+	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils).
 	</div>
 	</div>
 
