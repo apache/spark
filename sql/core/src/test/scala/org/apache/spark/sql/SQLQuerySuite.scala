@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterAll
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
@@ -311,6 +313,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time").registerTempTable("timestamps")
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
