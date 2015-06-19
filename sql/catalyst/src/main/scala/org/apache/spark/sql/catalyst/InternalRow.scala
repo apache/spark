@@ -38,7 +38,8 @@ abstract class InternalRow extends Row {
       return false
     }
 
-    for (i <- 0 until length) {
+    var i = 0
+    while (i < length) {
       if (isNullAt(i) != other.isNullAt(i)) {
         return false
       }
@@ -56,6 +57,7 @@ abstract class InternalRow extends Row {
           return false
         }
       }
+      i += 1
     }
     true
   }
@@ -63,8 +65,8 @@ abstract class InternalRow extends Row {
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode: Int = {
     var result: Int = 37
-
-    for (i <- 0 until length) {
+    var i = 0
+    while (i < length) {
       val update: Int =
         if (isNullAt(i)) {
           0
@@ -84,6 +86,7 @@ abstract class InternalRow extends Row {
           }
         }
       result = 37 * result + update
+      i += 1
     }
     result
   }
