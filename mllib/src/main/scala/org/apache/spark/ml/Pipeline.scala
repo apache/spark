@@ -63,9 +63,7 @@ abstract class PipelineStage extends Params with Logging {
     outputSchema
   }
 
-  override def copy(extra: ParamMap): PipelineStage = {
-    super.copy(extra).asInstanceOf[PipelineStage]
-  }
+  override def copy(extra: ParamMap): PipelineStage
 }
 
 /**
@@ -190,6 +188,6 @@ class PipelineModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PipelineModel = {
-    new PipelineModel(uid, stages)
+    new PipelineModel(uid, stages.map(_.copy(extra)))
   }
 }

@@ -428,7 +428,7 @@ class Word2Vec extends Serializable with Logging {
  * Word2Vec model
  */
 @Experimental
-class Word2VecModel private[mllib] (
+class Word2VecModel private[spark] (
     model: Map[String, Array[Float]]) extends Serializable with Saveable {
 
   // wordList: Ordered list of words obtained from model.
