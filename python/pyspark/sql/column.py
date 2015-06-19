@@ -326,6 +326,25 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
+    @since(1.5)
+    def hoge(self, *values):
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is any of the given columns.
+
+        >>> df.select(df.name, df.age, df.age.hoge(2, 4)).show()
+        +-----+---+---------+
+        | name|age|(age = 2)|
+        +-----+---+---------+
+        |Alice|  2|     true|
+        |  Bob|  5|    false|
+        +-----+---+---------+
+        """
+        for v in values:
+            if self == v:
+                return self == v 
+            return self == v
+
     @since(1.4)
     def when(self, condition, value):
         """
