@@ -55,8 +55,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("basic usage") {
     val topic = s"topicbasic-${Random.nextInt}"
     kafkaTestUtils.createTopic(topic)
-    val messages = Set("the", "quick", "brown", "fox")
-    kafkaTestUtils.sendMessages(topic, messages.toArray)
+    val messages = Array("the", "quick", "brown", "fox")
+    kafkaTestUtils.sendMessages(topic, messages)
 
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt}")
@@ -67,14 +67,14 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       sc, kafkaParams, offsetRanges)
 
     val received = rdd.map(_._2).collect.toSet
-    assert(received === messages)
+    assert(received === messages.toSet)
 
     // size-related method optimizations return sane results
     assert(rdd.count === messages.size)
     assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
     assert(!rdd.isEmpty)
     assert(rdd.take(1).size === 1)
-    assert(messages(rdd.take(1).head._2))
+    assert(rdd.take(1).head._2 === messages.head)
     assert(rdd.take(messages.size + 10).size === messages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
