@@ -45,24 +45,20 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("int literals") {
-    List(0, 1, Int.MinValue, Int.MaxValue).foreach {
-      d => {
-        checkEvaluation(Literal(d), d)
-        checkEvaluation(Literal(d.toLong), d.toLong)
-        checkEvaluation(Literal(d.toShort), d.toShort)
-        checkEvaluation(Literal(d.toByte), d.toByte)
-      }
+    List(0, 1, Int.MinValue, Int.MaxValue).foreach { d =>
+      checkEvaluation(Literal(d), d)
+      checkEvaluation(Literal(d.toLong), d.toLong)
+      checkEvaluation(Literal(d.toShort), d.toShort)
+      checkEvaluation(Literal(d.toByte), d.toByte)
     }
     checkEvaluation(Literal(Long.MinValue), Long.MinValue)
     checkEvaluation(Literal(Long.MaxValue), Long.MaxValue)
   }
 
   test("double literals") {
-    List(0.0, -0.0, Double.NegativeInfinity, Double.PositiveInfinity).foreach {
-      d => {
-        checkEvaluation(Literal(d), d)
-        checkEvaluation(Literal(d.toFloat), d.toFloat)
-      }
+    List(0.0, -0.0, Double.NegativeInfinity, Double.PositiveInfinity).foreach { d =>
+      checkEvaluation(Literal(d), d)
+      checkEvaluation(Literal(d.toFloat), d.toFloat)
     }
     checkEvaluation(Literal(Double.MinValue), Double.MinValue)
     checkEvaluation(Literal(Double.MaxValue), Double.MaxValue)
