@@ -222,8 +222,6 @@ case class Bin(child: Expression)
   override def expectedChildTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
-  def funcName: String = name.toLowerCase
-
   override def eval(input: catalyst.InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
