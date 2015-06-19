@@ -174,12 +174,6 @@ object TestData {
       "3, C3, true, null" ::
       "4, D4, true, 2147483644" :: Nil)
 
-  case class TimestampField(time: Timestamp)
-  val timestamps = TestSQLContext.sparkContext.parallelize((0 to 3).map { i =>
-    TimestampField(new Timestamp(i))
-  })
-  timestamps.toDF().registerTempTable("timestamps")
-
   case class IntField(i: Int)
   // An RDD with 4 elements and 8 partitions
   val withEmptyParts = TestSQLContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
