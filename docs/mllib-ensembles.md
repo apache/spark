@@ -9,7 +9,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Ensembles
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
-MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBosotedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
+MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
 Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests

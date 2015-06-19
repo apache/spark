@@ -179,6 +179,7 @@ There are now several algorithms in the Pipelines API which are not in the lower
 **Pipelines API Algorithm Guides**
 
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Decision Trees for Classification and Regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 
 **Algorithms in `spark.ml`**

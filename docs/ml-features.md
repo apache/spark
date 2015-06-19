@@ -1387,5 +1387,3 @@ print(output.select("features", "clicked").first())
 </div>
 </div>
 
-# Feature Selectors
-
