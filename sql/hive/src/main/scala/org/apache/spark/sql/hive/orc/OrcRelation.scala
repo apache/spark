@@ -111,7 +111,7 @@ private[orc] class OrcOutputWriter(
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
       conf.asInstanceOf[JobConf],
-      new Path(path, filename).toUri.getPath,
+      new Path(path, filename).toString,
       Reporter.NULL
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
