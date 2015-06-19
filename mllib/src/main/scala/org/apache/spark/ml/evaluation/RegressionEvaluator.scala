@@ -70,13 +70,13 @@ final class RegressionEvaluator(override val uid: String)
     val metrics = new RegressionMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "rmse" =>
-        1 / metrics.rootMeanSquaredError
+        -metrics.rootMeanSquaredError
       case "mse" =>
-        1 / metrics.meanSquaredError
+        -metrics.meanSquaredError
       case "r2" =>
         metrics.r2
       case "mae" =>
-        1 / metrics.meanAbsoluteError
+        -metrics.meanAbsoluteError
     }
     metric
   }
