@@ -27,20 +27,20 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     val now = new Timestamp(System.currentTimeMillis())
     now.setNanos(100)
     val ns = DateTimeUtils.fromJavaTimestamp(now)
-    assert(ns % 10000000L == 1)
-    assert(DateTimeUtils.toJavaTimestamp(ns) == now)
+    assert(ns % 10000000L === 1)
+    assert(DateTimeUtils.toJavaTimestamp(ns) === now)
 
     List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
       val ts = DateTimeUtils.toJavaTimestamp(t)
-      assert(DateTimeUtils.fromJavaTimestamp(ts) == t)
-      assert(DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromJavaTimestamp(ts)) == ts)
+      assert(DateTimeUtils.fromJavaTimestamp(ts) === t)
+      assert(DateTimeUtils.toJavaTimestamp(DateTimeUtils.fromJavaTimestamp(ts)) === ts)
     }
   }
 
   test("100ns and julian day") {
     val (d, ns) = DateTimeUtils.toJulianDay(0)
-    assert(d == 2440587)
-    assert(ns == DateTimeUtils.SECONDS_PER_DAY / 2 * DateTimeUtils.NANOS_PER_SECOND)
+    assert(d === DateTimeUtils.JULIAN_DAY_OF_EPOCH)
+    assert(ns === DateTimeUtils.SECONDS_PER_DAY / 2 * DateTimeUtils.NANOS_PER_SECOND)
     assert(DateTimeUtils.fromJulianDay(d, ns) == 0L)
 
     val t = new Timestamp(61394778610000L) // (2015, 6, 11, 10, 10, 10, 100)

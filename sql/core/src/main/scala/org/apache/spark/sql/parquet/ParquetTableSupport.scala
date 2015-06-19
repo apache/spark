@@ -299,7 +299,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   }
 
   // Scratch array used to write decimals as fixed-length binary
-  private val scratchBytes = new Array[Byte](8)
+  private[this] val scratchBytes = new Array[Byte](8)
 
   private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
     val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
@@ -315,7 +315,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   }
 
   // array used to write Timestamp as Int96 (fixed-length binary)
-  private val int96buf = new Array[Byte](12)
+  private[this] val int96buf = new Array[Byte](12)
 
   private[parquet] def writeTimestamp(ts: Long): Unit = {
     val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
