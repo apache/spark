@@ -29,6 +29,8 @@ namespace :deploy do
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
     run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar #{fetch(:spark_jar_path)}/spark-assembly-#{fetch(:sha)}.jar"
+    run "hdfs dfs -copyFromLocal -f #{release_path}/python/lib/pyspark.zip #{fetch(:spark_jar_path)}/pyspark-#{fetch(:sha)}.zip"
+    run "hdfs dfs -copyFromLocal -f #{release_path}/python/lib/py4j-*.zip #{fetch(:spark_jar_path)}/py4j-#{fetch(:sha)}.zip"
   end
 
   task :prevent_gateway do
