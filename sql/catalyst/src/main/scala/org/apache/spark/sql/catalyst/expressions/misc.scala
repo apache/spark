@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{BinaryType, StringType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -41,5 +42,9 @@ case class Md5(child: Expression)
     }
   }
 
-  override def toString: String = s"MD5($child)"
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c =>
+      s"""org.apache.spark.unsafe.types.UTF8String.fromString
+         |(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))""".stripMargin)
+  }
 }
