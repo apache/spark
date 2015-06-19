@@ -76,20 +76,6 @@ private[ml] trait CrossValidatorParams extends Params {
   def getNumFolds: Int = $(numFolds)
 
   setDefault(numFolds -> 3)
-
-  /**
-   * Param for whether maximize the evaluation value during cross validation.
-   * If false, turn to minimize the evaluation value.
-   * Default: true
-   * @group param
-   */
-  val useMax: BooleanParam = new BooleanParam(this, "useMax",
-    "whether maximize the evaluation value durin cross validation")
-
-  /** @group getParam */
-  def getUseMax: Boolean = $(useMax)
-
-  setDefault(useMax -> true)
 }
 
 /**
@@ -115,9 +101,6 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
 
   /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
-
-  /** @group setParam */
-  def setUseMax(value: Boolean): this.type = set(useMax, value)
 
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
@@ -148,11 +131,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     }
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
-    val (bestMetric, bestIndex) = if ($(useMax)) {
-      metrics.zipWithIndex.maxBy(_._1)
-    } else {
-      metrics.zipWithIndex.minBy(_._1)
-    }
+    val (bestMetric, bestIndex) = metrics.zipWithIndex.maxBy(_._1)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
