@@ -88,10 +88,11 @@ class PipelineSuite extends SparkFunSuite {
   test("PipelineModel.copy") {
     val hashingTF = new HashingTF()
       .setNumFeatures(100)
-    val model = new PipelineModel("pipeline", Array(hashingTF))
+    val model = new PipelineModel("pipeline", Array[Transformer](hashingTF))
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
     require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
+  }
 
   test("pipeline model constructors") {
     val transform0 = mock[Transformer]
