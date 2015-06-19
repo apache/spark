@@ -2333,3 +2333,34 @@ private[spark] class RedirectThread(
     }
   }
 }
+
+/**
+ * Circular buffer, which consume all of the data write to it.
+ */
+private[spark] class CircularBuffer extends java.io.OutputStream {
+  var pos: Int = 0
+  var buffer = new Array[Int](10240)
+
+  def write(i: Int): Unit = {
+    buffer(pos) = i
+    pos = (pos + 1) % buffer.size
+  }
+
+  override def toString: String = {
+    val (end, start) = buffer.splitAt(pos)
+    val input = new java.io.InputStream {
+      val iterator = (start ++ end).iterator
+
+      def read(): Int = if (iterator.hasNext) iterator.next() else -1
+    }
+    val reader = new BufferedReader(new InputStreamReader(input))
+    val stringBuilder = new StringBuilder
+    var line = reader.readLine()
+    while (line != null) {
+      stringBuilder.append(line)
+      stringBuilder.append("\n")
+      line = reader.readLine()
+    }
+    stringBuilder.toString()
+  }
+}

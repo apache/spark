@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -176,16 +176,9 @@ case class ScriptTransformation(
 
       // Consume the error stream from the pipeline, otherwise it will be blocked if
       // the pipeline is full.
-      new Thread(new Runnable() {
-        override def run(): Unit = {
-          var value = -1
-          do {
-            value = errorStream.read() // consume the error message stream.
-          } while (value != -1)
-
-          errorStream.close()
-        }
-      }, "Thread-ScriptTransformation-STDERR-Consumer").start()
+      new RedirectThread(errorStream, // input stream from the pipeline
+        new CircularBuffer(),         // output to a circular buffer
+        "Thread-ScriptTransformation-STDERR-Consumer").start()
 
       iterator
     }
