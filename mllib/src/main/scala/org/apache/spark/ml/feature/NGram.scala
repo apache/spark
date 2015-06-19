@@ -31,8 +31,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * words.
  *
  * When the input is empty, an empty array is returned.
- * When the input array length is less than n (number of elements per n-gram), a single n-gram
- * consisting of the input array is returned.
+ * When the input array length is less than n (number of elements per n-gram), no n-grams are
+ * returned.
  */
 @Experimental
 class NGram(override val uid: String)
@@ -57,8 +57,7 @@ class NGram(override val uid: String)
   setDefault(n -> 2)
 
   override protected def createTransformFunc: Seq[String] => Seq[String] = {
-    val minLength = $(n)
-    _.sliding(minLength).map(_.mkString(" ")).toSeq
+    _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

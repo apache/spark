@@ -30,53 +30,54 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.NGramSuite._
 
   test("default behavior yields bigram features") {
-    val NGramTransformer = new NGram()
+    val nGram = new NGram()
       .setInputCol("inputTokens")
-      .setOutputCol("NGrams")
+      .setOutputCol("nGrams")
     val dataset = sqlContext.createDataFrame(Seq(
       NGramTestData(
         Array("Test", "for", "ngram", "."),
         Array("Test for", "for ngram", "ngram .")
     )))
-    testNGram(NGramTransformer, dataset)
+    testNGram(nGram, dataset)
   }
 
   test("NGramLength=4 yields length 4 n-grams") {
-    val NGramTransformer = new NGram()
+    val nGram = new NGram()
       .setInputCol("inputTokens")
-      .setOutputCol("NGrams")
+      .setOutputCol("nGrams")
       .setN(4)
     val dataset = sqlContext.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array("a b c d", "b c d e")
       )))
-    testNGram(NGramTransformer, dataset)
+    testNGram(nGram, dataset)
   }
 
   test("empty input yields empty output") {
-    val NGramTransformer = new NGram()
+    val nGram = new NGram()
       .setInputCol("inputTokens")
-      .setOutputCol("NGrams")
+      .setOutputCol("nGrams")
       .setN(4)
     val dataset = sqlContext.createDataFrame(Seq(
       NGramTestData(
         Array(),
         Array()
       )))
-    testNGram(NGramTransformer, dataset)
+    testNGram(nGram, dataset)
   }
-  test("input array < n yields a single n-gram consisting of input array") {
-    val NGramTransformer = new NGram()
+
+  test("input array < n yields empty output") {
+    val nGram = new NGram()
       .setInputCol("inputTokens")
-      .setOutputCol("NGrams")
+      .setOutputCol("nGrams")
       .setN(6)
     val dataset = sqlContext.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
-        Array("a b c d e")
+        Array()
       )))
-    testNGram(NGramTransformer, dataset)
+    testNGram(nGram, dataset)
   }
 }
 
@@ -84,7 +85,7 @@ object NGramSuite extends SparkFunSuite {
 
   def testNGram(t: NGram, dataset: DataFrame): Unit = {
     t.transform(dataset)
-      .select("NGrams", "wantedNGrams")
+      .select("nGrams", "wantedNGrams")
       .collect()
       .foreach { case Row(actualNGrams, wantedNGrams) =>
         assert(actualNGrams === wantedNGrams)
