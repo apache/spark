@@ -186,6 +186,15 @@ object TestJsonData {
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """]""" :: Nil)
 
+  val emptyRecords: RDD[String] =
+    TestSQLContext.sparkContext.parallelize(
+      """{""" ::
+        """""" ::
+        """{"a": {}}""" ::
+        """{"a": {"b": {}}}""" ::
+        """{"b": [{"c": {}}]}""" ::
+        """]""" :: Nil)
+
   val empty =
     TestSQLContext.sparkContext.parallelize(Seq[String]())
 }
