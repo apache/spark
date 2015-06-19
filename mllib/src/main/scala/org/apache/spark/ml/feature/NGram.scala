@@ -29,6 +29,10 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * values in the input array are ignored.
  * It returns an array of n-grams where each n-gram is represented by a space-separated string of
  * words.
+ *
+ * When the input is empty, an empty array is returned.
+ * When the input array length is less than n (number of elements per n-gram), a single n-gram
+ * consisting of the input array is returned.
  */
 @Experimental
 class NGram(override val uid: String)
@@ -38,28 +42,27 @@ class NGram(override val uid: String)
 
   /**
    * Minimum n-gram length, >= 1.
-   * Defauult: 2, bigram features
+   * Default: 2, bigram features
    * @group param
    */
-  val NGramLength: IntParam = new IntParam(this, "NGramLength", "number elements per n-gram (>=1)",
+  val n: IntParam = new IntParam(this, "n", "number elements per n-gram (>=1)",
     ParamValidators.gtEq(1))
 
   /** @group setParam */
-  def setNGramLength(value: Int): this.type = set(NGramLength, value)
+  def setN(value: Int): this.type = set(n, value)
 
   /** @group getParam */
-  def getNGramLength: Int = $(NGramLength)
+  def getN: Int = $(n)
 
-  setDefault(NGramLength -> 2)
+  setDefault(n -> 2)
 
   override protected def createTransformFunc: Seq[String] => Seq[String] = {
-    val minLength = $(NGramLength)
+    val minLength = $(n)
     _.sliding(minLength).map(_.mkString(" ")).toSeq
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(
-      inputType.sameType(ArrayType(StringType)),
+    require(inputType.sameType(ArrayType(StringType)),
       s"Input type must be ArrayType(StringType) but got $inputType.")
   }
 

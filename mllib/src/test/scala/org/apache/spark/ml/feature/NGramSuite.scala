@@ -30,7 +30,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.NGramSuite._
 
   test("default behavior yields bigram features") {
-    val tokenizer = new NGram()
+    val NGramTransformer = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("NGrams")
     val dataset = sqlContext.createDataFrame(Seq(
@@ -38,20 +38,45 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array("Test", "for", "ngram", "."),
         Array("Test for", "for ngram", "ngram .")
     )))
-    testNGram(tokenizer, dataset)
+    testNGram(NGramTransformer, dataset)
   }
 
   test("NGramLength=4 yields length 4 n-grams") {
-    val tokenizer = new NGram()
+    val NGramTransformer = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("NGrams")
-      .setNGramLength(4)
+      .setN(4)
     val dataset = sqlContext.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array("a b c d", "b c d e")
       )))
-    testNGram(tokenizer, dataset)
+    testNGram(NGramTransformer, dataset)
+  }
+
+  test("empty input yields empty output") {
+    val NGramTransformer = new NGram()
+      .setInputCol("inputTokens")
+      .setOutputCol("NGrams")
+      .setN(4)
+    val dataset = sqlContext.createDataFrame(Seq(
+      NGramTestData(
+        Array(),
+        Array()
+      )))
+    testNGram(NGramTransformer, dataset)
+  }
+  test("input array < n yields a single n-gram consisting of input array") {
+    val NGramTransformer = new NGram()
+      .setInputCol("inputTokens")
+      .setOutputCol("NGrams")
+      .setN(6)
+    val dataset = sqlContext.createDataFrame(Seq(
+      NGramTestData(
+        Array("a", "b", "c", "d", "e"),
+        Array("a b c d e")
+      )))
+    testNGram(NGramTransformer, dataset)
   }
 }
 
@@ -62,7 +87,7 @@ object NGramSuite extends SparkFunSuite {
       .select("NGrams", "wantedNGrams")
       .collect()
       .foreach { case Row(actualNGrams, wantedNGrams) =>
-      assert(actualNGrams === wantedNGrams)
-    }
+        assert(actualNGrams === wantedNGrams)
+      }
   }
 }
