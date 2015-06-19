@@ -22,9 +22,9 @@ import java.security.NoSuchAlgorithmException
 import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -45,6 +45,54 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
       s"${ctx.stringType}.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
 }
+
+
+/**
+ * A function that returns a hash value of the argument
+ *
+ */
+case class Hash(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = IntegerType
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    hashCode(value)
+  }
+
+  def hashCode(v: Any): Int = v match {
+    case null => 0
+    case arr: Array[_] => {
+      var res: Int = 0
+      arr.foreach { case (i) => res += hashCode(i) }
+      res
+    }
+    case seq: Seq[_] => {
+      var res: Int = 0
+      seq.foreach { case (i) => res += hashCode(i) }
+      res
+    }
+    case m: Map[_, _] => {
+      var res: Int = 0
+      m.foreach { case (k, v) => res += (hashCode(k) + hashCode(v)) }
+      res
+    }
+    case r: Row => {
+      var res: Int = 0
+      for (i <- 0 until r.length) {
+        res += 31 * res + hashCode(r.get(i))
+      }
+      res
+    }
+    case others => others.hashCode()
+  }
+
+  override def toString: String = s"hash($child)"
+
+}
+
 
 /**
  * A function that calculates the SHA-2 family of functions (SHA-224, SHA-256, SHA-384, and SHA-512)
@@ -112,6 +160,7 @@ case class Sha2(left: Expression, right: Expression)
       """
     })
   }
+
 }
 
 /**

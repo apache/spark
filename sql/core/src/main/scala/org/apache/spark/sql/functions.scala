@@ -1523,6 +1523,22 @@ object functions {
    */
   def md5(columnName: String): Column = md5(Column(columnName))
 
+   /**
+   * Calculates the hash value of the argument.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def hash(e: Column): Column = Hash(e.expr)
+
+  /**
+   * Calculates the hash value of the argument.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def hash(columnName: String): Column = hash(Column(columnName))
+
   /**
    * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
    *

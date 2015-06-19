@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{IntegerType, StringType, BinaryType}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -29,6 +30,29 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "6ac1e56bc78f031059be7be854522c4c")
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
+  }
+
+  test("hash") {
+    val f = 'd.struct(StructField("name", StringType, true)).at(0)
+    checkEvaluation(Hash(Literal.create(null, NullType)), 0)
+    checkEvaluation(Hash(Literal(3)), 3)
+    checkEvaluation(Hash(Literal(3l)), 3)
+    checkEvaluation(Hash(Literal(3.7d)), -644612093)
+    checkEvaluation(Hash(Literal(3.7f)), 1080872141)
+    val v1: Byte = 3
+    val v2: Short = 3
+    checkEvaluation(Hash(Literal(v1)), 3)
+    checkEvaluation(Hash(Literal(v2)), 3)
+    checkEvaluation(Hash(Literal("ABC")), 94369)
+    checkEvaluation(Hash(Literal(true)), 1231)
+    checkEvaluation(Hash(Literal.create(3.7, DecimalType.Unlimited)), -644612093)
+    checkEvaluation(Hash(Literal.create(java.sql.Date.valueOf("1991-12-07"), DateType)), 8010)
+    checkEvaluation(Hash(Literal.create(java.sql.Timestamp.valueOf("1991-12-07 12:00:00"), TimestampType)), -1745111446)
+    checkEvaluation(Hash(Literal.create(Map[Int, Int](1 -> 2), IntegerType)), 3)
+    checkEvaluation(Hash(Literal.create(Seq[Byte](1, 2, 3, 4, 5, 6), BinaryType)), 21)
+    checkEvaluation(Hash(Literal.create(Array[Double](1.1, 2.2, 3.3, 4.4, 5.5, 6.6), DoubleType)),
+      -427425783)
+    checkEvaluation(Hash(f), 94369, InternalRow(create_row("ABC")))
   }
 
   test("sha1") {
