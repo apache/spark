@@ -58,7 +58,8 @@ case class BroadcastLeftSemiJoinHash(
           if (!rowKey.anyNull) {
             val keyExists = hashSet.contains(rowKey)
             if (!keyExists) {
-              hashSet.add(rowKey)
+              // rowKey may be not serializable (from codegen)
+              hashSet.add(rowKey.copy())
             }
           }
         }
