@@ -420,17 +420,17 @@ class Word2Vec extends Serializable with Logging {
 /**
  * :: Experimental ::
  * Word2Vec model
- *
- * @param wordIndex: Maps each word to an index, which can retrieve the corresponding
- *                   vector from wordVectors (see below).
- * @param wordVectors: Array of length numWords * vectorSize, vector corresponding
- *                     to the word mapped with index i can be retrieved by the slice
- *                     (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Experimental
 class Word2VecModel private[mllib] (
     private val wordIndex: Map[String, Int],
     private val wordVectors: Array[Float]) extends Serializable with Saveable {
+
+  // wordIndex: Maps each word to an index, which can retrieve the corresponding
+  //            vector from wordVectors (see below).
+  // wordVectors: Array of length numWords * vectorSize, vector corresponding
+  //              to the word mapped with index i can be retrieved by the slice
+  //              (i * vectorSize, i * vectorSize + vectorSize)
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
@@ -441,6 +441,7 @@ class Word2VecModel private[mllib] (
     val (wl, _) = wordIndex.toSeq.sortBy(_._2).unzip
     wl.toArray
   }
+
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
   private val wordVecNorms: Array[Double] = {
@@ -544,11 +545,11 @@ class Word2VecModel private[mllib] (
 @Experimental
 object Word2VecModel extends Loader[Word2VecModel] {
 
-  private def buildWordIndex(model: Map[String, Array[Float]]) = {
+  private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {
     model.keys.zipWithIndex.toMap
   }
 
-  private def buildWordVectors(model: Map[String, Array[Float]]) = {
+  private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
     require(!model.isEmpty, "Word2VecMap should be non-empty")
     val (vectorSize, numWords) = (model.head._2.size, model.size)
     val wordList = model.keys.toArray
