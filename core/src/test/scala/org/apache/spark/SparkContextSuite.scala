@@ -24,9 +24,11 @@ import com.google.common.base.Charsets._
 import com.google.common.io.Files
 
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.spark.util.Utils
+import org.apache.spark.rdd.{RDD, HadoopRDD, NewHadoopRDD}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -268,6 +270,31 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
       assert(sc.binaryFiles(dirpath1 + "," + dirpath2).count() == 5L)
 
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("Passing configuration into methods that create (New)HadoopRDD (SPARK-8398)") {
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val conf = new Configuration(sc.hadoopConfiguration)
+      val k = "test"
+      val v = "dummyForTest"
+      conf.set(k, v)
+      def sourceRDD(rdd: RDD[_]): RDD[_] =
+        if (!rdd.dependencies.isEmpty) rdd.dependencies.head.rdd else rdd
+
+      assert(sourceRDD(sc.textFile("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
+        .getConf.get(k) == v)
+      assert(sourceRDD(sc.wholeTextFiles("nonexistent", 1, conf)).asInstanceOf[NewHadoopRDD[_, _]]
+        .getConf.get(k) == v)
+      assert(sourceRDD(sc.binaryFiles("nonexistent", 1, conf)).asInstanceOf[NewHadoopRDD[_, _]]
+        .getConf.get(k) == v)
+      assert(sourceRDD(sc.sequenceFile[Int, Int]("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
+        .getConf.get(k) == v)
+      assert(sourceRDD(sc.objectFile[Int]("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
+        .getConf.get(k) == v)
     } finally {
       sc.stop()
     }
