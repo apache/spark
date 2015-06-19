@@ -164,12 +164,20 @@ private[ui] object RDDOperationGraph extends Logging {
    *
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: RDDOperationGraph): String = {
+  def makeDotFile(graph: RDDOperationGraph, stageId: String): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
-    graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
-    dotFile.append("}")
+    try {
+      dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+      graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
+      dotFile.append("}")
+    } catch {
+      case t: Throwable =>
+        dotFile.clear()
+        logError(s"Failed to making dot file of $stageId", t)
+        return ""
+    }
+
     val result = dotFile.toString()
     logDebug(result)
     result
