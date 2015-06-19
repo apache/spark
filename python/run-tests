@@ -126,7 +126,20 @@ function run_streaming_tests() {
       KAFKA_ASSEMBLY_JAR="$f"
     done
 
-    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
+    FLUME_ASSEMBLY_DIR="$FWDIR"/external/flume-assembly
+    JAR_PATH="${FLUME_ASSEMBLY_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+    for f in "${JAR_PATH}"/spark-streaming-flume-assembly-*.jar; do
+      if [[ ! -e "$f" ]]; then
+        echo "Failed to find Spark Streaming Flume assembly jar in $FLUME_ASSEMBLY_DIR" 1>&2
+        echo "You need to build Spark with " \
+             "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or" \
+             "'build/mvn package' before running this program" 1>&2
+        exit 1
+      fi
+      FLUME_ASSEMBLY_JAR="$f"
+    done
+
+    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR},${FLUME_ASSEMBLY_JAR} pyspark-shell"
     run_test "pyspark.streaming.util"
     run_test "pyspark.streaming.tests"
 }
