@@ -17,13 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml._
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.{DoubleParam, Params}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -39,7 +39,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
    * @group param
    */
   val min: DoubleParam = new DoubleParam(this, "min",
-    "lower bound of the expected feature range")
+    "lower bound of the output feature range")
 
   /**
    * upper bound after transformation, shared by all features
@@ -47,18 +47,31 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
    * @group param
    */
   val max: DoubleParam = new DoubleParam(this, "max",
-    "upper bound of the expected feature range")
+    "upper bound of the output feature range")
+
+  /** Validates and transforms the input schema. */
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    val inputType = schema($(inputCol)).dataType
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input column ${$(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    StructType(outputFields)
+  }
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Rescale each feature individually to a common range [min, max] linearly using column summary
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
- * feature E is calculated as, *
+ * feature E is calculated as,
  *
  * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ *
+ * For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
  */
-@AlphaComponent
+@Experimental
 class MinMaxScaler(override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams {
 
@@ -81,38 +94,29 @@ class MinMaxScaler(override val uid: String)
   override def fit(dataset: DataFrame): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
-    val summary = input.treeAggregate(new MultivariateOnlineSummarizer)(
-      (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
-
+    val summary = Statistics.colStats(input)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${$(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema)
   }
 
   override def validateParams(): Unit = {
-    require($(min) <= $(max))
+    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
   }
 
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
  */
-@AlphaComponent
+@Experimental
 class MinMaxScalerModel private[ml] (
     override val uid: String,
-    val originMin: Vector,
-    val originMax: Vector)
+    val originalMin: Vector,
+    val originalMax: Vector)
   extends Model[MinMaxScalerModel] with MinMaxScalerParams {
 
   /** @group setParam */
@@ -121,51 +125,42 @@ class MinMaxScalerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+  /** @group setParam */
+  def setMin(value: Double): this.type = set(min, value)
 
-    val scale = udf { (vector: Vector) => {
+  /** @group setParam */
+  def setMax(value: Double): this.type = set(max, value)
+
+  override def validateParams(): Unit = {
+    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
+  }
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
+    val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
+    val minArray = originalMin.toArray
+
+    val reScale = udf { (vector: Vector) =>
       val scale = $(max) - $(min)
-      val result = vector match {
-        case DenseVector(vs) =>
-          val values = vs.clone()
-          val size = values.size
-          var i = 0
-          while(i < size) {
-            val originalRange = originMax(i) - originMin(i)
-            val raw = if(originalRange != 0) (values(i) - originMin(i)) / originalRange else 0.5
-            values(i) =  raw * scale + $(min)
-            i += 1
-          }
-          Vectors.dense(values)
-        case SparseVector(size, indices, vs) =>
-          // For sparse vector, the `index` array inside sparse vector object will not be changed,
-          // so we can re-use it to save memory.
-          val values = vs.clone()
-          val nnz = values.size
-          var i = 0
-          while (i < nnz) {
-            val index = indices(i)
-            val originRange = originMax(index) - originMin(index)
-            val raw = if(originRange != 0) (values(i) - originMin(index)) / originRange else 0.5
-            values(i) = raw  * scale + $(min)
-            i += 1
-          }
-          Vectors.sparse(size, indices, values)
-        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+
+      // 0 in sparse vector will probably be rescaled to non-zero
+      val values = vector.toArray
+      val size = values.size
+      var i = 0
+      while (i < size) {
+        val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
+        values(i) =  raw * scale + $(min)
+        i += 1
       }
-      result
-    }}
-    dataset.withColumn($(outputCol), scale(col($(inputCol))))
+      Vectors.dense(values)
+    }
+
+    val metadata = outputSchema($(outputCol)).metadata
+    dataset.select(col("*"), reScale(col($(inputCol))).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${$(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema)
   }
 }
