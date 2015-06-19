@@ -260,6 +260,10 @@ case class Pow(left: Expression, right: Expression)
 
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+
+  /**
+   * Natural log, i.e. using e as the base.
+   */
   def this(child: Expression) = {
     this(EulerNumber(), child)
   }
