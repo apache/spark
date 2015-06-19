@@ -285,16 +285,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       def sourceRDD(rdd: RDD[_]): RDD[_] =
         if (!rdd.dependencies.isEmpty) rdd.dependencies.head.rdd else rdd
 
-      assert(sourceRDD(sc.textFile("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
-        .getConf.get(k) == v)
-      assert(sourceRDD(sc.wholeTextFiles("nonexistent", 1, conf)).asInstanceOf[NewHadoopRDD[_, _]]
-        .getConf.get(k) == v)
-      assert(sourceRDD(sc.binaryFiles("nonexistent", 1, conf)).asInstanceOf[NewHadoopRDD[_, _]]
-        .getConf.get(k) == v)
-      assert(sourceRDD(sc.sequenceFile[Int, Int]("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
-        .getConf.get(k) == v)
-      assert(sourceRDD(sc.objectFile[Int]("nonexistent", 1, conf)).asInstanceOf[HadoopRDD[_, _]]
-        .getConf.get(k) == v)
+      assert(sourceRDD(sc.textFile("nonexistent", 1, conf))
+        .asInstanceOf[HadoopRDD[_, _]].getConf.get(k) == v)
+      assert(sourceRDD(sc.wholeTextFiles("nonexistent", 1, conf))
+        .asInstanceOf[NewHadoopRDD[_, _]].getConf.get(k) == v)
+      assert(sourceRDD(sc.binaryFiles("nonexistent", 1, conf))
+        .asInstanceOf[NewHadoopRDD[_, _]].getConf.get(k) == v)
+      assert(sourceRDD(sc.sequenceFile[Int, Int]("nonexistent", 1, conf))
+        .asInstanceOf[HadoopRDD[_, _]].getConf.get(k) == v)
+      assert(sourceRDD(sc.objectFile[Int]("nonexistent", 1, conf))
+        .asInstanceOf[HadoopRDD[_, _]].getConf.get(k) == v)
     } finally {
       sc.stop()
     }

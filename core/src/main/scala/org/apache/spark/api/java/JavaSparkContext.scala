@@ -229,7 +229,10 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def wholeTextFiles(path: String, minPartitions: Int, conf: Configuration): JavaPairRDD[String, String] =
+  def wholeTextFiles(
+    path: String,
+    minPartitions: Int,
+    conf: Configuration): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path, minPartitions, conf))
 
   /**
@@ -304,7 +307,10 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def binaryFiles(path: String, minPartitions: Int, conf: Configuration): JavaPairRDD[String, PortableDataStream] =
+  def binaryFiles(
+    path: String,
+    minPartitions: Int,
+    conf: Configuration): JavaPairRDD[String, PortableDataStream] =
     new JavaPairRDD(sc.binaryFiles(path, minPartitions, conf))
 
   /**

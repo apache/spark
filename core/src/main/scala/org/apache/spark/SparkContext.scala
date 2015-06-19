@@ -1142,10 +1142,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-   def sequenceFile[K, V]
-       (path: String, minPartitions: Int = defaultMinPartitions, conf: Configuration = hadoopConfiguration)
-       (implicit km: ClassTag[K], vm: ClassTag[V],
-        kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
+  def sequenceFile[K, V](path: String, minPartitions: Int = defaultMinPartitions,
+      conf: Configuration = hadoopConfiguration)(implicit km: ClassTag[K], vm: ClassTag[V],
+      kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
     withScope {
       assertNotStopped()
       val kc = clean(kcf)()
