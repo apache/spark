@@ -594,7 +594,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       (JavaUtils.optionToOptional(v), w)
     })
   }
-  
+
   /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
    * partitioner/parallelism level and using map-side aggregation.

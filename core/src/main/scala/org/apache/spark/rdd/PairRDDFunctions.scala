@@ -570,7 +570,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     assert(leftReplication >= 1, "must specify a positive number for left replication")
     assert(rightReplication >= 1, "must specify a positive number for right replication")
 
-    def getReplication(random: JRandom, replication: Int, 
+    def getReplication(random: JRandom, replication: Int,
       otherReplication: Int) : Seq[(Int, Int)] = {
       val rand = random.nextInt(otherReplication)
       (0 until replication).map{ rep => (rand, rep) }
