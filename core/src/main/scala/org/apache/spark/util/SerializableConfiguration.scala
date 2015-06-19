@@ -14,35 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.util
 
-package org.apache.spark
-
-import java.io._
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io.ObjectWritable
-import org.apache.hadoop.io.Writable
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
-@DeveloperApi
-class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
-
-  def value: T = t
-
-  override def toString: String = t.toString
-
+private[spark]
+class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
-    new ObjectWritable(t).write(out)
+    value.write(out)
   }
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    val ow = new ObjectWritable()
-    ow.setConf(new Configuration(false))
-    ow.readFields(in)
-    t = ow.get().asInstanceOf[T]
+    value = new Configuration(false)
+    value.readFields(in)
   }
 }

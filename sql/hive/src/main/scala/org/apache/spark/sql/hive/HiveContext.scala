@@ -21,15 +21,13 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 
-import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.spark.sql.catalyst.ParserDialect
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
@@ -39,6 +37,9 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
+import org.apache.spark.sql.SQLConf.SQLConfEntry
+import org.apache.spark.sql.SQLConf.SQLConfEntry._
+import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand}
@@ -69,13 +70,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   import HiveContext._
 
+  println("create HiveContext")
+
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
    * SerDe.
    */
-  protected[sql] def convertMetastoreParquet: Boolean =
-    getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
+  protected[sql] def convertMetastoreParquet: Boolean = getConf(CONVERT_METASTORE_PARQUET)
 
   /**
    * When true, also tries to merge possibly different but compatible Parquet schemas in different
@@ -84,7 +86,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
-    getConf("spark.sql.hive.convertMetastoreParquet.mergeSchema", "false") == "true"
+    getConf(CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
 
   /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
@@ -98,8 +100,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
-  protected[sql] def convertCTAS: Boolean =
-    getConf("spark.sql.hive.convertCTAS", "false").toBoolean
+  protected[sql] def convertCTAS: Boolean = getConf(CONVERT_CTAS)
 
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
@@ -117,8 +118,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *              option is only valid when using the execution version of Hive.
    *  - maven - download the correct version of hive on demand from maven.
    */
-  protected[hive] def hiveMetastoreJars: String =
-    getConf(HIVE_METASTORE_JARS, "builtin")
+  protected[hive] def hiveMetastoreJars: String = getConf(HIVE_METASTORE_JARS)
 
   /**
    * A comma separated list of class prefixes that should be loaded using the classloader that
@@ -128,11 +128,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * custom appenders that are used by log4j.
    */
   protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
-    getConf("spark.sql.hive.metastore.sharedPrefixes", jdbcPrefixes)
-      .split(",").filterNot(_ == "")
-
-  private def jdbcPrefixes = Seq(
-    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc").mkString(",")
+    getConf(HIVE_METASTORE_SHARED_PREFIXES).filterNot(_ == "")
 
   /**
    * A comma separated list of class prefixes that should explicitly be reloaded for each version
@@ -140,14 +136,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * prefix that typically would be shared (i.e. org.apache.spark.*)
    */
   protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
-    getConf("spark.sql.hive.metastore.barrierPrefixes", "")
-      .split(",").filterNot(_ == "")
+    getConf(HIVE_METASTORE_BARRIER_PREFIXES).filterNot(_ == "")
 
   /*
    * hive thrift server use background spark sql thread pool to execute sql queries
    */
-  protected[hive] def hiveThriftServerAsync: Boolean =
-    getConf("spark.sql.hive.thriftServer.async", "true").toBoolean
+  protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -364,7 +358,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  /* A catalyst metadata catalog that points to the Hive Metastore. */
+  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+    setConf(entry.key, entry.stringConverter(value))
+  }
+
+    /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
   override protected[sql] lazy val catalog =
     new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog
@@ -402,8 +400,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
-      override def caseSensitiveAnalysis: Boolean =
-        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
     }
 
     /**
@@ -519,7 +516,50 @@ private[hive] object HiveContext {
   val hiveExecutionVersion: String = "0.13.1"
 
   val HIVE_METASTORE_VERSION: String = "spark.sql.hive.metastore.version"
-  val HIVE_METASTORE_JARS: String = "spark.sql.hive.metastore.jars"
+  val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
+    defaultValue = Some("builtin"),
+    doc = "Location of the jars that should be used to instantiate the HiveMetastoreClient. This" +
+      " property can be one of three options: " +
+      "1. \"builtin\" Use Hive 0.13.1, which is bundled with the Spark assembly jar when " +
+      "<code>-Phive</code> is enabled. When this option is chosen, " +
+      "spark.sql.hive.metastore.version must be either <code>0.13.1</code> or not defined. " +
+      "2. \"maven\" Use Hive jars of specified version downloaded from Maven repositories." +
+      "3. A classpath in the standard format for both Hive and Hadoop.")
+
+  val CONVERT_METASTORE_PARQUET = booleanConf("spark.sql.hive.convertMetastoreParquet",
+    defaultValue = Some(true),
+    doc = "When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
+      "the built in support.")
+
+  val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING = booleanConf(
+    "spark.sql.hive.convertMetastoreParquet.mergeSchema",
+    defaultValue = Some(false),
+    doc = "TODO")
+
+  val CONVERT_CTAS = booleanConf("spark.sql.hive.convertCTAS",
+    defaultValue = Some(false),
+    doc = "TODO")
+
+  val HIVE_METASTORE_SHARED_PREFIXES = stringSeqConf("spark.sql.hive.metastore.sharedPrefixes",
+    defaultValue = Some(jdbcPrefixes),
+    doc = "A comma separated list of class prefixes that should be loaded using the classloader " +
+      "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
+      "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
+      "classes that need to be shared are those that interact with classes that are already " +
+      "shared. For example, custom appenders that are used by log4j.")
+
+  private def jdbcPrefixes = Seq(
+    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
+
+  val HIVE_METASTORE_BARRIER_PREFIXES = stringSeqConf("spark.sql.hive.metastore.barrierPrefixes",
+    defaultValue = Some(Seq()),
+    doc = "A comma separated list of class prefixes that should explicitly be reloaded for each " +
+      "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
+      "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
+
+  val HIVE_THRIFT_SERVER_ASYNC = booleanConf("spark.sql.hive.thriftServer.async",
+    defaultValue = Some(true),
+    doc = "TODO")
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {

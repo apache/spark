@@ -32,6 +32,7 @@ import org.junit.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -65,8 +66,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   @Test
   public void testKafkaStream() throws InterruptedException {
-    String topic1 = "topic1";
-    String topic2 = "topic2";
+    final String topic1 = "topic1";
+    final String topic2 = "topic2";
 
     String[] topic1data = createTopicAndSendData(topic1);
     String[] topic2data = createTopicAndSendData(topic2);
@@ -87,6 +88,16 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         StringDecoder.class,
         kafkaParams,
         topicToSet(topic1)
+    ).transformToPair(
+        // Make sure you can get offset ranges from the rdd
+        new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
+          @Override
+          public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) throws Exception {
+            OffsetRange[] offsets = ((HasOffsetRanges)rdd.rdd()).offsetRanges();
+            Assert.assertEquals(offsets[0].topic(), topic1);
+            return rdd;
+          }
+        }
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override

@@ -193,6 +193,8 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
@@ -253,5 +255,29 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
+  }
+}
+
+case class Logarithm(left: Expression, right: Expression)
+  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+
+  /**
+   * Natural log, i.e. using e as the base.
+   */
+  def this(child: Expression) = {
+    this(EulerNumber(), child)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val logCode = if (left.isInstanceOf[EulerNumber]) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+    }
+    logCode + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+    """
   }
 }

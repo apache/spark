@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.DoubleType
 
@@ -191,6 +192,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Log2, f, (-5 to -1).map(_ * 1.0), expectNull = true)
   }
 
+  test("sqrt") {
+    testUnary(Sqrt, math.sqrt, (0 to 20).map(_ * 0.1))
+    testUnary(Sqrt, math.sqrt, (-5 to -1).map(_ * 1.0), expectNull = true)
+
+    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(Sqrt(Literal(-1.0)), null, EmptyRow)
+    checkEvaluation(Sqrt(Literal(-1.5)), null, EmptyRow)
+  }
+
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
@@ -204,4 +214,22 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Atan2, math.atan2)
   }
 
+  test("binary log") {
+    val f = (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
+    val domain = (1 to 20).map(v => (v * 0.1, v * 0.2))
+
+    domain.foreach { case (v1, v2) =>
+      checkEvaluation(Logarithm(Literal(v1), Literal(v2)), f(v1 + 0.0, v2 + 0.0), EmptyRow)
+      checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
+      checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
+    }
+    checkEvaluation(
+      Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal.create(null, DoubleType)),
+      null,
+      create_row(null))
+  }
 }

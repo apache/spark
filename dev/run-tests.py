@@ -391,7 +391,7 @@ def run_scala_tests_maven(test_profiles):
 
 def run_scala_tests_sbt(test_modules, test_profiles):
     # declare the variable for reference
-    sbt_test_goals = None
+    sbt_test_goals = []
 
     if "ALL" in test_modules:
         sbt_test_goals = ["test"]
@@ -399,12 +399,12 @@ def run_scala_tests_sbt(test_modules, test_profiles):
         # if we only have changes in SQL, MLlib, Streaming, or GraphX then build
         # a custom test list
         if "SQL" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals = ["catalyst/test",
-                              "sql/test",
-                              "hive/test",
-                              "hive-thriftserver/test",
-                              "mllib/test",
-                              "examples/test"]
+            sbt_test_goals += ["catalyst/test",
+                               "sql/test",
+                               "hive/test",
+                               "hive-thriftserver/test",
+                               "mllib/test",
+                               "examples/test"]
         if "MLLIB" in test_modules and "CORE" not in test_modules:
             sbt_test_goals += ["mllib/test", "examples/test"]
         if "STREAMING" in test_modules and "CORE" not in test_modules:

@@ -707,10 +707,18 @@ object functions {
   /**
    * Computes the square root of the specified float value.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 1.3.0
    */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
    * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
@@ -1082,6 +1090,22 @@ object functions {
    * @since 1.4.0
    */
   def log(columnName: String): Column = log(Column(columnName))
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, a: Column): Column = Logarithm(lit(base).expr, a.expr)
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, columnName: String): Column = log(base, Column(columnName))
 
   /**
    * Computes the logarithm of the given value in base 10.
