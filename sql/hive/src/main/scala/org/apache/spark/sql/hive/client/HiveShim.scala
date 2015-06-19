@@ -168,7 +168,7 @@ private[client] class Shim_v0_12 extends Shim {
     // Starting from Hive 0.13, setCurrentSessionState will internally override
     // the context class loader of the current thread by the class loader set in
     // the conf of the SessionState. So, for this Hive 0.12 shim, we add the same
-    // behavior. So, shim.setCurrentSessionState of all Hive versions have the
+    // behavior and make shim.setCurrentSessionState of all Hive versions have the
     // consistent behavior.
     Thread.currentThread().setContextClassLoader(state.getConf.getClassLoader)
     startMethod.invoke(null, state)
