@@ -27,7 +27,7 @@ import scala.reflect.{classTag, ClassTag}
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.mapred.{ JobConf, TextOutputFormat }
+import org.apache.hadoop.mapred.{JobConf, TextOutputFormat}
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
@@ -1397,7 +1397,9 @@ abstract class RDD[T: ClassTag](
       }
     }
     RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      .saveAsHadoopFile(path, classOf[NullWritable], classOf[Text], classOf[TextOutputFormat[NullWritable, Text]], conf)
+      .saveAsHadoopFile(
+        path, classOf[NullWritable],classOf[Text], 
+        classOf[TextOutputFormat[NullWritable, Text]], conf)
   }
 
   /**
@@ -1424,7 +1426,7 @@ abstract class RDD[T: ClassTag](
   def saveAsObjectFile(path: String, conf: JobConf = new JobConf(sc.hadoopConfiguration)): Unit = withScope {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
-      .saveAsSequenceFile(path, None, conf)
+      .saveAsSequenceFile(path, conf = conf)
   }
 
   /**
