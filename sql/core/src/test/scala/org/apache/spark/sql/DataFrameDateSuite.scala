@@ -50,7 +50,7 @@ class DataFrameDateTimeSuite extends QueryTest {
 
 
     checkAnswer(
-      df.select("t").filter($"t" >= "2014-06-01"),
+      df.select("t").filter($"t" >= "2015"),
       Row(Date.valueOf("2015-01-01")) :: Nil)
   }
 }
