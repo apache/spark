@@ -130,7 +130,7 @@ function renderDagViz(forJob) {
     return;
   }
 
-   // If some stage's dotFile is empty because Throwable, fail fast and report error
+   // If some stage's dot-file is empty because Throwable, fail fast and report error
    var dotFiles = [];
    metadataContainer().selectAll(".stage-metadata").each(function() {
      var metadata = d3.select(this);
