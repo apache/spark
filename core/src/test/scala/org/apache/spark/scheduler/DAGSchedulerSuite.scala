@@ -699,6 +699,7 @@ class DAGSchedulerSuite
     runEvent(ExecutorLost("exec-hostA"))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
+
     val taskSet = taskSets(0)
     // should be ignored for being too old
     runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA",
@@ -751,7 +752,7 @@ class DAGSchedulerSuite
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
       (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
-      (Success, makeMapStatus("hostC", shuffleMapRdd.partitions.size))
+      (Success, makeMapStatus("hostA", shuffleMapRdd.partitions.size))
     ))
 
     complete(taskSets(1), Seq(
@@ -766,10 +767,18 @@ class DAGSchedulerSuite
     // Cause mapOutTracker remove hostA outputs for taskset(0).
     // Task that resubmitted will fetch matadata failed.
     runEvent(CompletionEvent(taskSets(1).tasks(0),
-      FetchFailed(null, firstShuffleId, -1, 0, "Fetch matadata failed"),
+      FetchFailed(null, firstShuffleId, 2, 0, "Fetch failed"),
       null, null, createFakeTaskInfo(), null))
+
     // FetchFailed cause resubmit failed Stages.
     scheduler.resubmitFailedStages()
+
+    runEvent(CompletionEvent(taskSets(0).tasks(2), Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.size), null, createFakeTaskInfo(), null))
+
+    val thrown = intercept[Exception] { mapOutputTracker.getServerStatuses(0, 2) }
+    // Assert not throw MetadataFetchFailedException: Missing an output location for shuffle 0
+    assert(thrown == null)
 
     runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
       makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))

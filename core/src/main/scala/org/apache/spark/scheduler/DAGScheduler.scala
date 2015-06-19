@@ -1215,10 +1215,12 @@ class DAGScheduler(
 
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
         // TODO: This will be really slow if we keep accumulating shuffle map stages
-        for ((shuffleId, stage) <- shuffleToMapStage if !runningStages.contains(stage) ) {
+        for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
-          val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-          mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+          if (!runningStages.contains(stage)) {
+            val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
+            mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+          }
         }
         if (shuffleToMapStage.isEmpty) {
           mapOutputTracker.incrementEpoch()
