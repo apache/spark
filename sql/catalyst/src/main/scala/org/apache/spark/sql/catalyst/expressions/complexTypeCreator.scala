@@ -100,8 +100,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override lazy val resolved: Boolean = childrenResolved
-
   override lazy val dataType: StructType = {
     assert(resolved,
       s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")

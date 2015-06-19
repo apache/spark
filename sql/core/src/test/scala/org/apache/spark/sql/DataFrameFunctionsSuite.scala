@@ -122,10 +122,10 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
 
-  test("named_struct with column expression") {
+  test("namedStruct with column expression") {
     val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
     val row = df.select(
-      named_struct(lit("x"), (col("a") * 2), lit("y"), col("b"))).take(2)
+      namedStruct(lit("x"), (col("a") * 2), lit("y"), col("b"))).take(2)
 
     val expectedType = StructType(Seq(
       StructField("x", IntegerType, nullable = false),
@@ -137,10 +137,10 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row(1).getAs[Row](0) === Row(4, "str2"))
   }
 
-  test("named_struct with literal columns") {
+  test("namedStruct with literal columns") {
     val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
     val row = df.select(
-      named_struct(lit("x"), (col("a") * 2), lit("y"), lit(5.0))).take(2)
+      namedStruct(lit("x"), (col("a") * 2), lit("y"), lit(5.0))).take(2)
 
     val expectedType = StructType(Seq(
       StructField("x", IntegerType, nullable = false),
@@ -152,10 +152,10 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row(1).getAs[Row](0) === Row(4, 5.0))
   }
 
-  test("named_struct with all literal columns") {
+  test("namedStruct with all literal columns") {
     val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
     val row = df.select(
-      named_struct(lit("x"), lit("v"), lit("y"), lit(5.0))).take(2)
+      namedStruct(lit("x"), lit("v"), lit("y"), lit(5.0))).take(2)
 
     val expectedType = StructType(Seq(
       StructField("x", StringType, nullable = false),
@@ -167,16 +167,16 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row(1).getAs[Row](0) === Row("v", 5.0))
   }
 
-  test("named_struct with odd arguments") {
+  test("namedStruct with odd arguments") {
     intercept[IllegalArgumentException] {
-      named_struct(col("x"))
+      namedStruct(col("x"))
     }
   }
 
-  test("named_struct with non string literal names") {
+  test("namedStruct with non string literal names") {
     val df = Seq((1, "str")).toDF("a", "b")
     intercept[IllegalArgumentException] {
-      df.select(named_struct(lit(1), (col("a") * 2), lit("y"), lit(5.0)))
+      df.select(namedStruct(lit(1), (col("a") * 2), lit("y"), lit(5.0)))
     }
   }
 

@@ -769,9 +769,9 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def named_struct(cols: Column*): Column = {
+  def namedStruct(cols: Column*): Column = {
     require(cols.length % 2 == 0,
-      s"named_struct expects an even number of arguments.")
+      s"namedStruct expects an even number of arguments.")
     CreateNamedStruct(cols.map(_.expr))
   }
 
