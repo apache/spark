@@ -115,7 +115,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
       }
       if (invalidNames.size != 0) {
         TypeCheckResult.TypeCheckFailure(
-          s"Non String Literal fields at odd position $invalidNames")
+          s"Non String Literal fields at odd position : ${invalidNames.mkString(",")}")
       } else {
         TypeCheckResult.TypeCheckSuccess
       }
