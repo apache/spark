@@ -893,16 +893,16 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.assertIsNone(stkm.latestModel())
         self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
 
-        stkm.setInitialCenters([[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0])
+        stkm.setInitialCenters(
+            centers=[[0.0, 0.0], [1.0, 1.0]], weights=[1.0, 1.0])
         self.assertEquals(
             stkm.latestModel().centers, [[0.0, 0.0], [1.0, 1.0]])
         self.assertEquals(stkm.latestModel().clusterWeights, [1.0, 1.0])
 
     def test_accuracy_for_single_center(self):
-        """Test that the parameters obtained are correct for a single center."""
-        numBatches, numPoints, k, d, r, seed = 5, 5, 1, 5, 0.1, 0
+        """Test that parameters obtained are correct for a single center."""
         centers, batches = self.streamingKMeansDataGenerator(
-            numBatches, numPoints, k, d, r, seed)
+            batches=5, numPoints=5, k=1, d=5, r=0.1, seed=0)
         stkm = StreamingKMeans(1)
         stkm.setInitialCenters([[0., 0., 0., 0., 0.]], [0.])
         input_stream = self.ssc.queueStream(
@@ -914,7 +914,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self._ssc_wait(t, 10.0, 0.01)
         self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
         realCenters = array_sum(array(centers), axis=0)
-        for i in range(d):
+        for i in range(5):
             modelCenters = stkm.latestModel().centers[0][i]
             self.assertAlmostEqual(centers[0][i], modelCenters, 1)
             self.assertAlmostEqual(realCenters[i], modelCenters, 1)
@@ -934,8 +934,8 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         """Test the model on toy data with four clusters."""
         stkm = StreamingKMeans()
         initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
-        weights = [1.0, 1.0, 1.0, 1.0]
-        stkm.setInitialCenters(initCenters, weights)
+        stkm.setInitialCenters(
+            centers=initCenters, weights=[1.0, 1.0, 1.0, 1.0])
 
         # Create a toy dataset by setting a tiny offest for each point.
         offsets = [[0, 0.1], [0, -0.1], [0.1, 0], [-0.1, 0]]
@@ -958,10 +958,10 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
     def test_predictOn_model(self):
         """Test that the model predicts correctly on toy data."""
-        initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
-        weights = [1.0, 1.0, 1.0, 1.0]
         stkm = StreamingKMeans()
-        stkm._model = StreamingKMeansModel(initCenters, weights)
+        stkm._model = StreamingKMeansModel(
+            clusterCenters=[[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]],
+            clusterWeights=[1.0, 1.0, 1.0, 1.0])
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
         predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
