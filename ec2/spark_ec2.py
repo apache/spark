@@ -414,6 +414,7 @@ EC2_INSTANCE_TYPES = {
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
     "t2.medium":   "hvm",
+    "t2.large":    "hvm",
 }
 
 
@@ -972,6 +973,7 @@ def get_num_disks(instance_type):
         "t2.micro":    0,
         "t2.small":    0,
         "t2.medium":   0,
+        "t2.large":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
