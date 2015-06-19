@@ -98,22 +98,6 @@ hive_thriftserver = Module(
 )
 
 
-mllib = Module(
-    name="mllib",
-    dependencies=[sql],
-    source_file_regexes=[
-        "examples/src/main/java/org/apache/spark/examples/mllib/",
-        "examples/src/main/scala/org/apache/spark/examples/mllib",
-        "data/mllib/",
-        "mllib/",
-    ],
-    sbt_test_goals=[
-        "mllib/test",
-        "examples/test",
-    ]
-)
-
-
 graphx = Module(
     name="graphx",
     dependencies=[],
@@ -143,6 +127,22 @@ streaming = Module(
         "streaming-mqtt/test",
         "streaming-twitter/test",
         "streaming-zeromq/test",
+    ]
+)
+
+
+mllib = Module(
+    name="mllib",
+    dependencies=[streaming, sql],
+    source_file_regexes=[
+        "examples/src/main/java/org/apache/spark/examples/mllib/",
+        "examples/src/main/scala/org/apache/spark/examples/mllib",
+        "data/mllib/",
+        "mllib/",
+    ],
+    sbt_test_goals=[
+        "mllib/test",
+        "examples/test",
     ]
 )
 
