@@ -569,7 +569,7 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_modules = set(test_modules)
 
-    hive_profiles = (sql in test_modules)
+    hive_profiles = (sql in test_modules or root in test_modules)
     test_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=hive_profiles)
 
     if build_tool == "maven":
