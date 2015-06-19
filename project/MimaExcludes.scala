@@ -52,11 +52,16 @@ object MimaExcludes {
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // NanoTime is only used inside catalyst, not needed anymore
+            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
+            // not needed anymore
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.timestamp.NanoTime"),
               ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.timestamp.NanoTime$")
+              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
           )
         case v if v.startsWith("1.4") =>
           Seq(
