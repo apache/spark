@@ -47,7 +47,9 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hash(Literal(true)), 1231)
     checkEvaluation(Hash(Literal.create(3.7, DecimalType.Unlimited)), -644612093)
     checkEvaluation(Hash(Literal.create(java.sql.Date.valueOf("1991-12-07"), DateType)), 8010)
-    checkEvaluation(Hash(Literal.create(java.sql.Timestamp.valueOf("1991-12-07 12:00:00"), TimestampType)), -1745111446)
+    checkEvaluation(
+      Hash(Literal.create(java.sql.Timestamp.valueOf("1991-12-07 12:00:00"), TimestampType)),
+      -1745111446)
     checkEvaluation(Hash(Literal.create(Map[Int, Int](1 -> 2), IntegerType)), 3)
     checkEvaluation(Hash(Literal.create(Seq[Byte](1, 2, 3, 4, 5, 6), BinaryType)), 21)
     checkEvaluation(Hash(Literal.create(Array[Double](1.1, 2.2, 3.3, 4.4, 5.5, 6.6), DoubleType)),

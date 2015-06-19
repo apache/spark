@@ -1524,7 +1524,7 @@ object functions {
   def md5(columnName: String): Column = md5(Column(columnName))
 
    /**
-   * Calculates the hash value of the argument.
+   * Calculates the hash value of the column.
    *
    * @group misc_funcs
    * @since 1.5.0
@@ -1532,7 +1532,7 @@ object functions {
   def hash(e: Column): Column = Hash(e.expr)
 
   /**
-   * Calculates the hash value of the argument.
+   * Calculates the hash value of the column.
    *
    * @group misc_funcs
    * @since 1.5.0

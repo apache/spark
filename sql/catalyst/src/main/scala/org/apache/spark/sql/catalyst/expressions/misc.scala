@@ -49,7 +49,6 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
 /**
  * A function that returns a hash value of the argument
- *
  */
 case class Hash(child: Expression) extends UnaryExpression {
 
@@ -65,14 +64,10 @@ case class Hash(child: Expression) extends UnaryExpression {
   def hashCode(v: Any): Int = v match {
     case null => 0
     case arr: Array[_] => {
-      var res: Int = 0
-      arr.foreach { case (i) => res += hashCode(i) }
-      res
+      arr.foldLeft(0) { (acc, n) => acc + hashCode(n) }
     }
     case seq: Seq[_] => {
-      var res: Int = 0
-      seq.foreach { case (i) => res += hashCode(i) }
-      res
+      seq.foldLeft(0) { (acc, n) => acc + hashCode(n) }
     }
     case m: Map[_, _] => {
       var res: Int = 0
@@ -89,7 +84,7 @@ case class Hash(child: Expression) extends UnaryExpression {
     case others => others.hashCode()
   }
 
-  override def toString: String = s"hash($child)"
+  override def toString: String = s"HASH($child)"
 
 }
 
