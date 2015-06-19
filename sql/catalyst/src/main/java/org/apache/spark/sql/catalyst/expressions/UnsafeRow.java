@@ -92,6 +92,7 @@ public final class UnsafeRow extends BaseMutableRow {
    */
   public static final Set<DataType> readableFieldTypes;
 
+  // TODO: support DecimalType
   static {
     settableFieldTypes = Collections.unmodifiableSet(
       new HashSet<DataType>(
@@ -111,7 +112,8 @@ public final class UnsafeRow extends BaseMutableRow {
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
       Arrays.asList(new DataType[]{
-        StringType
+        StringType,
+        BinaryType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -222,11 +224,6 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public void setString(int ordinal, String value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public int size() {
     return numFields;
   }
@@ -249,6 +246,8 @@ public final class UnsafeRow extends BaseMutableRow {
       return null;
     } else if (dataType == StringType) {
       return getUTF8String(i);
+    } else if (dataType == BinaryType) {
+      return getBinary(i);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -311,21 +310,23 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   public UTF8String getUTF8String(int i) {
+    return UTF8String.fromBytes(getBinary(i));
+  }
+
+  public byte[] getBinary(int i) {
     assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
-    final long offsetToStringSize = getLong(i);
-    final int stringSizeInBytes =
-      (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
-    final byte[] strBytes = new byte[stringSizeInBytes];
+    final long offsetAndSize = getLong(i);
+    final int offset = (int)(offsetAndSize >> 32);
+    final int size = (int)(offsetAndSize & ((1L << 32) - 1));
+    final byte[] bytes = new byte[size];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + offsetToStringSize + 8,  // The `+ 8` is to skip past the size to get the data
-      strBytes,
+      baseOffset + offset,
+      bytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,
-      stringSizeInBytes
+      size
     );
-    str.set(strBytes);
-    return str;
+    return bytes;
   }
 
   @Override

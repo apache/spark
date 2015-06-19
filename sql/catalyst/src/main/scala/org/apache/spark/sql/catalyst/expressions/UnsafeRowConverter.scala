@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -122,6 +120,7 @@ private object UnsafeColumnWriter {
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
+      case BinaryType => BinaryUnsafeColumnWriter
       case DateType => IntUnsafeColumnWriter
       case TimestampType => LongUnsafeColumnWriter
       case t =>
@@ -141,6 +140,7 @@ private object LongUnsafeColumnWriter extends LongUnsafeColumnWriter
 private object FloatUnsafeColumnWriter extends FloatUnsafeColumnWriter
 private object DoubleUnsafeColumnWriter extends DoubleUnsafeColumnWriter
 private object StringUnsafeColumnWriter extends StringUnsafeColumnWriter
+private object BinaryUnsafeColumnWriter extends BinaryUnsafeColumnWriter
 
 private abstract class PrimitiveUnsafeColumnWriter extends UnsafeColumnWriter {
   // Primitives don't write to the variable-length region:
@@ -238,7 +238,7 @@ private class DoubleUnsafeColumnWriter private() extends PrimitiveUnsafeColumnWr
 private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter {
   def getSize(source: InternalRow, column: Int): Int = {
     val numBytes = source.get(column).asInstanceOf[UTF8String].getBytes.length
-    8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 
   override def write(
@@ -246,19 +246,45 @@ private class StringUnsafeColumnWriter private() extends UnsafeColumnWriter {
       target: UnsafeRow,
       column: Int,
       appendCursor: Int): Int = {
-    val value = source.get(column).asInstanceOf[UTF8String]
+    val value = source.get(column).asInstanceOf[UTF8String].getBytes
     val baseObject = target.getBaseObject
     val baseOffset = target.getBaseOffset
-    val numBytes = value.getBytes.length
-    PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + appendCursor, numBytes)
+    val numBytes = value.length
     PlatformDependent.copyMemory(
-      value.getBytes,
+      value,
       PlatformDependent.BYTE_ARRAY_OFFSET,
       baseObject,
-      baseOffset + appendCursor + 8,
+      baseOffset + appendCursor,
       numBytes
     )
-    target.setLong(column, appendCursor)
-    8 + ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+    target.setLong(column, (appendCursor.toLong << 32) | numBytes.toLong)
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+  }
+}
+
+private class BinaryUnsafeColumnWriter private() extends UnsafeColumnWriter {
+  def getSize(source: InternalRow, column: Int): Int = {
+    val numBytes = source.getAs[Array[Byte]](column).length
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
+  }
+
+  override def write(
+    source: InternalRow,
+    target: UnsafeRow,
+    column: Int,
+    appendCursor: Int): Int = {
+    val value = source.getAs[Array[Byte]](column)
+    val baseObject = target.getBaseObject
+    val baseOffset = target.getBaseOffset
+    val numBytes = value.length
+    PlatformDependent.copyMemory(
+      value,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      baseObject,
+      baseOffset + appendCursor,
+      numBytes
+    )
+    target.setLong(column, (appendCursor.toLong << 32) | numBytes.toLong)
+    ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 }
