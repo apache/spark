@@ -44,7 +44,7 @@ case class Md5(child: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"""org.apache.spark.unsafe.types.UTF8String.fromString
-         |(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))""".stripMargin)
+      "org.apache.spark.unsafe.types.UTF8String.fromString" +
+        s"(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
 }
