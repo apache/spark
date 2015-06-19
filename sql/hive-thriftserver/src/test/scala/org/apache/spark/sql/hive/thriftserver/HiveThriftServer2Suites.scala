@@ -113,8 +113,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) ===
-        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 
@@ -238,7 +238,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       // first session, we get the default value of the session status
       { statement =>
 
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
         defaultV1 = rs1.getString(1)
         assert(defaultV1 != "200")
@@ -256,19 +256,21 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       { statement =>
 
         val queries = Seq(
-            s"SET ${SQLConf.SHUFFLE_PARTITIONS}=291",
+            s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
             "SET hive.cli.print.header=true"
             )
 
         queries.map(statement.execute)
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
-        assert("spark.sql.shuffle.partitions=291" === rs1.getString(1))
+        assert("spark.sql.shuffle.partitions" === rs1.getString(1))
+        assert("291" === rs1.getString(2))
         rs1.close()
 
         val rs2 = statement.executeQuery("SET hive.cli.print.header")
         rs2.next()
-        assert("hive.cli.print.header=true" === rs2.getString(1))
+        assert("hive.cli.print.header" === rs2.getString(1))
+        assert("true" === rs2.getString(2))
         rs2.close()
       },
 
@@ -276,7 +278,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       // default value
       { statement =>
 
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
         assert(defaultV1 === rs1.getString(1))
         rs1.close()
@@ -404,8 +406,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) ===
-        s"spark.sql.hive.version=${HiveContext.hiveExecutionVersion}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 }

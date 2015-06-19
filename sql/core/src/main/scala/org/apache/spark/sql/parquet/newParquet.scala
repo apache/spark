@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.util.Try
 
 import com.google.common.base.Objects
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -34,16 +33,16 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.{Partition => SparkPartition, SerializableWritable, Logging, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD._
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, SparkException, Partition => SparkPartition}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -220,7 +219,7 @@ private[sql] class ParquetRelation2(
     }
 
     conf.setClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS,
+      SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
       classOf[ParquetOutputCommitter])
 
@@ -258,8 +257,8 @@ private[sql] class ParquetRelation2(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
@@ -498,7 +497,7 @@ private[sql] object ParquetRelation2 extends Logging {
       ParquetTypesConverter.convertToString(dataSchema.toAttributes))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+    conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
   }
 
   /** This closure sets input paths at the driver side. */

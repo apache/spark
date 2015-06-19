@@ -48,7 +48,7 @@ package object debug {
    */
   implicit class DebugSQLContext(sqlContext: SQLContext) {
     def debug(): Unit = {
-      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
     }
   }
 

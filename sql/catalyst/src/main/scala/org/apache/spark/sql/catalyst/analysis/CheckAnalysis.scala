@@ -51,14 +51,6 @@ trait CheckAnalysis {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
-            }
-
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 

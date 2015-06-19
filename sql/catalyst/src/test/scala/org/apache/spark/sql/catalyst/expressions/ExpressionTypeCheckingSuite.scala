@@ -54,8 +54,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   test("check types for unary arithmetic") {
     assertError(UnaryMinus('stringField), "operator - accepts numeric type")
-    assertSuccess(Sqrt('stringField)) // We will cast String to Double for sqrt
-    assertError(Sqrt('booleanField), "function sqrt accepts numeric type")
     assertError(Abs('stringField), "function abs accepts numeric type")
     assertError(BitwiseNot('stringField), "operator ~ accepts integral type")
   }

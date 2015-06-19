@@ -39,7 +39,8 @@ import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreType
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{Logging, SerializableWritable}
+import org.apache.spark.{Logging}
+import org.apache.spark.util.SerializableConfiguration
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -283,7 +284,7 @@ private[orc] case class OrcTableScan(
       classOf[Writable]
     ).asInstanceOf[HadoopRDD[NullWritable, Writable]]
 
-    val wrappedConf = new SerializableWritable(conf)
+    val wrappedConf = new SerializableConfiguration(conf)
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))

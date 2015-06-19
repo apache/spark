@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
@@ -27,9 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -91,7 +91,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
       val confBroadcast =
-        t.sqlContext.sparkContext.broadcast(new SerializableWritable(sharedHadoopConf))
+        t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
       pruneFilterProject(
         l,
         projects,
@@ -126,7 +126,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Otherwise, the cost of broadcasting HadoopConf in every RDD will be high.
     val sharedHadoopConf = SparkHadoopUtil.get.conf
     val confBroadcast =
-      relation.sqlContext.sparkContext.broadcast(new SerializableWritable(sharedHadoopConf))
+      relation.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
 
     // Builds RDD[Row]s for each selected partition.
     val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
