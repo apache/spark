@@ -697,10 +697,7 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     // pretend we were told hostA went away
-    val oldEpoch = mapOutputTracker.getEpoch
     runEvent(ExecutorLost("exec-hostA"))
-    val newEpoch = mapOutputTracker.getEpoch
-    assert(newEpoch > oldEpoch)
 
     val taskSet = taskSets(0)
     // should be ignored for being too old
@@ -712,8 +709,8 @@ class DAGSchedulerSuite
     // should be ignored for being too old
     runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA",
       reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
-    // should work because it's a new epoch
-    taskSet.tasks(1).epoch = newEpoch
+    // should work because the host is re-add
+    runEvent(ExecutorAdded("exec-hostA", "hostA"))
     runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA",
       reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
