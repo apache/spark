@@ -58,36 +58,13 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
   protected override def evalInternal(evalE: Any) = numeric.negate(evalE)
 }
 
-case class Sqrt(child: Expression) extends UnaryArithmetic {
-  override def dataType: DataType = DoubleType
-  override def nullable: Boolean = true
-  override def toString: String = s"SQRT($child)"
+case class UnaryPositive(child: Expression) extends UnaryArithmetic {
+  override def toString: String = s"positive($child)"
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function sqrt")
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    defineCodeGen(ctx, ev, c => c)
 
-  private lazy val numeric = TypeUtils.getNumeric(child.dataType)
-
-  protected override def evalInternal(evalE: Any) = {
-    val value = numeric.toDouble(evalE)
-    if (value < 0) null
-    else math.sqrt(value)
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        if (${eval.primitive} < 0.0) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.primitive} = java.lang.Math.sqrt(${eval.primitive});
-        }
-      }
-    """
-  }
+  protected override def evalInternal(evalE: Any) = evalE
 }
 
 /**
@@ -341,31 +318,29 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isNativeType(left.dataType)) {
-      val eval1 = left.gen(ctx)
-      val eval2 = right.gen(ctx)
-      eval1.code + eval2.code + s"""
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(left.dataType)} ${ev.primitive} =
-          ${ctx.defaultValue(left.dataType)};
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
-        if (${eval1.isNull}) {
-          ${ev.isNull} = ${eval2.isNull};
-          ${ev.primitive} = ${eval2.primitive};
-        } else if (${eval2.isNull}) {
-          ${ev.isNull} = ${eval1.isNull};
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
+
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode > 0) {
           ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitive} > ${eval2.primitive}) {
-            ${ev.primitive} = ${eval1.primitive};
-          } else {
-            ${ev.primitive} = ${eval2.primitive};
-          }
+          ${ev.primitive} = ${eval2.primitive};
         }
-      """
-    } else {
-      super.genCode(ctx, ev)
-    }
+      }
+    """
   }
   override def toString: String = s"MaxOf($left, $right)"
 }
@@ -395,33 +370,29 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isNativeType(left.dataType)) {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val compCode = ctx.genComp(dataType, eval1.primitive, eval2.primitive)
 
-      val eval1 = left.gen(ctx)
-      val eval2 = right.gen(ctx)
+    eval1.code + eval2.code + s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(left.dataType)} ${ev.primitive} =
+        ${ctx.defaultValue(left.dataType)};
 
-      eval1.code + eval2.code + s"""
-        boolean ${ev.isNull} = false;
-        ${ctx.javaType(left.dataType)} ${ev.primitive} =
-          ${ctx.defaultValue(left.dataType)};
-
-        if (${eval1.isNull}) {
-          ${ev.isNull} = ${eval2.isNull};
-          ${ev.primitive} = ${eval2.primitive};
-        } else if (${eval2.isNull}) {
-          ${ev.isNull} = ${eval1.isNull};
+      if (${eval1.isNull}) {
+        ${ev.isNull} = ${eval2.isNull};
+        ${ev.primitive} = ${eval2.primitive};
+      } else if (${eval2.isNull}) {
+        ${ev.isNull} = ${eval1.isNull};
+        ${ev.primitive} = ${eval1.primitive};
+      } else {
+        if ($compCode < 0) {
           ${ev.primitive} = ${eval1.primitive};
         } else {
-          if (${eval1.primitive} < ${eval2.primitive}) {
-            ${ev.primitive} = ${eval1.primitive};
-          } else {
-            ${ev.primitive} = ${eval2.primitive};
-          }
+          ${ev.primitive} = ${eval2.primitive};
         }
-      """
-    } else {
-      super.genCode(ctx, ev)
-    }
+      }
+    """
   }
 
   override def toString: String = s"MinOf($left, $right)"

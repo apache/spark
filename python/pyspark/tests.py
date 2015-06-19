@@ -179,9 +179,12 @@ class SorterTests(unittest.TestCase):
                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
+        class CustomizedSorter(ExternalSorter):
+            def _next_limit(self):
+                return self.memory_limit
         l = list(range(1024))
         random.shuffle(l)
-        sorter = ExternalSorter(1)
+        sorter = CustomizedSorter(1)
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
         self.assertGreater(shuffle.DiskBytesSpilled, 0)
         last = shuffle.DiskBytesSpilled
@@ -457,6 +460,14 @@ class RDDTests(ReusedPySparkTestCase):
         id2 = rdd2.id()
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
+
+    def test_empty_rdd(self):
+        rdd = self.sc.emptyRDD()
+        self.assertTrue(rdd.isEmpty())
+
+    def test_sum(self):
+        self.assertEqual(0, self.sc.emptyRDD().sum())
+        self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970

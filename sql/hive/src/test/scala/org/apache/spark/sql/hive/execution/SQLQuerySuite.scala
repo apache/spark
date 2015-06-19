@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.hive.{HiveQLDialect, MetastoreRelation}
+import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
@@ -191,9 +191,9 @@ class SQLQuerySuite extends QueryTest {
       }
     }
 
-    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
+    val originalConf = convertCTAS
 
-    setConf("spark.sql.hive.convertCTAS", "true")
+    setConf(HiveContext.CONVERT_CTAS, true)
 
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -235,7 +235,7 @@ class SQLQuerySuite extends QueryTest {
     checkRelation("ctas1", false)
     sql("DROP TABLE ctas1")
 
-    setConf("spark.sql.hive.convertCTAS", originalConf)
+    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("SQL Dialect Switching") {
@@ -332,7 +332,7 @@ class SQLQuerySuite extends QueryTest {
 
     val origUseParquetDataSource = conf.parquetUseDataSourceApi
     try {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
       sql(
         """CREATE TABLE ctas5
           | STORED AS parquet AS
@@ -348,7 +348,7 @@ class SQLQuerySuite extends QueryTest {
         "MANAGED_TABLE"
       )
 
-      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      val default = convertMetastoreParquet
       // use the Hive SerDe for parquet tables
       sql("set spark.sql.hive.convertMetastoreParquet = false")
       checkAnswer(
@@ -356,7 +356,7 @@ class SQLQuerySuite extends QueryTest {
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
       sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
     } finally {
-      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource)
     }
   }
 
@@ -603,8 +603,8 @@ class SQLQuerySuite extends QueryTest {
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).registerTempTable("data")
-    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
-    setConf("spark.sql.hive.convertCTAS", "false")
+    val originalConf = convertCTAS
+    setConf(HiveContext.CONVERT_CTAS, false)
 
     sql("CREATE TABLE explodeTest (key bigInt)")
     table("explodeTest").queryExecution.analyzed match {
@@ -621,7 +621,7 @@ class SQLQuerySuite extends QueryTest {
 
     sql("DROP TABLE explodeTest")
     dropTempTable("data")
-    setConf("spark.sql.hive.convertCTAS", originalConf)
+    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("sanity test for SPARK-6618") {
@@ -932,6 +932,34 @@ class SQLQuerySuite extends QueryTest {
       sql("drop table if exists dynparttest1")
       sql("drop table if exists dynparttest2")
       sql("set hive.exec.dynamic.partition.mode=strict")
+    }
+  }
+
+  test("Call add jar in a different thread (SPARK-8306)") {
+    @volatile var error: Option[Throwable] = None
+    val thread = new Thread {
+      override def run() {
+        // To make sure this test works, this jar should not be loaded in another place.
+        TestHive.sql(
+          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        try {
+          TestHive.sql(
+            """
+              |CREATE TEMPORARY FUNCTION example_max
+              |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
+            """.stripMargin)
+        } catch {
+          case throwable: Throwable =>
+            error = Some(throwable)
+        }
+      }
+    }
+    thread.start()
+    thread.join()
+    error match {
+      case Some(throwable) =>
+        fail("CREATE TEMPORARY FUNCTION should not fail.", throwable)
+      case None => // OK
     }
   }
 }
