@@ -890,6 +890,24 @@ object functions {
   def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
 
   /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(e: Column): Column = Bin(e.expr)
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
+
+  /**
    * Computes the cube-root of the given value.
    *
    * @group math_funcs

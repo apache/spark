@@ -110,6 +110,16 @@ class DataFrameFunctionsSuite extends QueryTest {
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
 
+  test("bin") {
+    val df = Seq[(Integer, Integer)]((12, null)).toDF("a", "b")
+    checkAnswer(
+      df.select(bin("a"), bin("b")),
+      Row("1100", null))
+    checkAnswer(
+      df.selectExpr("bin(a)", "bin(b)"),
+      Row("1100", null))
+  }
+
   test("if function") {
     val df = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
