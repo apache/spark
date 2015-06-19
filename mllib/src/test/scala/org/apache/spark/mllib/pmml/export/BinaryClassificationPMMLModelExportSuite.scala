@@ -19,13 +19,13 @@ package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.RegressionModel
 import org.dmg.pmml.RegressionNormalizationMethodType
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class BinaryClassificationPMMLModelExportSuite extends FunSuite {
+class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
 
   test("logistic regression PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
@@ -53,13 +53,13 @@ class BinaryClassificationPMMLModelExportSuite extends FunSuite {
     // ensure logistic regression has normalization method set to LOGIT
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.LOGIT)
   }
-  
+
   test("linear SVM PMML export") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
-    
+
     val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
-    
+
     // assert that the PMML format is as expected
     assert(svmModelExport.isInstanceOf[PMMLModelExport])
     val pmml = svmModelExport.getPmml
@@ -80,5 +80,5 @@ class BinaryClassificationPMMLModelExportSuite extends FunSuite {
     // ensure linear SVM has normalization method set to NONE
     assert(pmmlRegressionModel.getNormalizationMethod() == RegressionNormalizationMethodType.NONE)
   }
-  
+
 }

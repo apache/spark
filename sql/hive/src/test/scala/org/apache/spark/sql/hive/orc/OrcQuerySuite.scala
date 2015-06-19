@@ -21,10 +21,11 @@ import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.InternalRow
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -50,10 +51,7 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll with OrcTest {
-  override val sqlContext = TestHive
-
-  import TestHive.read
+class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   def getTempFilePath(prefix: String, suffix: String = ""): File = {
     val tempFile = File.createTempFile(prefix, suffix)
@@ -68,7 +66,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        sqlContext.read.format("orc").load(file),
         data.toDF().collect())
     }
   }

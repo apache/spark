@@ -205,7 +205,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     def setParams(self, predictionCol="prediction", labelCol="label",
                   metricName="rmse"):
         """
-        setParams(self, predictionCol="prediction", labelCol="label",
+        setParams(self, predictionCol="prediction", labelCol="label", \
                   metricName="rmse")
         Sets params for regression evaluator.
         """

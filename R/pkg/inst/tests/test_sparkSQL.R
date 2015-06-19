@@ -32,6 +32,15 @@ jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 parquetPath <- tempfile(pattern="sparkr-test", fileext=".parquet")
 writeLines(mockLines, jsonPath)
 
+# For test nafunctions, like dropna(), fillna(),...
+mockLinesNa <- c("{\"name\":\"Bob\",\"age\":16,\"height\":176.5}",
+                 "{\"name\":\"Alice\",\"age\":null,\"height\":164.3}",
+                 "{\"name\":\"David\",\"age\":60,\"height\":null}",
+                 "{\"name\":\"Amy\",\"age\":null,\"height\":null}",
+                 "{\"name\":null,\"age\":null,\"height\":null}")
+jsonPathNa <- tempfile(pattern="sparkr-test", fileext=".tmp")
+writeLines(mockLinesNa, jsonPathNa)
+
 test_that("infer types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
@@ -90,6 +99,43 @@ test_that("create DataFrame from RDD", {
   expect_true(count(df) == 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+})
+
+test_that("convert NAs to null type in DataFrames", {
+  rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
+  df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  expect_true(is.na(collect(df)[2, "a"]))
+  expect_equal(collect(df)[2, "b"], 4L)
+
+  l <- data.frame(x = 1L, y = c(1L, NA_integer_, 3L))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(df)[2, "x"], 1L)
+  expect_true(is.na(collect(df)[2, "y"]))
+
+  rdd <- parallelize(sc, list(list(1, 2), list(NA, 4)))
+  df <- createDataFrame(sqlContext, rdd, list("a", "b"))
+  expect_true(is.na(collect(df)[2, "a"]))
+  expect_equal(collect(df)[2, "b"], 4)
+
+  l <- data.frame(x = 1, y = c(1, NA_real_, 3))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(df)[2, "x"], 1)
+  expect_true(is.na(collect(df)[2, "y"]))
+
+  l <- list("a", "b", NA, "d")
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], "d")
+
+  l <- list("a", "b", NA_character_, "d")
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], "d")
+
+  l <- list(TRUE, FALSE, NA, TRUE)
+  df <- createDataFrame(sqlContext, l)
+  expect_true(is.na(collect(df)[3, "_1"]))
+  expect_equal(collect(df)[4, "_1"], TRUE)
 })
 
 test_that("toDF", {
@@ -495,6 +541,19 @@ test_that("read.df() from json file", {
   df <- read.df(sqlContext, jsonPath, "json")
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
+
+  # Check if we can apply a user defined schema
+  schema <- structType(structField("name", type = "string"),
+                       structField("age", type = "double"))
+
+  df1 <- read.df(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df1, "DataFrame"))
+  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+
+  # Run the same with loadDF
+  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
+  expect_true(inherits(df2, "DataFrame"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 })
 
 test_that("write.df() as parquet file", {
@@ -765,5 +824,105 @@ test_that("describe() on a DataFrame", {
   expect_equal(collect(stats)[5, "age"], "30")
 })
 
+test_that("dropna() on a DataFrame", {
+  df <- jsonFile(sqlContext, jsonPathNa)
+  rows <- collect(df)
+
+  # drop with columns
+  
+  expected <- rows[!is.na(rows$name),]
+  actual <- collect(dropna(df, cols = "name"))
+  expect_true(identical(expected, actual))
+
+  expected <- rows[!is.na(rows$age),]
+  actual <- collect(dropna(df, cols = "age"))
+  row.names(expected) <- row.names(actual)
+  # identical on two dataframes does not work here. Don't know why.
+  # use identical on all columns as a workaround.
+  expect_true(identical(expected$age, actual$age))
+  expect_true(identical(expected$height, actual$height))
+  expect_true(identical(expected$name, actual$name))
+  
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
+  actual <- collect(dropna(df, cols = c("age", "height")))
+  expect_true(identical(expected, actual))
+
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  actual <- collect(dropna(df))
+  expect_true(identical(expected, actual))
+  
+  # drop with how
+
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  actual <- collect(dropna(df))
+  expect_true(identical(expected, actual))
+
+  expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
+  actual <- collect(dropna(df, "all"))
+  expect_true(identical(expected, actual))
+  
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  actual <- collect(dropna(df, "any"))
+  expect_true(identical(expected, actual))
+
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
+  actual <- collect(dropna(df, "any", cols = c("age", "height")))
+  expect_true(identical(expected, actual))
+
+  expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
+  actual <- collect(dropna(df, "all", cols = c("age", "height")))
+  expect_true(identical(expected, actual))
+  
+  # drop with threshold
+  
+  expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
+  actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
+  expect_true(identical(expected, actual))  
+
+  expected <- rows[as.integer(!is.na(rows$age)) + 
+                   as.integer(!is.na(rows$height)) +
+                   as.integer(!is.na(rows$name)) >= 3,]
+  actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
+  expect_true(identical(expected, actual))
+})
+
+test_that("fillna() on a DataFrame", {
+  df <- jsonFile(sqlContext, jsonPathNa)
+  rows <- collect(df)
+  
+  # fill with value
+  
+  expected <- rows
+  expected$age[is.na(expected$age)] <- 50
+  expected$height[is.na(expected$height)] <- 50.6
+  actual <- collect(fillna(df, 50.6))
+  expect_true(identical(expected, actual))
+
+  expected <- rows
+  expected$name[is.na(expected$name)] <- "unknown"
+  actual <- collect(fillna(df, "unknown"))
+  expect_true(identical(expected, actual))
+
+  expected <- rows
+  expected$age[is.na(expected$age)] <- 50
+  actual <- collect(fillna(df, 50.6, "age"))
+  expect_true(identical(expected, actual))
+
+  expected <- rows
+  expected$name[is.na(expected$name)] <- "unknown"
+  actual <- collect(fillna(df, "unknown", c("age", "name")))
+  expect_true(identical(expected, actual))
+  
+  # fill with named list
+
+  expected <- rows
+  expected$age[is.na(expected$age)] <- 50
+  expected$height[is.na(expected$height)] <- 50.6
+  expected$name[is.na(expected$name)] <- "unknown"
+  actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
+  expect_true(identical(expected, actual))  
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
+unlink(jsonPathNa)

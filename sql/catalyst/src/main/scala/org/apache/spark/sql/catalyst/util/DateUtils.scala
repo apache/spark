@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.sql.Date
+import java.sql.{Timestamp, Date}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
- * helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
+ * Helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
  */
 object DateUtils {
   private val MILLIS_PER_DAY = 86400000
+  private val HUNDRED_NANOS_PER_SECOND = 10000000L
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val LOCAL_TIMEZONE = new ThreadLocal[TimeZone] {
@@ -45,17 +46,17 @@ object DateUtils {
     ((millisLocal + LOCAL_TIMEZONE.get().getOffset(millisLocal)) / MILLIS_PER_DAY).toInt
   }
 
-  private def toMillisSinceEpoch(days: Int): Long = {
+  def toMillisSinceEpoch(days: Int): Long = {
     val millisUtc = days.toLong * MILLIS_PER_DAY
     millisUtc - LOCAL_TIMEZONE.get().getOffset(millisUtc)
   }
 
-  def fromJavaDate(date: java.sql.Date): Int = {
+  def fromJavaDate(date: Date): Int = {
     javaDateToDays(date)
   }
 
-  def toJavaDate(daysSinceEpoch: Int): java.sql.Date = {
-    new java.sql.Date(toMillisSinceEpoch(daysSinceEpoch))
+  def toJavaDate(daysSinceEpoch: Int): Date = {
+    new Date(toMillisSinceEpoch(daysSinceEpoch))
   }
 
   def toString(days: Int): String = Cast.threadLocalDateFormat.get.format(toJavaDate(days))
@@ -64,9 +65,9 @@ object DateUtils {
     if (!s.contains('T')) {
       // JDBC escape string
       if (s.contains(' ')) {
-        java.sql.Timestamp.valueOf(s)
+        Timestamp.valueOf(s)
       } else {
-        java.sql.Date.valueOf(s)
+        Date.valueOf(s)
       }
     } else if (s.endsWith("Z")) {
       // this is zero timezone of ISO8601
@@ -85,6 +86,35 @@ object DateUtils {
       // ISO8601 with GMT insert
       val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
       ISO8601GMT.parse(s)
+    }
+  }
+
+  /**
+   * Return a java.sql.Timestamp from number of 100ns since epoch
+   */
+  def toJavaTimestamp(num100ns: Long): Timestamp = {
+    // setNanos() will overwrite the millisecond part, so the milliseconds should be
+    // cut off at seconds
+    var seconds = num100ns / HUNDRED_NANOS_PER_SECOND
+    var nanos = num100ns % HUNDRED_NANOS_PER_SECOND
+    // setNanos() can not accept negative value
+    if (nanos < 0) {
+      nanos += HUNDRED_NANOS_PER_SECOND
+      seconds -= 1
+    }
+    val t = new Timestamp(seconds * 1000)
+    t.setNanos(nanos.toInt * 100)
+    t
+  }
+
+  /**
+   * Return the number of 100ns since epoch from java.sql.Timestamp.
+   */
+  def fromJavaTimestamp(t: Timestamp): Long = {
+    if (t != null) {
+      t.getTime() * 10000L + (t.getNanos().toLong / 100) % 10000L
+    } else {
+      0L
     }
   }
 }

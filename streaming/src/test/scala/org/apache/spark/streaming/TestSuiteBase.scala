@@ -24,12 +24,12 @@ import scala.collection.mutable.SynchronizedBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler._
@@ -204,7 +204,7 @@ class BatchCounter(ssc: StreamingContext) {
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
+trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
   def framework: String = this.getClass.getSimpleName

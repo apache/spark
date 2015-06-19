@@ -146,7 +146,7 @@ private[spark] class MesosSchedulerBackend(
   private def createExecArg(): Array[Byte] = {
     if (execArgs == null) {
       val props = new HashMap[String, String]
-      for ((key,value) <- sc.conf.getAll) {
+      for ((key, value) <- sc.conf.getAll) {
         props(key) = value
       }
       // Serialize the map as an array of (String, String) pairs

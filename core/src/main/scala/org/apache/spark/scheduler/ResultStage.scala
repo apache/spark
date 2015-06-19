@@ -28,9 +28,9 @@ private[spark] class ResultStage(
     rdd: RDD[_],
     numTasks: Int,
     parents: List[Stage],
-    jobId: Int,
+    firstJobId: Int,
     callSite: CallSite)
-  extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
+  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
 
   // The active job for this result stage. Will be empty if the job has already finished
   // (e.g., because the job was cancelled).

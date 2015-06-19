@@ -57,7 +57,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
       """
-        |CREATE TEMPORARY FUNCTION udtf_count2 
+        |CREATE TEMPORARY FUNCTION udtf_count2
         |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
       """.stripMargin)
   }
@@ -874,15 +874,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
-    // current TestSerDe.jar is from 0.12.0
-    if (HiveShim.version == "0.12.0") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-          |WITH serdeproperties('s1'='9')
-        """.stripMargin)
-    }
     sql("DROP TABLE alter1")
   }
 
@@ -890,15 +881,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // this is a test case from mapjoin_addjar.q
     val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
-    if (HiveShim.version == "0.13.1") {
-      sql(s"ADD JAR $testJar")
-      sql(
-        """CREATE TABLE t1(a string, b string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-      sql("select * from src join t1 on src.key = t1.a")
-      sql("DROP TABLE t1")
-    }
+    sql(s"ADD JAR $testJar")
+    sql(
+      """CREATE TABLE t1(a string, b string)
+      |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
   }
 
   test("ADD FILE command") {
@@ -1095,13 +1084,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    val KV = "([^=]+)=([^=]*)".r
-    def collectResults(df: DataFrame): Set[(String, String)] =
+    def collectResults(df: DataFrame): Set[Any] =
       df.collect().map {
         case Row(key: String, value: String) => key -> value
-        case Row(KV(key, value)) => key -> value
+        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
       }.toSet
     conf.clear()
+
+    val expectedConfs = conf.getAllDefinedConfs.toSet
+    assertResult(expectedConfs)(collectResults(sql("SET -v")))
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -1113,15 +1104,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
-    }
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET -v"))
     }
 
     // "SET key"

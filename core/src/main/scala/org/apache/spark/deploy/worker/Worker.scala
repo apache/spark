@@ -554,7 +554,7 @@ private[deploy] object Worker extends Logging {
       conf = conf, securityManager = securityMgr)
     val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterAkkaUrls, systemName, actorName, workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 

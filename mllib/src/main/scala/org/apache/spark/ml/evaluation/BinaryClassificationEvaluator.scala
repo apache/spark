@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -28,11 +27,10 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
-@AlphaComponent
+@Experimental
 class BinaryClassificationEvaluator(override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol {
 

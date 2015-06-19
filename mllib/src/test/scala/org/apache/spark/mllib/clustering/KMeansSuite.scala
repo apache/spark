@@ -19,14 +19,13 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class KMeansSuite extends FunSuite with MLlibTestSparkContext {
+class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
@@ -75,7 +74,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
     val center = Vectors.dense(1.0, 2.0, 3.0)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=2, maxIterations=1)
+    var model = KMeans.train(data, k = 2, maxIterations = 1)
     assert(model.clusterCenters.size === 2)
   }
 
@@ -87,7 +86,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       2)
 
     // Make sure code runs.
-    var model = KMeans.train(data, k=3, maxIterations=1)
+    var model = KMeans.train(data, k = 3, maxIterations = 1)
     assert(model.clusterCenters.size === 3)
   }
 
@@ -281,7 +280,7 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object KMeansSuite extends FunSuite {
+object KMeansSuite extends SparkFunSuite {
   def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
     val singlePoint = isSparse match {
       case true =>
@@ -305,7 +304,7 @@ object KMeansSuite extends FunSuite {
   }
 }
 
-class KMeansClusterSuite extends FunSuite with LocalClusterSparkContext {
+class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

@@ -242,6 +242,22 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   running against earlier versions, this property will be ignored.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above.
+  This keytab will be copied to the node running the Application Master via the Secure Distributed Cache,
+  for renewing the login tickets and the delegation tokens periodically.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure HDFS.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN

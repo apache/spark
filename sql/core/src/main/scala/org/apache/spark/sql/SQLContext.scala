@@ -27,20 +27,18 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import com.google.common.reflect.TypeToken
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -82,13 +80,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def setConf(props: Properties): Unit = conf.setConf(props)
 
+  /** Set the given Spark SQL configuration property. */
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+
   /**
    * Set the given Spark SQL configuration property.
    *
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConf(key, value)
+  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -96,7 +97,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = conf.getConf(key)
+  def getConf(key: String): String = conf.getConfString(key)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue` in [[SQLConfEntry]].
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * desired one.
+   */
+  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+    conf.getConf(entry, defaultValue)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -105,7 +121,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -122,7 +138,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(conf)
+  protected[sql] lazy val functionRegistry: FunctionRegistry =
+    new OverrideFunctionRegistry(FunctionRegistry.builtin)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -184,9 +201,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.dialect
   }
 
-  sparkContext.getConf.getAll.foreach {
-    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
-    case _ =>
+  {
+    // We extract spark sql settings from SparkContext's conf and put them to
+    // Spark SQL's conf.
+    // First, we populate the SQLConf (conf). So, we can make sure that other values using
+    // those settings in their construction can get the correct settings.
+    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
+    // and spark.sql.hive.metastore.jars to get correctly constructed.
+    val properties = new Properties
+    sparkContext.getConf.getAll.foreach {
+      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
+      case _ =>
+    }
+    // We directly put those settings to conf to avoid of calling setConf, which may have
+    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
+    // get constructed. If we call setConf directly, the constructed metadataHive may have
+    // wrong settings, or the construction may fail.
+    conf.setConf(properties)
+    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
+    // (e.g. hiveconf in HiveContext).
+    properties.foreach {
+      case (key, value) => setConf(key, value)
+    }
   }
 
   @transient
@@ -300,7 +336,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args :_*))
+        new ColumnName(sc.s(args : _*))
       }
     }
 
@@ -392,7 +428,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
     DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
@@ -468,10 +504,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[Row])
+      rowRDD.map(converter(_).asInstanceOf[InternalRow])
     } else {
-      rowRDD
+      rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
+   * converted to Catalyst rows.
+   */
+  private[sql]
+  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
     DataFrame(this, logicalPlan)
   }
@@ -507,13 +555,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
         Class.forName(className, true, Utils.getContextOrSparkClassLoader))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-
+      val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
+        (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
       iter.map { row =>
         new GenericRow(
-          extractors.zip(attributeSeq).map { case (e, attr) =>
-            CatalystTypeConverters.convertToCatalyst(e.invoke(row), attr.dataType)
-          }.toArray[Any]
-        ) : Row
+          methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
+        ) : InternalRow
       }
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
@@ -688,7 +736,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end`(exclusive) with step value 1.
+   * in an range from 0 to `end` (exclusive) with step value 1.
+   *
+   * @since 1.4.1
+   * @group dataframe
+   */
+  @Experimental
+  def range(end: Long): DataFrame = range(0, end)
+
+  /**
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 1.4.0
    * @group dataframe
@@ -703,7 +762,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end`(exclusive) with an step value, with partition number
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
    * @since 1.4.0
@@ -857,7 +916,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val planner = new SparkPlanner
 
   @transient
-  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
    * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
@@ -886,6 +945,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] def detachSession(): Unit = {
     tlSession.remove()
+  }
+
+  protected[sql] def setSession(session: SQLSession): Unit = {
+    detachSession()
+    tlSession.set(session)
   }
 
   protected[sql] class SQLSession {
@@ -919,7 +983,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
@@ -1001,7 +1065,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericRow(m): Row}
+      iter.map { m => new GenericRow(m): InternalRow}
     }
 
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
@@ -1011,7 +1075,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(TypeToken.of(beanClass))
+    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
     dataType.asInstanceOf[StructType].fields.map { f =>
       AttributeReference(f.name, f.dataType, f.nullable)()
     }
@@ -1023,21 +1087,33 @@ class SQLContext(@transient val sparkContext: SparkContext)
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
 
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
+   */
   @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
@@ -1048,6 +1124,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * [[DataFrame]] if no paths are passed in.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
    */
   @deprecated("Use read.parquet()", "1.4.0")
   @scala.annotation.varargs
@@ -1067,6 +1144,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String): DataFrame = {
@@ -1078,6 +1156,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String, schema: StructType): DataFrame = {
@@ -1086,6 +1165,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonFile(path: String, samplingRatio: Double): DataFrame = {
@@ -1098,6 +1178,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
@@ -1108,6 +1189,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
@@ -1117,6 +1199,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
@@ -1128,6 +1211,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
@@ -1139,6 +1223,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
@@ -1150,6 +1235,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
   @deprecated("Use read.json()", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
@@ -1161,6 +1247,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
    */
   @deprecated("Use read.load(path)", "1.4.0")
   def load(path: String): DataFrame = {
@@ -1171,6 +1258,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the dataset stored at path as a DataFrame, using the given data source.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
    */
   @deprecated("Use read.format(source).load(path)", "1.4.0")
   def load(path: String, source: String): DataFrame = {
@@ -1182,6 +1270,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
   @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
@@ -1193,6 +1282,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
   @deprecated("Use read.format(source).options(options).load()", "1.4.0")
   def load(source: String, options: Map[String, String]): DataFrame = {
@@ -1204,6 +1294,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
@@ -1216,6 +1308,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
    *
    * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
    */
   @deprecated("Use read.format(source).schema(schema).options(options).load()", "1.4.0")
   def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
@@ -1227,6 +1321,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * url named table.
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String): DataFrame = {
@@ -1244,6 +1339,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(
@@ -1263,6 +1359,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * of the [[DataFrame]].
    *
    * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
   @deprecated("use read.jdbc()", "1.4.0")
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {

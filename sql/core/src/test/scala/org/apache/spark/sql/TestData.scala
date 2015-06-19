@@ -109,8 +109,8 @@ object TestData {
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   val arrayData =
     TestSQLContext.sparkContext.parallelize(
-      ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
-      ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
+      ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
+      ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
   arrayData.toDF().registerTempTable("arrayData")
 
   case class MapData(data: scala.collection.Map[Int, String])

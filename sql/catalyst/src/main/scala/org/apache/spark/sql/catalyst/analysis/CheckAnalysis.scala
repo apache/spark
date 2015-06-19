@@ -51,25 +51,19 @@ trait CheckAnalysis {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
-            }
-
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+
+          case e: Expression if e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.failAnalysis(
+                  s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
+            }
 
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-          case b: BinaryExpression if !b.resolved =>
-            failAnalysis(
-              s"invalid expression ${b.prettyString} " +
-              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
           case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
             failAnalysis(

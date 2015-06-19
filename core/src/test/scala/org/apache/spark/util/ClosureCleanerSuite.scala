@@ -20,14 +20,12 @@ package org.apache.spark.util
 import java.io.NotSerializableException
 import java.util.Random
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.{TaskContext, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.rdd.RDD
 
-class ClosureCleanerSuite extends FunSuite {
+class ClosureCleanerSuite extends SparkFunSuite {
   test("closures inside an object") {
     assert(TestObject.run() === 30) // 6 + 7 + 8 + 9
   }
@@ -123,6 +121,10 @@ class ClosureCleanerSuite extends FunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testSubmitJob(sc) }
     }
   }
+
+  test("createNullValue") {
+    new TestCreateNullValue().run()
+  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
@@ -203,7 +205,7 @@ object TestObjectWithNestedReturns {
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
-      nums.map {x => 
+      nums.map {x =>
         // this return is fine since it will not transfer control outside the closure
         def foo(): Int = { return 5; 1 }
         foo()
@@ -350,5 +352,45 @@ private object TestUserClosuresActuallyCleaned {
       { case (_, _) => return }: (Int, Int) => Unit,
       { return }
     )
+  }
+}
+
+class TestCreateNullValue {
+
+  var x = 5
+
+  def getX: Int = x
+
+  def run(): Unit = {
+    val bo: Boolean = true
+    val c: Char = '1'
+    val b: Byte = 1
+    val s: Short = 1
+    val i: Int = 1
+    val l: Long = 1
+    val f: Float = 1
+    val d: Double = 1
+
+    // Bring in all primitive types into the closure such that they become
+    // parameters of the closure constructor. This allows us to test whether
+    // null values are created correctly for each type.
+    val nestedClosure = () => {
+      if (s.toString == "123") { // Don't really output them to avoid noisy
+        println(bo)
+        println(c)
+        println(b)
+        println(s)
+        println(i)
+        println(l)
+        println(f)
+        println(d)
+      }
+
+      val closure = () => {
+        println(getX)
+      }
+      ClosureCleaner.clean(closure)
+    }
+    nestedClosure()
   }
 }

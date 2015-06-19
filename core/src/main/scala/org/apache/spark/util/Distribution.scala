@@ -35,7 +35,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   java.util.Arrays.sort(data, startIdx, endIdx)
   val length = endIdx - startIdx
 
-  val defaultProbabilities = Array(0,0.25,0.5,0.75,1.0)
+  val defaultProbabilities = Array(0, 0.25, 0.5, 0.75, 1.0)
 
   /**
    * Get the value of the distribution at the given probabilities.  Probabilities should be
@@ -44,7 +44,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    */
   def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
       : IndexedSeq[Double] = {
-    probabilities.toIndexedSeq.map{p:Double => data(closestIndex(p))}
+    probabilities.toIndexedSeq.map { p: Double => data(closestIndex(p)) }
   }
 
   private def closestIndex(p: Double) = {

@@ -324,65 +324,73 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A one-hot encoder that maps a column of label indices to a column of binary vectors, with
-    at most a single one-value. By default, the binary vector has an element for each category, so
-    with 5 categories, an input value of 2.0 would map to an output vector of
-    (0.0, 0.0, 1.0, 0.0, 0.0). If includeFirst is set to false, the first category is omitted, so
-    the output vector for the previous example would be (0.0, 1.0, 0.0, 0.0) and an input value
-    of 0.0 would map to a vector of all zeros. Including the first category makes the vector columns
-    linearly dependent because they sum up to one.
+    A one-hot encoder that maps a column of category indices to a
+    column of binary vectors, with at most a single one-value per row
+    that indicates the input category index.
+    For example with 5 categories, an input value of 2.0 would map to
+    an output vector of `[0.0, 0.0, 1.0, 0.0]`.
+    The last category is not included by default (configurable via
+    :py:attr:`dropLast`) because it makes the vector entries sum up to
+    one, and hence linearly dependent.
+    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+    Note that this is different from scikit-learn's OneHotEncoder,
+    which keeps all categories.
+    The output vectors are sparse.
 
-    TODO: This method requires the use of StringIndexer first. Decouple them.
+    .. seealso::
+
+       :py:class:`StringIndexer` for converting categorical values into
+       category indices
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
-    >>> encoder = OneHotEncoder(includeFirst=False, inputCol="indexed", outputCol="features")
+    >>> encoder = OneHotEncoder(inputCol="indexed", outputCol="features")
     >>> encoder.transform(td).head().features
-    SparseVector(2, {})
+    SparseVector(2, {0: 1.0})
     >>> encoder.setParams(outputCol="freqs").transform(td).head().freqs
-    SparseVector(2, {})
-    >>> params = {encoder.includeFirst: True, encoder.outputCol: "test"}
+    SparseVector(2, {0: 1.0})
+    >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
     >>> encoder.transform(td, params).head().test
     SparseVector(3, {0: 1.0})
     """
 
     # a placeholder to make it appear in the generated doc
-    includeFirst = Param(Params._dummy(), "includeFirst", "include first category")
+    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category")
 
     @keyword_only
-    def __init__(self, includeFirst=True, inputCol=None, outputCol=None):
+    def __init__(self, dropLast=True, inputCol=None, outputCol=None):
         """
         __init__(self, includeFirst=True, inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self.includeFirst = Param(self, "includeFirst", "include first category")
-        self._setDefault(includeFirst=True)
+        self.dropLast = Param(self, "dropLast", "whether to drop the last category")
+        self._setDefault(dropLast=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, includeFirst=True, inputCol=None, outputCol=None):
+    def setParams(self, dropLast=True, inputCol=None, outputCol=None):
         """
-        setParams(self, includeFirst=True, inputCol=None, outputCol=None)
+        setParams(self, dropLast=True, inputCol=None, outputCol=None)
         Sets params for this OneHotEncoder.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    def setIncludeFirst(self, value):
+    def setDropLast(self, value):
         """
-        Sets the value of :py:attr:`includeFirst`.
+        Sets the value of :py:attr:`dropLast`.
         """
-        self._paramMap[self.includeFirst] = value
+        self._paramMap[self.dropLast] = value
         return self
 
-    def getIncludeFirst(self):
+    def getDropLast(self):
         """
-        Gets the value of includeFirst or its default value.
+        Gets the value of dropLast or its default value.
         """
-        return self.getOrDefault(self.includeFirst)
+        return self.getOrDefault(self.dropLast)
 
 
 @inherit_doc

@@ -51,7 +51,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     val finalFunc = (iterator: Iterator[(K, (Iterable[V], Iterable[S]))]) => {
       val i = iterator.map(t => {
         val itr = t._2._2.iterator
-        val headOption = if(itr.hasNext) Some(itr.next) else None
+        val headOption = if (itr.hasNext) Some(itr.next()) else None
         (t._1, t._2._1.toSeq, headOption)
       })
       updateFuncLocal(i)

@@ -230,7 +230,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   class ReceiverLauncher {
     @transient val env = ssc.env
     @volatile @transient private var running = false
-    @transient val thread  = new Thread() {
+    @transient val thread = new Thread() {
       override def run() {
         try {
           SparkEnv.set(env)

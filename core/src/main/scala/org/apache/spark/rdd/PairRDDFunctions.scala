@@ -328,7 +328,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     reduceByKeyLocally(func)
   }
 
-  /** 
+  /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
@@ -467,7 +467,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
     val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
     val bufs = combineByKey[CompactBuffer[V]](
-      createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine=false)
+      createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
 
@@ -1011,7 +1011,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       jobFormat.checkOutputSpecs(job)
     }
 
-    val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
+    val writeShard = (context: TaskContext, iter: Iterator[(K, V)]) => {
       val config = wrappedConf.value
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
@@ -1027,7 +1027,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
-      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K, V]]
       require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
       Utils.tryWithSafeFinally {

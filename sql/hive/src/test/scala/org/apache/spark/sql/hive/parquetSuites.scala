@@ -21,8 +21,6 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
@@ -30,7 +28,7 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SQLConf, SaveMode}
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -38,7 +36,7 @@ case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
 
-case class StructContainer(intStructField :Int, stringStructField: String)
+case class StructContainer(intStructField: Int, stringStructField: String)
 
 case class ParquetDataWithComplexTypes(
     intField: Int,
@@ -155,7 +153,7 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
     read.json(rdd2).registerTempTable("jt_array")
 
-    setConf("spark.sql.hive.convertMetastoreParquet", "true")
+    setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll(): Unit = {
@@ -166,7 +164,7 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
     sql("DROP TABLE normal_parquet")
     sql("DROP TABLE IF EXISTS jt")
     sql("DROP TABLE IF EXISTS jt_array")
-    setConf("spark.sql.hive.convertMetastoreParquet", "false")
+    setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
@@ -201,14 +199,14 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
     sql("DROP TABLE IF EXISTS test_parquet")
 
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("scan an empty parquet table") {
@@ -548,12 +546,12 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("MetastoreRelation in InsertIntoTable will not be converted") {
@@ -694,12 +692,12 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("values in arrays and maps stored in parquet are always nullable") {
@@ -735,7 +733,7 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
     val filePath = new File(tempDir, "testParquet").getCanonicalPath
     val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
 
-    val df = Seq(1,2,3).map(i => (i, i.toString)).toDF("int", "str")
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
     intercept[Throwable](df2.write.parquet(filePath))
 
@@ -752,12 +750,12 @@ class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 }
 

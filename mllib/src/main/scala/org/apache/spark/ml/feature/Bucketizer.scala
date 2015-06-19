@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import java.{util => ju}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
@@ -31,10 +31,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
-@AlphaComponent
+@Experimental
 final class Bucketizer(override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 

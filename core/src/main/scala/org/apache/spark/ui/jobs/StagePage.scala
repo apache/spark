@@ -527,7 +527,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         minLaunchTime = launchTime.min(minLaunchTime)
         maxFinishTime = finishTime.max(maxFinishTime)
 
-        def toProportion(time: Long) = (time.toDouble / totalExecutionTime * 100).toLong
+        def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
 
         val metricsOpt = taskUIData.taskMetrics
         val shuffleReadTime =
