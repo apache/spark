@@ -72,10 +72,15 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     // size-related method optimizations return sane results
     assert(rdd.count === messages.size)
     assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
-    assert(! rdd.isEmpty)
+    assert(!rdd.isEmpty)
     assert(rdd.take(1).size === 1)
     assert(messages(rdd.take(1).head._2))
     assert(rdd.take(messages.size + 10).size === messages.size)
+
+    val emptyRdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)))
+
+    assert(emptyRdd.isEmpty)
 
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
