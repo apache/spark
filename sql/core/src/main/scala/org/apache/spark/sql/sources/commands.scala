@@ -316,7 +316,7 @@ private[sql] abstract class BaseWriterContainer(
     outputCommitter.setupJob(jobContext)
   }
 
-  def executorSideSetup(taskContext:TaskContext): Unit = {
+  def executorSideSetup(taskContext: TaskContext): Unit = {
     setupIDs(taskContext.stageId(), taskContext.partitionId(), taskContext.attemptNumber())
     setupConf()
     taskAttemptContext = newTaskAttemptContext(serializableConf.value, taskAttemptId)
