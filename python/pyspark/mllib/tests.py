@@ -1013,17 +1013,19 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
 class LinearDataGeneratorTests(MLlibTestCase):
     def test_dim(self):
-        points = LinearDataGenerator.generateLinearInput(
-            0.0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0],
-            [0.33, 0.33, 0.33], 4, 0, 0.1)
-        self.assertEqual(len(points), 4)
-        for point in points:
+        linear_data = LinearDataGenerator.generateLinearInput(
+            intercept=0.0, weights=[0.0, 0.0, 0.0],
+            xMean=[0.0, 0.0, 0.0], xVariance=[0.33, 0.33, 0.33],
+            nPoints=4, seed=0, eps=0.1)
+        self.assertEqual(len(linear_data), 4)
+        for point in linear_data:
             self.assertEqual(len(point.features), 3)
 
-        rdd = LinearDataGenerator.generateLinearRDD(
-            sc, 6, 2, 0.1, 2, 0.0).collect()
-        self.assertEqual(len(rdd), 6)
-        for point in rdd:
+        linear_data = LinearDataGenerator.generateLinearRDD(
+            sc=sc, nexamples=6, nfeatures=2, eps=0.1,
+            nParts=2, intercept=0.0).collect()
+        self.assertEqual(len(linear_data), 6)
+        for point in linear_data:
             self.assertEqual(len(point.features), 2)
 
 

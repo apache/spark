@@ -274,14 +274,12 @@ class LinearDataGenerator(object):
                           the amount of gaussian noise added is more.
         Returns a list of LabeledPoints of length nPoints
         """
-        seed, nPoints = int(seed), int(nPoints)
-        intercept, eps = float(intercept), float(eps)
         weights = [float(weight) for weight in weights]
         xMean = [float(mean) for mean in xMean]
         xVariance = [float(var) for var in xVariance]
         return list(callMLlibFunc(
-            "generateLinearInputWrapper", intercept, weights, xMean, xVariance,
-            nPoints, seed, eps))
+            "generateLinearInputWrapper", float(intercept), weights, xMean,
+            xVariance, int(nPoints), int(seed), float(eps)))
 
     @staticmethod
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
@@ -289,10 +287,9 @@ class LinearDataGenerator(object):
         """
         Generate a RDD of LabeledPoints.
         """
-        nexamples, nfeatures, nParts = int(nexamples), int(nfeatures), int(nParts)
-        intercept, eps = float(intercept), float(eps)
-        return callMLlibFunc("generateLinearRDDWrapper", sc, nexamples, nfeatures,
-                             eps, nParts, intercept)
+        return callMLlibFunc(
+            "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
+            float(eps), int(nParts), float(intercept))
 
 
 def _test():
