@@ -33,7 +33,8 @@ from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 from pyspark.streaming import DStream
 
-__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture']
+__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
+           'StreamingKMeans', 'StreamingKMeansModel']
 
 
 @inherit_doc
@@ -273,27 +274,34 @@ class GaussianMixture(object):
 class StreamingKMeansModel(KMeansModel):
     """
     .. note:: Experimental
+
     Clustering model which can perform an online update of the centroids.
 
     The update formula for each centroid is given by
-    c_t+1 = [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t]
-    n_t+1 = n_t * a + m_t
+
+    * c_t+1 = ((c_t * n_t * a) + (x_t * m_t)) / (n_t + m_t)
+    * n_t+1 = n_t * a + m_t
 
     where
-    c_t:   Centroid at the n_th iteration.
-    n_t:   Number of samples (or) weights associated with the centroid
+
+    * c_t: Centroid at the n_th iteration.
+    * n_t: Number of samples (or) weights associated with the centroid
            at the n_th iteration.
-    x_t:   Centroid of the new data closest to c_t.
-    m_t:   Number of samples (or) weights of the new data closest to c_t
-    c_t+1: New centroid.
-    n_t+1: New number of weights.
-    a:     Decay Factor, which gives the forgetfulness.
+    * x_t: Centroid of the new data closest to c_t.
+    * m_t: Number of samples (or) weights of the new data closest to c_t
+    * c_t+1: New centroid.
+    * n_t+1: New number of weights.
+    * a: Decay Factor, which gives the forgetfulness.
 
     Note that if a is set to 1, it is the weighted mean of the previous
     and new data. If it set to zero, the old centroids are completely
     forgotten.
 
-    >>> initCenters, initWeights = [[0.0, 0.0], [1.0, 1.0]], [1.0, 1.0]
+    :param clusterCenters: Initial cluster centers.
+    :param clusterWeights: List of weights assigned to each cluster.
+
+    >>> initCenters = [[0.0, 0.0], [1.0, 1.0]]
+    >>> initWeights = [1.0, 1.0]
     >>> stkm = StreamingKMeansModel(initCenters, initWeights)
     >>> data = sc.parallelize([[-0.1, -0.1], [0.1, 0.1],
     ...                        [0.9, 0.9], [1.1, 1.1]])
@@ -301,10 +309,10 @@ class StreamingKMeansModel(KMeansModel):
     >>> stkm.centers
     array([[ 0.,  0.],
            [ 1.,  1.]])
-    >>> stkm.predict([-0.1, -0.1]) == stkm.predict([0.1, 0.1]) == 0
-    True
-    >>> stkm.predict([0.9, 0.9]) == stkm.predict([1.1, 1.1]) == 1
-    True
+    >>> stkm.predict([-0.1, -0.1])
+    0
+    >>> stkm.predict([0.9, 0.9])
+    1
     >>> stkm.clusterWeights
     [3.0, 3.0]
     >>> decayFactor = 0.0
@@ -319,9 +327,6 @@ class StreamingKMeansModel(KMeansModel):
     0
     >>> stkm.predict([1.5, 1.5])
     1
-
-    :param clusterCenters: Initial cluster centers.
-    :param clusterWeights: List of weights assigned to each cluster.
     """
     def __init__(self, clusterCenters, clusterWeights):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
@@ -329,7 +334,7 @@ class StreamingKMeansModel(KMeansModel):
 
     @property
     def clusterWeights(self):
-        """Convenience method to return the cluster weights."""
+        """Return the cluster weights."""
         return self._clusterWeights
 
     @ignore_unicode_prefix
@@ -338,13 +343,12 @@ class StreamingKMeansModel(KMeansModel):
 
         :param data: Should be a RDD that represents the new data.
         :param decayFactor: forgetfulness of the previous centroids.
-        :param timeUnit: Can be "batches" or "points"
-
-        If points, then the decay factor is raised to the power of
-        number of new points and if batches, it is used as it is.
+        :param timeUnit: Can be "batches" or "points". If points, then the
+                         decay factor is raised to the power of number of new
+                         points and if batches, it is used as it is.
         """
         if not isinstance(data, RDD):
-            raise TypeError("data should be of a RDD, got %s." % type(data))
+            raise TypeError("Data should be of an RDD, got %s." % type(data))
         data = data.map(_convert_to_vector)
         decayFactor = float(decayFactor)
         if timeUnit not in ["batches", "points"]:
@@ -363,13 +367,15 @@ class StreamingKMeans(object):
     """
     .. note:: Experimental
 
-    Provides methods to set k, decayFactor, timeUnit to train and
-    predict the incoming data
+    Provides methods to set k, decayFactor, timeUnit to configure the
+    KMeans algorithm for fitting and predicting on incoming dstreams.
+    More details on how the centroids are updated are provided under the
+    docs of StreamingKMeansModel.
 
-    :param k:           int, number of clusters
+    :param k: int, number of clusters
     :param decayFactor: float, forgetfulness of the previous centroids.
-    :param timeUnit:    can be "batches" or "points". If points, then the
-                        decayfactor is raised to the power of no. of new points.
+    :param timeUnit: can be "batches" or "points". If points, then the
+                     decayfactor is raised to the power of no. of new points.
     """
     def __init__(self, k=2, decayFactor=1.0, timeUnit="batches"):
         self._k = k
@@ -406,14 +412,17 @@ class StreamingKMeans(object):
 
     def setHalfLife(self, halfLife, timeUnit):
         """
-        Set number of instances after which the centroids at
-        has 0.5 weightage
+        Set number of batches after which the centroids of that
+        particular batch has half the weightage.
         """
         self._timeUnit = timeUnit
         self._decayFactor = exp(log(0.5) / halfLife)
         return self
 
     def setInitialCenters(self, centers, weights):
+        """
+        Set initial centers. Should be set before calling trainOn.
+        """
         self._model = StreamingKMeansModel(centers, weights)
         return self
 

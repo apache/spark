@@ -629,7 +629,7 @@ the predicted cluster assignments on new data points as they arrive.
 
 {% highlight python %}
 model.trainOn(trainingData)
-model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features)))
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
 
 ssc.start()
 ssc.awaitTermination()
