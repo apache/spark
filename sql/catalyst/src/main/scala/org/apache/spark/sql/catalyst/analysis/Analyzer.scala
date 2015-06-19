@@ -336,9 +336,15 @@ class Analyzer(
         }
         j.copy(right = newRight)
 
+      // When resolve `SortOrder`s in Sort based on child, don't report errors as
+      // we still have chance to resolve it based on grandchild
+      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
+        val newOrdering = resolveSortOrders(ordering, child, throws = false)
+        Sort(newOrdering, global, child)
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        q transformExpressionsUp {
           case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
             resolver(nameParts(0), VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
@@ -373,6 +379,26 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
+  private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
+    ordering.map { order =>
+      // Resolve SortOrder in one round.
+      // If throws == false or the desired attribute doesn't exist
+      // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
+      // Else, throw exception.
+      try {
+        val newOrder = order transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            plan.resolve(nameParts, resolver).getOrElse(u)
+          case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+            ExtractValue(child, fieldName, resolver)
+        }
+        newOrder.asInstanceOf[SortOrder]
+      } catch {
+        case a: AnalysisException if !throws => order
+      }
+    }
+  }
+
   /**
    * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
@@ -383,13 +409,13 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
-        val (resolvedOrdering, missing) = resolveAndFindMissing(ordering, p, child)
+        val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(p.output,
-            Sort(resolvedOrdering, global,
+            Sort(newOrdering, global,
               Project(projectList ++ missing, child)))
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
@@ -404,19 +430,19 @@ class Analyzer(
         )
 
         // Find sort attributes that are projected away so we can temporarily add them back in.
-        val (resolvedOrdering, unresolved) = resolveAndFindMissing(ordering, a, groupingRelation)
+        val (newOrdering, missingAttr) = resolveAndFindMissing(ordering, a, groupingRelation)
 
         // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
         // Sort.
-        val (withAggsRemoved, aliasedAggregateList) = resolvedOrdering.map {
+        val (withAggsRemoved, aliasedAggregateList) = newOrdering.map {
           case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
             val aliased = Alias(aggOrdering.child, "_aggOrdering")()
-            (aggOrdering.copy(child = aliased.toAttribute), aliased :: Nil)
+            (aggOrdering.copy(child = aliased.toAttribute), Some(aliased))
 
-          case other => (other, Nil)
+          case other => (other, None)
         }.unzip
 
-        val missing = unresolved ++ aliasedAggregateList.flatten
+        val missing = missingAttr ++ aliasedAggregateList.flatten
 
         if (missing.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
@@ -429,40 +455,25 @@ class Analyzer(
     }
 
     /**
-     * Given a child and a grandchild that are present beneath a sort operator, returns
-     * a resolved sort ordering and a list of attributes that are missing from the child
-     * but are present in the grandchild.
+     * Given a child and a grandchild that are present beneath a sort operator, try to resolve
+     * the sort ordering and returns it with a list of attributes that are missing from the
+     * child but are present in the grandchild.
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      // Find any attributes that remain unresolved in the sort.
-      val unresolved: Seq[Seq[String]] =
-        ordering.flatMap(_.collect { case UnresolvedAttribute(nameParts) => nameParts })
-
-      // Create a map from name, to resolved attributes, when the desired name can be found
-      // prior to the projection.
-      val resolved: Map[Seq[String], NamedExpression] =
-        unresolved.flatMap(u => grandchild.resolve(u, resolver).map(a => u -> a)).toMap
-
+      val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
-      val requiredAttributes = AttributeSet(resolved.values)
-
+      val requiredAttributes = AttributeSet(newOrdering.filter(_.resolved))
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
       val missingInProject = requiredAttributes -- child.output
-
-      // Now that we have all the attributes we need, reconstruct a resolved ordering.
-      // It is important to do it here, instead of waiting for the standard resolved as adding
-      // attributes to the project below can actually introduce ambiquity that was not present
-      // before.
-      val resolvedOrdering = ordering.map(_ transform {
-        case u @ UnresolvedAttribute(name) => resolved.getOrElse(name, u)
-      }).asInstanceOf[Seq[SortOrder]]
-
-      (resolvedOrdering, missingInProject.toSeq)
+      // It is important to return the new SortOrders here, instead of waiting for the standard
+      // resolving process as adding attributes to the project below can actually introduce
+      // ambiguity that was not present before.
+      (newOrdering, missingInProject.toSeq)
     }
   }
 

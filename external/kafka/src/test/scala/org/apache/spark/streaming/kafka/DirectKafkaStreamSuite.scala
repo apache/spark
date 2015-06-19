@@ -99,7 +99,8 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, topics)
     }
 
-    val allReceived = new ArrayBuffer[(String, String)]
+    val allReceived =
+      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
 
     // hold a reference to the current offset ranges, so it can be used downstream
     var offsetRanges = Array[OffsetRange]()
@@ -170,7 +171,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]()
+    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -216,7 +217,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]()
+    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -332,7 +333,8 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, Set(topic))
     }
 
-    val allReceived = new ArrayBuffer[(String, String)]
+    val allReceived =
+      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
 
     stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
     ssc.start()
@@ -358,8 +360,8 @@ class DirectKafkaStreamSuite
 }
 
 object DirectKafkaStreamSuite {
-  val collectedData = new mutable.ArrayBuffer[String]()
-  var total = -1L
+  val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
+  @volatile var total = -1L
 
   class InputInfoCollector extends StreamingListener {
     val numRecordsSubmitted = new AtomicLong(0L)
