@@ -209,3 +209,22 @@ private object InternalNode {
     }
   }
 }
+
+private[tree] class LearningNode(
+    prediction: Double,
+    impurity: Double,
+    gain: Double,
+    leftChild: Node,
+    rightChild: Node,
+    split: Split,
+    val id: Int) extends InternalNode(prediction, impurity, gain, leftChild, rightChild, split) {
+
+}
+
+private[tree] object LearningNode {
+
+  def emptyNode(nodeIndex: Int): LearningNode = {
+    new LearningNode(Double.NaN, Double.NaN, Double.NaN, null, null, null, nodeIndex)
+  }
+
+}
