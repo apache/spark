@@ -15,28 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.param
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{StringType, BinaryType}
 
-/** A subclass of Params for testing. */
-class TestParams(override val uid: String) extends Params with HasMaxIter with HasInputCol {
+class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  def this() = this(Identifiable.randomUID("testParams"))
-
-  def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
-
-  def setInputCol(value: String): this.type = { set(inputCol, value); this }
-
-  setDefault(maxIter -> 10)
-
-  def clearMaxIter(): this.type = clear(maxIter)
-
-  override def validateParams(): Unit = {
-    super.validateParams()
-    require(isDefined(inputCol))
+  test("md5") {
+    checkEvaluation(Md5(Literal("ABC".getBytes)), "902fbdd2b1df0c4f70b4a5d23525e932")
+    checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+      "6ac1e56bc78f031059be7be854522c4c")
+    checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
   }
 
-  override def copy(extra: ParamMap): TestParams = defaultCopy(extra)
 }

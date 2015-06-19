@@ -54,10 +54,13 @@ import org.apache.spark.sql.execution.QueryExecutionException
  * @param version the version of hive used when pick function calls that are not compatible.
  * @param config  a collection of configuration options that will be added to the hive conf before
  *                opening the hive client.
+ * @param initClassLoader the classloader used when creating the `state` field of
+ *                        this ClientWrapper.
  */
 private[hive] class ClientWrapper(
     version: HiveVersion,
-    config: Map[String, String])
+    config: Map[String, String],
+    initClassLoader: ClassLoader)
   extends ClientInterface
   with Logging {
 
@@ -98,11 +101,18 @@ private[hive] class ClientWrapper(
   // Create an internal session state for this ClientWrapper.
   val state = {
     val original = Thread.currentThread().getContextClassLoader
-    Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
+    // Switch to the initClassLoader.
+    Thread.currentThread().setContextClassLoader(initClassLoader)
     val ret = try {
       val oldState = SessionState.get()
       if (oldState == null) {
         val initialConf = new HiveConf(classOf[SessionState])
+        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+        // the initial value will be the current thread's context class loader
+        // (i.e. initClassLoader at here).
+        // We call initialConf.setClassLoader(initClassLoader) at here to make
+        // this action explicit.
+        initialConf.setClassLoader(initClassLoader)
         config.foreach { case (k, v) =>
           logDebug(s"Hive Config: $k=$v")
           initialConf.set(k, v)
@@ -125,6 +135,7 @@ private[hive] class ClientWrapper(
   def conf: HiveConf = SessionState.get().getConf
 
   // TODO: should be a def?s
+  // When we create this val client, the HiveConf of it (conf) is the one associated with state.
   private val client = Hive.get(conf)
 
   /**
@@ -132,13 +143,9 @@ private[hive] class ClientWrapper(
    */
   private def withHiveState[A](f: => A): A = synchronized {
     val original = Thread.currentThread().getContextClassLoader
-    // This setContextClassLoader is used for Hive 0.12's metastore since Hive 0.12 will not
-    // internally override the context class loader of the current thread with the class loader
-    // associated with the HiveConf in `state`.
-    Thread.currentThread().setContextClassLoader(getClass.getClassLoader)
     // Set the thread local metastore client to the client associated with this ClientWrapper.
     Hive.set(client)
-    // Starting from Hive 0.13.0, setCurrentSessionState will use the classLoader associated
+    // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
     shim.setCurrentSessionState(state)
