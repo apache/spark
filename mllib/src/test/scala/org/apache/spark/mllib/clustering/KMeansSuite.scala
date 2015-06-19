@@ -282,28 +282,33 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("Initialize using given cluster centers") {
     val points = Seq(
       Vectors.dense(0.0, 0.0),
-      Vectors.dense(0.0, 0.1),
-      Vectors.dense(0.1, 0.0),
-      Vectors.dense(9.0, 0.0),
-      Vectors.dense(9.0, 0.2),
-      Vectors.dense(9.2, 0.0)
+      Vectors.dense(1.0, 0.0),
+      Vectors.dense(0.0, 1.0),
+      Vectors.dense(1.0, 1.0)
     )
     val rdd = sc.parallelize(points, 3)
-    val model = KMeans.train(rdd, k = 2, maxIterations = 2, runs = 1)
 
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-    model.save(sc, path)
-    val loadedModel = KMeansModel.load(sc, path)
+    val m1 = new KMeansModel(Array(points(0), points(2)))
+    val m2 = new KMeansModel(Array(points(1), points(3)))
 
-    val newModel = KMeans.train(rdd, k = 2, maxIterations = 2, initialModel = loadedModel)
-    val predicts = newModel.predict(rdd).collect()
+    val modelM1 = new KMeans()
+      .setK(2)
+      .setMaxIterations(1)
+      .setInitialModel(m1)
+      .run(rdd)
+    val modelM2 = new KMeans()
+      .setK(2)
+      .setMaxIterations(1)
+      .setInitialModel(m2)
+      .run(rdd)
 
-      assert(predicts(0) === predicts(1))
-      assert(predicts(0) === predicts(2))
-      assert(predicts(3) === predicts(4))
-      assert(predicts(3) === predicts(5))
-      assert(predicts(0) != predicts(3))
+    val predicts1 = modelM1.predict(rdd).collect()
+    val predicts2 = modelM2.predict(rdd).collect()
+
+    assert(predicts1(0) === predicts1(1))
+    assert(predicts1(2) === predicts1(3))
+    assert(predicts2(0) === predicts2(1))
+    assert(predicts2(2) === predicts2(3))
   }
 
 }

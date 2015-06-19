@@ -160,12 +160,14 @@ class KMeans private (
   // random or k-means|| initializationMode
   private var initialModel: Option[KMeansModel] = None
 
-  /** Set the initial starting point, bypassing the random initialization or k-means||
-    * The condition (model.k == this.k) must be met; failure will result in an
-    * IllegalArgumentException.
-    */
+  /**
+   * Set the initial starting point, bypassing the random initialization or k-means||
+   * The condition model.k == this.k must be met, and only one run is allowed;
+   * failure in either case will result in an IllegalArgumentException.
+   */
   def setInitialModel(model: KMeansModel): this.type = {
-    require(model.k==k, "mismatched cluster count")
+    require(model.k == k, "mismatched cluster count")
+    require(runs == 1, "can only run once with given initial model")
     initialModel = Some(model)
     this
   }
@@ -497,25 +499,6 @@ object KMeans {
       maxIterations: Int,
       runs: Int): KMeansModel = {
     train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters and initial cluster centers
-   *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param initialModel an existing set of cluster centers.
-   */
-  def train(
-       data: RDD[Vector],
-       k: Int,
-       maxIterations: Int,
-       initialModel: KMeansModel): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitialModel(initialModel)
-      .run(data)
   }
 
   /**
