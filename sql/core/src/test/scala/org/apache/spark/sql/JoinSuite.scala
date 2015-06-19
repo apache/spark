@@ -102,7 +102,13 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       Seq(
         ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+          classOf[SortMergeJoin]),
+        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+          classOf[SortMergeJoin]),
+        ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[SortMergeJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
       ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
