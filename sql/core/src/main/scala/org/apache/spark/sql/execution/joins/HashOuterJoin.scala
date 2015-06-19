@@ -90,7 +90,7 @@ case class HashOuterJoin(
           case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
         }
         if (temp.size == 0) {
-          joinedRow.withRight(rightNullRow).copy.asInstanceOf[InternalRow] :: Nil
+          joinedRow.withRight(rightNullRow).copy :: Nil
         } else {
           temp
         }

@@ -48,4 +48,6 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression {
     count += 1
     (TaskContext.get().partitionId().toLong << 33) + currentCount
   }
+
+  override def isThreadSafe: Boolean = false
 }

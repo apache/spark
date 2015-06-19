@@ -619,7 +619,7 @@ class DataFrame private[sql](
   def as(alias: Symbol): DataFrame = as(alias.name)
 
   /**
-   * Selects a set of expressions.
+   * Selects a set of column based expressions.
    * {{{
    *   df.select($"colA", $"colB" + 1)
    * }}}
@@ -1029,10 +1029,10 @@ class DataFrame private[sql](
 
     val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
     val names = schema.toAttributes.map(_.name)
+    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
     val rowFunction =
-      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema)
-        .asInstanceOf[InternalRow]))
+      f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
@@ -1059,8 +1059,8 @@ class DataFrame private[sql](
     val names = attributes.map(_.name)
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
-      f(row(0).asInstanceOf[A]).map(o =>
-        catalyst.InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -1232,11 +1232,11 @@ class DataFrame private[sql](
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map {
         case (aggregation, (statistic, _)) =>
-          catalyst.InternalRow(statistic :: aggregation.toList: _*)
+          InternalRow(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => catalyst.InternalRow(name) }
+      statistics.map { case (name, _) => InternalRow(name) }
     }
 
     // All columns are string type

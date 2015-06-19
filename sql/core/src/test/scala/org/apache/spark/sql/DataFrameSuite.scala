@@ -33,7 +33,7 @@ class DataFrameSuite extends QueryTest {
   test("analysis error should be eagerly reported") {
     val oldSetting = ctx.conf.dataFrameEagerAnalysis
     // Eager analysis.
-    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
 
     intercept[Exception] { testData.select('nonExistentName) }
     intercept[Exception] {
@@ -47,11 +47,11 @@ class DataFrameSuite extends QueryTest {
     }
 
     // No more eager analysis once the flag is turned off
-    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
     testData.select('nonExistentName)
 
     // Set the flag back to original value before this test.
-    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting)
   }
 
   test("dataframe toString") {
@@ -70,7 +70,7 @@ class DataFrameSuite extends QueryTest {
 
   test("invalid plan toString, debug mode") {
     val oldSetting = ctx.conf.dataFrameEagerAnalysis
-    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
 
     // Turn on debug mode so we can see invalid query plans.
     import org.apache.spark.sql.execution.debug._
@@ -83,7 +83,7 @@ class DataFrameSuite extends QueryTest {
         badPlan.toString)
 
     // Set the flag back to original value before this test.
-    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+    ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting)
   }
 
   test("access complex data") {
@@ -132,6 +132,14 @@ class DataFrameSuite extends QueryTest {
         .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
+  }
+
+  test("explode alias and star") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(explode($"a").as("a"), $"*"),
+      Row("a", Seq("a"), 1) :: Nil)
   }
 
   test("selectExpr") {
@@ -548,13 +556,13 @@ class DataFrameSuite extends QueryTest {
 
   test("SPARK-6899") {
     val originalValue = ctx.conf.codegenEnabled
-    ctx.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    ctx.setConf(SQLConf.CODEGEN_ENABLED, true)
     try{
       checkAnswer(
         decimalData.agg(avg('a)),
         Row(new java.math.BigDecimal(2.0)))
     } finally {
-      ctx.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+      ctx.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
