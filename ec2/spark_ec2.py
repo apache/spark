@@ -358,7 +358,7 @@ def get_validate_spark_version(version, repo):
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
-# Last Updated: 2015-05-08
+# Last Updated: 2015-06-19
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 EC2_INSTANCE_TYPES = {
     "c1.medium":   "pvm",
@@ -400,6 +400,11 @@ EC2_INSTANCE_TYPES = {
     "m3.large":    "hvm",
     "m3.xlarge":   "hvm",
     "m3.2xlarge":  "hvm",
+    "m4.large":    "hvm",
+    "m4.xlarge":   "hvm",
+    "m4.2xlarge":  "hvm",
+    "m4.4xlarge":  "hvm",
+    "m4.10xlarge": "hvm",
     "r3.large":    "hvm",
     "r3.xlarge":   "hvm",
     "r3.2xlarge":  "hvm",
@@ -911,7 +916,7 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Last Updated: 2015-05-08
+    # Last Updated: 2015-06-19
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
@@ -953,6 +958,11 @@ def get_num_disks(instance_type):
         "m3.large":    1,
         "m3.xlarge":   2,
         "m3.2xlarge":  2,
+        "m4.large":    0,
+        "m4.xlarge":   0,
+        "m4.2xlarge":  0,
+        "m4.4xlarge":  0,
+        "m4.10xlarge": 0,
         "r3.large":    1,
         "r3.xlarge":   1,
         "r3.2xlarge":  1,
