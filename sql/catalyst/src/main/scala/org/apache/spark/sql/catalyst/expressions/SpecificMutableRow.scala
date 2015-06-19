@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -221,7 +222,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
@@ -240,7 +241,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     }
   }
 
-  override def setString(ordinal: Int, value: String): Unit = update(ordinal, UTF8String(value))
+  override def setString(ordinal: Int, value: String): Unit =
+    update(ordinal, UTF8String.fromString(value))
 
   override def getString(ordinal: Int): String = apply(ordinal).toString
 

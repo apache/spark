@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+import math
 import sys
 
 if sys.version < "3":
@@ -143,7 +144,7 @@ _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
     'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
-    'pow': 'Returns the value of the first argument raised to the power of the second argument.'
+    'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
 
 _window_functions = {
@@ -400,6 +401,21 @@ def when(condition, value):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
     jc = sc._jvm.functions.when(condition._jc, v)
+    return Column(jc)
+
+
+@since(1.4)
+def log(col, base=math.e):
+    """Returns the first argument-based logarithm of the second argument.
+
+    >>> df.select(log(df.age, 10.0).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    ['0.30102', '0.69897']
+
+    >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
+    ['0.69314', '1.60943']
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.log(base, _to_java_column(col))
     return Column(jc)
 
 

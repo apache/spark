@@ -25,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
@@ -320,7 +321,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    UTF8String(stringBytes)
+    UTF8String.fromBytes(stringBytes)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {

@@ -22,12 +22,14 @@ import java.nio.ByteBuffer
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.unsafe.types.UTF8String
+
 
 class ColumnTypeSuite extends SparkFunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
@@ -66,7 +68,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(BOOLEAN, true, 1)
-    checkActualSize(STRING, UTF8String("hello"), 4 + "hello".getBytes("utf-8").length)
+    checkActualSize(STRING, UTF8String.fromString("hello"), 4 + "hello".getBytes("utf-8").length)
     checkActualSize(DATE, 0, 4)
     checkActualSize(TIMESTAMP, 0L, 8)
 
@@ -118,7 +120,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       val length = buffer.getInt()
       val bytes = new Array[Byte](length)
       buffer.get(bytes)
-      UTF8String(bytes)
+      UTF8String.fromBytes(bytes)
     })
 
   testColumnType[BinaryType.type, Array[Byte]](

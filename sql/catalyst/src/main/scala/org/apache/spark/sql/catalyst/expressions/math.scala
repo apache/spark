@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
@@ -34,7 +35,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
 
-  override def eval(input: Row): Any = c
+  override def eval(input: InternalRow): Any = c
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     s"""
@@ -60,7 +61,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
@@ -103,7 +104,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = DoubleType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -192,6 +193,8 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
@@ -215,7 +218,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -252,5 +255,25 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
+  }
+}
+
+case class Logarithm(left: Expression, right: Expression)
+  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  def this(child: Expression) = {
+    this(EulerNumber(), child)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val logCode = if (left.isInstanceOf[EulerNumber]) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+    }
+    logCode + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+    """
   }
 }

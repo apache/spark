@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
@@ -111,11 +114,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
-    case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateUtils.toString(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String(timestampToString(DateUtils.toJavaTimestamp(t))))
-    case _ => buildCast[Any](_, o => UTF8String(o.toString))
+      t => UTF8String.fromString(timestampToString(DateUtils.toJavaTimestamp(t))))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
   // BinaryConverter
@@ -141,7 +144,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != 0)
+      buildCast[Decimal](_, _ != Decimal(0))
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -318,7 +321,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(s.toString.toDouble), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -392,7 +395,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
     // TODO: Could be faster?
     val newRow = new GenericMutableRow(from.fields.size)
-    buildCast[Row](_, row => {
+    buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
         val v = row(i)
@@ -424,7 +427,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
   }
@@ -454,7 +457,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (BooleanType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
       case (dt: DecimalType, BooleanType) =>
-        defineCodeGen(ctx, ev, c => s"$c.isZero()")
+        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
       case (dt: NumericType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c != 0")
 

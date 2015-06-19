@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
 
 object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+  def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
     create(BindReferences.bindReference(expression, inputSchema))
 
-  def create(expression: Expression): (Row => Boolean) = {
-    (r: Row) => expression.eval(r).asInstanceOf[Boolean]
+  def create(expression: Expression): (InternalRow => Boolean) = {
+    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
 
@@ -77,7 +77,7 @@ case class Not(child: Expression) extends UnaryExpression with Predicate with Ex
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     child.eval(input) match {
       case null => null
       case b: Boolean => !b
@@ -98,7 +98,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
     list.exists(e => e.eval(input) == evaluatedValue)
   }
@@ -117,7 +117,7 @@ case class InSet(value: Expression, hset: Set[Any])
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     hset.contains(value.eval(input))
   }
 }
@@ -129,7 +129,7 @@ case class And(left: Expression, right: Expression)
 
   override def symbol: String = "&&"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == false) {
        false
@@ -178,7 +178,7 @@ case class Or(left: Expression, right: Expression)
 
   override def symbol: String = "||"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == true) {
       true
@@ -235,7 +235,7 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
 
   protected def checkTypesInternal(t: DataType): TypeCheckResult
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -250,16 +250,11 @@ abstract class BinaryComparison extends BinaryExpression with Predicate {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    left.dataType match {
-      case dt: NumericType if ctx.isNativeType(dt) => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case DateType | TimestampType => defineCodeGen (ctx, ev, {
-        (c1, c3) => s"$c1 $symbol $c3"
-      })
-      case other => defineCodeGen (ctx, ev, {
-        (c1, c2) => s"$c1.compare($c2) $symbol 0"
-      })
+    if (ctx.isPrimitiveType(left.dataType)) {
+      // faster version
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
 
@@ -280,8 +275,9 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
     if (left.dataType != BinaryType) l == r
     else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
   }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, ctx.equalFunc(left.dataType))
+    defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
 
@@ -292,7 +288,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 
   override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     val r = right.eval(input)
     if (l == null && r == null) {
@@ -307,7 +303,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.equalFunc(left.dataType)(eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
         boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||

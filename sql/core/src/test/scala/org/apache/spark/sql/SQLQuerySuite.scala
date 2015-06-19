@@ -45,6 +45,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row("one", 6) :: Row("three", 3) :: Nil)
   }
 
+  test("SPARK-8010: promote numeric to string") {
+    val df = Seq((1, 1)).toDF("key", "value")
+    df.registerTempTable("src")
+    val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
+    val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
+
+    checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
+    checkAnswer(queryCoalesce, Row("1") :: Nil)
+  }
+
   test("SPARK-6743: no columns from cache") {
     Seq(
       (83, 0, 38),
@@ -123,6 +133,32 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("SPARK-7158 collect and take return different results") {
+    import java.util.UUID
+    import org.apache.spark.sql.types._
+
+    val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
+    // we except the id is materialized once
+    def id: () => String = () => { UUID.randomUUID().toString() }
+
+    val dfWithId = df.withColumn("id", callUDF(id, StringType))
+    // Make a new DataFrame (actually the same reference to the old one)
+    val cached = dfWithId.cache()
+    // Trigger the cache
+    val d0 = dfWithId.collect()
+    val d1 = cached.collect()
+    val d2 = cached.collect()
+
+    // Since the ID is only materialized once, then all of the records
+    // should come from the cache, not by re-computing. Otherwise, the ID
+    // will be different
+    assert(d0.map(_(0)) === d2.map(_(0)))
+    assert(d0.map(_(1)) === d2.map(_(1)))
+
+    assert(d1.map(_(0)) === d2.map(_(0)))
+    assert(d1.map(_(1)) === d2.map(_(1)))
+  }
+
   test("grouping on nested fields") {
     sqlContext.read.json(sqlContext.sparkContext.parallelize(
       """{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
@@ -152,21 +188,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Seq(Row("1"), Row("2")))
   }
 
-  test("SPARK-3176 Added Parser of SQL ABS()") {
-    checkAnswer(
-      sql("SELECT ABS(-1.3)"),
-      Row(1.3))
-    checkAnswer(
-      sql("SELECT ABS(0.0)"),
-      Row(0.0))
-    checkAnswer(
-      sql("SELECT ABS(2.5)"),
-      Row(2.5))
-  }
-
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -263,7 +287,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         Row(0, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
@@ -456,41 +480,41 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("sorting") {
     val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, "false")
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
     sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before.toString)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
   }
 
   test("external sorting") {
     val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, "true")
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
     sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before.toString)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
   }
 
   test("SPARK-6927 sorting with codegen on") {
     val externalbefore = sqlContext.conf.externalSortEnabled
     val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, "false")
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     try{
       sortTest()
     } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
     val externalbefore = sqlContext.conf.externalSortEnabled
     val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, "true")
+    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
+    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
     try {
       sortTest()
     } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
+      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
@@ -671,7 +695,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  ignore("cartesian product join") {
+  test("cartesian product join") {
     checkAnswer(
       testData3.join(testData3),
       Row(1, null, 1, null) ::
@@ -884,25 +908,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Row(s"$testKey=$testVal")
+      Row(testKey, testVal)
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
       Seq(
-        Row(s"$testKey=$testVal"),
-        Row(s"${testKey + testKey}=${testVal + testVal}"))
+        Row(testKey, testVal),
+        Row(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
     checkAnswer(
       sql(s"SET $testKey"),
-      Row(s"$testKey=$testVal")
+      Row(testKey, testVal)
     )
     checkAnswer(
       sql(s"SET $nonexistentKey"),
-      Row(s"$nonexistentKey=<undefined>")
+      Row(nonexistentKey, "<undefined>")
     )
     sqlContext.conf.clear()
   }
@@ -1316,12 +1340,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, "false")
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, "true")
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
@@ -1352,6 +1376,51 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 
+  test("SPARK-6583 order by aggregated function") {
+    Seq("1" -> 3, "1" -> 4, "2" -> 7, "2" -> 8, "3" -> 5, "3" -> 6, "4" -> 1, "4" -> 2)
+      .toDF("a", "b").registerTempTable("orderByData")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row("4") :: Row("1") :: Row("3") :: Row("2") :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a, sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b)
+        """.stripMargin),
+      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+            |SELECT a, sum(b)
+            |FROM orderByData
+            |GROUP BY a
+            |ORDER BY sum(b) + 1
+          """.stripMargin),
+      Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
+  }
+
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     withTempTable("t") {
       // numeric field i, boolean field j, result of i = j, result of i <=> j
@@ -1369,6 +1438,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
       checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
       checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
+    }
+  }
+
+  test("SPARK-7067: order by queries for complex ExtractValue chain") {
+    withTempTable("t") {
+      sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+        """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
+      checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
   }
 }

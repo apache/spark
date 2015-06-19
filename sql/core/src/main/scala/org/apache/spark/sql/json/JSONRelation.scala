@@ -22,10 +22,10 @@ import java.io.IOException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 
 private[sql] class DefaultSource
@@ -154,12 +154,12 @@ private[sql] class JSONRelation(
       JacksonParser(
         baseRDD(),
         schema,
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
     } else {
       JsonRDD.jsonStringToRow(
         baseRDD(),
         schema,
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
     }
   }
 
@@ -168,12 +168,12 @@ private[sql] class JSONRelation(
       JacksonParser(
         baseRDD(),
         StructType.fromAttributes(requiredColumns),
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
     } else {
       JsonRDD.jsonStringToRow(
         baseRDD(),
         StructType.fromAttributes(requiredColumns),
-        sqlContext.conf.columnNameOfCorruptRecord)
+        sqlContext.conf.columnNameOfCorruptRecord).map(_.asInstanceOf[Row])
     }
   }
 
