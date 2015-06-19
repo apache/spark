@@ -215,11 +215,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
   /**
-   * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
-   */
-  var debugLogging = false
-
-  /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
    */
@@ -241,12 +236,19 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   protected def compile(code: String): Class[_] = {
     val startTime = System.nanoTime()
+    // Current class loader may be ExecutorClassLoader, which will cause fail to find
+    // class in java.lang.  It's also slow, use the default JVM class loader.
+    val currentThread = Thread.currentThread()
+    val oldClassLoader = currentThread.getContextClassLoader
+    currentThread.setContextClassLoader(getClass.getClassLoader)
     val clazz = try {
       new ClassBodyEvaluator(code).getClazz()
     } catch {
       case e: Exception =>
         logError(s"failed to compile:\n $code", e)
         throw e
+    } finally {
+      currentThread.setContextClassLoader(oldClassLoader)
     }
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
