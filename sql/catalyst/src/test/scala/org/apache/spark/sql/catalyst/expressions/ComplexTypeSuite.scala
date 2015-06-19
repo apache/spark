@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -98,6 +100,22 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(getStructField(struct, "a").nullable === true)
     assert(getStructField(nullStruct_fieldNotNullable, "a").nullable === true)
     assert(getStructField(nullStruct, "a").nullable === true)
+  }
+
+  test("CreateNamedStruct with odd number of parameters") {
+    val thrown = intercept[TestFailedException] {
+      checkEvaluation(
+        CreateNamedStruct(Seq("a", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
+    }
+    assert(thrown.getCause.getMessage.contains("even number of arguments"))
+  }
+
+  test("CreateNamedStruct with non String Literal name") {
+    val thrown = intercept[TestFailedException] {
+      checkEvaluation(
+        CreateNamedStruct(Seq(1, "a", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
+    }
+    assert(thrown.getCause.getMessage.contains("Non String Literal fields"))
   }
 
   test("complex type") {
