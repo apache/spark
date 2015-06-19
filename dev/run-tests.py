@@ -75,8 +75,6 @@ sql = Module(
     source_file_regexes=[
         "sql/(?!hive-thriftserver)",
         "bin/spark-sql",
-        "examples/src/main/java/org/apache/spark/examples/sql/",
-        "examples/src/main/scala/org/apache/spark/examples/sql/",
     ],
     sbt_test_goals=[
         "catalyst/test",
@@ -114,19 +112,95 @@ streaming = Module(
     name="streaming",
     dependencies=[],
     source_file_regexes=[
-        "external/",
-        "extras/java8-tests/",
-        "extras/kinesis-asl/",
         "streaming",
     ],
     sbt_test_goals=[
         "streaming/test",
-        "streaming-flume/test",
-        "streaming-flume-sink/test",
-        "streaming-kafka/test",
-        "streaming-mqtt/test",
-        "streaming-twitter/test",
+    ]
+)
+
+
+streaming_kinesis_asl = Module(
+    name="kinesis-asl",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "extras/kinesis-asl/",
+    ],
+    sbt_test_goals=[
+        "kinesis-asl/test",
+    ]
+)
+
+
+streaming_zeromq = Module(
+    name="streaming-zeromq",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/zeromq",
+    ],
+    sbt_test_goals=[
         "streaming-zeromq/test",
+    ]
+)
+
+
+streaming_twitter = Module(
+    name="streaming-twitter",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/twitter",
+    ],
+    sbt_test_goals=[
+        "streaming-twitter/test",
+    ]
+)
+
+
+streaming_mqqt = Module(
+    name="streaming-mqqt",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/mqqt",
+    ],
+    sbt_test_goals=[
+        "streaming-mqqt/test",
+    ]
+)
+
+
+streaming_kafka = Module(
+    name="streaming-kafka",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/kafka",
+        "external/kafka-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka/test",
+    ]
+)
+
+
+streaming_flume_sink = Module(
+    name="streaming-flume-sink",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume-sink",
+    ],
+    sbt_test_goals=[
+        "streaming-flume-sink/test",
+    ]
+)
+
+
+streaming_flume = Module(
+    name="streaming_flume",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume",
+    ],
+    sbt_test_goals=[
+        "streaming-flume/test",
     ]
 )
 
@@ -135,14 +209,11 @@ mllib = Module(
     name="mllib",
     dependencies=[streaming, sql],
     source_file_regexes=[
-        "examples/src/main/java/org/apache/spark/examples/mllib/",
-        "examples/src/main/scala/org/apache/spark/examples/mllib",
         "data/mllib/",
         "mllib/",
     ],
     sbt_test_goals=[
         "mllib/test",
-        "examples/test",
     ]
 )
 
@@ -184,6 +255,15 @@ docs = Module(
     dependencies=[],
     source_file_regexes=[
         "docs/",
+    ]
+)
+
+
+ec2 = Module(
+    name="ec2",
+    dependencies=[],
+    source_file_regexes=[
+        "ec2/",
     ]
 )
 
