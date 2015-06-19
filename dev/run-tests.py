@@ -249,14 +249,15 @@ def determine_modules_to_test(changed_modules):
     >>> sorted(x.name for x in determine_modules_to_test([sql]))
     ['examples', 'hive-thriftserver', 'mllib', 'pyspark', 'sparkr', 'sql']
     """
+    # If we're going to have to run all of the tests, then we can just short-circuit
+    # and return 'root'. No module depends on root, so if it appears then it will be
+    # in changed_modules.
+    if root in changed_modules:
+        return [root]
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
-    modules_to_test = modules_to_test.union(set(changed_modules))
-    if root in modules_to_test:
-        return [root]
-    else:
-        return modules_to_test
+    return modules_to_test.union(set(changed_modules))
 
 
 # -------------------------------------------------------------------------------------------------
