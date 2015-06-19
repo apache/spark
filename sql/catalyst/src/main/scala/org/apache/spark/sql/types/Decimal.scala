@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.math.{MathContext, RoundingMode}
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -137,9 +139,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal
+      decimalVal(new MathContext(Decimal.MAX_PRECISION, RoundingMode.HALF_EVEN))
     } else {
-      BigDecimal(longVal, _scale)
+      BigDecimal(longVal, _scale)(new MathContext(Decimal.MAX_PRECISION, RoundingMode.HALF_EVEN))
     }
   }
 
@@ -261,7 +263,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def - (that: Decimal): Decimal = Decimal(toBigDecimal - that.toBigDecimal)
 
-  def * (that: Decimal): Decimal = Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal))
+  def * (that: Decimal): Decimal = Decimal(toBigDecimal * that.toBigDecimal)
 
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toBigDecimal / that.toBigDecimal)
@@ -285,6 +287,9 @@ object Decimal {
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
+
+  /** Maximum precision a Decimal can support */
+  val MAX_PRECISION = 38
 
   private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
