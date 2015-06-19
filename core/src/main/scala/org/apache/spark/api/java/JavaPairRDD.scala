@@ -520,7 +520,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * The input params leftReplication and rightReplication control the replication of the left
    * (this rdd) and right (other rdd) respectively.
    */
-  def blockJoin[W](other: JavaPairRDD[K, W], leftReplication: Int, rightReplication: Int, 
+  def blockJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
+    rightReplication: Int,
     partitioner: Partitioner): JavaPairRDD[K, (V, W)] = {
     fromRDD(rdd.blockJoin(other, leftReplication, rightReplication, partitioner))
   }
@@ -531,8 +534,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * The input params leftReplication and rightReplication control the replication of the left
    * (this rdd) and right (other rdd) respectively.
    */
-  def blockJoin[W](other: JavaPairRDD[K, W], leftReplication: Int, rightReplication: Int) 
-      : JavaPairRDD[K, (V, W)] = {
+  def blockJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
+    rightReplication: Int) : JavaPairRDD[K, (V, W)] = {
     fromRDD(rdd.blockJoin(other, leftReplication, rightReplication))
   }
 
@@ -541,9 +546,11 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is useful in cases where the data has extreme skew.
    * The input param rightReplication controls the replication of the right (other rdd).
    */
-  def blockLeftOuterJoin[W](other: JavaPairRDD[K, W], rightReplication: Int,
+  def blockLeftOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    rightReplication: Int,
     partitioner: Partitioner): JavaPairRDD[K, (V, Optional[W])] = {
-    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication, partitioner).mapValues{ case (v, w) =>
+    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication, partitioner).mapValues { case (v, w) =>
       (v, JavaUtils.optionToOptional(w))
     })
   }
@@ -553,9 +560,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is useful in cases where the data has extreme skew.
    * The input param rightReplication controls the replication of the right (other rdd).
    */
-  def blockLeftOuterJoin[W](other: JavaPairRDD[K, W], rightReplication: Int)
-      : JavaPairRDD[K, (V, Optional[W])] = {
-    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication).mapValues{ case (v, w) =>
+  def blockLeftOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    rightReplication: Int): JavaPairRDD[K, (V, Optional[W])] = {
+    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication).mapValues { case (v, w) =>
       (v, JavaUtils.optionToOptional(w))
     })
   }
@@ -565,9 +573,11 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is useful in cases where the data has extreme skew.
    * The input param leftReplication controls the replication of the left (this rdd).
    */
-  def blockRightOuterJoin[W](other: JavaPairRDD[K, W], leftReplication: Int, 
+  def blockRightOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
     partitioner: Partitioner): JavaPairRDD[K, (Optional[V], W)] = {
-    fromRDD(rdd.blockRightOuterJoin(other, leftReplication, partitioner).mapValues{ case (v, w) =>
+    fromRDD(rdd.blockRightOuterJoin(other, leftReplication, partitioner).mapValues { case (v, w) =>
       (JavaUtils.optionToOptional(v), w)
     })
   }
@@ -577,9 +587,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * This is useful in cases where the data has extreme skew.
    * The input param leftReplication controls the replication of the left (this rdd).
    */
-  def blockRightOuterJoin[W](other: JavaPairRDD[K, W], leftReplication: Int) 
-      : JavaPairRDD[K, (Optional[V], W)] = {
-    fromRDD(rdd.blockRightOuterJoin(other, leftReplication).mapValues{ case (v, w) =>
+  def blockRightOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int): JavaPairRDD[K, (Optional[V], W)] = {
+    fromRDD(rdd.blockRightOuterJoin(other, leftReplication).mapValues { case (v, w) =>
       (JavaUtils.optionToOptional(v), w)
     })
   }
