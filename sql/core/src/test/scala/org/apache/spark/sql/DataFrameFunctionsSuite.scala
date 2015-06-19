@@ -121,65 +121,6 @@ class DataFrameFunctionsSuite extends QueryTest {
     assert(row(1).getAs[Row](0) === Row("v", 5.0))
   }
 
-
-  test("namedStruct with column expression") {
-    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
-    val row = df.select(
-      namedStruct(lit("x"), (col("a") * 2), lit("y"), col("b"))).take(2)
-
-    val expectedType = StructType(Seq(
-      StructField("x", IntegerType, nullable = false),
-      StructField("y", StringType)
-    ))
-
-    assert(row(0).schema(0).dataType === expectedType)
-    assert(row(0).getAs[Row](0) === Row(2, "str1"))
-    assert(row(1).getAs[Row](0) === Row(4, "str2"))
-  }
-
-  test("namedStruct with literal columns") {
-    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
-    val row = df.select(
-      namedStruct(lit("x"), (col("a") * 2), lit("y"), lit(5.0))).take(2)
-
-    val expectedType = StructType(Seq(
-      StructField("x", IntegerType, nullable = false),
-      StructField("y", DoubleType, nullable = false)
-    ))
-
-    assert(row(0).schema(0).dataType === expectedType)
-    assert(row(0).getAs[Row](0) === Row(2, 5.0))
-    assert(row(1).getAs[Row](0) === Row(4, 5.0))
-  }
-
-  test("namedStruct with all literal columns") {
-    val df = Seq((1, "str1"), (2, "str2")).toDF("a", "b")
-    val row = df.select(
-      namedStruct(lit("x"), lit("v"), lit("y"), lit(5.0))).take(2)
-
-    val expectedType = StructType(Seq(
-      StructField("x", StringType, nullable = false),
-      StructField("y", DoubleType, nullable = false)
-    ))
-
-    assert(row(0).schema(0).dataType === expectedType)
-    assert(row(0).getAs[Row](0) === Row("v", 5.0))
-    assert(row(1).getAs[Row](0) === Row("v", 5.0))
-  }
-
-  test("namedStruct with odd arguments") {
-    intercept[IllegalArgumentException] {
-      namedStruct(col("x"))
-    }
-  }
-
-  test("namedStruct with non string literal names") {
-    val df = Seq((1, "str")).toDF("a", "b")
-    intercept[IllegalArgumentException] {
-      df.select(namedStruct(lit(1), (col("a") * 2), lit("y"), lit(5.0)))
-    }
-  }
-
   test("constant functions") {
     checkAnswer(
       ctx.sql("SELECT E()"),

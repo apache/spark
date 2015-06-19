@@ -761,21 +761,6 @@ object functions {
   }
 
   /**
-   * Creates a new struct column with given field names and columns.
-   * The input columns should be of length 2*n and follow (name1, col1, name2, col2),
-   * name* should be String Literal
-   *
-   * @group normal_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def namedStruct(cols: Column*): Column = {
-    require(cols.length % 2 == 0,
-      s"namedStruct expects an even number of arguments.")
-    CreateNamedStruct(cols.map(_.expr))
-  }
-
-  /**
    * Converts a string expression to upper case.
    *
    * @group normal_funcs
