@@ -32,8 +32,7 @@ SUPPORT_PYTHON_VERSIONS="2.6 3.4 pypy"
 TARGET_PYTHON_VERSION=
 if [ $# != 0 -a $1 == "-v" ]; then
     TARGET_PYTHON_VERSION=$2
-    shift
-    shift
+    shift 2
 fi
 
 if [ $# == 0 ]; then
