@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
@@ -518,16 +519,29 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
+  def saveAsTextFile(path: String, conf: JobConf): Unit = {
+    rdd.saveAsTextFile(path, conf)
+  }
+
+  /**
+   * Save this RDD as a text file, using string representations of elements.
+   */
   def saveAsTextFile(path: String): Unit = {
     rdd.saveAsTextFile(path)
   }
-
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsTextFile(path, codec)
+  }
+
+  /**
+   * Save this RDD as a SequenceFile of serialized objects.
+   */
+  def saveAsObjectFile(path: String, conf: JobConf): Unit = {
+    rdd.saveAsObjectFile(path, conf)
   }
 
   /**

@@ -190,7 +190,47 @@ class JavaSparkContext(val sc: SparkContext)
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
 
+  /**
+   * Read a text file from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   */
+  def textFile(path: String, minPartitions: Int, conf: Configuration): JavaRDD[String] =
+    sc.textFile(path, minPartitions, conf)
 
+
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * {{{
+   *   JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")
+   * }}}
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(path: String, minPartitions: Int, conf: Configuration): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path, minPartitions, conf))
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
@@ -234,6 +274,38 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def wholeTextFiles(path: String): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path))
+
+  /**
+   * Read a directory of binary files from HDFS, a local file system (available on all nodes),
+   * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
+   * record and returned in a key-value pair, where the key is the path of each file,
+   * the value is the content of each file.
+   *
+   * For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   *
+   * then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred; very large files but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def binaryFiles(path: String, minPartitions: Int, conf: Configuration): JavaPairRDD[String, PortableDataStream] =
+    new JavaPairRDD(sc.binaryFiles(path, minPartitions, conf))
 
   /**
    * Read a directory of binary files from HDFS, a local file system (available on all nodes),
@@ -309,8 +381,39 @@ class JavaSparkContext(val sc: SparkContext)
    * @return An RDD of data with values, represented as byte arrays
    */
   @Experimental
+  def binaryRecords(path: String, recordLength: Int, conf: Configuration): JavaRDD[Array[Byte]] = {
+    new JavaRDD(sc.binaryRecords(path, recordLength, conf))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Load data from a flat binary file, assuming the length of each record is constant.
+   *
+   * @param path Directory to the input data files
+   * @return An RDD of data with values, represented as byte arrays
+   */
+  @Experimental
   def binaryRecords(path: String, recordLength: Int): JavaRDD[Array[Byte]] = {
     new JavaRDD(sc.binaryRecords(path, recordLength))
+  }
+
+  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    * */
+  def sequenceFile[K, V](path: String,
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int,
+    conf: Configuration
+    ): JavaPairRDD[K, V] = {
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions, conf))
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
@@ -342,6 +445,18 @@ class JavaSparkContext(val sc: SparkContext)
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass))
+  }
+
+  /**
+   * Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+   * BytesWritable values that contain a serialized partition. This is still an experimental storage
+   * format and may not be supported exactly as is in future Spark releases. It will also be pretty
+   * slow if you use the default serializer (Java serialization), though the nice thing about it is
+   * that there's very little effort required to save arbitrary objects.
+   */
+  def objectFile[T](path: String, minPartitions: Int, conf: Configuration): JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    sc.objectFile(path, minPartitions, conf)(ctag)
   }
 
   /**
@@ -426,6 +541,27 @@ class JavaSparkContext(val sc: SparkContext)
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     val rdd = sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass)
+    new JavaHadoopRDD(rdd.asInstanceOf[HadoopRDD[K, V]])
+  }
+
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    */
+  def hadoopFile[K, V, F <: InputFormat[K, V]](
+    path: String,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int,
+    conf: Configuration
+    ): JavaPairRDD[K, V] = {
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    val rdd = sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions, conf)
     new JavaHadoopRDD(rdd.asInstanceOf[HadoopRDD[K, V]])
   }
 
