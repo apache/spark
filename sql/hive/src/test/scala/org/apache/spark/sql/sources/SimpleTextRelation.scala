@@ -156,6 +156,7 @@ class CommitFailureTestRelation(
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context) {
         override def close(): Unit = {
+          super.close()
           sys.error("Intentional task commitment failure for testing purpose.")
         }
       }
