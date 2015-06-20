@@ -62,7 +62,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, FIFO scheduler") {
+  slowTest("cluster mode, FIFO scheduler") {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     testCount()
@@ -71,7 +71,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, fair scheduler") {
+  slowTest("cluster mode, fair scheduler") {
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)

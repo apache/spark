@@ -360,7 +360,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
   }
 
-  test("coalesced RDDs with locality, large scale (10K partitions)") {
+  slowTest("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
     import collection.mutable
     val partitions = 10000
@@ -602,7 +602,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("takeSample") {
+  slowTest("takeSample") {
     val n = 1000000
     val data = sc.parallelize(1 to n, 2)
 

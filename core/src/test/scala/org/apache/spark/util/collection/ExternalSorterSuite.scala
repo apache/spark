@@ -131,11 +131,11 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter4.stop()
   }
 
-  test("empty partitions with spilling with kryo ser") {
+  slowTest("empty partitions with spilling with kryo ser") {
     emptyPartitionsWithSpilling(createSparkConf(false, true))
   }
 
-  test("empty partitions with spilling with java ser") {
+  slowTest("empty partitions with spilling with java ser") {
     emptyPartitionsWithSpilling(createSparkConf(false, false))
   }
 
@@ -163,12 +163,12 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sorter.stop()
   }
 
-  test("spilling in local cluster with kryo ser") {
+  slowTest("spilling in local cluster with kryo ser") {
     // Load defaults, otherwise SPARK_HOME is not found
     testSpillingInLocalCluster(createSparkConf(true, true))
   }
 
-  test("spilling in local cluster with java ser") {
+  slowTest("spilling in local cluster with java ser") {
     // Load defaults, otherwise SPARK_HOME is not found
     testSpillingInLocalCluster(createSparkConf(true, false))
   }
@@ -243,11 +243,11 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(resultE === (0 until 100000).map(i => (i/4, i)).toSeq)
   }
 
-  test("spilling in local cluster with many reduce tasks with kryo ser") {
+  slowTest("spilling in local cluster with many reduce tasks with kryo ser") {
     spillingInLocalClusterWithManyReduceTasks(createSparkConf(true, true))
   }
 
-  test("spilling in local cluster with many reduce tasks with java ser") {
+  slowTest("spilling in local cluster with many reduce tasks with java ser") {
     spillingInLocalClusterWithManyReduceTasks(createSparkConf(true, false))
   }
 
@@ -321,7 +321,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(resultE === (0 until 100000).map(i => (i/4, i)).toSeq)
   }
 
-  test("cleanup of intermediate files in sorter") {
+  slowTest("cleanup of intermediate files in sorter") {
     val conf = createSparkConf(true, false)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -346,7 +346,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(diskBlockManager.getAllBlocks().length === 0)
   }
 
-  test("cleanup of intermediate files in sorter if there are errors") {
+  slowTest("cleanup of intermediate files in sorter if there are errors") {
     val conf = createSparkConf(true, false)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -370,7 +370,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(diskBlockManager.getAllBlocks().length === 0)
   }
 
-  test("cleanup of intermediate files in shuffle") {
+  slowTest("cleanup of intermediate files in shuffle") {
     val conf = createSparkConf(false, false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -385,7 +385,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(diskBlockManager.getAllFiles().length === 4)
   }
 
-  test("cleanup of intermediate files in shuffle with errors") {
+  slowTest("cleanup of intermediate files in shuffle with errors") {
     val conf = createSparkConf(false, false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -551,7 +551,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(results === expected)
   }
 
-  test("spilling with hash collisions") {
+  slowTest("spilling with hash collisions") {
     val conf = createSparkConf(true, false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -608,7 +608,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(count === 100000 + collisionPairs.size * 2)
   }
 
-  test("spilling with many hash collisions") {
+  slowTest("spilling with many hash collisions") {
     val conf = createSparkConf(true, false)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -631,7 +631,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(count === 10000)
   }
 
-  test("spilling with hash collisions using the Int.MaxValue key") {
+  slowTest("spilling with hash collisions using the Int.MaxValue key") {
     val conf = createSparkConf(true, false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -655,7 +655,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("spilling with null keys and values") {
+  slowTest("spilling with null keys and values") {
     val conf = createSparkConf(true, false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -684,11 +684,11 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("sort without breaking sorting contracts with kryo ser") {
+  slowTest("sort without breaking sorting contracts with kryo ser") {
     sortWithoutBreakingSortingContracts(createSparkConf(true, true))
   }
 
-  test("sort without breaking sorting contracts with java ser") {
+  slowTest("sort without breaking sorting contracts with java ser") {
     sortWithoutBreakingSortingContracts(createSparkConf(true, false))
   }
 

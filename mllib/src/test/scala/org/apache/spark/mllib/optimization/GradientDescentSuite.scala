@@ -143,7 +143,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
 
 class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small") {
+  slowTest("task size should be small") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>

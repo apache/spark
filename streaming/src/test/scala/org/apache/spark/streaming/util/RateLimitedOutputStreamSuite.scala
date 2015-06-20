@@ -30,7 +30,7 @@ class RateLimitedOutputStreamSuite extends SparkFunSuite {
     System.nanoTime - start
   }
 
-  test("write") {
+  slowTest("write") {
     val underlying = new ByteArrayOutputStream
     val data = "X" * 41000
     val stream = new RateLimitedOutputStream(underlying, desiredBytesPerSec = 10000)

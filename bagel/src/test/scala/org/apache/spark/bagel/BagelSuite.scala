@@ -38,7 +38,7 @@ class BagelSuite extends SparkFunSuite with Assertions with BeforeAndAfter with 
     }
   }
 
-  test("halting by voting") {
+  slowTest("halting by voting") {
     sc = new SparkContext("local", "test")
     val verts = sc.parallelize(Array("a", "b", "c", "d").map(id => (id, new TestVertex(true, 0))))
     val msgs = sc.parallelize(Array[(String, TestMessage)]())
@@ -75,7 +75,7 @@ class BagelSuite extends SparkFunSuite with Assertions with BeforeAndAfter with 
     }
   }
 
-  test("large number of iterations") {
+  slowTest("large number of iterations") {
     // This tests whether jobs with a large number of iterations finish in a reasonable time,
     // because non-memoized recursion in RDD or DAGScheduler used to cause them to hang
     failAfter(30 seconds) {

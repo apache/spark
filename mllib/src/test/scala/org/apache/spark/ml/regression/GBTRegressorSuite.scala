@@ -51,7 +51,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
   }
 
-  test("Regression with continuous features: SquaredError") {
+  slowTest("Regression with continuous features: SquaredError") {
     val categoricalFeatures = Map.empty[Int, Int]
     GBTRegressor.supportedLossTypes.foreach { loss =>
       testCombinations.foreach {

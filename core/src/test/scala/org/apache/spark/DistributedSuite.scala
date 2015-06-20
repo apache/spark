@@ -31,7 +31,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   val clusterUrl = "local-cluster[2,1,512]"
 
-  test("task throws not serializable exception") {
+  slowTest("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
     // this test will hang. Correct behavior is that executors don't crash but fail tasks
     // and the scheduler throws a SparkException.
@@ -49,7 +49,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     resetSparkContext()
   }
 
-  test("local-cluster format") {
+  slowTest("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
@@ -64,7 +64,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     resetSparkContext()
   }
 
-  test("simple groupByKey") {
+  slowTest("simple groupByKey") {
     sc = new SparkContext(clusterUrl, "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 5)
     val groups = pairs.groupByKey(5).collect()
@@ -75,7 +75,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(valuesFor2.toList.sorted === List(1))
   }
 
-  test("groupByKey where map output sizes exceed maxMbInFlight") {
+  slowTest("groupByKey where map output sizes exceed maxMbInFlight") {
     val conf = new SparkConf().set("spark.reducer.maxSizeInFlight", "1m")
     sc = new SparkContext(clusterUrl, "test", conf)
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
@@ -86,14 +86,14 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(groups.map(_._2).sum === 2000)
   }
 
-  test("accumulators") {
+  slowTest("accumulators") {
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)
     sc.parallelize(1 to 10, 10).foreach(x => accum += x)
     assert(accum.value === 55)
   }
 
-  test("broadcast variables") {
+  slowTest("broadcast variables") {
     sc = new SparkContext(clusterUrl, "test")
     val array = new Array[Int](100)
     val bv = sc.broadcast(array)
@@ -103,7 +103,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(sum === 0)
   }
 
-  test("repeatedly failing task") {
+  slowTest("repeatedly failing task") {
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)
     val thrown = intercept[SparkException] {
@@ -113,7 +113,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(thrown.getMessage.contains("failed 4 times"))
   }
 
-  test("repeatedly failing task that crashes JVM") {
+  slowTest("repeatedly failing task that crashes JVM") {
     // Ensures that if a task fails in a way that crashes the JVM, the job eventually fails rather
     // than hanging due to retrying the failed task infinitely many times (eventually the
     // standalone scheduler will remove the application, causing the job to hang waiting to
@@ -129,7 +129,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("caching") {
+  slowTest("caching") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).cache()
     assert(data.count() === 1000)
@@ -137,7 +137,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching on disk") {
+  slowTest("caching on disk") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.DISK_ONLY)
     assert(data.count() === 1000)
@@ -145,7 +145,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching in memory, replicated") {
+  slowTest("caching in memory, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_ONLY_2)
     assert(data.count() === 1000)
@@ -153,7 +153,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching in memory, serialized, replicated") {
+  slowTest("caching in memory, serialized, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_ONLY_SER_2)
     assert(data.count() === 1000)
@@ -161,7 +161,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching on disk, replicated") {
+  slowTest("caching on disk, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.DISK_ONLY_2)
     assert(data.count() === 1000)
@@ -169,7 +169,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching in memory and disk, replicated") {
+  slowTest("caching in memory and disk, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_AND_DISK_2)
     assert(data.count() === 1000)
@@ -177,7 +177,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 1000)
   }
 
-  test("caching in memory and disk, serialized, replicated") {
+  slowTest("caching in memory and disk, serialized, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_AND_DISK_SER_2)
 
@@ -200,7 +200,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("compute without caching when no partitions fit in memory") {
+  slowTest("compute without caching when no partitions fit in memory") {
     sc = new SparkContext(clusterUrl, "test")
     // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
     // to only 50 KB (0.0001 of 512 MB), so no partitions should fit in memory
@@ -210,7 +210,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 4000000)
   }
 
-  test("compute when only some partitions fit in memory") {
+  slowTest("compute when only some partitions fit in memory") {
     val conf = new SparkConf().set("spark.storage.memoryFraction", "0.01")
     sc = new SparkContext(clusterUrl, "test", conf)
     // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
@@ -222,13 +222,13 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === 4000000)
   }
 
-  test("passing environment variables to cluster") {
+  slowTest("passing environment variables to cluster") {
     sc = new SparkContext(clusterUrl, "test", null, Nil, Map("TEST_VAR" -> "TEST_VALUE"))
     val values = sc.parallelize(1 to 2, 2).map(x => System.getenv("TEST_VAR")).collect()
     assert(values.toSeq === Seq("TEST_VALUE", "TEST_VALUE"))
   }
 
-  test("recover from node failures") {
+  slowTest("recover from node failures") {
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
@@ -238,7 +238,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.map(failOnMarkedIdentity).collect.size === 2)
   }
 
-  test("recover from repeated node failures during shuffle-map") {
+  slowTest("recover from repeated node failures during shuffle-map") {
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
@@ -250,7 +250,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("recover from repeated node failures during shuffle-reduce") {
+  slowTest("recover from repeated node failures during shuffle-reduce") {
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
@@ -269,7 +269,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("recover from node failures with replication") {
+  slowTest("recover from node failures with replication") {
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
@@ -290,7 +290,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("unpersist RDDs") {
+  slowTest("unpersist RDDs") {
     DistributedSuite.amMaster = true
     sc = new SparkContext("local-cluster[3,1,512]", "test")
     val data = sc.parallelize(Seq(true, false, false, false), 4)

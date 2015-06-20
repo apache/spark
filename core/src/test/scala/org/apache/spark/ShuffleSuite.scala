@@ -46,7 +46,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(valuesFor2.toList.sorted === List(1))
   }
 
-  test("shuffle non-zero block size") {
+  slowTest("shuffle non-zero block size") {
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val NUM_BLOCKS = 3
 
@@ -71,7 +71,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
   }
 
-  test("shuffle serializer") {
+  slowTest("shuffle serializer") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
@@ -87,7 +87,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(c.count === 10)
   }
 
-  test("zero sized blocks") {
+  slowTest("zero sized blocks") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
@@ -114,7 +114,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("zero sized blocks without kryo") {
+  slowTest("zero sized blocks without kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
@@ -139,7 +139,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("shuffle on mutable pairs") {
+  slowTest("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
@@ -151,7 +151,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     data.foreach { pair => results should contain ((pair._1, pair._2)) }
   }
 
-  test("sorting on mutable pairs") {
+  slowTest("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
@@ -166,7 +166,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     results(3) should be ((100, 100))
   }
 
-  test("cogroup using mutable pairs") {
+  slowTest("cogroup using mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
@@ -193,7 +193,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(results(3)(1).contains("3"))
   }
 
-  test("subtract mutable pairs") {
+  slowTest("subtract mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
@@ -207,7 +207,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     results(0) should be ((3, 33))
   }
 
-  test("sort with Java non serializable class - Kryo") {
+  slowTest("sort with Java non serializable class - Kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     sc = new SparkContext("local-cluster[2,1,512]", "test", myConf)
@@ -221,7 +221,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(c.collect() === Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
   }
 
-  test("sort with Java non serializable class - Java") {
+  slowTest("sort with Java non serializable class - Java") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
@@ -237,7 +237,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(thrown.getMessage.toLowerCase.contains("serializable"))
   }
 
-  test("shuffle with different compression settings (SPARK-3426)") {
+  slowTest("shuffle with different compression settings (SPARK-3426)") {
     for (
       shuffleSpillCompress <- Set(true, false);
       shuffleCompress <- Set(true, false)

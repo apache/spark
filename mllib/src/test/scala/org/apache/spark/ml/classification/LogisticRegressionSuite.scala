@@ -207,7 +207,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizerB.numClasses === 5)
   }
 
-  test("binary logistic regression with intercept without regularization") {
+  slowTest("binary logistic regression with intercept without regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
     val model = trainer.fit(binaryDataset)
 
@@ -238,7 +238,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
-  test("binary logistic regression without intercept without regularization") {
+  slowTest("binary logistic regression without intercept without regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
     val model = trainer.fit(binaryDataset)
 
@@ -270,7 +270,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
-  test("binary logistic regression with intercept with L1 regularization") {
+  slowTest("binary logistic regression with intercept with L1 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.12)
     val model = trainer.fit(binaryDataset)
@@ -302,7 +302,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 2E-2)
   }
 
-  test("binary logistic regression without intercept with L1 regularization") {
+  slowTest("binary logistic regression without intercept with L1 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(1.0).setRegParam(0.12)
     val model = trainer.fit(binaryDataset)
@@ -335,7 +335,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-2)
   }
 
-  test("binary logistic regression with intercept with L2 regularization") {
+  slowTest("binary logistic regression with intercept with L2 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(1.37)
     val model = trainer.fit(binaryDataset)
@@ -367,7 +367,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
-  test("binary logistic regression without intercept with L2 regularization") {
+  slowTest("binary logistic regression without intercept with L2 regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(1.37)
     val model = trainer.fit(binaryDataset)
@@ -400,7 +400,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
-  test("binary logistic regression with intercept with ElasticNet regularization") {
+  slowTest("binary logistic regression with intercept with ElasticNet regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.38).setRegParam(0.21)
     val model = trainer.fit(binaryDataset)
@@ -432,7 +432,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(3) ~== weightsR(3) relTol 1E-3)
   }
 
-  test("binary logistic regression without intercept with ElasticNet regularization") {
+  slowTest("binary logistic regression without intercept with ElasticNet regularization") {
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.38).setRegParam(0.21)
     val model = trainer.fit(binaryDataset)

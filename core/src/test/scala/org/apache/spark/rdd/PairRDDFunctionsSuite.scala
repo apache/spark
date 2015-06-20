@@ -85,7 +85,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(valuesFor2.toList.sorted === List(1))
   }
 
-  test("sampleByKey") {
+  slowTest("sampleByKey") {
 
     val defaultSeed = 1L
 
@@ -125,7 +125,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("sampleByKeyExact") {
+  slowTest("sampleByKeyExact") {
     val defaultSeed = 1L
 
     // vary RDD size

@@ -51,7 +51,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
 
   lazy val dataRDD = sc.parallelize(data, 2).cache()
 
-  test("LBFGS loss should be decreasing and match the result of Gradient Descent.") {
+  slowTest("LBFGS loss should be decreasing and match the result of Gradient Descent.") {
     val regParam = 0
 
     val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
@@ -94,7 +94,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       "LBFGS should match GD result within 2% difference.")
   }
 
-  test("LBFGS and Gradient Descent with L2 regularization should get the same result.") {
+  slowTest("LBFGS and Gradient Descent with L2 regularization should get the same result.") {
     val regParam = 0.2
 
     // Prepare another non-zero weights to compare the loss in the first iteration.
@@ -195,7 +195,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert((lossLBFGS3(4) - lossLBFGS3(5)) / lossLBFGS3(4) < convergenceTol)
   }
 
-  test("Optimize via class LBFGS.") {
+  slowTest("Optimize via class LBFGS.") {
     val regParam = 0.2
 
     // Prepare another non-zero weights to compare the loss in the first iteration.
@@ -232,7 +232,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
 
 class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small") {
+  slowTest("task size should be small") {
     val m = 10
     val n = 200000
     val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>

@@ -32,7 +32,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
   /** Length of time to wait while draining listener events. */
   private val WAIT_TIMEOUT_MILLIS = 10000
 
-  test("verify that correct log urls get propagated from workers") {
+  slowTest("verify that correct log urls get propagated from workers") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
 
     val listener = new SaveExecutorInfo
@@ -52,7 +52,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("verify that log urls reflect SPARK_PUBLIC_DNS (SPARK-6175)") {
+  slowTest("verify that log urls reflect SPARK_PUBLIC_DNS (SPARK-6175)") {
     val SPARK_PUBLIC_DNS = "public_dns"
     class MySparkConf extends SparkConf(false) {
       override def getenv(name: String): String = {

@@ -145,7 +145,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(tempDir.list().size === 1)
   }
 
-  test("Job should not complete if all commits are denied") {
+  slowTest("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
       Matchers.any(), Matchers.any(), Matchers.any())

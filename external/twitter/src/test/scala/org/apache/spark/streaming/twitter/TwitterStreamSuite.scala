@@ -35,7 +35,7 @@ class TwitterStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging 
 
   private val framework: String = this.getClass.getSimpleName
 
-  test("twitter input stream") {
+  slowTest("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filters = Seq("filter1", "filter2")
     val authorization: Authorization = NullAuthorization.getInstance()

@@ -44,7 +44,7 @@ import org.apache.spark.streaming.receiver.Receiver
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
-  test("socket input stream") {
+  slowTest("socket input stream") {
     withTestServer(new TestServer()) { testServer =>
       // Start the server
       testServer.start()
@@ -106,7 +106,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  test("socket input stream - no block in a batch") {
+  slowTest("socket input stream - no block in a batch") {
     withTestServer(new TestServer()) { testServer =>
       testServer.start()
 
@@ -136,7 +136,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  test("binary records stream") {
+  slowTest("binary records stream") {
     val testDir: File = null
     try {
       val batchDuration = Seconds(2)

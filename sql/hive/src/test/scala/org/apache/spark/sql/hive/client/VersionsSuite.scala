@@ -37,7 +37,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       "hive.metastore.warehouse.dir" -> warehousePath.toString)
   }
 
-  test("success sanity check") {
+  slowTest("success sanity check") {
     val badClient = IsolatedClientLoader.forVersion("13", buildConf()).client
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
@@ -77,12 +77,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
   private var client: ClientInterface = null
 
   versions.foreach { version =>
-    test(s"$version: create client") {
+    slowTest(s"$version: create client") {
       client = null
       client = IsolatedClientLoader.forVersion(version, buildConf()).client
     }
 
-    test(s"$version: createDatabase") {
+    slowTest(s"$version: createDatabase") {
       val db = HiveDatabase("default", "")
       client.createDatabase(db)
     }

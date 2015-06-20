@@ -173,7 +173,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(dv1.values === Array(1.0, 0.0, 3.0, 1.0))
   }
 
-  test("kFold") {
+  slowTest("kFold") {
     val data = sc.parallelize(1 to 100, 2)
     val collectedData = data.collect().sorted
     val twoFoldedRdd = kFold(data, 2, 1)

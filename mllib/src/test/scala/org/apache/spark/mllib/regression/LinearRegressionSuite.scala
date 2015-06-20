@@ -43,7 +43,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   // Test if we can correctly learn Y = 3 + 10*X1 + 10*X2
-  test("linear regression") {
+  slowTest("linear regression") {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linReg = new LinearRegressionWithSGD().setIntercept(true)
@@ -69,7 +69,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   // Test if we can correctly learn Y = 10*X1 + 10*X2
-  test("linear regression without intercept") {
+  slowTest("linear regression without intercept") {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
       0.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linReg = new LinearRegressionWithSGD().setIntercept(false)
@@ -96,7 +96,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   // Test if we can correctly learn Y = 10*X1 + 10*X10000
-  test("sparse linear regression without intercept") {
+  slowTest("sparse linear regression without intercept") {
     val denseRDD = sc.parallelize(
       LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42), 2)
     val sparseRDD = denseRDD.map { case LabeledPoint(label, v) =>
@@ -151,7 +151,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
 class LinearRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small in both training and prediction") {
+  slowTest("task size should be small in both training and prediction") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
