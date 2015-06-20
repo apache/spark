@@ -102,13 +102,21 @@ class DirectKafkaStreamSuite
     val allReceived =
       new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
 
-    stream.foreachRDD { rdd =>
-    // Get the offset ranges in the RDD
-      val offsets = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    // hold a reference to the current offset ranges, so it can be used downstream
+    var offsetRanges = Array[OffsetRange]()
+
+    stream.transform { rdd =>
+      // Get the offset ranges in the RDD
+      offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+      rdd
+    }.foreachRDD { rdd =>
+      for (o <- offsetRanges) {
+        println(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}")
+      }
       val collected = rdd.mapPartitionsWithIndex { (i, iter) =>
       // For each partition, get size of the range in the partition,
       // and the number of items in the partition
-        val off = offsets(i)
+        val off = offsetRanges(i)
         val all = iter.toSeq
         val partSize = all.size
         val rangeSize = off.untilOffset - off.fromOffset
