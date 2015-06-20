@@ -15,6 +15,6 @@
  * limitations under the License.
  */
 
-/** Dummy class used in regression test SPARK-8498. */
+/** Dummy class used in regression test SPARK-8489. */
 case class MyCoolClass(past: String, present: String, future: String)
 
