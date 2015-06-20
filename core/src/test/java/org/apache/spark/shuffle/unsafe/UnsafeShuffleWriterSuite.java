@@ -253,6 +253,20 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
+  @Test(expected=RuntimeException.class)
+  public void writeFailurePropegates() throws Exception {
+    class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
+      @Override public boolean hasNext() {
+        throw new RuntimeException("panda magic");
+      }
+      @Override public Product2<Object, Object> next() {
+        return null;
+      }
+    }
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
+  }
+
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);

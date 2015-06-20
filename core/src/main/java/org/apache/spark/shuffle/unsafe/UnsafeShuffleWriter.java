@@ -139,17 +139,22 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
-    boolean success = false;
     try {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
       closeAndWriteOutput();
-      success = true;
-    } finally {
-      if (!success) {
-        sorter.cleanupAfterError();
+    } catch (Exception e) {
+      // Trigger a cleanup if we encountered an error
+      if (sorter != null) {
+        try {
+          sorter.cleanupAfterError();
+        } catch (Exception e2) {
+          throw new RuntimeException("Failed to perform cleanup after exception", e);
+        }
       }
+      // re-throw the exception
+      throw e;
     }
   }
 
