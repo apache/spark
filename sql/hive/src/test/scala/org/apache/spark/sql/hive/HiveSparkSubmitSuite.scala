@@ -41,7 +41,7 @@ class HiveSparkSubmitSuite
     System.setProperty("spark.testing", "true")
   }
 
-  test("SPARK-8368: includes jars passed in through --jars") {
+  slowTest("SPARK-8368: includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -57,7 +57,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-8020: set sql conf in spark conf") {
+  slowTest("SPARK-8020: set sql conf in spark conf") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
@@ -67,7 +67,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-8489: MissingRequirementError during reflection") {
+  slowTest("SPARK-8489: MissingRequirementError during reflection") {
     // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
     // a HiveContext and uses it to create a data frame from an RDD using reflection.
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
