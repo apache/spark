@@ -37,6 +37,10 @@ final class RegressionEvaluator(override val uid: String)
 
   /**
    * param for metric name in evaluation (supports `"rmse"` (default), `"mse"`, `"r2"`, and `"mae"`)
+   *
+   * Because we will maximize evaluation value (ref: `CrossValidator`),
+   * when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
+   * we take and output the negative of this metric.
    * @group param
    */
   val metricName: Param[String] = {
