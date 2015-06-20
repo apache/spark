@@ -1376,8 +1376,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String, conf: JobConf = new JobConf(sc.hadoopConfiguration))
-      : Unit = withScope {
+  def saveAsTextFile(path: String, conf: JobConf): Unit = withScope {
     // https://issues.apache.org/jira/browse/SPARK-2075
     //
     // NullWritable is a `Comparable` in Hadoop 1.+, so the compiler cannot find an implicit
@@ -1404,6 +1403,12 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Save this RDD as a text file, using string representations of elements.
+   */
+  def saveAsTextFile(path: String): Unit =
+    saveAsTextFile(path, new JobConf(sc.hadoopConfiguration))
+
+  /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = withScope {
@@ -1424,12 +1429,17 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String, conf: JobConf = new JobConf(sc.hadoopConfiguration))
-      : Unit = withScope {
+  def saveAsObjectFile(path: String, conf: JobConf): Unit = withScope {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
-      .saveAsSequenceFile(path, conf = conf)
+      .saveAsSequenceFile(path, None, conf)
   }
+
+  /**
+   * Save this RDD as a SequenceFile of serialized objects.
+   */
+  def saveAsObjectFile(path: String): Unit =
+    saveAsObjectFile(path, new JobConf(sc.hadoopConfiguration))
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.

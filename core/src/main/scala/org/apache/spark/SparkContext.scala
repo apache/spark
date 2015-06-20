@@ -794,11 +794,66 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def textFile(
       path: String,
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration): RDD[String] = withScope {
+      minPartitions: Int,
+      conf: Configuration): RDD[String] = withScope {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions, conf).map(pair => pair._2.toString)
+  }
+
+  /**
+   * Read a text file from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   */
+  def textFile(
+      path: String,
+      minPartitions: Int = defaultMinPartitions): RDD[String] =
+    textFile(path, minPartitions, hadoopConfiguration)
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `val rdd = sparkContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(
+      path: String,
+      minPartitions: Int,
+      conf: Configuration): RDD[(String, String)] = withScope {
+    assertNotStopped()
+    val job = new NewHadoopJob(conf)
+    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
+    // comma separated files as input. (see SPARK-7155)
+    NewFileInputFormat.setInputPaths(job, path)
+    val updateConf = job.getConfiguration
+    new WholeTextFileRDD(
+      this,
+      classOf[WholeTextFileInputFormat],
+      classOf[String],
+      classOf[String],
+      updateConf,
+      minPartitions).setName(path)
   }
 
   /**
@@ -830,23 +885,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def wholeTextFiles(
       path: String,
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration): RDD[(String, String)] = withScope {
-    assertNotStopped()
-    val job = new NewHadoopJob(conf)
-    // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
-    // comma separated files as input. (see SPARK-7155)
-    NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = job.getConfiguration
-    new WholeTextFileRDD(
-      this,
-      classOf[WholeTextFileInputFormat],
-      classOf[String],
-      classOf[String],
-      updateConf,
-      minPartitions).setName(path)
-  }
-
+      minPartitions: Int = defaultMinPartitions): RDD[(String, String)] =
+    wholeTextFiles(path, minPartitions, hadoopConfiguration)
 
   /**
    * :: Experimental ::
@@ -880,8 +920,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @Experimental
   def binaryFiles(
       path: String,
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration): RDD[(String, PortableDataStream)] = withScope {
+      minPartitions: Int,
+      conf: Configuration): RDD[(String, PortableDataStream)] = withScope {
     assertNotStopped()
     val job = new NewHadoopJob(conf)
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
@@ -896,6 +936,41 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       updateConf,
       minPartitions).setName(path)
   }
+
+  /**
+   * :: Experimental ::
+   *
+   * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
+   * (useful for binary data)
+   *
+   * For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * `val rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   *
+   * then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   *
+   * @note Small files are preferred; very large files may cause bad performance.
+   */
+  @Experimental
+  def binaryFiles(
+      path: String,
+      minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] =
+    binaryFiles(path, minPartitions, hadoopConfiguration)
 
   /**
    * :: Experimental ::
@@ -974,8 +1049,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = withScope {
+      minPartitions: Int,
+      conf: Configuration): RDD[(K, V)] = withScope {
     assertNotStopped()
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(conf))
@@ -989,6 +1064,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass,
       minPartitions).setName(path)
   }
+
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
+  def hadoopFile[K, V](
+      path: String,
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int = defaultMinPartitions): RDD[(K, V)] =
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions, hadoopConfiguration)
 
   /**
    * Smarter version of hadoopFile() that uses class tags to figure out the classes of keys,
@@ -1109,15 +1200,86 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
     * copy them using a `map` function.
     */
-  def sequenceFile[K, V](path: String,
+  def sequenceFile[K, V](
+      path: String,
       keyClass: Class[K],
       valueClass: Class[V],
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration
+      minPartitions: Int,
+      conf: Configuration
       ): RDD[(K, V)] = withScope {
     assertNotStopped()
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
     hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions, conf)
+  }
+
+  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
+    */
+  def sequenceFile[K, V](
+      path: String,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int
+      ): RDD[(K, V)] =
+    sequenceFile(path, keyClass, valueClass, minPartitions, hadoopConfiguration)
+
+  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
+    */
+  def sequenceFile[K, V](
+      path: String,
+      keyClass: Class[K],
+      valueClass: Class[V]
+      ): RDD[(K, V)] =
+    sequenceFile(path, keyClass, valueClass, defaultMinPartitions, hadoopConfiguration)
+
+  /**
+   * Version of sequenceFile() for types implicitly convertible to Writables through a
+   * WritableConverter. For example, to access a SequenceFile where the keys are Text and the
+   * values are IntWritable, you could simply write
+   * {{{
+   * sparkContext.sequenceFile[String, Int](path, ...)
+   * }}}
+   *
+   * WritableConverters are provided in a somewhat strange way (by an implicit function) to support
+   * both subclasses of Writable and types for which we define a converter (e.g. Int to
+   * IntWritable). The most natural thing would've been to have implicit objects for the
+   * converters, but then we couldn't have an object for every subclass of Writable (you can't
+   * have a parameterized singleton object). We use functions instead to create a new converter
+   * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
+   * allow it to figure out the Writable class to use in the subclass case.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
+  def sequenceFile[K, V](
+      path: String,
+      minPartitions: Int,
+      conf: Configuration)(implicit km: ClassTag[K], vm: ClassTag[V],
+      kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
+    withScope {
+      assertNotStopped()
+      val kc = clean(kcf)()
+      val vc = clean(vcf)()
+      val format = classOf[SequenceFileInputFormat[Writable, Writable]]
+      val writables = hadoopFile(path, format,
+        kc.writableClass(km).asInstanceOf[Class[Writable]],
+        vc.writableClass(vm).asInstanceOf[Class[Writable]], minPartitions, conf)
+      writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
+    }
   }
 
   /**
@@ -1142,19 +1304,27 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
    */
-  def sequenceFile[K, V](path: String, minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration)(implicit km: ClassTag[K], vm: ClassTag[V],
-      kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] = {
-    withScope {
-      assertNotStopped()
-      val kc = clean(kcf)()
-      val vc = clean(vcf)()
-      val format = classOf[SequenceFileInputFormat[Writable, Writable]]
-      val writables = hadoopFile(path, format,
-        kc.writableClass(km).asInstanceOf[Class[Writable]],
-        vc.writableClass(vm).asInstanceOf[Class[Writable]], minPartitions, conf)
-      writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
-    }
+  def sequenceFile[K, V](
+      path: String,
+      minPartitions: Int = defaultMinPartitions)(implicit km: ClassTag[K], vm: ClassTag[V],
+      kcf: () => WritableConverter[K], vcf: () => WritableConverter[V]): RDD[(K, V)] =
+    sequenceFile(path, minPartitions, hadoopConfiguration)(km, vm, kcf, vcf)
+
+  /**
+   * Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+   * BytesWritable values that contain a serialized partition. This is still an experimental
+   * storage format and may not be supported exactly as is in future Spark releases. It will also
+   * be pretty slow if you use the default serializer (Java serialization),
+   * though the nice thing about it is that there's very little effort required to save arbitrary
+   * objects.
+   */
+  def objectFile[T: ClassTag](
+      path: String,
+      minPartitions: Int,
+      conf: Configuration): RDD[T] = withScope {
+    assertNotStopped()
+    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions, conf)
+      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
   }
 
   /**
@@ -1167,12 +1337,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def objectFile[T: ClassTag](
       path: String,
-      minPartitions: Int = defaultMinPartitions,
-      conf: Configuration = hadoopConfiguration): RDD[T] = withScope {
-    assertNotStopped()
-    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions, conf)
-      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
-  }
+      minPartitions: Int = defaultMinPartitions): RDD[T] =
+    objectFile(path, minPartitions, hadoopConfiguration)
 
   protected[spark] def checkpointFile[T: ClassTag](path: String): RDD[T] = withScope {
     new CheckpointRDD[T](this, path)

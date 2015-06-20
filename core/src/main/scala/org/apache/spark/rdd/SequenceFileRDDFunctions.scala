@@ -87,8 +87,8 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
    */
   def saveAsSequenceFile(
       path: String,
-      codec: Option[Class[_ <: CompressionCodec]] = None,
-      conf: JobConf = new JobConf(self.context.hadoopConfiguration)): Unit = self.withScope {
+      codec: Option[Class[_ <: CompressionCodec]],
+      conf: JobConf): Unit = self.withScope {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
@@ -114,4 +114,16 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
         path, keyWritableClass, valueWritableClass, format, conf, codec)
     }
   }
+
+  /**
+   * Output the RDD as a Hadoop SequenceFile using the Writable types we infer from the RDD's key
+   * and value types. If the key or value are Writable, then we use their classes directly;
+   * otherwise we map primitive types such as Int and Double to IntWritable, DoubleWritable, etc,
+   * byte arrays to BytesWritable, and Strings to Text. The `path` can be on any Hadoop-supported
+   * file system.
+   */
+  def saveAsSequenceFile(
+      path: String,
+      codec: Option[Class[_ <: CompressionCodec]] = None): Unit =
+    saveAsSequenceFile(path, codec, new JobConf(self.context.hadoopConfiguration))
 }
