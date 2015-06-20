@@ -297,7 +297,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
 /**
  * :: Experimental ::
- * A param amd its value.
+ * A param and its value.
  */
 @Experimental
 case class ParamPair[T](param: Param[T], value: T) {
