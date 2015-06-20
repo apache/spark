@@ -264,7 +264,7 @@ public class UnsafeShuffleWriterSuite {
       }
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(Iterators.<Product2<Object, Object>>emptyIterator());
+    writer.write(new BadRecords());
   }
 
   @Test
