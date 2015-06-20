@@ -70,6 +70,19 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
    */
   def writeRow(row: InternalRow, baseObject: Object, baseOffset: Long): Int = {
     unsafeRow.pointTo(baseObject, baseOffset, writers.length, null)
+
+    if (writers.length > 0) {
+      // zero-out the bitset
+      var n = writers.length / 64
+      while (n >= 0) {
+        PlatformDependent.UNSAFE.putLong(
+          unsafeRow.getBaseObject,
+          unsafeRow.getBaseOffset + n * 8,
+          0L)
+        n -= 1
+      }
+    }
+
     var fieldNumber = 0
     var appendCursor: Int = fixedLengthSize
     while (fieldNumber < writers.length) {
