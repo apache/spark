@@ -27,13 +27,13 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
-case class DCTTestData(vec: Array[Double], wantedVec: Array[Double])
+case class DCTTestData[T](vec: Array[T], wantedVec: Array[T])
 
 class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.DiscreteCosineTransformerSuite._
 
   test("forward transform of discrete cosine matches jTransforms result") {
-    val transformer = new DiscreteCosineTransformer()
+    val transformer = new DiscreteCosineTransformer[Double]()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(false)
@@ -41,13 +41,13 @@ class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkCo
     val expectedResult = data.clone()
     (new DoubleDCT_1D(data.length)).forward(expectedResult, true)
     val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
+      DCTTestData[Double](data, expectedResult)
     ))
-    testDCT(transformer, dataset)
+    testDCT[Double](transformer, dataset)
   }
 
   test("inverse transform of discrete cosine matches jTransforms result") {
-    val transformer = new DiscreteCosineTransformer()
+    val transformer = new DiscreteCosineTransformer[Double]()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(true)
@@ -55,20 +55,21 @@ class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkCo
     val expectedResult = data.clone()
     (new DoubleDCT_1D(data.length)).inverse(expectedResult, true)
     val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
+      DCTTestData[Double](data, expectedResult)
     ))
-    testDCT(transformer, dataset)
+    testDCT[Double](transformer, dataset)
   }
 }
 
 object DiscreteCosineTransformerSuite extends SparkFunSuite {
 
-  def testDCT(t: DiscreteCosineTransformer, dataset: DataFrame): Unit = {
+  def testDCT[T : Numeric](t: DiscreteCosineTransformer[_], dataset: DataFrame): Unit = {
+    import Numeric.Implicits._
     t.transform(dataset)
       .select("resultVec", "wantedVec")
       .collect()
-      .foreach { case Row(resultVec: ArrayBuffer[Double], wantedVec : ArrayBuffer[Double]) =>
-        assert(resultVec.zip(wantedVec).map(x => Math.pow(x._1 - x._2, 2)).sum < 1e-4)
+      .foreach { case Row(resultVec: ArrayBuffer[T], wantedVec : ArrayBuffer[T]) =>
+        assert(resultVec.zip(wantedVec).map(x => math.pow((x._1 - x._2).toDouble, 2)).sum < 1e-4)
       }
   }
 }
