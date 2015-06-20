@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 if sys.version >= "3":
     from io import StringIO
 else:
