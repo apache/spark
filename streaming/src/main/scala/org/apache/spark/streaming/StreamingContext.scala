@@ -549,8 +549,8 @@ class StreamingContext private[streaming] (
         case e: NotSerializableException =>
           throw new NotSerializableException(
             "DStream checkpointing has been enabled but the DStreams with their functions " +
-              "are not serializable\nSerialization stack:\n" +
-              SerializationDebugger.find(checkpoint).map("\t- " + _).mkString("\n")
+              "are not serializable\n" +
+              SerializationDebugger.improveException(checkpoint, e).getMessage()
           )
       }
     }
