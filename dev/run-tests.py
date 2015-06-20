@@ -38,9 +38,31 @@ all_modules = []
 
 
 class Module(object):
+    """
+    A module is the basic abstraction in our test runner script. Each module consists of a set of
+    source files, a set of test commands, and a set of dependencies on other modules. We use modules
+    to define a dependency graph that lets determine which tests to run based on which files have
+    changed.
+    """
 
     def __init__(self, name, dependencies, source_file_regexes, sbt_test_goals=(),
                  should_run_python_tests=False, should_run_r_tests=False):
+        """
+        Define a new module.
+
+        :param name: A short module name, for display in logging and error messages.
+        :param dependencies: A set of dependencies for this module. This should only include direct
+            dependencies; transitive dependencies are resolved automatically.
+        :param source_file_regexes: a set of regexes that match source files belonging to this
+            module. These regexes are applied by attempting to match at the beginning of the
+            filename strings.
+        :param sbt_test_goals: A set of SBT test goals for testing this module/
+        :param should_run_python_tests: If true, changes in this module will trigger Python tests.
+            For now, this has the effect of causing _all_ Python tests to be run, although in the
+            future this should be changed to run only a subset of the Python tests that depend
+            on this module.
+        :param should_run_r_tests: If true, changes in this module will trigger all R tests.
+        """
         self.name = name
         self.dependencies = dependencies
         self.source_file_prefixes = source_file_regexes
@@ -80,7 +102,8 @@ sql = Module(
         "catalyst/test",
         "sql/test",
         "hive/test",
-    ])
+    ]
+)
 
 
 hive_thriftserver = Module(
@@ -534,8 +557,10 @@ def exec_sbt(sbt_args=()):
 
 
 def get_hadoop_profiles(hadoop_version):
-    """Return a list of profiles indicating which Hadoop version to use from
-    a Hadoop version tag."""
+    """
+    For the given Hadoop version tag, return a list of SBT profile flags for
+    building and testing against that Hadoop version.
+    """
 
     sbt_maven_hadoop_profiles = {
         "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
