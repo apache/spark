@@ -253,11 +253,14 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
-  @Test(expected=RuntimeException.class)
+  class PandaException extends RuntimeException {
+  }
+
+  @Test(expected=PandaException.class)
   public void writeFailurePropegates() throws Exception {
     class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
       @Override public boolean hasNext() {
-        throw new RuntimeException("panda magic");
+        throw new PandaException();
       }
       @Override public Product2<Object, Object> next() {
         return null;
