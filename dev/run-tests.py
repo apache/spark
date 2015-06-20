@@ -45,8 +45,8 @@ class Module(object):
     changed.
     """
 
-    def __init__(self, name, dependencies, source_file_regexes, sbt_test_goals=(),
-                 should_run_python_tests=False, should_run_r_tests=False):
+    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
+                 sbt_test_goals=(), should_run_python_tests=False, should_run_r_tests=False):
         """
         Define a new module.
 
@@ -56,7 +56,9 @@ class Module(object):
         :param source_file_regexes: a set of regexes that match source files belonging to this
             module. These regexes are applied by attempting to match at the beginning of the
             filename strings.
-        :param sbt_test_goals: A set of SBT test goals for testing this module/
+        :param build_profile_flags: A set of profile flags that should be passed to Maven or SBT in
+            order to build and test this module (e.g. '-PprofileName').
+        :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param should_run_python_tests: If true, changes in this module will trigger Python tests.
             For now, this has the effect of causing _all_ Python tests to be run, although in the
             future this should be changed to run only a subset of the Python tests that depend
@@ -67,6 +69,7 @@ class Module(object):
         self.dependencies = dependencies
         self.source_file_prefixes = source_file_regexes
         self.sbt_test_goals = sbt_test_goals
+        self.build_profile_flags = build_profile_flags
         self.should_run_python_tests = should_run_python_tests
         self.should_run_r_tests = should_run_r_tests
 
@@ -79,24 +82,15 @@ class Module(object):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
 
 
-root = Module(
-    name="root",
-    dependencies=[],
-    source_file_regexes=[],
-    sbt_test_goals=[
-        "test",
-    ],
-    should_run_python_tests=True,
-    should_run_r_tests=True
-)
-
-
 sql = Module(
     name="sql",
     dependencies=[],
     source_file_regexes=[
         "sql/(?!hive-thriftserver)",
         "bin/spark-sql",
+    ],
+    build_profile_flags=[
+        "-Phive",
     ],
     sbt_test_goals=[
         "catalyst/test",
@@ -112,6 +106,9 @@ hive_thriftserver = Module(
     source_file_regexes=[
         "sql/hive-thriftserver",
         "sbin/start-thriftserver.sh",
+    ],
+    build_profile_flags=[
+        "-Phive-thriftserver",
     ],
     sbt_test_goals=[
         "hive-thriftserver/test",
@@ -148,6 +145,9 @@ streaming_kinesis_asl = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "extras/kinesis-asl/",
+    ],
+    build_profile_flags=[
+        "-Pkinesis-asl",
     ],
     sbt_test_goals=[
         "kinesis-asl/test",
@@ -291,6 +291,23 @@ ec2 = Module(
 )
 
 
+# The root module is a dummy module which is used to run all of the tests.
+# No other modules should directly depend on this module.
+root = Module(
+    name="root",
+    dependencies=[],
+    source_file_regexes=[],
+    # In order to run all of the tests, enable every test profile:
+    build_profile_flags=
+        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
+    sbt_test_goals=[
+        "test",
+    ],
+    should_run_python_tests=True,
+    should_run_r_tests=True
+)
+
+
 def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
@@ -382,7 +399,7 @@ ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh")
 
 
 def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", cmd.join(' '), "; received return code", retcode
+    print "[error] running", ' '.join(cmd), "; received return code", retcode
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -577,30 +594,9 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def get_build_profiles(hadoop_version,
-                       enable_base_profiles=True,
-                       enable_hive_profiles=False):
-    """Returns a list of hadoop profiles to be used as looked up from the passed in hadoop profile
-    key with the option of adding on the base and hive profiles."""
-
-    base_profiles = ["-Pkinesis-asl"]
-    hive_profiles = ["-Phive", "-Phive-thriftserver"]
-    hadoop_profiles = get_hadoop_profiles(hadoop_version)
-
-    build_profiles = hadoop_profiles
-
-    if enable_base_profiles:
-        build_profiles += base_profiles
-
-    if enable_hive_profiles:
-        build_profiles += hive_profiles
-
-    return build_profiles
-
-
 def build_spark_maven(hadoop_version):
-    # we always build with Hive support even if we skip Hive tests in most builds
-    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
@@ -611,7 +607,8 @@ def build_spark_maven(hadoop_version):
 
 
 def build_spark_sbt(hadoop_version):
-    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly"]
@@ -674,9 +671,8 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_modules = set(test_modules)
 
-    hive_profiles = (sql in test_modules or root in test_modules)
-    test_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=hive_profiles)
-
+    test_profiles = get_hadoop_profiles(hadoop_version) + \
+        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
@@ -740,7 +736,7 @@ def main():
         hadoop_version = "hadoop2.3"
         test_env = "local"
 
-    print "[info] Using build tool", build_tool, "with profile", hadoop_version,
+    print "[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
     print "under environment", test_env
 
     changed_modules = None
