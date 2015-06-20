@@ -92,7 +92,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   private lazy val names = nameExprs.map(_.asInstanceOf[Literal].value.toString)
 
   override lazy val dataType: StructType = {
-    require(resolved, resolveFailureMessage)
+    assert(resolved, resolveFailureMessage)
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
       StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
     }
@@ -123,7 +123,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def eval(input: InternalRow): Any = {
-    require(resolved, resolveFailureMessage)
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
 

@@ -102,22 +102,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(getStructField(nullStruct, "a").nullable === true)
   }
 
-  test("CreateNamedStruct with odd number of parameters") {
-    val thrown = intercept[TestFailedException] {
-      checkEvaluation(
-        CreateNamedStruct(Seq("a", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
-    }
-    assert(thrown.getCause.getMessage.contains("even number of arguments"))
-  }
-
-  test("CreateNamedStruct with non String Literal name") {
-    val thrown = intercept[TestFailedException] {
-      checkEvaluation(
-        CreateNamedStruct(Seq(1, "a", "b", 2.0)), InternalRow("x", 2.0), InternalRow.empty)
-    }
-    assert(thrown.getCause.getMessage.contains("Non String Literal fields"))
-  }
-
   test("complex type") {
     val row = create_row(
       "^Ba*n", // 0
