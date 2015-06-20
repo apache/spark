@@ -186,7 +186,7 @@ object TestJsonData {
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """]""" :: Nil)
 
-  val emptyRecords: RDD[String] =
+  val emptyRecords =
     TestSQLContext.sparkContext.parallelize(
       """{""" ::
         """""" ::
