@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-from StringIO import StringIO
+if sys.version >= "3":
+    from io import StringIO
+else:
+    from StringIO import StringIO
 from py4j.java_gateway import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
