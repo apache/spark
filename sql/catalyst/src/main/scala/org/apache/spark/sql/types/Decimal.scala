@@ -139,9 +139,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal(new MathContext(Decimal.MAX_PRECISION, RoundingMode.HALF_EVEN))
+      decimalVal(MathContext.UNLIMITED)
     } else {
-      BigDecimal(longVal, _scale)(new MathContext(Decimal.MAX_PRECISION, RoundingMode.HALF_EVEN))
+      BigDecimal(longVal, _scale)(MathContext.UNLIMITED)
     }
   }
 
@@ -287,9 +287,6 @@ object Decimal {
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
-
-  /** Maximum precision a Decimal can support */
-  val MAX_PRECISION = 38
 
   private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
