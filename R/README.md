@@ -37,6 +37,20 @@ library(SparkR)
 sc <- sparkR.init(master="local")
 ```
 
+To pass in additional options to `spark-submit` you can set the environment variable `SPARKR_SUBMIT_ARGS`. For example to include the CSV reader package you can run
+```
+# Set this to where Spark is installed
+Sys.setenv(SPARK_HOME="/Users/shivaram/spark")
+# This line loads SparkR from the installed directory
+.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
+# Set SPARKR_SUBMIT_ARGS to include CSV package. Note that sparkr-shell should always be the
+# at the end of the other options.
+Sys.setenv(SPARKR_SUBMIT_ARGS="--packages com.databricks:spark-csv_2.10:1.0.3 sparkr-shell")
+library(SparkR)
+sc <- sparkR.init(master="local")
+# You should see the CSV package being downloaded & included now
+```
+
 #### Making changes to SparkR
 
 The [instructions](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark) for making contributions to Spark also apply to SparkR.

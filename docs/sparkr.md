@@ -13,6 +13,53 @@ In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implem
 supports operations like selection, filtering, aggregation etc. (similar to R data frames,
 [dplyr](https://github.com/hadley/dplyr)) but on large datasets.
 
+# Running sparkR
+
+The recommended way to use SparkR is through the `sparkR` and [`spark-submit`](submitting-applications.html) scripts.
+We also provide some instructions on using SparkR from other R frontends like RStudio.
+
+## From the command line
+
+You can start using SparkR by launching the SparkR shell with
+
+    ./bin/sparkR
+
+The `sparkR` script automatically creates a SparkContext with Spark by default in
+local mode. To specify the Spark master of a cluster for the automatically created
+SparkContext, you can run
+
+    ./bin/sparkR --master "local[2]"
+
+To set other options like driver memory, executor memory etc. you can pass in [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
+
+## Using SparkR from RStudio
+
+<div data-lang="r"  markdown="1">
+If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example
+
+{% highlight r %}
+# Set this to where Spark is installed
+Sys.setenv(SPARK_HOME="/Users/shivaram/spark")
+# This line loads SparkR from the installed directory
+.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
+library(SparkR)
+sc <- sparkR.init(master="local")
+{% endhighlight %}
+
+To pass in additional options to `spark-submit` you can set the environment variable `SPARKR_SUBMIT_ARGS`. For example to include the [Spark CSV reader](https://github.com/databricks/spark-csv) package you can run
+{% highlight r %}
+# Set this to where Spark is installed
+Sys.setenv(SPARK_HOME="/Users/shivaram/spark")
+# This line loads SparkR from the installed directory
+.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
+# Set SPARKR_SUBMIT_ARGS to include CSV package. Note that sparkr-shell should always be the
+# at the end of the other options.
+Sys.setenv(SPARKR_SUBMIT_ARGS="--packages com.databricks:spark-csv_2.10:1.0.3 sparkr-shell")
+library(SparkR)
+sc <- sparkR.init(master="local")
+# You should see the CSV package being downloaded & included now
+{% endhighlight %}
+
 # SparkR DataFrames
 
 A DataFrame is a distributed collection of data organized into named columns. It is conceptually
