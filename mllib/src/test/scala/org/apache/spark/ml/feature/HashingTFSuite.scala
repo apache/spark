@@ -28,8 +28,7 @@ import org.apache.spark.util.Utils
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
-    val hashingTF = new HashingTF
-    ParamsSuite.checkParams(hashingTF, 3)
+    ParamsSuite.checkParams(new HashingTF)
   }
 
   test("hashingTF") {
