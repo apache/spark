@@ -1046,9 +1046,10 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         """
         Generate 1 / (1 + exp(-x * scale + offset))
 
-        where, x is randomnly distributed and the threshold
-        values for each sample in x is obtained from an uniform
-        distribution
+        where,
+        x is randomnly distributed and the threshold
+        and labels for each sample in x is obtained from a random uniform
+        distribution.
         """
         rng = random.RandomState(seed)
         x = rng.randn(nPoints)
@@ -1078,7 +1079,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         t = time()
         self.ssc.start()
         self._ssc_wait(t, 20.0, 0.01)
-        rel = (1.5 - slr.latestModel.weights.array[0]) / 1.5
+        rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
         self.assertAlmostEqual(rel, 0.1, 1)
 
     def test_convergence(self):
@@ -1096,7 +1097,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         slr.setInitialWeights([0.0])
         slr.trainOn(input_stream)
         input_stream.foreachRDD(
-            lambda x: models.append(slr.latestModel.weights[0]))
+            lambda x: models.append(slr.latestModel().weights[0]))
 
         t = time()
         self.ssc.start()

@@ -28,8 +28,9 @@ from pyspark.streaming import DStream
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
-__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
-           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD',
+           'LogisticRegressionWithLBFGS', 'SVMModel', 'SVMWithSGD',
+           'NaiveBayesModel', 'NaiveBayes',
            'StreamingLogisticRegressionWithSGD']
 
 
@@ -585,26 +586,20 @@ class NaiveBayes(object):
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
-class StreamingLogisticRegressionWithSGD(object):
+class StreamingLinearAlgorithm(object):
     """
-    Run LogisticRegression with SGD on a stream of data.
+    Base class that has to be inherited by any StreamingLinearAlgorithm.
 
-    After training on a stream of data, the weights obtained at the end of
-    training are used as initial weights for the next stream of data.
-    :param: stepSize          Step size for each iteration of gradient
-                              descent.
-    :param: numIterations     Total number of iterations run.
-    :param: miniBatchFraction Fraction of data on which SGD is run for each
-                              iteration.
-    :param: regParam          L2 Regularization parameter.
+    Prevents reimplementation of methods predictOn and predictOnValues.
     """
-    def __init__(self, stepSize=0.1, numIterations=50,
-                 miniBatchFraction=1.0, regParam=0.01):
-        self.stepSize = stepSize
-        self.numIterations = numIterations
-        self.regParam = regParam
-        self.miniBatchFraction = miniBatchFraction
-        self._model = None
+    def __init__(self, model):
+        self._model = model
+
+    def latestModel(self):
+        """
+        Returns the latest model.
+        """
+        return self._model
 
     def _validate(self, dstream):
         if not isinstance(dstream, DStream):
@@ -614,21 +609,53 @@ class StreamingLogisticRegressionWithSGD(object):
             raise ValueError(
                 "Model must be intialized using setInitialWeights")
 
-    @property
-    def latestModel(self):
+    def predictOn(self, dstream):
         """
-        Returns a LogisticRegressionModel fit on the latest stream of data.
+        Make predictions on a dstream.
 
-        The weights and intercepts can be got from the `weights` and
-        `intercept` attributes.
+        Returns a transformed dstream object.
         """
-        return self._model
+        self._validate(dstream)
+        return dstream.map(lambda x: self._model.predict(x))
+
+    def predictOnValues(self, dstream):
+        """
+        Make predictions on a keyed dstream.
+
+        Returns a transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.mapValues(lambda x: self._model.predict(x))
+
+
+@inherit_doc
+class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
+    """
+    Run LogisticRegression with SGD on a stream of data.
+
+    The weights obtained at the end of training a stream are used as initial
+    weights for the next stream.
+    :param stepSize: Step size for each iteration of gradient descent.
+    :param numIterations: Number of iterations run for each batch of data.
+    :param miniBatchFraction: Fraction of data on which SGD is run for each
+                              iteration.
+    :param regParam: L2 Regularization parameter.
+    """
+    def __init__(self, stepSize=0.1, numIterations=50,
+                 miniBatchFraction=1.0, regParam=0.01):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.regParam = regParam
+        self.miniBatchFraction = miniBatchFraction
+        self._model = None
+        super(StreamingLogisticRegressionWithSGD, self).__init__(
+            model=self._model)
 
     def setInitialWeights(self, initialWeights):
         """
         Set the initial value of weights.
 
-        This must be set before running trainOn and predicOn
+        This must be set before running trainOn and predictOn.
         """
         initialWeights = _convert_to_vector(initialWeights)
 
@@ -641,6 +668,8 @@ class StreamingLogisticRegressionWithSGD(object):
         self._validate(dstream)
 
         def update(rdd):
+            # Check for empty RDD Streams. If this try except clause is
+            # removed, then calling train raises an error.
             try:
                 rdd.first()
             except ValueError:
@@ -651,24 +680,6 @@ class StreamingLogisticRegressionWithSGD(object):
                     self.miniBatchFraction, self._model.weights)
 
         dstream.foreachRDD(update)
-
-    def predictOn(self, dstream):
-        """
-        Make predictions on a dstream of Vectors.
-
-        Returns a transformed dstream object.
-        """
-        self._validate(dstream)
-        return dstream.map(lambda x: self._model.predict(x))
-
-    def predictOnValues(self, dstream):
-        """
-        Make predictions on a keyed dstream where the values are Vectors.
-
-        Returns a transformed dstream object.
-        """
-        self._validate(dstream)
-        return dstream.mapValues(lambda x: self._model.predict(x))
 
 
 def _test():
