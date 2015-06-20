@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 class LocalSQLContext
   extends SQLContext(
     new SparkContext(
-      "local[2]",
+      "local[*]",
       "TestSQLContext",
       new SparkConf().set("spark.sql.testkey", "true"))) {
 
