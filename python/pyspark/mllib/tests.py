@@ -49,6 +49,7 @@ from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler
 from pyspark.mllib.feature import ElementwiseProduct
+from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
 from pyspark.sql import SQLContext
@@ -1008,6 +1009,48 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 6.0, 0.01)
         self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+
+
+class MLUtilsTests(MLlibTestCase):
+    def test_append_bias(self):
+        data = [2.0, 2.0, 2.0]
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret[3], 1.0)
+        self.assertEqual(type(ret), DenseVector)
+
+    def test_append_bias_with_vector(self):
+        data = Vectors.dense([2.0, 2.0, 2.0])
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret[3], 1.0)
+        self.assertEqual(type(ret), DenseVector)
+
+    def test_append_bias_with_sp_vector(self):
+        data = Vectors.sparse(3, {0: 2.0, 2: 2.0})
+        expected = Vectors.sparse(4, {0: 2.0, 2: 2.0, 3: 1.0})
+        # Returned value must be SparseVector
+        ret = MLUtils.appendBias(data)
+        self.assertEqual(ret, expected)
+        self.assertEqual(type(ret), SparseVector)
+
+    def test_load_vectors(self):
+        import shutil
+        data = [
+            [1.0, 2.0, 3.0],
+            [1.0, 2.0, 3.0]
+        ]
+        temp_dir = tempfile.mkdtemp()
+        load_vectors_path = os.path.join(temp_dir, "test_load_vectors")
+        try:
+            self.sc.parallelize(data).saveAsTextFile(load_vectors_path)
+            ret_rdd = MLUtils.loadVectors(self.sc, load_vectors_path)
+            ret = ret_rdd.collect()
+            self.assertEqual(len(ret), 2)
+            self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
+            self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
+        except:
+            self.fail()
+        finally:
+            shutil.rmtree(load_vectors_path)
 
 
 if __name__ == "__main__":

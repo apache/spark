@@ -29,7 +29,7 @@ if sys.version > '3':
     xrange = range
 
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
-from pyspark.mllib.linalg import Vector, Vectors, DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import Vector, Vectors, SparseVector, _convert_to_vector
 
 
 class MLUtils(object):
@@ -183,15 +183,11 @@ class MLUtils(object):
         """
         vec = _convert_to_vector(data)
         if isinstance(vec, SparseVector):
-            if _have_scipy:
-                l = scipy.sparse.csc_matrix(np.append(vec.toArray(), 1.0))
-                return _convert_to_vector(l.T)
-            else:
-                raise TypeError("Cannot append bias %s into sparce "
-                                "vector because of lack of scipy" % type(vec))
+            l = scipy.sparse.csc_matrix(np.append(vec.toArray(), 1.0))
+            return _convert_to_vector(l.T)
         elif isinstance(vec, Vector):
             vec = vec.toArray()
-        return np.append(vec, 1.0).tolist()
+        return _convert_to_vector(np.append(vec, 1.0).tolist())
 
     @staticmethod
     def loadVectors(sc, path):
