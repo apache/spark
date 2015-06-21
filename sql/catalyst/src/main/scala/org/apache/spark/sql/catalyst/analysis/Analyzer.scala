@@ -154,6 +154,11 @@ class Analyzer(
       case Aggregate(groups, aggs, child)
         if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Aggregate(groups, assignAliases(aggs), child)
+
+      case g: GroupingAnalytics
+        if g.child.resolved && g.aggregations.exists(_.isInstanceOf[UnresolvedAlias]) =>
+        g.withNewAggs(assignAliases(g.aggregations))
+
       case Project(projectList, child)
         if child.resolved && projectList.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Project(assignAliases(projectList), child)
@@ -267,24 +272,24 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case Alias(f @ UnresolvedFunction(_, args), name) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(child = f.copy(children = expandedArgs), name)() :: Nil
-            case Alias(c @ CreateArray(args), name) if containsStar(args) =>
+              UnresolvedAlias(child = f.copy(children = expandedArgs)) :: Nil
+            case UnresolvedAlias(c @ CreateArray(args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(c.copy(children = expandedArgs), name)() :: Nil
-            case Alias(c @ CreateStruct(args), name) if containsStar(args) =>
+              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
+            case UnresolvedAlias(c @ CreateStruct(args)) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child.output, resolver)
                 case o => o :: Nil
               }
-              Alias(c.copy(children = expandedArgs), name)() :: Nil
+              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
             case o => o :: Nil
           },
           child)

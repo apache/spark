@@ -45,14 +45,18 @@ object ExtractValue {
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
+
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName), ordinal, containsNull)
+
       case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
         GetArrayItem(child, extraction)
+
       case (_: MapType, _) =>
         GetMapValue(child, extraction)
+
       case (otherType, _) =>
         val errorMsg = otherType match {
           case StructType(_) | ArrayType(StructType(_), _) =>
