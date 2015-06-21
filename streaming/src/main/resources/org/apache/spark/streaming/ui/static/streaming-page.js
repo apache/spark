@@ -248,7 +248,7 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
         .attr("class", "x axis")
         .call(xAxis)
         .append("text")
-            .attr("transform", "translate(" + (margin.left + width - 50) + ", 15)")
+            .attr("transform", "translate(" + (margin.left + width - 50) + ", 0)")
             .text("#batches");
 
     svg.append("g")
