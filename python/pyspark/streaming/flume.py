@@ -17,7 +17,7 @@
 
 import sys
 if sys.version >= "3":
-    from io import StringIO
+    from io import BytesIO
 else:
     from StringIO import StringIO
 from py4j.java_gateway import Py4JJavaError
@@ -113,10 +113,10 @@ class FlumeUtils(object):
         stream = DStream(jstream, ssc, ser)
 
         def func(event):
-            headersBytes = StringIO(event[0])
+            headersBytes = BytesIO(event[0]) if sys.version >= "3" else StringIO(event[0])
             headers = {}
             strSer = UTF8Deserializer()
-            for i in xrange(0, read_int(headersBytes)):
+            for i in range(0, read_int(headersBytes)):
                 key = strSer.loads(headersBytes)
                 value = strSer.loads(headersBytes)
                 headers[key] = value

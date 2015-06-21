@@ -714,7 +714,7 @@ class FlumeStreamTests(PySparkStreamingTestCase):
         # Validate both the header and the body
         header = {"test": "header"}
         self.assertEqual(len(input), len(result))
-        for i in xrange(0, len(input)):
+        for i in range(0, len(input)):
             self.assertEqual(header, result[i][0])
             self.assertEqual(input[i], result[i][1])
 
@@ -732,14 +732,14 @@ class FlumeStreamTests(PySparkStreamingTestCase):
                     raise
 
     def test_flume_stream(self):
-        input = [str(i) for i in xrange(1, 101)]
+        input = [str(i) for i in range(1, 101)]
         result = self._startContext(len(input), False)
         self._writeInput(input, False)
         self.wait_for(result, len(input))
         self._validateResult(input, result)
 
     def test_compressed_flume_stream(self):
-        input = [str(i) for i in xrange(1, 101)]
+        input = [str(i) for i in range(1, 101)]
         result = self._startContext(len(input), True)
         self._writeInput(input, True)
         self.wait_for(result, len(input))
