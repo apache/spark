@@ -53,9 +53,10 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+    val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
     val split = context.getTaskAttemptID.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
-    new Path(outputFile, s"$name-${numberFormat.format(split)}-${UUID.randomUUID()}")
+    new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
   }
 }
 

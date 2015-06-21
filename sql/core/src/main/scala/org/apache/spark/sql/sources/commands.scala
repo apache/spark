@@ -428,15 +428,14 @@ private[sql] class DefaultWriterContainer(
       assert(writer != null, "OutputWriter instance should have been initialized")
       writer.close()
       super.commitTask()
-    } catch {
-      case cause: Throwable =>
-        super.abortTask()
-        throw new RuntimeException("Failed to commit task", cause)
+    } catch { case cause: Throwable =>
+      throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
+      // It's possible that the task fails before `writer` gets initialized
       if (writer != null) {
         writer.close()
       }
@@ -480,21 +479,25 @@ private[sql] class DynamicPartitionWriterContainer(
     })
   }
 
-  override def commitTask(): Unit = {
-    try {
+  private def clearOutputWriters(): Unit = {
+    if (outputWriters.nonEmpty) {
       outputWriters.values.foreach(_.close())
       outputWriters.clear()
+    }
+  }
+
+  override def commitTask(): Unit = {
+    try {
+      clearOutputWriters()
       super.commitTask()
     } catch { case cause: Throwable =>
-      super.abortTask()
       throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
-      outputWriters.values.foreach(_.close())
-      outputWriters.clear()
+      clearOutputWriters()
     } finally {
       super.abortTask()
     }
