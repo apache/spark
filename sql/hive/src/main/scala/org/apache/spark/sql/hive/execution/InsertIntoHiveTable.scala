@@ -48,16 +48,16 @@ case class InsertIntoHiveTable(
     overwrite: Boolean,
     ifNotExists: Boolean) extends UnaryNode with HiveInspectors {
 
-  @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
-  @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
-  @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val catalog = sc.catalog
+  val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
+  lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
+  private lazy val hiveContext = new Context(sc.hiveconf)
+  private lazy val catalog = sc.catalog
 
-  private def newSerializer(tableDesc: TableDesc): Serializer = {
+  private val newSerializer = (tableDesc: TableDesc) => {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
     serializer.initialize(null, tableDesc.getProperties)
     serializer
-  }
+  }: Serializer
 
   def output: Seq[Attribute] = child.output
 
@@ -79,13 +79,10 @@ case class InsertIntoHiveTable(
       SparkHiveWriterContainer.createPathFromString(fileSinkConf.getDirName, conf.value))
     log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
 
-    writerContainer.driverSideSetup()
-    sc.sparkContext.runJob(rdd, writeToFile _)
-    writerContainer.commitJob()
-
+    val newSer = newSerializer
+    val schema = table.schema
     // Note that this function is executed on executor side
-    def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-      val serializer = newSerializer(fileSinkConf.getTableInfo)
+    val writeToFile = (context: TaskContext, iterator: Iterator[InternalRow]) => {
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(
           fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
@@ -106,12 +103,16 @@ case class InsertIntoHiveTable(
         }
 
         writerContainer
-          .getLocalFileWriter(row, table.schema)
-          .write(serializer.serialize(outputData, standardOI))
+          .getLocalFileWriter(row, schema)
+          .write(newSer(fileSinkConf.getTableInfo).serialize(outputData, standardOI))
       }
 
       writerContainer.close()
-    }
+    }: Unit
+
+    writerContainer.driverSideSetup()
+    sc.sparkContext.runJob(rdd, sc.sparkContext.clean(writeToFile))
+    writerContainer.commitJob()
   }
 
   /**

@@ -180,8 +180,7 @@ case class TakeOrderedAndProject(
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  protected override def doExecute(): RDD[InternalRow] =
-    sparkContext.makeRDD(collectData(), 1)
+  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
