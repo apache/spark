@@ -27,8 +27,6 @@ import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
-case class BigData(s: String)
-
 class CachedTableSuite extends QueryTest {
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
@@ -119,7 +117,7 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 1000
-    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => data).toDF("s")
       .registerTempTable("bigData")
     ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(ctx.table("bigData").count() === 200000L)
