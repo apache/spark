@@ -135,9 +135,9 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> from shutil import rmtree
     >>> try:
-    ...    rmtree(path)
+    ...     rmtree(path)
     ... except:
-    ...    pass
+    ...     pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
@@ -503,8 +503,9 @@ class IsotonicRegressionModel(Saveable, Loader):
     2.0
     >>> sameModel.predict(5)
     16.5
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """
