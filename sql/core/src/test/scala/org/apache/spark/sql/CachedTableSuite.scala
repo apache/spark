@@ -28,10 +28,14 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
-private case class BigData(s: String)
-
 class CachedTableSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  val testData = {
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+    df.registerTempTable("testData")
+    df
+  }
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = ctx.table(tableName).queryExecution.executedPlan
@@ -111,7 +115,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
 
   test("too big for memory") {
     val data = "*" * 1000
-    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => data).toDF("s")
       .registerTempTable("bigData")
     ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(ctx.table("bigData").count() === 200000L)
