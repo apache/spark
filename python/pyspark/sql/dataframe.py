@@ -1175,7 +1175,7 @@ class DataFrame(object):
         if not support:
             support = 0.01
         return DataFrame(self._jdf.stat().freqItemsFrame(_to_seq(self._sc, cols), support),
-                             self.sql_ctx)
+                        self.sql_ctx)
 
     @since(1.4)
     def freqItems(self, cols, support=None):
