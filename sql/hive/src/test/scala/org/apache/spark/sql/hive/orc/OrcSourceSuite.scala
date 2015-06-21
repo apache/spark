@@ -43,6 +43,12 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
     orcTableDir.mkdir()
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
+    // Originally we were using a 10-row RDD for testing.  However, when default parallelism is
+    // greater than 10 (e.g., running on a node with 32 cores), this RDD contains empty partitions,
+    // which result in empty ORC files.  Unfortunately, ORC doesn't handle empty files properly and
+    // causes build failure on Jenkins, which happens to have 32 cores. Please refer to SPARK-8501
+    // for more details.  To workaround this issue before fixing SPARK-8501, we simply increase row
+    // number in this RDD to avoid empty partitions.
     sparkContext
       .makeRDD(1 to 100)
       .map(i => OrcData(i, s"part-$i"))
