@@ -37,9 +37,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
    * val data =
    *   sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2), 10000, 42), 2)
    * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("path")
-   * val dataNR =
-   *   sc.parallelize(LinearDataGenerator.generateLinearInput(0.0, Array(4.7, 7.2), 10000, 42), 2)
-   * dataNR.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("pathNR")
+   * val dataM =
+   *   sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2), Array(0.9, -1.3),
+   *    Array(0.7, 1.2), 10000, 42, 0.1), 2)
+   * dataM.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("pathM")
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -49,6 +50,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     datasetNR = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
+
   }
 
   test("linear regression with intercept without regularization") {
@@ -102,10 +104,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
      * (Intercept)         .
-     * as.numeric.data.V2. 4.648385
-     * as.numeric.data.V3. 7.462729
+     * as.numeric.data.V2. 6.995908
+     * as.numeric.data.V3. 5.275131
      */
-    val weightsR = Array(4.648385, 7.462729)
+    val weightsR = Array(6.995908, 5.275131)
 
     assert(model.intercept ~== 0 relTol 1E-3)
     assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
@@ -116,10 +118,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      * 3 x 1 sparse Matrix of class "dgCMatrix"
      *                             s0
      * (Intercept)           .
-     * as.numeric.dataNR.V2. 4.701019
-     * as.numeric.dataNR.V3. 7.198280
+     * as.numeric.data3.V2. 4.70011
+     * as.numeric.data3.V3. 7.19943
      */
-    val weightsRNR = Array(4.701019, 7.198280)
+    val weightsRNR = Array(4.70011, 7.19943)
 
     assert(modelNR.intercept ~== 0 relTol 1E-3)
     assert(modelNR.weights(0) ~== weightsRNR(0) relTol 1E-3)
