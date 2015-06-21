@@ -97,7 +97,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      * data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
      * features <- as.matrix(data.frame(as.numeric(data$V2), as.numeric(data$V3)))
      * label <- as.numeric(data$V1)
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, intercept = false))
      * > weights
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
