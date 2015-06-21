@@ -133,8 +133,9 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> data = [
@@ -275,8 +276,9 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> data = [
@@ -389,8 +391,9 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> data = [
