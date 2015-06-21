@@ -147,6 +147,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
+      closeAndWriteOutput();
       success = true;
     } finally {
       if (sorter != null) {
