@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Long => JLong}
+
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{DataType, DoubleType}
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A leaf expression specifically for math constants. Math constants expect no input.
@@ -193,6 +196,8 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
@@ -205,6 +210,34 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   override def funcName: String = "toRadians"
 }
 
+case class Bin(child: Expression)
+  extends UnaryExpression with Serializable with ExpectsInputTypes {
+
+  val name: String = "BIN"
+
+  override def foldable: Boolean = child.foldable
+  override def nullable: Boolean = true
+  override def toString: String = s"$name($child)"
+
+  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+  override def dataType: DataType = StringType
+
+  def funcName: String = name.toLowerCase
+
+  override def eval(input: catalyst.InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      UTF8String.fromString(JLong.toBinaryString(evalE.asInstanceOf[Long]))
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c) =>
+      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -258,6 +291,10 @@ case class Pow(left: Expression, right: Expression)
 
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+
+  /**
+   * Natural log, i.e. using e as the base.
+   */
   def this(child: Expression) = {
     this(EulerNumber(), child)
   }

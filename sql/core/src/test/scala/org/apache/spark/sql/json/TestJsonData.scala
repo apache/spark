@@ -189,5 +189,14 @@ trait TestJsonData {
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """]""" :: Nil)
 
+  def emptyRecords: RDD[String] =
+    ctx.sparkContext.parallelize(
+      """{""" ::
+        """""" ::
+        """{"a": {}}""" ::
+        """{"a": {"b": {}}}""" ::
+        """{"b": [{"c": {}}]}""" ::
+        """]""" :: Nil)
+
   def empty: RDD[String] = ctx.sparkContext.parallelize(Seq[String]())
 }

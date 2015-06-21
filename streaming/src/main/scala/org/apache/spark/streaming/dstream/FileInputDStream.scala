@@ -26,10 +26,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.{SparkConf, SerializableWritable}
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
-import org.apache.spark.util.{TimeStampedHashMap, Utils}
+import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -78,7 +77,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
-  private val serializableConfOpt = conf.map(new SerializableWritable(_))
+  private val serializableConfOpt = conf.map(new SerializableConfiguration(_))
 
   /**
    * Minimum duration of remembering the information of selected files. Defaults to 60 seconds.

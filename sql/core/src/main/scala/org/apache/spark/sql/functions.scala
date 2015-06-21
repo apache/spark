@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
+ * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
@@ -707,10 +708,18 @@ object functions {
   /**
    * Computes the square root of the specified float value.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 1.3.0
    */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
    * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
@@ -880,6 +889,24 @@ object functions {
    * @since 1.4.0
    */
   def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(e: Column): Column = Bin(e.expr)
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
 
   /**
    * Computes the cube-root of the given value.
@@ -1349,6 +1376,26 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Misc functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(e: Column): Column = Md5(e.expr)
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(columnName: String): Column = md5(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions

@@ -141,6 +141,8 @@ final class GBTClassifier(override val uid: String)
     val oldModel = oldGBT.run(oldDataset)
     GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures)
   }
+
+  override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
 
 @Experimental
