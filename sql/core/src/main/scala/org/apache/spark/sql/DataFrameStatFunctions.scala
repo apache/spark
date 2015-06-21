@@ -184,20 +184,16 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
   def freqItemsFrame(cols: Array[String], support: Double): DataFrame = {
-    //get the row
     val fi = freqItems(cols, support).first
-    //get the schema
     val fiSchema = fi.schema
     val schemaNames = fiSchema.map(_.name)
     val schemaTypes = fiSchema.map(_.dataType.asInstanceOf[ArrayType].elementType)
     val newSchema = StructType(schemaNames.zip(schemaTypes)
       .map(x => StructField(x._1, x._2)).toArray)
-    //get the sizes
     val colSize = fi.toSeq.map(_.asInstanceOf[ArrayBuffer[Any]].size)
     val rowSize = fi.size
     var i = 0
     var j = 0
-    //make a seq for the rows
     var rowHolder = Seq[Row]()
     for (i <- 0 to colSize.max-1) {
       var fillMap = colSize.map(_ > i)
@@ -254,20 +250,16 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
    def freqItemsFrame(cols: Seq[String], support: Double) : DataFrame = {
-     //get the row
      val fi = freqItems(cols, support).first
-     //get the schema
      val fiSchema = fi.schema
      val schemaNames = fiSchema.map(_.name)
      val schemaTypes = fiSchema.map(_.dataType.asInstanceOf[ArrayType].elementType)
      val newSchema = StructType(schemaNames.zip(schemaTypes)
        .map(x => StructField(x._1, x._2)).toArray)
-     //get the sizes
      val colSize = fi.toSeq.map(_.asInstanceOf[ArrayBuffer[Any]].size)
      val rowSize = fi.size
      var i = 0
      var j = 0
-     //make a seq for the rows
      var rowHolder = Seq[Row]()
      for (i <- 0 to colSize.max-1) {
        var fillMap = colSize.map(_ > i)
