@@ -198,7 +198,6 @@ case class InsertIntoHiveTable(
       table.hiveQlTable.getPartCols().foreach { entry =>
         orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
       }
-      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
 
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.

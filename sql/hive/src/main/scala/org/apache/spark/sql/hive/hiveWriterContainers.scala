@@ -228,12 +228,11 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       newFileSinkDesc.setCompressCodec(fileSinkConf.getCompressCodec)
       newFileSinkDesc.setCompressType(fileSinkConf.getCompressType)
 
-      val path = {
-        val outputPath = FileOutputFormat.getOutputPath(conf.value)
-        assert(outputPath != null, "Undefined job output-path")
-        val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
-        new Path(workPath, getOutputName)
-      }
+      // use the path like ${hive_tmp}/_temporary/${attemptId}/
+      // to avoid write to the same file when `spark.speculation=true`
+      val path = FileOutputFormat.getTaskOutputPath(
+        conf.value,
+        dynamicPartPath.stripPrefix("/") + "/" + getOutputName)
 
       HiveFileFormatUtils.getHiveRecordWriter(
         conf.value,
