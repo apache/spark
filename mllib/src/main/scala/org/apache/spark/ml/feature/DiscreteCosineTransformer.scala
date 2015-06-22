@@ -34,6 +34,7 @@ import org.apache.spark.sql.types.{NumericType, ArrayType, DataType, DoubleType}
  * More information: https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II
  */
 @Experimental
+// TODO: explore variance -IN (and +OUT in UnaryTransformer)
 class DiscreteCosineTransformer[IN : Numeric](override val uid: String)
   extends UnaryTransformer[Seq[IN], Seq[Double], DiscreteCosineTransformer[IN]] {
 
