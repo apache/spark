@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.Substring
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -157,6 +157,51 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
+  }
+}
+
+/**
+ * A function that converts string to normalized format for comparing it with timestamp type
+ */
+private[catalyst] case class NormalizeTS(child: Expression)
+  extends UnaryExpression with CaseConversionExpression with Logging {
+
+  override def convert(v: UTF8String): UTF8String = {
+    val s = v.toString.trim
+    val m = Cast.timestampRegex.pattern.matcher(s)
+    if (m.matches()) {
+      UTF8String.fromString(
+        if (m.group(2) == null) {
+          s + " 00:00:00"
+        } else if (m.group(3) != null) {
+          // contains nano part
+          var nano = m.group(4)
+          if (nano.length > 9) {
+            nano = nano.substring(0, 9) // trim to max 9
+          }
+          if (isAllZeros(nano)) {
+            s.substring(0, m.start(3))  // remove nano part
+          } else {
+            s.substring(0, m.start(4) + nano.length)
+          }
+        } else {
+          s
+        }
+      )
+    } else {
+      v
+    }
+  }
+
+  private def isAllZeros(s: String): Boolean = {
+    for (c <- s) {
+      if (c != '0') return false
+    }
+    true
+  }
+
+  override def toString: String = {
+    s"NormalizeTS($child)"
   }
 }
 

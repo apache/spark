@@ -383,6 +383,38 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Nil)
   }
 
+  test("SPARK-8420 Inconsistent behavior with Dataframe Timestamp between 1.3.1 and 1.4.0") {
+    val timestamps = Seq(
+      Timestamp.valueOf("2015-06-16 00:00:00"),
+      Timestamp.valueOf("2015-06-18 06:00:00"),
+      Timestamp.valueOf("2015-06-20 12:00:00"))
+    timestamps.map(t => Tuple1(t)).toDF("time").registerTempTable("timestamps2")
+
+    val expected = Row(java.sql.Timestamp.valueOf("2015-06-16 00:00:00"))
+
+    // convert string to normalized format, if it's in timestamp format
+    checkAnswer(
+      sql("SELECT time FROM timestamps2 WHERE time='2015-06-16'"), expected)
+
+    checkAnswer(
+      sql("SELECT time FROM timestamps2 WHERE time='2015-06-16 00:00:00'"), expected)
+
+    checkAnswer(
+      sql("SELECT time FROM timestamps2 WHERE time='2015-06-16 00:00:00.00'"), expected)
+
+    checkAnswer(
+      sql("SELECT time FROM timestamps2 WHERE time='2015-06-16 00:00:00.000000000123'"), expected)
+
+    // if it's not timestamp format, use as-is string to be compared
+    checkAnswer(sql("SELECT time FROM timestamps2 WHERE time > '2015-06-2'"),
+      Row(java.sql.Timestamp.valueOf("2015-06-20 12:00:00")))
+
+    checkAnswer(sql("SELECT time FROM timestamps2 WHERE time < 'abcd'"),
+      Row(java.sql.Timestamp.valueOf("2015-06-16 00:00:00")) ::
+      Row(java.sql.Timestamp.valueOf("2015-06-18 06:00:00")) ::
+      Row(java.sql.Timestamp.valueOf("2015-06-20 12:00:00")) :: Nil)
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
