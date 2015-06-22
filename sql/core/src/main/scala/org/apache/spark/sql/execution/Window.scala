@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -45,28 +45,26 @@ case class Window(
       // This operator will be very expensive.
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(windowSpec.partitionSpec, true) :: Nil
+      // The required child ordering has two parts.
+      // The first part is the expressions in the partition specification.
+      // We add these expressions to the required ordering to make sure input rows are grouped
+      // based on the partition specification. So, we only need to process a single partition
+      // at a time.
+      // The second part is the expressions specified in the ORDER BY cluase.
+      // Basically, we first use sort to group rows based on partition specifications and then sort
+      // Rows in a group based on the order specification.
+      val sortKeys = (windowSpec.partitionSpec.map(SortOrder(_, Ascending)) ++ windowSpec.orderSpec)
+      ClusteredDistribution(windowSpec.partitionSpec, true, sortKeys) :: Nil
     }
 
   // Since window functions are adding columns to the input rows, the child's outputPartitioning
   // is preserved.
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    // The required child ordering has two parts.
-    // The first part is the expressions in the partition specification.
-    // We add these expressions to the required ordering to make sure input rows are grouped
-    // based on the partition specification. So, we only need to process a single partition
-    // at a time.
-    // The second part is the expressions specified in the ORDER BY cluase.
-    // Basically, we first use sort to group rows based on partition specifications and then sort
-    // Rows in a group based on the order specification.
-    (windowSpec.partitionSpec.map(SortOrder(_, Ascending)) ++ windowSpec.orderSpec) :: Nil
+  override def outputPartitioning: Partitioning = if (windowSpec.partitionSpec.isEmpty) {
+    SinglePartition()
+  } else {
+    HashPartition(windowSpec.partitionSpec)
   }
 
-  // Since window functions basically add columns to input rows, this operator
-  // will not change the ordering of input rows.
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   case class ComputedWindow(
     unbound: WindowExpression,

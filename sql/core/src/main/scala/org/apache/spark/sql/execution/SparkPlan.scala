@@ -67,17 +67,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
-  def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
+  def outputPartitioning: Partitioning = UnknownPartitioning
 
   /** Specifies any partition requirements on the input data for this operator. */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
-
-  /** Specifies how data is ordered in each partition. */
-  def outputOrdering: Seq[SortOrder] = Nil
-
-  /** Specifies sort order for each partition requirements on the input data for this operator. */
-  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
