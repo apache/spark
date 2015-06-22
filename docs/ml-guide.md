@@ -3,16 +3,22 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
-`spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
+Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
-It is currently an alpha component, and we would like to hear back from the community about
-how it fits real-world use cases and how it could be improved.
+
+*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
 
 Note that we will keep supporting and adding features to `spark.mllib` along with the
 development of `spark.ml`.
 Users should be comfortable using `spark.mllib` features and expect more features coming.
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
+
+Guides for sub-packages of `spark.ml` include:
+
+* [Feature Extraction, Transformation, and Selection](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
+* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+
 
 **Table of Contents**
 
@@ -147,16 +153,6 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
-
-# Algorithm Guides
-
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
-
-**Pipelines API Algorithm Guides**
-
-* [Feature Extraction, Transformation, and Selection](ml-features.html)
-* [Ensembles](ml-ensembles.html)
-
 
 # Code Examples
 
@@ -782,6 +778,16 @@ Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for mor
 Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
 
 # Migration Guide
+
+## From 1.3 to 1.4
+
+Several major API changes occurred, including:
+* `Param` and other APIs for specifying parameters
+* `uid` unique IDs for Pipeline components
+* Reorganization of certain classes
+Since the `spark.ml` API was an Alpha Component in Spark 1.3, we do not list all changes here.
+
+However, now that `spark.ml` is no longer an Alpha Component, we will provide details on any API changes for future releases.
 
 ## From 1.2 to 1.3
 

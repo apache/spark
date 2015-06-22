@@ -186,6 +186,8 @@ class LinearRegression(override val uid: String)
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
   }
+
+  override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
 /**

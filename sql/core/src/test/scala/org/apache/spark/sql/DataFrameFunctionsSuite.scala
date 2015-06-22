@@ -110,6 +110,16 @@ class DataFrameFunctionsSuite extends QueryTest {
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
 
+  test("bin") {
+    val df = Seq[(Integer, Integer)]((12, null)).toDF("a", "b")
+    checkAnswer(
+      df.select(bin("a"), bin("b")),
+      Row("1100", null))
+    checkAnswer(
+      df.selectExpr("bin(a)", "bin(b)"),
+      Row("1100", null))
+  }
+
   test("if function") {
     val df = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
@@ -121,6 +131,17 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(
       ctx.sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
       Row("x", "y", null))
+  }
+
+  test("misc md5 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(md5($"a"), md5("b")),
+      Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
+
+    checkAnswer(
+      df.selectExpr("md5(a)", "md5(b)"),
+      Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
   }
 
   test("string length function") {
