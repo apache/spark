@@ -557,8 +557,9 @@ class SQLTests(ReusedPySparkTestCase):
 
         df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
                 .format("json").save(path=tmpPath)
-        actual = self.sqlCtx.read.format("json").load(path=tmpPath,
-                                       noUse="this options will not be used in load.")
+        actual =\
+            self.sqlCtx.read.format("json")\
+                            .load(path=tmpPath, noUse="this options will not be used in load.")
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
