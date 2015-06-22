@@ -294,7 +294,8 @@ class SparkContext(object):
     @property
     def applicationId(self):
         """
-        applicationId - depends on used scheduler
+        applicationId - unique identified for the Spark Application
+        its format depends on the scheduler implementation used to run the app
         (i.e.
             in case of local spark app something like u'local-1433865536131'
             in case of YARN something like u'application_1433865536131_34483'

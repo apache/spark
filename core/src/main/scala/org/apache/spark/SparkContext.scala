@@ -315,6 +315,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _dagScheduler = ds
   }
 
+  /**
+   *
+   * unique identified for the Spark Application
+   * its format depends on the scheduler implementation used to run the app
+   * (i.e.
+   *  in case of local spark app something like u'local-1433865536131'
+   *  in case of YARN something like u'application_1433865536131_34483'
+   * )
+   */
   def applicationId: String = _applicationId
   def applicationAttemptId: Option[String] = _applicationAttemptId
 
