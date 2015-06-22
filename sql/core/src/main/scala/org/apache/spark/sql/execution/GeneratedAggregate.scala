@@ -270,10 +270,8 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (!iter.hasNext) {
-        // unsafe aggregation buffer is not released if input is empty (see SPARK-8357)
-        Iterator[InternalRow]()
-      } else if (groupingExpressions.isEmpty) {
+      if (groupingExpressions.isEmpty) {
+        // even with the empty input, value of empty buffer should be forwarded
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
@@ -286,7 +284,10 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
+      } else if (!iter.hasNext) {
+        Iterator[InternalRow]()
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
+        // unsafe aggregation buffer is not released if input is empty (see SPARK-8357)
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
