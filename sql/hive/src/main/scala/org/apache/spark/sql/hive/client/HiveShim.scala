@@ -43,6 +43,11 @@ import org.apache.hadoop.hive.ql.session.SessionState
  */
 private[client] sealed abstract class Shim {
 
+  /**
+   * Set the current SessionState to the given SessionState. Also, set the context classloader of
+   * the current thread to the one set in the HiveConf of this given `state`.
+   * @param state
+   */
   def setCurrentSessionState(state: SessionState): Unit
 
   /**
@@ -159,7 +164,15 @@ private[client] class Shim_v0_12 extends Shim {
       JBoolean.TYPE,
       JBoolean.TYPE)
 
-  override def setCurrentSessionState(state: SessionState): Unit = startMethod.invoke(null, state)
+  override def setCurrentSessionState(state: SessionState): Unit = {
+    // Starting from Hive 0.13, setCurrentSessionState will internally override
+    // the context class loader of the current thread by the class loader set in
+    // the conf of the SessionState. So, for this Hive 0.12 shim, we add the same
+    // behavior and make shim.setCurrentSessionState of all Hive versions have the
+    // consistent behavior.
+    Thread.currentThread().setContextClassLoader(state.getConf.getClassLoader)
+    startMethod.invoke(null, state)
+  }
 
   override def getDataLocation(table: Table): Option[String] =
     Option(getDataLocationMethod.invoke(table)).map(_.toString())

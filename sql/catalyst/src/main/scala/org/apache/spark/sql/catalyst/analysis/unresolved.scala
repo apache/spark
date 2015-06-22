@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{errors, trees}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
@@ -205,4 +204,23 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$child[$extraction]"
+}
+
+/**
+ * Holds the expression that has yet to be aliased.
+ */
+case class UnresolvedAlias(child: Expression) extends NamedExpression
+  with trees.UnaryNode[Expression] {
+
+  override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
+  override def qualifiers: Seq[String] = throw new UnresolvedException(this, "qualifiers")
+  override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def name: String = throw new UnresolvedException(this, "name")
+
+  override lazy val resolved = false
+
+  override def eval(input: InternalRow = null): Any =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
