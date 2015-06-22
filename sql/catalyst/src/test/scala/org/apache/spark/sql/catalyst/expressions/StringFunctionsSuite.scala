@@ -226,5 +226,13 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // checkEvaluation(StringLength(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
-
+  test("Concat/ConcatWS Expression") {
+    checkEvaluation(Concat("b", "c"), "bc")
+    checkEvaluation(Concat(Literal(null), Literal(null)), null)
+    checkEvaluation(ConcatWS(",", CreateArray(Seq("b", "c"))), "b,c")
+    checkEvaluation(ConcatWS(Literal(null), CreateArray(Seq("b", "c"))), null)
+    checkEvaluation(ConcatWS("", CreateArray(Seq("b", Literal.create(null, StringType), "c")),
+      CreateArray(Seq(Literal.create(null, StringType)))), "bnullcnull")
+    checkEvaluation(ConcatWS(",", CreateArray(Seq()), "a"), ",a")
+  }
 }
