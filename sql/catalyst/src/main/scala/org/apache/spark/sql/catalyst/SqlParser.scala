@@ -99,13 +99,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val WHERE = Keyword("WHERE")
   protected val WITH = Keyword("WITH")
 
-  protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
-    exprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
-    }
-  }
-
   protected lazy val start: Parser[LogicalPlan] =
     start1 | insert | cte
 
@@ -130,8 +123,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val base = r.getOrElse(OneRowRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
-            .map(Aggregate(_, assignAliases(p), withFilter))
-            .getOrElse(Project(assignAliases(p), withFilter))
+            .map(Aggregate(_, p.map(UnresolvedAlias(_)), withFilter))
+            .getOrElse(Project(p.map(UnresolvedAlias(_)), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
           val withOrder = o.map(_(withHaving)).getOrElse(withHaving)

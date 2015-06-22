@@ -26,6 +26,7 @@ import shutil
 import tempfile
 import pickle
 import functools
+import time
 import datetime
 
 import py4j
@@ -45,6 +46,20 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.window import Window
+
+
+class UTC(datetime.tzinfo):
+    """UTC"""
+    ZERO = datetime.timedelta(0)
+
+    def utcoffset(self, dt):
+        return self.ZERO
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return self.ZERO
 
 
 class ExamplePointUDT(UserDefinedType):
@@ -524,6 +539,38 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
+    def test_save_and_load_builder(self):
+        df = self.df
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df.write.json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        schema = StructType([StructField("value", StringType(), True)])
+        actual = self.sqlCtx.read.json(tmpPath, schema)
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+
+        df.write.mode("overwrite").json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
+                .format("json").save(path=tmpPath)
+        actual =\
+            self.sqlCtx.read.format("json")\
+                            .load(path=tmpPath, noUse="this options will not be used in load.")
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        actual = self.sqlCtx.load(path=tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+
+        shutil.rmtree(tmpPath)
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -587,6 +634,23 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, df.filter(df.time == time).count())
         self.assertEqual(0, df.filter(df.date > date).count())
         self.assertEqual(0, df.filter(df.time > time).count())
+
+    def test_time_with_timezone(self):
+        day = datetime.date.today()
+        now = datetime.datetime.now()
+        ts = time.mktime(now.timetuple()) + now.microsecond / 1e6
+        # class in __main__ is not serializable
+        from pyspark.sql.tests import UTC
+        utc = UTC()
+        utcnow = datetime.datetime.fromtimestamp(ts, utc)
+        df = self.sqlCtx.createDataFrame([(day, now, utcnow)])
+        day1, now1, utcnow1 = df.first()
+        # Pyrolite serialize java.sql.Date as datetime, will be fixed in new version
+        self.assertEqual(day1.date(), day)
+        # Pyrolite does not support microsecond, the error should be
+        # less than 1 millisecond
+        self.assertTrue(now - now1 < datetime.timedelta(0.001))
+        self.assertTrue(now - utcnow1 < datetime.timedelta(0.001))
 
     def test_dropna(self):
         schema = StructType([

@@ -47,17 +47,17 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Add Locale setting
     Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, "5")
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize.toString)
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning.toString)
+    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -252,7 +252,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_dyn_part14.*", // These work alone but fail when run with other tests...
 
     // the answer is sensitive for jdk version
-    "udf_java_method"
+    "udf_java_method",
+
+    // Spark SQL use Long for TimestampType, lose the precision under 100ns
+    "timestamp_1",
+    "timestamp_2"
   )
 
   /**
@@ -795,8 +799,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
-    "timestamp_1",
-    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
     "timestamp_lazy",
@@ -931,7 +933,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_stddev_pop",
     "udf_stddev_samp",
     "udf_string",
-    // "udf_struct",  TODO: FIX THIS and enable it.
+    "udf_struct",
     "udf_substring",
     "udf_subtract",
     "udf_sum",

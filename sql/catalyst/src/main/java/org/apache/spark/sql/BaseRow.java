@@ -19,15 +19,17 @@ package org.apache.spark.sql;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.List;
 
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.StructType;
 
-public abstract class BaseRow implements Row {
+public abstract class BaseRow extends InternalRow {
 
   @Override
   final public int length() {
@@ -104,6 +106,11 @@ public abstract class BaseRow implements Row {
   }
 
   @Override
+  public Timestamp getTimestamp(int i) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public <T> Seq<T> getSeq(int i) {
     throw new UnsupportedOperationException();
   }
@@ -148,8 +155,29 @@ public abstract class BaseRow implements Row {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * A generic version of Row.equals(Row), which is used for tests.
+   */
   @Override
-  public Row copy() {
+  public boolean equals(Object other) {
+    if (other instanceof Row) {
+      Row row = (Row) other;
+      int n = size();
+      if (n != row.size()) {
+        return false;
+      }
+      for (int i = 0; i < n; i ++) {
+        if (isNullAt(i) != row.isNullAt(i) || (!isNullAt(i) && !get(i).equals(row.get(i)))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  @Override
+  public InternalRow copy() {
     final int n = size();
     Object[] arr = new Object[n];
     for (int i = 0; i < n; i++) {

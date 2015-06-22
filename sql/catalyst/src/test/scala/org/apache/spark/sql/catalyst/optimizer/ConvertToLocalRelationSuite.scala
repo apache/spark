@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -37,13 +37,11 @@ class ConvertToLocalRelationSuite extends PlanTest {
   test("Project on LocalRelation should be turned into a single LocalRelation") {
     val testRelation = LocalRelation(
       LocalRelation('a.int, 'b.int).output,
-      Row(1, 2) ::
-      Row(4, 5) :: Nil)
+      InternalRow(1, 2) :: InternalRow(4, 5) :: Nil)
 
     val correctAnswer = LocalRelation(
       LocalRelation('a1.int, 'b1.int).output,
-      Row(1, 3) ::
-      Row(4, 6) :: Nil)
+      InternalRow(1, 3) :: InternalRow(4, 6) :: Nil)
 
     val projectOnLocal = testRelation.select(
       UnresolvedAttribute("a").as("a1"),

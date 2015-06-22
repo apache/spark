@@ -51,14 +51,6 @@ trait CheckAnalysis {
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
-            }
-
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
@@ -103,14 +95,7 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            val cleaned = aggregateExprs.map(_.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g, _) => g
-            })
-
-            cleaned.foreach(checkValidAggregateExpression)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case _ => // Fallbacks to the following checks
         }

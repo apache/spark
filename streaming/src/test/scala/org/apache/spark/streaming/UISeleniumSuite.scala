@@ -27,9 +27,10 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
- * Selenium tests for the Spark Web UI.
+ * Selenium tests for the Spark Streaming Web UI.
  */
 class UISeleniumSuite
   extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
@@ -37,7 +38,9 @@ class UISeleniumSuite
   implicit var webDriver: WebDriver = _
 
   override def beforeAll(): Unit = {
-    webDriver = new HtmlUnitDriver
+    webDriver = new HtmlUnitDriver {
+      getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
+    }
   }
 
   override def afterAll(): Unit = {

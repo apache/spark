@@ -520,6 +520,16 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for PCA.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitPCA(k: Int, data: JavaRDD[Vector]): PCAModel = {
+    new PCA(k).fit(data.rdd)
+  }
+
+  /**
    * Java stub for IDF.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
@@ -700,6 +710,14 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       cached.unpersist(blocking = false)
     }
+  }
+
+  def elementwiseProductVector(scalingVector: Vector, vector: Vector): Vector = {
+    new ElementwiseProduct(scalingVector).transform(vector)
+  }
+
+  def elementwiseProductVector(scalingVector: Vector, vector: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new ElementwiseProduct(scalingVector).transform(vector)
   }
 
   /**
@@ -954,6 +972,21 @@ private[python] class PythonMLLibAPI extends Serializable {
       bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
     return new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
       points.asScala.toArray)
+  }
+
+  /**
+   * Java stub for the update method of StreamingKMeansModel.
+   */
+  def updateStreamingKMeansModel(
+      clusterCenters: JList[Vector],
+      clusterWeights: JList[Double],
+      data: JavaRDD[Vector],
+      decayFactor: Double,
+      timeUnit: String): JList[Object] = {
+    val model = new StreamingKMeansModel(
+      clusterCenters.asScala.toArray, clusterWeights.asScala.toArray)
+        .update(data, decayFactor, timeUnit)
+      List[AnyRef](model.clusterCenters, Vectors.dense(model.clusterWeights)).asJava
   }
 
 }

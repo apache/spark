@@ -19,9 +19,13 @@ package org.apache.spark.sql.sources
 
 import java.sql.{Timestamp, Date}
 
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DefaultSource extends SimpleScanSource
 
@@ -47,6 +51,10 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
+    // Check that weird parameters are passed correctly.
+    parameters("option_with_underscores")
+    parameters("option.with.dots")
+
     AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
   }
 }
@@ -60,10 +68,12 @@ case class AllDataTypesScan(
 
   override def schema: StructType = userSpecifiedSchema
 
+  override def needConversion: Boolean = false
+
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
-      Row(
-        s"str_$i",
+      InternalRow(
+        UTF8String.fromString(s"str_$i"),
         s"str_$i".getBytes(),
         i % 2 == 0,
         i.toByte,
@@ -72,17 +82,18 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        new java.math.BigDecimal(i),
-        new java.math.BigDecimal(i),
-        new Date(1970, 1, 1),
-        new Timestamp(20000 + i),
-        s"varchar_$i",
+        Decimal(new java.math.BigDecimal(i)),
+        Decimal(new java.math.BigDecimal(i)),
+        DateUtils.fromJavaDate(new Date(1970, 1, 1)),
+        DateUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
+        UTF8String.fromString(s"varchar_$i"),
         Seq(i, i + 1),
-        Seq(Map(s"str_$i" -> Row(i.toLong))),
+        Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
         Map(i -> i.toString),
-        Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
+        Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
         Row(i, i.toString),
-        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
+        Row(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
+          InternalRow(Seq(DateUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
     }
   }
 }
@@ -121,7 +132,9 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
 
@@ -152,7 +165,9 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
   }
@@ -354,7 +369,9 @@ class TableScanSuite extends DataSourceTest {
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',
-       |  to '10'
+       |  to '10',
+       |  option_with_underscores 'someval',
+       |  option.with.dots 'someval'
        |)
        """.stripMargin)
 

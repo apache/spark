@@ -185,12 +185,20 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
+
+    checkAnswer(
+      ctx.sql("select isnull(null), isnull(1)"),
+      Row(true, false))
   }
 
   test("isNotNull") {
     checkAnswer(
       nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
+
+    checkAnswer(
+      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      Row(false, true))
   }
 
   test("===") {
@@ -288,6 +296,22 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
+  test("in") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a".in(1, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 1)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"b".in("y", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "y")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+  }
+
   val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
@@ -361,23 +385,6 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key.asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key.desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(lit(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
@@ -393,6 +400,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      Row("AB", "CDE"))
   }
 
   test("lower") {
@@ -410,6 +421,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      Row("ab", "cde"))
   }
 
   test("monotonicallyIncreasingId") {

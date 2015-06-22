@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.NoSuchElementException
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -64,9 +66,9 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
 
   override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
 
-  protected override def doExecute(): RDD[Row] = {
-    val converted = sideEffectResult.map(r =>
-      CatalystTypeConverters.convertToCatalyst(r, schema).asInstanceOf[Row])
+  protected override def doExecute(): RDD[InternalRow] = {
+    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
+    val converted = sideEffectResult.map(convert(_).asInstanceOf[InternalRow])
     sqlContext.sparkContext.parallelize(converted, 1)
   }
 }
@@ -75,48 +77,92 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommand(
-    kv: Option[(String, Option[String])],
-    override val output: Seq[Attribute])
-  extends RunnableCommand with Logging {
+case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = kv match {
+  private def keyValueOutput: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("key", StringType, false) ::
+        StructField("value", StringType, false) :: Nil)
+    schema.toAttributes
+  }
+
+  private val (_output, runFunc): (Seq[Attribute], SQLContext => Seq[Row]) = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      if (value.toInt < 1) {
-        val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
-          "determining the number of reducers is not supported."
-        throw new IllegalArgumentException(msg)
-      } else {
-        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        if (value.toInt < 1) {
+          val msg =
+            s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
+              "determining the number of reducers is not supported."
+          throw new IllegalArgumentException(msg)
+        } else {
+          sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
+        }
       }
+      (keyValueOutput, runFunc)
 
     // Configures a single property.
     case Some((key, Some(value))) =>
-      sqlContext.setConf(key, value)
-      Seq(Row(s"$key=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.setConf(key, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
 
-    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
-    // Notice that different from Hive, here "SET -v" is an alias of "SET".
     // (In Hive, "SET" returns all changed properties while "SET -v" returns all properties.)
-    case Some(("-v", None)) | None =>
-      sqlContext.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
+    case None =>
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+      }
+      (keyValueOutput, runFunc)
+
+    // Queries all properties along with their default values and docs that are defined in the
+    // SQLConf of the sqlContext.
+    case Some(("-v", None)) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+          Row(key, defaultValue, doc)
+        }
+      }
+      val schema = StructType(
+        StructField("key", StringType, false) ::
+          StructField("default", StringType, false) ::
+          StructField("meaning", StringType, false) :: Nil)
+      (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, sqlContext.conf.numShufflePartitions.toString))
+      }
+      (keyValueOutput, runFunc)
 
     // Queries a single property.
     case Some((key, None)) =>
-      Seq(Row(s"$key=${sqlContext.getConf(key, "<undefined>")}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        val value =
+          try {
+            sqlContext.getConf(key)
+          } catch {
+            case _: NoSuchElementException => "<undefined>"
+          }
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
   }
+
+  override val output: Seq[Attribute] = _output
+
+  override def run(sqlContext: SQLContext): Seq[Row] = runFunc(sqlContext)
+
 }
 
 /**
