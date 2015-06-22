@@ -59,7 +59,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val appId = parts(0)
     val attemptId = if (parts.length > 1) Some(parts(1)) else None
     operations.getAppUI(appId, attemptId) match {
-      case Some((ui, completed)) =>
+      case Some(ui) =>
+        val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
         // attach the spark UI
         operations.attachSparkUI(ui, completed)
         // build the cache entry
@@ -134,9 +135,9 @@ private[history] trait ApplicationCacheOperations {
    * Get the application UI
    * @param appId application ID
    * @param attemptId attempt ID
-   * @return (the Spark UI, completed flag)
+   * @return The Spark UI
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Boolean)]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
 
   /** Attach a reconstructed UI  */
   def attachSparkUI(ui: SparkUI, completed: Boolean): Unit;

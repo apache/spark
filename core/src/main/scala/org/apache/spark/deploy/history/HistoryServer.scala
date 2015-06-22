@@ -165,19 +165,11 @@ class HistoryServer(
   /**
    * Get the application UI and whether or not it is completed
    * @param appId application ID
-   * @param attemptId attemptd ID
+   * @param attemptId attempt ID
    * @return (the Spark UI, completed flag)
    */
-  override def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Boolean)] = {
-    provider.getAppUI(appId,attemptId) match {
-      case Some(ui) =>
-        // look up the listing to see if it is listed as complete
-        val completed = provider.getListing().exists(
-          (info) => info.name == appId && info.attempts.last.completed)
-        Some(ui, completed)
-      case None =>
-        None
-    }
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
+    provider.getAppUI(appId, attemptId)
   }
 
   /**

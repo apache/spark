@@ -17,25 +17,27 @@
  */
 package org.apache.spark.deploy.history
 
-import java.util.NoSuchElementException
+import java.util.{Date, NoSuchElementException}
 
 import com.google.common.base.Ticker
 import com.google.common.util.concurrent.UncheckedExecutionException
+import org.mockito.Mockito._
+import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.scheduler.ReplayListenerBus
+import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.{SparkConf, Logging, SparkFunSuite}
+import org.apache.spark.{Logging, SparkFunSuite}
 
-class ApplicationCacheSuite extends SparkFunSuite with Logging {
+class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar {
 
   /**
    * cache operations
    */
   class StubCacheOperations extends ApplicationCacheOperations {
 
-    var instances = scala.collection.mutable.HashMap.empty[String, (SparkUI, Boolean)]
+    var instances = scala.collection.mutable.HashMap.empty[String, SparkUI]
 
-    var attached = scala.collection.mutable.HashMap.empty[String, (SparkUI, Boolean)]
+    var attached = scala.collection.mutable.HashMap.empty[String, SparkUI]
 
     var getCount = 0L
     var attachCount = 0L
@@ -49,7 +51,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
      * @return (the Spark UI, completed flag)
      */
     override def getAppUI(appId: String,
-        attemptId: Option[String]): Option[(SparkUI, Boolean)] = {
+        attemptId: Option[String]): Option[SparkUI] = {
       getCount +=1
       instances.get(appId)
     }
@@ -57,13 +59,15 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     /** Attach a reconstructed UI  */
     override def attachSparkUI(ui: SparkUI, completed: Boolean): Unit  = {
       attachCount += 1
-      attached += (ui.appName -> (ui, completed))
+      val name = ui.getAppName
+      assert(name != null, s"no name for spark UI $ui")
+      attached += (name -> ui)
     }
 
 
     def create(name: String, completed: Boolean): SparkUI  = {
-      val ui = newUI(name)
-      instances += (name -> (ui, completed))
+      val ui = newUI(name, completed)
+      instances += (name -> ui)
       ui
     }
 
@@ -71,12 +75,10 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
      * Detach a reconstructed UI
      *
      * @param ui Spark UI
-     * @param refreshInProgress flag to indicate this was triggered by a refresh of an
-     *                          incomplete application
      */
     override def detachSparkUI(ui: SparkUI): Unit = {
       detachCount += 1
-      attached -= ui.appName
+      attached -= ui.getAppName
     }
 
     /**
@@ -110,9 +112,15 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
   }
 
 
-  def newUI(name: String) : SparkUI =  {
-    SparkUI.createHistoryUI(new SparkConf(),
-      new ReplayListenerBus(),null, name, "", 0)
+  def newUI(name: String, completed: Boolean) : SparkUI =  {
+    val date = new Date(0)
+    val info = new ApplicationInfo(name, name,
+      Seq(new AttemptInfo(None, date, date, "user", completed)))
+    val ui = mock[SparkUI]
+    when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
+    when(ui.getAppName).thenReturn(name)
+    when(ui.appName).thenReturn(name)
+    ui
   }
 
   /**
@@ -148,7 +156,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     assert(0 == operations.attachCount)
 
     // add the entry
-    operations.instances += ("1" -> (newUI("1"), true))
+    operations.instances += ("1" -> (newUI("1", true)))
     operations.create("1", true)
 
     // now expect it to be found
@@ -159,7 +167,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     assert(1 == operations.attachCount)
 
     // and in the map of attached
-    assert(None !== operations.attached.get("1"))
+    assert(None !== operations.attached.get("1"), s"attached entry '1' from $cache")
 
     //go forward in time
     ticker.set(10)
@@ -175,9 +183,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     cache.get("3")
 
     // there should have been a detachment here
-    assert(1 === operations.detachCount)
+    assert(1 === operations.detachCount, s"detach count from $cache")
     /// and entry "1" no longer attached
-    assert(None === operations.attached.get("1"))
+    assert(None === operations.attached.get("1"), s"get(1) in $cache")
 
   }
 
@@ -190,7 +198,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     val cache = new ApplicationCache(operations, 5, 10, ticker)
     //operations.instances += ("1" ->(newUI("1"), true))
     // add the incomplete app
-    operations.instances += ("inc" ->(newUI("inc"), false))
+    operations.instances += ("inc" ->(newUI("inc", false)))
     val entry = cache.get("inc")
     assert(1 === entry.timestamp)
     assert(!entry.completed)
@@ -207,7 +215,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     assert(entry !== entry3, s"updated entry test from $cache")
     assert(1 === operations.refreshCount,  s"refresh count in $cache")
     assert(1 === operations.detachCount, s"detach count in $cache")
-    assert(None !== operations.attached.get("inc"))
+    assert(None !== operations.attached.get("inc"), s"attached['inc'] in $cache")
     assert(entry3.timestamp === 15)
 
     // go a little bit forward again
@@ -218,7 +226,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     // and a short time later, and again the entry can be updated.
     // here with a now complete entry
     ticker.set(30)
-    operations.instances += ("inc" ->(newUI("inc"), true))
+    operations.instances += ("inc" ->(newUI("inc", true)))
     val entry5 = cache.get("inc")
     assert(entry5.completed)
 
