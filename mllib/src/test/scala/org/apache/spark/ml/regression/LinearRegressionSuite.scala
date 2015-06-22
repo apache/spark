@@ -216,11 +216,13 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression without intercept with L2 regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3).setFitIntercept(false)
+    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
+      .setFitIntercept(false)
     val model = trainer.fit(dataset)
 
     /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3, intercept = FALSE))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
+     *   intercept = FALSE))
      * > weights
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
@@ -271,11 +273,13 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
   test("linear regression without intercept with ElasticNet regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6).setFitIntercept(false)
+    val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+      .setFitIntercept(false)
     val model = trainer.fit(dataset)
 
     /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6, intercept=FALSE))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
+     *   intercept=FALSE))
      * > weights
      * 3 x 1 sparse Matrix of class "dgCMatrix"
      * s0
