@@ -10,16 +10,16 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 # Launching Spark on YARN
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
-These configs are used to write to the dfs and connect to the YARN ResourceManager. The
+These configs are used to write to HDFS and connect to the YARN ResourceManager. The
 configuration contained in this directory will be distributed to the YARN cluster so that all
 containers used by the application use the same configuration. If the configuration references
 Java system properties or environment variables not managed by YARN, they should also be set in the
 Spark application's configuration (driver, executors, and the AM when running in client mode).
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
-(Default: --deploy-mode client)
+(Default: `--deploy-mode client`)
 
-Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the master parameter is yarn. 
+Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the master parameter is yarn. For a specific yarn deployment, use --deploy-mode to specify yarn-cluster or yarn-client. 
 
 To launch a Spark application in yarn-cluster mode:
 
