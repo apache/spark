@@ -287,28 +287,17 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense(1.0, 1.0)
     )
     val rdd = sc.parallelize(points, 3)
+    // creating an initial model
+    val initialModel = new KMeansModel(Array(points(0), points(2)))
 
-    val m1 = new KMeansModel(Array(points(0), points(2)))
-    val m2 = new KMeansModel(Array(points(1), points(3)))
-
-    val modelM1 = new KMeans()
+    val returnModel = new KMeans()
       .setK(2)
-      .setMaxIterations(1)
-      .setInitialModel(m1)
+      .setMaxIterations(0)
+      .setInitialModel(initialModel)
       .run(rdd)
-    val modelM2 = new KMeans()
-      .setK(2)
-      .setMaxIterations(1)
-      .setInitialModel(m2)
-      .run(rdd)
-
-    val predicts1 = modelM1.predict(rdd).collect()
-    val predicts2 = modelM2.predict(rdd).collect()
-
-    assert(predicts1(0) === predicts1(1))
-    assert(predicts1(2) === predicts1(3))
-    assert(predicts2(0) === predicts2(1))
-    assert(predicts2(2) === predicts2(3))
+   // comparing the returned model and the initial model
+    assert(returnModel.clusterCenters(0) == initialModel.clusterCenters(0))
+    assert(returnModel.clusterCenters(1) == initialModel.clusterCenters(1))
   }
 
 }
