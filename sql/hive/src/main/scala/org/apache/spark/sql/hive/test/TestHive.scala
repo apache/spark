@@ -49,7 +49,7 @@ import scala.collection.JavaConversions._
 object TestHive
   extends TestHiveContext(
     new SparkContext(
-      "local[2]",
+      "local[32]",
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
