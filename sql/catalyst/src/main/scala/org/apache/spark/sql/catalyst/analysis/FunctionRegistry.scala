@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.types.IntegerType
+
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -152,7 +154,17 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[Upper]("ucase"),
-    expression[Upper]("upper")
+    expression[Upper]("upper"),
+
+    // window functions
+    leaf("row_number", WindowFunction.rowNumber()),
+    leaf("rank", WindowFunction.rank()),
+    leaf("dense_rank", WindowFunction.denseRank()),
+    leaf("percent_rank", WindowFunction.percentRank()),
+    leaf("cume_dist", WindowFunction.cumeDist()),
+    ntile,
+    lead,
+    lag
   )
 
   val builtin: FunctionRegistry = {
@@ -184,5 +196,66 @@ object FunctionRegistry {
       }
     }
     (name, builder)
+  }
+
+  /** Add a leaf expression. */
+  private def leaf(name: String, value: => Expression): (String, FunctionBuilder) = {
+    val f = (args: Seq[Expression]) => {
+      if (!args.isEmpty) {
+        throw new AnalysisException(s"Invalid number of arguments for function $name")
+      }
+      value
+    }
+    (name, f)
+  }
+
+  private def ntile: (String, FunctionBuilder) = {
+    val f = (args: Seq[Expression]) => {
+      args match {
+        case IntegerLiteral(buckets) :: Nil =>
+          WindowFunction.ntile(buckets)
+        case _ =>
+          throw new AnalysisException(s"Invalid arguments for function ntile: $args")
+      }
+    }
+    ("ntile", f)
+  }
+
+  private def lead: (String, FunctionBuilder) = {
+    val f = (args: Seq[Expression]) => {
+      val (e, offset, default) = leadLagParams("lead", args)
+      WindowFunction.lead(e, offset, default)
+    }
+    ("lead", f)
+  }
+
+  private def lag: (String, FunctionBuilder) = {
+    val f = (args: Seq[Expression]) => {
+      val (e, offset, default) = leadLagParams("lag", args)
+      WindowFunction.lag(e, offset, default)
+    }
+    ("lag", f)
+  }
+
+  private def leadLagParams(name: String, args: Seq[Expression]): (Expression, Int, Expression) = {
+    args match {
+      case Seq(e: Expression) =>
+        (e, 1, null)
+      case Seq(e: Expression, ExtractInteger(offset)) =>
+        (e, offset, null)
+      case Seq(e: Expression, ExtractInteger(offset), d: Expression) =>
+        (e, offset, d)
+      case _ =>
+        println(args)
+        throw new AnalysisException(s"Invalid arguments for function $name: $args")
+    }
+  }
+
+  object ExtractInteger {
+    def unapply(e: Expression): Option[Integer] = {
+      if (e.foldable && e.dataType == IntegerType) {
+        Some(e.eval(EmptyRow).asInstanceOf[Integer])
+      } else None
+    }
   }
 }

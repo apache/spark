@@ -74,6 +74,9 @@ class Analyzer(
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolvePartialWindowExpressions ::
+      ResolveUnspecifiedFrameWindowExpressions ::
+      ResolveImpliedOrderWindowExpressions ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
@@ -118,14 +121,14 @@ class Analyzer(
       case WithWindowDefinition(windowDefinitions, child) =>
         child.transform {
           case plan => plan.transformExpressions {
-            case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+            case we @ WindowExpression(_, WindowSpecReference(windowName), _, _) =>
               val errorMessage =
                 s"Window specification $windowName is not defined in the WINDOW clause."
               val windowSpecDefinition =
                 windowDefinitions
                   .get(windowName)
                   .getOrElse(failAnalysis(errorMessage))
-              WindowExpression(c, windowSpecDefinition)
+              we.copy(windowSpec = windowSpecDefinition)
           }
         }
     }
@@ -502,11 +505,17 @@ class Analyzer(
     }
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
-      exprs.foreach(_.foreach {
-        case agg: AggregateExpression => return true
-        case _ =>
-      })
-      false
+      // Collect all Windowed Aggregate Expressions.
+      val blacklist = exprs.flatMap { expr =>
+        expr.collect {
+          case WindowExpression(ae: AggregateExpression, _, _, _) => ae
+        }
+      }.toSet
+
+      // Find the first Aggregate Expression that is not Windowed.
+      exprs.exists(_.collectFirst {
+        case ae: AggregateExpression if (!blacklist.contains(ae)) => ae
+      }.isDefined)
     }
   }
 
@@ -716,28 +725,42 @@ class Analyzer(
           withName.toAttribute
       }
 
+      // Extract Window Specification Expressions.
+      def extractSpecExpressions(spec: WindowSpecDefinition) = {
+        val newPartitionSpec = spec.partitionSpec.map(extractExpr(_))
+        val newOrderSpec = spec.orderSpec.map { so =>
+          so.copy(child = extractExpr(so.child))
+        }
+        spec.copy(partitionSpec = newPartitionSpec,
+                  orderSpec = newOrderSpec)
+      }
+
       // Now, we extract regular expressions from expressionsWithWindowFunctions
       // by using extractExpr.
+      val seenWindowAggregates = new ArrayBuffer[AggregateExpression]
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
-          // Extracts children expressions of a WindowFunction (input parameters of
-          // a WindowFunction).
-          case wf : WindowFunction =>
-            val newChildren = wf.children.map(extractExpr(_))
-            wf.withNewChildren(newChildren)
-
-          // Extracts expressions from the partition spec and order spec.
-          case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _) =>
-            val newPartitionSpec = partitionSpec.map(extractExpr(_))
-            val newOrderSpec = orderSpec.map { so =>
-              val newChild = extractExpr(so.child)
-              so.copy(child = newChild)
-            }
-            wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
-
+          // Add the children of an aggregate expression to the expression list.
+          case we @ WindowExpression(agg: AggregateExpression,
+                  spec: WindowSpecDefinition, _, _) =>
+            val newAggChildren = agg.children.map(extractExpr(_))
+            val newAgg = agg.withNewChildren(newAggChildren)
+            seenWindowAggregates += newAgg
+            we.copy(windowFunction = newAgg,
+                   windowSpec = extractSpecExpressions(spec))
+          // Lead/Lag functions window function are have no aggregating operator. The function
+          // itself is added to the expression list.
+          case we @ WindowExpression(e: Expression,
+                  spec @ WindowSpecDefinition(_, _,
+                    SpecifiedWindowFrame(RowFrame,
+                      FrameBoundaryExtractor(l),
+                      FrameBoundaryExtractor(h))), _, _)
+                      if (l == h) =>
+            we.copy(windowFunction = extractExpr(e),
+                   windowSpec = extractSpecExpressions(spec))
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
-          case agg: AggregateExpression =>
+          case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
@@ -784,7 +807,8 @@ class Analyzer(
       // Second, we group extractedWindowExprBuffer based on their Window Spec.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
-          case window: WindowExpression => window.windowSpec
+          case WindowExpression(_, spec: WindowSpecDefinition, _, _) =>
+            spec.copy(frameSpecification = SpecifiedWindowFrame.unbounded)
         }.distinct
 
         // We do a final check and see if we only have a single Window Spec defined in an
@@ -870,6 +894,81 @@ class Analyzer(
         val finalProjectList = projectList.map (_.toAttribute)
         Project(finalProjectList, withWindow)
     }
+  }
+
+  object ResolvePartialWindowExpressions extends Rule[LogicalPlan] {
+    /* Add a parents window specification to a child. */
+    private def mergeSpec(expr: WindowExpression, spec: WindowSpecDefinition) = {
+      // Do not add an empty parent spec
+      if (spec == WindowSpecDefinition.empty) failAnalysis("Cannot replace window expression, " +
+        "the used specification is empty.")
+      // Do not replace a non-empty child spec
+      else if (expr.windowSpec != WindowSpecDefinition.empty && expr.windowSpec != spec) {
+        failAnalysis("Cannot replace window expression, the target expression already has "
+          + "a different valid window specification.")
+      }
+      // Create a copy with the updated specifica
+      else expr.copy(windowSpec = spec)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: LogicalPlan =>
+        q transformExpressionsDown {
+          // Simple Case, two nested window expressions. The parent expression should contain a
+          // valid specification, the child expression should contain the function and processing
+          // instructions. The parent is replaced by the updated child.
+          case we @ WindowExpression(cwe: WindowExpression, spec: WindowSpecDefinition, _, _) =>
+            mergeSpec(cwe, spec)
+          // Subtree Case, a parent window expression and a window-function-containing subtree. The
+          // specification of the parent window expression gets injected into the child window
+          // expressions. The parent is then replaced by the transformed subtree.
+          case we @ WindowExpression(ComposedWindowFunction(subtree),
+                      spec: WindowSpecDefinition, _, _) =>
+            subtree.transformDown {
+              // TODO see if there are any use cases when we have a partially defined subtree with
+              // a different window spec. That will currently fail miserably.
+              case cwe: WindowExpression => mergeSpec(cwe, spec)
+            }
+          // Fully Configured Window Function containing SubTree. Eliminate the expression.
+          case cwf @ ComposedWindowFunction(subtree) => subtree
+      }
+    }
+  }
+
+  object ResolveUnspecifiedFrameWindowExpressions extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case q: LogicalPlan =>
+        q transformExpressions {
+          // Replace the Spec's frame with the fixed frame.
+          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _, UnspecifiedFrame),
+                                    frame: SpecifiedWindowFrame, _) =>
+            we.copy(windowSpec = spec.copy(frameSpecification = frame))
+          // Replace the Spec's frame with a default frame.
+          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _,
+                      UnspecifiedFrame), _, _) =>
+            we.copy(windowSpec = spec.copy(frameSpecification =
+              SpecifiedWindowFrame.defaultWindowFrame(!spec.orderSpec.isEmpty, true)))
+          // Fail when two frames are defined and they DO NOT match.
+          case we @ WindowExpression(_, spec @ WindowSpecDefinition(_, _,
+                      frame: SpecifiedWindowFrame), fixedFrame: SpecifiedWindowFrame, _)
+                      if (frame != fixedFrame) =>
+            failAnalysis(s"The frame of the window '$frame' does not match the required " +
+              s"frame '$fixedFrame'")
+        }
+    }
+  }
+}
+
+/**
+ * Add the window ordering specification to implied ordering functions.
+ */
+object ResolveImpliedOrderWindowExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case q: LogicalPlan =>
+      q transformExpressions {
+        case we @ WindowExpression(implied: ImpliedOrderSpec, spec: WindowSpecDefinition, _, _) =>
+          we.copy(windowFunction = implied.defineOrderSpec(spec.orderSpec.map(_.child)))
+      }
   }
 }
 

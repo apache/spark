@@ -168,19 +168,6 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   errorTest(
-    "unresolved window function",
-    testRelation2.select(
-      WindowExpression(
-        UnresolvedWindowFunction(
-          "lead",
-          UnresolvedAttribute("c") :: Nil),
-        WindowSpecDefinition(
-          UnresolvedAttribute("a") :: Nil,
-          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as('window)),
-      "lead" :: "window functions currently requires a HiveContext" :: Nil)
-
-  errorTest(
     "too many generators",
     listRelation.select(Explode('list).as('a), Explode('list).as('b)),
     "only one generator" :: "explode" :: Nil)

@@ -324,6 +324,14 @@ private[hive] object HiveQl {
   }
 
   /** Extractor for matching Hive's AST Tokens. */
+  case class Token(name: String, children: Seq[ASTNode]) extends Node {
+    def getName(): String = name
+    def getChildren(): java.util.List[Node] = {
+      val col = new java.util.ArrayList[Node]
+      children.foreach(col.add(_))
+      col
+    }
+  }
   object Token {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
@@ -331,6 +339,7 @@ private[hive] object HiveQl {
         CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
+      case t: Token => Some((t.name, t.children))
       case _ => None
     }
   }
@@ -1449,24 +1458,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("[", child :: ordinal :: Nil) =>
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
-    /* Window Functions */
-    case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
-      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
-      nodesToWindowSpecification(spec) match {
-        case reference: WindowSpecReference =>
-          UnresolvedWindowExpression(function, reference)
-        case definition: WindowSpecDefinition =>
-          WindowExpression(function, definition)
-      }
-    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
-      // Safe to use Literal(1)?
-      val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
-      nodesToWindowSpecification(spec) match {
-        case reference: WindowSpecReference =>
-          UnresolvedWindowExpression(function, reference)
-        case definition: WindowSpecDefinition =>
-          WindowExpression(function, definition)
-      }
+    /* Window Functions. */
+    case Token(name, args :+ Token("TOK_WINDOWSPEC", spec)) =>
+      val function = nodeToExpr(Token(name, args))
+      val definition = nodesToWindowSpecification(spec)
+      WindowExpression(function, definition)
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
@@ -1622,7 +1618,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
           }.getOrElse(sys.error(s"If you see this, please file a bug report with your query."))
         }
-
       WindowSpecDefinition(partitionSpec, orderSpec, windowFrame)
   }
 

@@ -65,12 +65,13 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
+          case b: BinaryExpression if !b.resolved =>
             failAnalysis(
-              s"Could not resolve window function '$name'. " +
-              "Note that, using window functions currently requires a HiveContext")
+              s"invalid expression ${b.prettyString} " +
+              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
-          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
+          case w @ WindowExpression(windowFunction, windowSpec: WindowSpecDefinition, _, _)
+            if windowSpec.validate.nonEmpty =>
             // The window spec is not valid.
             val reason = windowSpec.validate.get
             failAnalysis(s"Window specification $windowSpec is not valid because $reason")
