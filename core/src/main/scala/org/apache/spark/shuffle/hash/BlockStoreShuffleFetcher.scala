@@ -26,7 +26,8 @@ import org.apache.spark._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
 
-private[hash] object BlockStoreShuffleFetcher extends Logging {
+private[hash] class BlockStoreShuffleFetcher extends Logging {
+
   def fetchBlockStreams(
       shuffleId: Int,
       reduceId: Int,
