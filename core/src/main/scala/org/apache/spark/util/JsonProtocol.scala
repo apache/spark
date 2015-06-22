@@ -92,6 +92,8 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
+      case blockUpdated: SparkListenerBlockUpdated =>
+        blockUpdatedToJson(blockUpdated)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
@@ -222,6 +224,11 @@ private[spark] object JsonProtocol {
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(logStart)) ~
     ("Spark Version" -> SPARK_VERSION)
+  }
+
+  def blockUpdatedToJson(blockUpdated: SparkListenerBlockUpdated): JValue = {
+    ("Event" -> Utils.getFormattedClassName(blockUpdated)) ~
+    ("Block Info" -> blockUpdatedInfoToJson(blockUpdated.blockUpdatedInfo))
   }
 
   /** ------------------------------------------------------------------- *
@@ -407,6 +414,52 @@ private[spark] object JsonProtocol {
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
   }
 
+  def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo): JValue = {
+    ("Block Manager ID" -> blockManagerIdToJson(blockUpdatedInfo.blockManagerId)) ~
+    ("Block ID" -> blockIdToJson(blockUpdatedInfo.blockId)) ~
+    ("Storage Level" -> storageLevelToJson(blockUpdatedInfo.storageLevel)) ~
+    ("Memory Size" -> blockUpdatedInfo.memSize) ~
+    ("ExternalBlockStore Size" -> blockUpdatedInfo.externalBlockStoreSize) ~
+    ("Disk Size" -> blockUpdatedInfo.diskSize)
+  }
+
+  def blockIdToJson(blockId: BlockId): JValue = blockId match {
+    case RDDBlockId(rddId, splitIndex) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("RDD ID" -> rddId) ~
+      ("Split Index" -> splitIndex)
+    case ShuffleBlockId(shuffleId, mapId, reduceId) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Shuffle ID" -> shuffleId) ~
+      ("Map ID" -> mapId) ~
+      ("Reduce ID" -> reduceId)
+    case ShuffleDataBlockId(shuffleId, mapId, reduceId) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Shuffle ID" -> shuffleId) ~
+      ("Map ID" -> mapId) ~
+      ("Reduce ID" -> reduceId)
+    case ShuffleIndexBlockId(shuffleId, mapId, reduceId) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Shuffle ID" -> shuffleId) ~
+      ("Map ID" -> mapId) ~
+      ("Reduce ID" -> reduceId)
+    case BroadcastBlockId(broadcastId, field) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Broadcast ID" -> broadcastId) ~
+      ("Field" -> field)
+    case TaskResultBlockId(taskId) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Task ID" -> taskId)
+    case StreamBlockId(streamId, uniqueId) =>
+      ("Class Name" -> Utils.getFormattedClassName(blockId)) ~
+      ("Stream ID" -> streamId) ~
+      ("Unique ID" -> uniqueId)
+    // These aren't used, but keeps compiler happy
+    case TempLocalBlockId(_) => JNothing
+    case TempShuffleBlockId(_) => JNothing
+    case TestBlockId(_) => JNothing
+  }
+
   /** ------------------------------ *
    * Util JSON serialization methods |
    * ------------------------------- */
@@ -463,6 +516,7 @@ private[spark] object JsonProtocol {
     val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
+    val blockUpdated = Utils.getFormattedClassName(SparkListenerBlockUpdated)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -481,6 +535,7 @@ private[spark] object JsonProtocol {
       case `executorAdded` => executorAddedFromJson(json)
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
+      case `blockUpdated` => blockUpdatedFromJson(json)
     }
   }
 
@@ -596,6 +651,11 @@ private[spark] object JsonProtocol {
   def logStartFromJson(json: JValue): SparkListenerLogStart = {
     val sparkVersion = (json \ "Spark Version").extract[String]
     SparkListenerLogStart(sparkVersion)
+  }
+
+  def blockUpdatedFromJson(json: JValue): SparkListenerBlockUpdated = {
+    val blockUpdatedInfo = blockUpdatedInfoFromJson(json \ "Block Info")
+    SparkListenerBlockUpdated(blockUpdatedInfo)
   }
 
   /** --------------------------------------------------------------------- *
@@ -846,6 +906,60 @@ private[spark] object JsonProtocol {
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
     new ExecutorInfo(executorHost, totalCores, logUrls)
+  }
+
+  def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
+    BlockUpdatedInfo(
+      blockManagerIdFromJson(json \ "Block Manager ID"),
+      blockIdFromJson(json \ "Block ID"),
+      storageLevelFromJson(json \ "Storage Level"),
+      (json \ "Memory Size").extract[Long],
+      (json \ "Disk Size").extract[Long],
+      (json \ "ExternalBlockStore Size").extract[Long]
+    )
+  }
+
+  def blockIdFromJson(json: JValue): BlockId = {
+    val rddBlockId = Utils.getFormattedClassName(RDDBlockId)
+    val shuffleBlockId = Utils.getFormattedClassName(ShuffleBlockId)
+    val shuffleDataBlockId = Utils.getFormattedClassName(ShuffleDataBlockId)
+    val shuffleIndexBlockId = Utils.getFormattedClassName(ShuffleIndexBlockId)
+    val broadcastBlockId = Utils.getFormattedClassName(BroadcastBlockId)
+    val taskResultBlockId = Utils.getFormattedClassName(TaskResultBlockId)
+    val streamBlockId = Utils.getFormattedClassName(StreamBlockId)
+
+    (json \ "Class Name").extract[String] match {
+      case `rddBlockId` =>
+        val rddId = (json \ "RDD ID").extract[Int]
+        val splitIndex = (json \ "Split Index").extract[Int]
+        RDDBlockId(rddId, splitIndex)
+      case `shuffleBlockId` =>
+        val shuffleId = (json \ "Shuffle ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Int]
+        val reduceId = (json \ "Reduce ID").extract[Int]
+        ShuffleBlockId(shuffleId, mapId, reduceId)
+      case `shuffleDataBlockId` =>
+        val shuffleId = (json \ "Shuffle ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Int]
+        val reduceId = (json \ "Reduce ID").extract[Int]
+        ShuffleDataBlockId(shuffleId, mapId, reduceId)
+      case `shuffleIndexBlockId` =>
+        val shuffleId = (json \ "Shuffle ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Int]
+        val reduceId = (json \ "Reduce ID").extract[Int]
+        ShuffleIndexBlockId(shuffleId, mapId, reduceId)
+      case `broadcastBlockId` =>
+        val broadcastId = (json \ "Broadcast ID").extract[Long]
+        val field = (json \ "Field").extract[String]
+        BroadcastBlockId(broadcastId, field)
+      case `taskResultBlockId` =>
+        val taskId = (json \ "Task ID").extract[Long]
+        TaskResultBlockId(taskId)
+      case `streamBlockId` =>
+        val streamId = (json \ "Stream ID").extract[Int]
+        val uniqueId = (json \ "Unique ID").extract[Long]
+        StreamBlockId(streamId, uniqueId)
+    }
   }
 
   /** -------------------------------- *

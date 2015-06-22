@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.BlockManagerMessages.UpdateBlockInfo
 
 class BlockStatusListenerSuite extends SparkFunSuite {
 
@@ -28,7 +27,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
     val listener = new BlockStatusListener()
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(0, blockManagerId, 0))
     listener.onBlockUpdated(SparkListenerBlockUpdated(
-      UpdateBlockInfo(
+      BlockUpdatedInfo(
         blockManagerId,
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,
@@ -49,7 +48,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(0, blockManagerId2, 0))
 
     listener.onBlockUpdated(SparkListenerBlockUpdated(
-      UpdateBlockInfo(
+      BlockUpdatedInfo(
         blockManagerId2,
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,
@@ -69,7 +68,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
 
     // Removing a replication of the same block should decrease the replication
     listener.onBlockUpdated(SparkListenerBlockUpdated(
-      UpdateBlockInfo(
+      BlockUpdatedInfo(
         blockManagerId2,
         StreamBlockId(0, 100),
         StorageLevel.NONE,
@@ -88,7 +87,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
     // Remove a block manager
     listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(0, blockManagerId2))
     listener.onBlockUpdated(SparkListenerBlockUpdated(
-      UpdateBlockInfo(
+      BlockUpdatedInfo(
         blockManagerId2,
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,

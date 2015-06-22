@@ -63,7 +63,7 @@ class BlockManagerMasterEndpoint(
       blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
       context.reply(updateBlockInfo(
         blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
-      listenerBus.post(SparkListenerBlockUpdated(_updateBlockInfo))
+      listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
