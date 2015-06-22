@@ -353,6 +353,7 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.partitionBy(partitionBy).mode(mode)
