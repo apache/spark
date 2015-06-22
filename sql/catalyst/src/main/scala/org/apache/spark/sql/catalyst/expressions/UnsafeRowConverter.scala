@@ -267,7 +267,7 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
     val numBytes = bytes.length
     if ((numBytes & 0x07) > 0) {
       // zero-out the padding bytes
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject, offset + (numBytes >> 3 << 3), 0L)
+      PlatformDependent.UNSAFE.putLong(target.getBaseObject, offset + ((numBytes >> 3) << 3), 0L)
     }
     PlatformDependent.copyMemory(
       bytes,
