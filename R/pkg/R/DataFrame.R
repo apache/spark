@@ -169,8 +169,8 @@ setMethod("isLocal",
 #'}
 setMethod("showDF",
           signature(x = "DataFrame"),
-          function(x, numRows = 20) {
-            s <- callJMethod(x@sdf, "showString", numToInt(numRows), TRUE)
+          function(x, numRows = 20, pretty = TRUE) {
+            s <- callJMethod(x@sdf, "showString", numToInt(numRows), pretty)
             cat(s)
           })
 
