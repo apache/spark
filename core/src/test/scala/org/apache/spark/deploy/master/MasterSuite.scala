@@ -21,16 +21,20 @@ import java.util.Date
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.io.Source
 import scala.language.postfixOps
 
 import akka.actor.Address
-import org.scalatest.{FunSuite, Matchers}
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy._
-import org.apache.spark.{SparkConf, SparkException}
 
-class MasterSuite extends FunSuite with Matchers {
+class MasterSuite extends SparkFunSuite with Matchers with Eventually {
 
   test("toAkkaUrl") {
     val conf = new SparkConf(loadDefaults = false)
@@ -155,6 +159,29 @@ class MasterSuite extends FunSuite with Matchers {
     }
 
     CustomRecoveryModeFactory.instantiationAttempts should be > instantiationAttempts
+  }
+
+  test("Master & worker web ui available") {
+    implicit val formats = org.json4s.DefaultFormats
+    val conf = new SparkConf()
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    try {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
+          .getLines().mkString("\n")
+        val JArray(workers) = (parse(json) \ "workers")
+        workers.size should be (2)
+        workers.foreach { workerSummaryJson =>
+          val JString(workerWebUi) = workerSummaryJson \ "webuiaddress"
+          val workerResponse = parse(Source.fromURL(s"${workerWebUi}/json")
+            .getLines().mkString("\n"))
+          (workerResponse \ "cores").extract[Int] should be (2)
+        }
+      }
+    } finally {
+      localCluster.stop()
+    }
   }
 
 }

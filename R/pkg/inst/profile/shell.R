@@ -24,10 +24,10 @@
   old <- getOption("defaultPackages")
   options(defaultPackages = c(old, "SparkR"))
 
-  sc <- SparkR::sparkR.init(Sys.getenv("MASTER", unset = ""))
+  sc <- SparkR::sparkR.init()
   assign("sc", sc, envir=.GlobalEnv)
-  sqlCtx <- SparkR::sparkRSQL.init(sc)
-  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
+  sqlContext <- SparkR::sparkRSQL.init(sc)
+  assign("sqlContext", sqlContext, envir=.GlobalEnv)
   cat("\n Welcome to SparkR!")
-  cat("\n Spark context is available as sc, SQL context is available as sqlCtx\n")
+  cat("\n Spark context is available as sc, SQL context is available as sqlContext\n")
 }

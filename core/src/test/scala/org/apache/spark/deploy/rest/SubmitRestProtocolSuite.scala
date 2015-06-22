@@ -21,14 +21,13 @@ import java.lang.Boolean
 import java.lang.Integer
 
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 /**
  * Tests for the REST application submission protocol.
  */
-class SubmitRestProtocolSuite extends FunSuite {
+class SubmitRestProtocolSuite extends SparkFunSuite {
 
   test("validate") {
     val request = new DummyRequest

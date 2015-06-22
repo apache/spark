@@ -17,16 +17,18 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
 
+import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
@@ -59,7 +61,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
-  private val fs = Utils.getHadoopFileSystem(logDir, SparkHadoopUtil.get.newConfiguration(conf))
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -157,7 +160,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
 
-          ui.setAppName(s"${appInfo.name} ($appId)")
+          appInfo.foreach { app => ui.setAppName(s"${app.name} ($appId)") }
 
           val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
           ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -219,6 +222,58 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      zipStream: ZipOutputStream): Unit = {
+
+    /**
+     * This method compresses the files passed in, and writes the compressed data out into the
+     * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
+     * the name of the file being compressed.
+     */
+    def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
+      val fs = FileSystem.get(hadoopConf)
+      val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
+      try {
+        outputStream.putNextEntry(new ZipEntry(entryName))
+        ByteStreams.copy(inputStream, outputStream)
+        outputStream.closeEntry()
+      } finally {
+        inputStream.close()
+      }
+    }
+
+    applications.get(appId) match {
+      case Some(appInfo) =>
+        try {
+          // If no attempt is specified, or there is no attemptId for attempts, return all attempts
+          appInfo.attempts.filter { attempt =>
+            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
+          }.foreach { attempt =>
+            val logPath = new Path(logDir, attempt.logPath)
+            // If this is a legacy directory, then add the directory to the zipStream and add
+            // each file to that directory.
+            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
+              val files = fs.listStatus(logPath)
+              zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
+              zipStream.closeEntry()
+              files.foreach { file =>
+                val path = file.getPath
+                zipFileToStream(path, attempt.logPath + Path.SEPARATOR + path.getName, zipStream)
+              }
+            } else {
+              zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
+            }
+          }
+        } finally {
+          zipStream.close()
+        }
+      case None => throw new SparkException(s"Logs for $appId not found.")
+    }
+  }
+
+
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
    */
@@ -227,8 +282,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = logs.flatMap { fileStatus =>
       try {
         val res = replay(fileStatus, bus)
-        logInfo(s"Application log ${res.logPath} loaded successfully.")
-        Some(res)
+        res match {
+          case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
+          case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
+            "The application may have not started.")
+        }
+        res
       } catch {
         case e: Exception =>
           logError(
@@ -374,9 +433,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replays the events in the specified log file and returns information about the associated
-   * application.
+   * application. Return `None` if the application ID cannot be located.
    */
-  private def replay(eventLog: FileStatus, bus: ReplayListenerBus): FsApplicationAttemptInfo = {
+  private def replay(
+      eventLog: FileStatus,
+      bus: ReplayListenerBus): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     val logInput =
@@ -390,16 +451,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
       bus.replay(logInput, logPath.toString, !appCompleted)
-      new FsApplicationAttemptInfo(
-        logPath.getName(),
-        appListener.appName.getOrElse(NOT_STARTED),
-        appListener.appId.getOrElse(logPath.getName()),
-        appListener.appAttemptId,
-        appListener.startTime.getOrElse(-1L),
-        appListener.endTime.getOrElse(-1L),
-        getModificationTime(eventLog).get,
-        appListener.sparkUser.getOrElse(NOT_STARTED),
-        appCompleted)
+      appListener.appId.map { appId =>
+        new FsApplicationAttemptInfo(
+          logPath.getName(),
+          appListener.appName.getOrElse(NOT_STARTED),
+          appId,
+          appListener.appAttemptId,
+          appListener.startTime.getOrElse(-1L),
+          appListener.endTime.getOrElse(-1L),
+          getModificationTime(eventLog).get,
+          appListener.sparkUser.getOrElse(NOT_STARTED),
+          appCompleted)
+      }
     } finally {
       logInput.close()
     }

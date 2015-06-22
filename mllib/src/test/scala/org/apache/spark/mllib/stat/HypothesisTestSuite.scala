@@ -19,16 +19,14 @@ package org.apache.spark.mllib.stat
 
 import java.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class HypothesisTestSuite extends FunSuite with MLlibTestSparkContext {
+class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("chi squared pearson goodness of fit") {
 

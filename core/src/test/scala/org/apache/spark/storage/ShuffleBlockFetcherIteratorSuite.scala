@@ -26,15 +26,14 @@ import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, TaskContextImpl}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContextImpl}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.serializer.TestSerializer
 
-class ShuffleBlockFetcherIteratorSuite extends FunSuite {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
   // Some of the tests are quite tricky because we are testing the cleanup behavior
   // in the presence of faults.
 

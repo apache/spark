@@ -86,7 +86,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (precision < 19) {
         return null  // Requested precision is too low to represent this value
       }
-      this.decimalVal = BigDecimal(longVal)
+      this.decimalVal = BigDecimal(unscaled)
       this.longVal = 0L
     } else {
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -313,7 +313,7 @@ object Decimal {
   // See scala.math's Numeric.scala for examples for Scala's built-in types.
 
   /** Common methods for Decimal evidence parameters */
-  trait DecimalIsConflicted extends Numeric[Decimal] {
+  private[sql] trait DecimalIsConflicted extends Numeric[Decimal] {
     override def plus(x: Decimal, y: Decimal): Decimal = x + y
     override def times(x: Decimal, y: Decimal): Decimal = x * y
     override def minus(x: Decimal, y: Decimal): Decimal = x - y
@@ -327,12 +327,12 @@ object Decimal {
   }
 
   /** A [[scala.math.Fractional]] evidence parameter for Decimals. */
-  object DecimalIsFractional extends DecimalIsConflicted with Fractional[Decimal] {
+  private[sql] object DecimalIsFractional extends DecimalIsConflicted with Fractional[Decimal] {
     override def div(x: Decimal, y: Decimal): Decimal = x / y
   }
 
   /** A [[scala.math.Integral]] evidence parameter for Decimals. */
-  object DecimalAsIfIntegral extends DecimalIsConflicted with Integral[Decimal] {
+  private[sql] object DecimalAsIfIntegral extends DecimalIsConflicted with Integral[Decimal] {
     override def quot(x: Decimal, y: Decimal): Decimal = x / y
     override def rem(x: Decimal, y: Decimal): Decimal = x % y
   }

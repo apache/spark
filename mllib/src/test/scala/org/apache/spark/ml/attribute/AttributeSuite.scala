@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.attribute
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types._
 
-import org.apache.spark.sql.types.{DoubleType, MetadataBuilder, Metadata}
-
-class AttributeSuite extends FunSuite {
+class AttributeSuite extends SparkFunSuite {
 
   test("default numeric attribute") {
     val attr: NumericAttribute = NumericAttribute.defaultAttr
@@ -208,5 +207,13 @@ class AttributeSuite extends FunSuite {
     val attr = BinaryAttribute.defaultAttr
     intercept[IllegalArgumentException](attr.withName(""))
     intercept[IllegalArgumentException](attr.withIndex(-1))
+  }
+
+  test("attribute from struct field") {
+    val metadata = NumericAttribute.defaultAttr.withName("label").toMetadata()
+    val fldWithoutMeta = new StructField("x", DoubleType, false, Metadata.empty)
+    assert(Attribute.fromStructField(fldWithoutMeta) == UnresolvedAttribute)
+    val fldWithMeta = new StructField("x", DoubleType, false, metadata)
+    assert(Attribute.fromStructField(fldWithMeta).isNumeric)
   }
 }

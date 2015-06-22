@@ -19,9 +19,9 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
@@ -32,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
@@ -63,6 +63,9 @@ private[spark] class TaskSchedulerImpl(
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
+
+  private val speculationScheduler =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
@@ -142,10 +145,11 @@ private[spark] class TaskSchedulerImpl(
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
-      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL_MS milliseconds,
-            SPECULATION_INTERVAL_MS milliseconds) {
-        Utils.tryOrStopSparkContext(sc) { checkSpeculatableTasks() }
-      }(sc.env.actorSystem.dispatcher)
+      speculationScheduler.scheduleAtFixedRate(new Runnable {
+        override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
+          checkSpeculatableTasks()
+        }
+      }, SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
   }
 
@@ -412,6 +416,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def stop() {
+    speculationScheduler.shutdown()
     if (backend != null) {
       backend.stop()
     }

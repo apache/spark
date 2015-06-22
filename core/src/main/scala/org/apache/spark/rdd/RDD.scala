@@ -434,11 +434,11 @@ abstract class RDD[T: ClassTag](
    * @return A random sub-sample of the RDD without replacement.
    */
   private[spark] def randomSampleWithRange(lb: Double, ub: Double, seed: Long): RDD[T] = {
-    this.mapPartitionsWithIndex { case (index, partition) =>
+    this.mapPartitionsWithIndex( { (index, partition) =>
       val sampler = new BernoulliCellSampler[T](lb, ub)
       sampler.setSeed(seed + index)
       sampler.sample(partition)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
@@ -454,7 +454,7 @@ abstract class RDD[T: ClassTag](
       withReplacement: Boolean,
       num: Int,
       seed: Long = Utils.random.nextLong): Array[T] = {
-    val numStDev =  10.0
+    val numStDev = 10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
@@ -717,7 +717,8 @@ abstract class RDD[T: ClassTag](
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(context, iter)
+    val cleanF = sc.clean(f)
+    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
     new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
   }
 
@@ -741,9 +742,11 @@ abstract class RDD[T: ClassTag](
   def mapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.map(t => f(t, a))
+      val a = cleanA(index)
+      iter.map(t => cleanF(t, a))
     }, preservesPartitioning)
   }
 
@@ -756,9 +759,11 @@ abstract class RDD[T: ClassTag](
   def flatMapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.flatMap(t => f(t, a))
+      val a = cleanA(index)
+      iter.flatMap(t => cleanF(t, a))
     }, preservesPartitioning)
   }
 
@@ -769,9 +774,11 @@ abstract class RDD[T: ClassTag](
    */
   @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
   def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
+    val cleanF = sc.clean(f)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex { (index, iter) =>
-      val a = constructA(index)
-      iter.map(t => {f(t, a); t})
+      val a = cleanA(index)
+      iter.map(t => {cleanF(t, a); t})
     }
   }
 
@@ -782,9 +789,11 @@ abstract class RDD[T: ClassTag](
    */
   @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
   def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
+    val cleanP = sc.clean(p)
+    val cleanA = sc.clean(constructA)
     mapPartitionsWithIndex((index, iter) => {
-      val a = constructA(index)
-      iter.filter(t => p(t, a))
+      val a = cleanA(index)
+      iter.filter(t => cleanP(t, a))
     }, preservesPartitioning = true)
   }
 
@@ -901,7 +910,8 @@ abstract class RDD[T: ClassTag](
    * Return an RDD that contains all matching values by applying `f`.
    */
   def collect[U: ClassTag](f: PartialFunction[T, U]): RDD[U] = withScope {
-    filter(f.isDefinedAt).map(f)
+    val cleanF = sc.clean(f)
+    filter(cleanF.isDefinedAt).map(cleanF)
   }
 
   /**
@@ -1005,9 +1015,16 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
-   * modify t1 and return it as its result value to avoid object allocation; however, it should not
-   * modify t2.
+   * given associative and commutative function and a neutral "zero value". The function
+   * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
+   * allocation; however, it should not modify t2.
+   *
+   * This behaves somewhat differently from fold operations implemented for non-distributed
+   * collections in functional languages like Scala. This fold operation may be applied to
+   * partitions individually, and then fold those results into the final result, rather than
+   * apply the fold to each element sequentially in some defined ordering. For functions
+   * that are not commutative, the result may differ from that of a fold applied to a
+   * non-distributed collection.
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1121,8 +1138,8 @@ abstract class RDD[T: ClassTag](
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
-    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
-      val map = new OpenHashMap[T,Long]
+    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (ctx, iter) =>
+      val map = new OpenHashMap[T, Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
@@ -1151,8 +1168,8 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = withScope {
-    require(p >= 4, s"p ($p) must be at least 4")
-    require(sp <= 32, s"sp ($sp) cannot be greater than 32")
+    require(p >= 4, s"p ($p) must be >= 4")
+    require(sp <= 32, s"sp ($sp) must be <= 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
     aggregate(zeroCounter)(
@@ -1177,8 +1194,9 @@ abstract class RDD[T: ClassTag](
    *                   It must be greater than 0.000017.
    */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = withScope {
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
-    countApproxDistinct(p, 0)
+    countApproxDistinct(if (p < 4) 4 else p, 0)
   }
 
   /**
@@ -1512,13 +1530,15 @@ abstract class RDD[T: ClassTag](
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * doCheckpoint() is called recursively on the parent RDDs.
    */
-  private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
+  private[spark] def doCheckpoint(): Unit = {
+    RDDOperationScope.withScope(sc, "checkpoint", allowNesting = false, ignoreParent = true) {
+      if (!doCheckpointCalled) {
+        doCheckpointCalled = true
+        if (checkpointData.isDefined) {
+          checkpointData.get.doCheckpoint()
+        } else {
+          dependencies.foreach(_.rdd.doCheckpoint())
+        }
       }
     }
   }
@@ -1565,15 +1585,15 @@ abstract class RDD[T: ClassTag](
         case 0 => Seq.empty
         case 1 =>
           val d = rdd.dependencies.head
-          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]], true)
+          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]], true)
         case _ =>
           val frontDeps = rdd.dependencies.take(len - 1)
           val frontDepStrings = frontDeps.flatMap(
-            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]]))
+            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_, _, _]]))
 
           val lastDep = rdd.dependencies.last
           val lastDepStrings =
-            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_,_,_]], true)
+            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_, _, _]], true)
 
           (frontDepStrings ++ lastDepStrings)
       }

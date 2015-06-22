@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import scala.collection.Map;
+import javax.annotation.Nullable;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
-import javax.annotation.Nullable;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.util.*;
-
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
-import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -49,7 +51,7 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow implements MutableRow {
+public final class UnsafeRow extends BaseMutableRow {
 
   private Object baseObject;
   private long baseOffset;
@@ -101,7 +103,9 @@ public final class UnsafeRow implements MutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
+          DoubleType,
+          DateType,
+          TimestampType
     })));
 
     // We support get() on a superset of the types for which we support set():
@@ -228,18 +232,8 @@ public final class UnsafeRow implements MutableRow {
   }
 
   @Override
-  public int length() {
-    return size();
-  }
-
-  @Override
   public StructType schema() {
     return schema;
-  }
-
-  @Override
-  public Object apply(int i) {
-    return get(i);
   }
 
   @Override
@@ -318,7 +312,6 @@ public final class UnsafeRow implements MutableRow {
 
   public UTF8String getUTF8String(int i) {
     assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
     final long offsetToStringSize = getLong(i);
     final int stringSizeInBytes =
       (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
@@ -330,8 +323,7 @@ public final class UnsafeRow implements MutableRow {
       PlatformDependent.BYTE_ARRAY_OFFSET,
       stringSizeInBytes
     );
-    str.set(strBytes);
-    return str;
+    return UTF8String.fromBytes(strBytes);
   }
 
   @Override
@@ -340,62 +332,7 @@ public final class UnsafeRow implements MutableRow {
   }
 
   @Override
-  public BigDecimal getDecimal(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Date getDate(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> Seq<T> getSeq(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> List<T> getList(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> Map<K, V> getMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> scala.collection.immutable.Map<String, T> getValuesMap(Seq<String> fieldNames) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> java.util.Map<K, V> getJavaMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row getStruct(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(String fieldName) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int fieldIndex(String name) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row copy() {
+  public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
 
@@ -411,25 +348,5 @@ public final class UnsafeRow implements MutableRow {
       values.update(fieldNumber, get(fieldNumber));
     }
     return values;
-  }
-
-  @Override
-  public String toString() {
-    return mkString("[", ",", "]");
-  }
-
-  @Override
-  public String mkString() {
-    return toSeq().mkString();
-  }
-
-  @Override
-  public String mkString(String sep) {
-    return toSeq().mkString(sep);
-  }
-
-  @Override
-  public String mkString(String start, String sep, String end) {
-    return toSeq().mkString(start, sep, end);
   }
 }

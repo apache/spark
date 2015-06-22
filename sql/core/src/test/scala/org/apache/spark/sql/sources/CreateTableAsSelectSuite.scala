@@ -17,27 +17,29 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.{IOException, File}
+import java.io.{File, IOException}
 
-import org.apache.spark.sql.AnalysisException
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext.sql
+
+  private lazy val sparkContext = caseInsensitiveContext.sparkContext
 
   var path: File = null
 
   override def beforeAll(): Unit = {
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
+    caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
   }
 
   override def afterAll(): Unit = {
-    dropTempTable("jt")
+    caseInsensitiveContext.dropTempTable("jt")
   }
 
   after {
@@ -59,7 +61,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    dropTempTable("jsonTable")
+    caseInsensitiveContext.dropTempTable("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT based on the file without write permission") {
@@ -129,7 +131,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT * FROM jsonTable"),
       sql("SELECT a * 4 FROM jt").collect())
 
-    dropTempTable("jsonTable")
+    caseInsensitiveContext.dropTempTable("jsonTable")
     // Explicitly delete the data.
     if (path.exists()) Utils.deleteRecursively(path)
 
@@ -147,7 +149,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT * FROM jsonTable"),
       sql("SELECT b FROM jt").collect())
 
-    dropTempTable("jsonTable")
+    caseInsensitiveContext.dropTempTable("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {

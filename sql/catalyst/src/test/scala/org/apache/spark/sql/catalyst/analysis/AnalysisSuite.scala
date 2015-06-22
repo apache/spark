@@ -17,29 +17,32 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 
-class AnalysisSuite extends FunSuite with BeforeAndAfter {
-  val caseSensitiveCatalog = new SimpleCatalog(true)
-  val caseInsensitiveCatalog = new SimpleCatalog(false)
+class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
+  val caseSensitiveConf = new SimpleCatalystConf(true)
+  val caseInsensitiveConf = new SimpleCatalystConf(false)
+
+  val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
+  val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)
 
   val caseSensitiveAnalyzer =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true) {
+    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
       override val extendedResolutionRules = EliminateSubQueries :: Nil
     }
   val caseInsensitiveAnalyzer =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false) {
+    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
       override val extendedResolutionRules = EliminateSubQueries :: Nil
     }
-
 
   def caseSensitiveAnalyze(plan: LogicalPlan): Unit =
     caseSensitiveAnalyzer.checkAnalysis(caseSensitiveAnalyzer.execute(plan))
@@ -69,6 +72,9 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       StructField("bField", StringType) ::
       StructField("cField", StringType) :: Nil
     ))())
+
+  val listRelation = LocalRelation(
+    AttributeReference("list", ArrayType(IntegerType))())
 
   before {
     caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
@@ -150,16 +156,34 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       caseSensitive: Boolean = true): Unit = {
     test(name) {
       val error = intercept[AnalysisException] {
-        if(caseSensitive) {
+        if (caseSensitive) {
           caseSensitiveAnalyze(plan)
         } else {
           caseInsensitiveAnalyze(plan)
         }
       }
 
-      errorMessages.foreach(m => assert(error.getMessage contains m))
+      errorMessages.foreach(m => assert(error.getMessage.toLowerCase contains m.toLowerCase))
     }
   }
+
+  errorTest(
+    "unresolved window function",
+    testRelation2.select(
+      WindowExpression(
+        UnresolvedWindowFunction(
+          "lead",
+          UnresolvedAttribute("c") :: Nil),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as('window)),
+      "lead" :: "window functions currently requires a HiveContext" :: Nil)
+
+  errorTest(
+    "too many generators",
+    listRelation.select(Explode('list).as('a), Explode('list).as('b)),
+    "only one generator" :: "explode" :: Nil)
 
   errorTest(
     "unresolved attributes",

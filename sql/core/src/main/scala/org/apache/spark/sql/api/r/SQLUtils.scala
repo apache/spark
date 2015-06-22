@@ -72,17 +72,6 @@ private[r] object SQLUtils {
     sqlContext.createDataFrame(rowRDD, schema)
   }
 
-  // A helper to include grouping columns in Agg()
-  def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
-    val aggExprs = exprs.map { col =>
-      col.expr match {
-        case expr: NamedExpression => expr
-        case expr: Expression => Alias(expr, expr.simpleString)()
-      }
-    }
-    gd.toDF(aggExprs)
-  }
-
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
   }
@@ -117,7 +106,7 @@ private[r] object SQLUtils {
 
     dfCols.map { col =>
       colToRBytes(col)
-    } 
+    }
   }
 
   def convertRowsToColumns(localDF: Array[Row], numCols: Int): Array[Array[Any]] = {
@@ -132,7 +121,7 @@ private[r] object SQLUtils {
     val numRows = col.length
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
-    
+
     SerDe.writeInt(dos, numRows)
 
     col.map { item =>
@@ -149,5 +138,20 @@ private[r] object SQLUtils {
       case "error" => SaveMode.ErrorIfExists
       case "ignore" => SaveMode.Ignore
     }
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).options(options).load()
+  }
+
+  def loadDF(
+      sqlContext: SQLContext,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    sqlContext.read.format(source).schema(schema).options(options).load()
   }
 }

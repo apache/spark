@@ -17,21 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
+import org.apache.spark.ml.param.ParamsSuite
+import org.scalatest.exceptions.TestFailedException
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{Row, SQLContext}
-import org.scalatest.exceptions.TestFailedException
+import org.apache.spark.sql.Row
 
-class PolynomialExpansionSuite extends FunSuite with MLlibTestSparkContext {
+class PolynomialExpansionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  @transient var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
+  test("params") {
+    ParamsSuite.checkParams(new PolynomialExpansion)
   }
 
   test("Polynomial expansion with default parameter") {

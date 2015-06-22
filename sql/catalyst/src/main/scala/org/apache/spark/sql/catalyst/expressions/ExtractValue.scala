@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{catalyst, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
@@ -47,7 +47,7 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), Literal(fieldName, StringType)) =>
         val ordinal = findField(fields, fieldName.toString, resolver)
         GetArrayStructFields(child, fields(ordinal), ordinal, containsNull)
-      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType]  =>
+      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
         GetArrayItem(child, extraction)
       case (_: MapType, _) =>
         GetMapValue(child, extraction)
@@ -92,8 +92,6 @@ object ExtractValue {
 
 trait ExtractValue extends UnaryExpression {
   self: Product =>
-
-  type EvaluatedType = Any
 }
 
 /**
@@ -107,8 +105,8 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
 
-  override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Row]
+  override def eval(input: InternalRow): Any = {
+    val baseValue = child.eval(input).asInstanceOf[InternalRow]
     if (baseValue == null) null else baseValue(ordinal)
   }
 }
@@ -127,8 +125,8 @@ case class GetArrayStructFields(
   override def foldable: Boolean = child.foldable
   override def toString: String = s"$child.${field.name}"
 
-  override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Seq[Row]]
+  override def eval(input: InternalRow): Any = {
+    val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]
     if (baseValue == null) null else {
       baseValue.map { row =>
         if (row == null) null else row(ordinal)
@@ -148,7 +146,7 @@ abstract class ExtractValueWithOrdinal extends ExtractValue {
   override def toString: String = s"$child[$ordinal]"
   override def children: Seq[Expression] = child :: ordinal :: Nil
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
       null

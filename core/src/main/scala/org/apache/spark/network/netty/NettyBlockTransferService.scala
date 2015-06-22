@@ -59,10 +59,20 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
     clientFactory = transportContext.createClientFactory(clientBootstrap.toList)
-    server = transportContext.createServer(conf.getInt("spark.blockManager.port", 0),
-      serverBootstrap.toList)
+    server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
     logInfo("Server created on " + server.getPort)
+  }
+
+  /** Creates and binds the TransportServer, possibly trying multiple ports. */
+  private def createServer(bootstraps: List[TransportServerBootstrap]): TransportServer = {
+    def startService(port: Int): (TransportServer, Int) = {
+      val server = transportContext.createServer(port, bootstraps)
+      (server, server.getPort)
+    }
+
+    val portToTry = conf.getInt("spark.blockManager.port", 0)
+    Utils.startServiceOnPort(portToTry, startService, conf, getClass.getName)._1
   }
 
   override def fetchBlocks(

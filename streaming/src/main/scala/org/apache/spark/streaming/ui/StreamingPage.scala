@@ -166,8 +166,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateLoadResources(): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri("/static/streaming-page.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -186,6 +186,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <strong>
         {SparkUIUtils.formatDate(startTime)}
       </strong>
+      (<strong>{listener.numTotalCompletedBatches}</strong>
+      completed batches, <strong>{listener.numTotalReceivedRecords}</strong> records)
     </div>
     <br />
   }
@@ -199,9 +201,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
    * @param times all time values that will be used in the graphs.
    */
   private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
-    val dateFormat = new SimpleDateFormat("HH:mm:ss")
     val js = "var timeFormat = {};\n" + times.map { time =>
-      val formattedTime = dateFormat.format(new Date(time))
+      val formattedTime =
+        UIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
@@ -243,17 +245,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // If it's not an integral number, just use its ceil integral number.
     val maxEventRate = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
     val minEventRate = 0L
-
-    // JavaScript to show/hide the InputDStreams sub table.
-    val triangleJs =
-      s"""$$('#inputs-table').toggle('collapsed');
-         |var status = false;
-         |if ($$(this).html() == '$BLACK_RIGHT_TRIANGLE_HTML') {
-         |$$(this).html('$BLACK_DOWN_TRIANGLE_HTML');status = true;}
-         |else {$$(this).html('$BLACK_RIGHT_TRIANGLE_HTML');status  = false;}
-         |window.history.pushState('',
-         |    document.title, window.location.pathname + '?show-streams-detail=' + status);"""
-        .stripMargin.replaceAll("\\n", "") // it must be only one single line
 
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
@@ -326,10 +317,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
               <div>
-              {if (hasStream) {
-                <span id="triangle" onclick={Unparsed(triangleJs)}>{Unparsed(BLACK_RIGHT_TRIANGLE_HTML)}</span>
-              }}
-                <strong>Input Rate</strong>
+              {
+                if (hasStream) {
+                  <span class="expand-input-rate">
+                    <span class="expand-input-rate-arrow arrow-closed"></span>
+                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="right">
+                      <strong>Input Rate</strong>
+                    </a>
+                  </span>
+                } else {
+                  <strong>Input Rate</strong>
+                }
+              }
               </div>
               <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>
@@ -347,7 +346,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Scheduling Delay</strong></div>
+              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "right")}</strong></div>
               <div>Avg: {schedulingDelay.formattedAvg}</div>
             </div>
           </td>
@@ -357,7 +356,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Processing Time</strong></div>
+              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "right")}</strong></div>
               <div>Avg: {processingTime.formattedAvg}</div>
             </div>
           </td>
@@ -367,7 +366,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Total Delay</strong></div>
+              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "right")}</strong></div>
               <div>Avg: {totalDelay.formattedAvg}</div>
             </div>
           </td>
@@ -475,14 +474,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val activeBatchesContent = {
       <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches).toNodeSeq
+        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
     }
 
     val completedBatchesContent = {
       <h4 id="completed">
         Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
       </h4> ++
-        new CompletedBatchTable(completedBatches).toNodeSeq
+        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
     }
 
     activeBatchesContent ++ completedBatchesContent

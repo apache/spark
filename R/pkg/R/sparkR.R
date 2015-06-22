@@ -222,19 +222,26 @@ sparkR.init <- function(
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sqlContext <- sparkRSQL.init(sc)
 #'}
 
-sparkRSQL.init <- function(jsc) {
+sparkRSQL.init <- function(jsc = NULL) {
   if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
 
-  sqlCtx <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                        "createSQLContext",
-                        jsc)
-  assign(".sparkRSQLsc", sqlCtx, envir = .sparkREnv)
-  sqlCtx
+  # If jsc is NULL, create a Spark Context
+  sc <- if (is.null(jsc)) {
+    sparkR.init()
+  } else {
+    jsc
+  }
+
+  sqlContext <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                            "createSQLContext",
+                            sc)
+  assign(".sparkRSQLsc", sqlContext, envir = .sparkREnv)
+  sqlContext
 }
 
 #' Initialize a new HiveContext.
@@ -246,15 +253,22 @@ sparkRSQL.init <- function(jsc) {
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' sqlCtx <- sparkRHive.init(sc)
+#' sqlContext <- sparkRHive.init(sc)
 #'}
 
-sparkRHive.init <- function(jsc) {
+sparkRHive.init <- function(jsc = NULL) {
   if (exists(".sparkRHivesc", envir = .sparkREnv)) {
     return(get(".sparkRHivesc", envir = .sparkREnv))
   }
 
-  ssc <- callJMethod(jsc, "sc")
+  # If jsc is NULL, create a Spark Context
+  sc <- if (is.null(jsc)) {
+    sparkR.init()
+  } else {
+    jsc
+  }
+
+  ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
   }, error = function(err) {
@@ -263,4 +277,48 @@ sparkRHive.init <- function(jsc) {
 
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
   hiveCtx
+}
+
+#' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+#' different value or cleared.
+#'
+#' @param sc existing spark context
+#' @param groupid the ID to be assigned to job groups
+#' @param description description for the the job group ID
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#'}
+
+setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
+  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
+
+#' Clear current job group ID and its description
+#'
+#' @param sc existing spark context
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' clearJobGroup(sc)
+#'}
+
+clearJobGroup <- function(sc) {
+  callJMethod(sc, "clearJobGroup")
+}
+
+#' Cancel active jobs for the specified group
+#'
+#' @param sc existing spark context
+#' @param groupId the ID of job group to be cancelled
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' cancelJobGroup(sc, "myJobGroup")
+#'}
+
+cancelJobGroup <- function(sc, groupId) {
+  callJMethod(sc, "cancelJobGroup", groupId)
 }

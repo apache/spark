@@ -29,16 +29,15 @@ import scala.util.Random
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.scalatest.FunSuite
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("timeConversion") {
     // Test -1
@@ -367,51 +366,58 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
   }
 
   test("resolveURI") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assume(before.split(",").length === 1)
       // Repeated invocations of resolveURI should yield the same result
-      def resolve(uri: String): String = Utils.resolveURI(uri, testWindows).toString
+      def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
       // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
-    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
-    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
-    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
+    assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
+    if (Utils.isWindows) {
+      assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt")
+      assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
+    }
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
+    assertResolves("file:foo", s"file:foo")
+    assertResolves("file:foo:baby", s"file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
-    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+    def assertResolves(before: String, after: String): Unit = {
       assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before, testWindows) === after)
-      assert(Utils.resolveURIs(after, testWindows) === after)
+      assert(Utils.resolveURIs(before) === after)
+      assert(Utils.resolveURIs(after) === after)
       // Repeated invocations of resolveURIs should yield the same result
-      def resolve(uri: String): String = Utils.resolveURIs(uri, testWindows)
+      def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
-    val cwd = System.getProperty("user.dir")
+    val rawCwd = System.getProperty("user.dir")
+    val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
+    if (Utils.isWindows) {
+      assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+    }
   }
 
   test("nonLocalPaths") {
@@ -425,6 +431,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,path to/a.jar,s3:/smart.jar") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
     assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
       Array("hdfs:/spark.jar", "s3:/smart.jar"))
@@ -542,12 +550,17 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
   test("fetch hcfs dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "source-dir")
-    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
 
-    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val path =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceDir.getAbsolutePath)
+      }
     val conf = new Configuration()
     val fs = Utils.getHadoopFileSystem(path.toString, conf)
 
@@ -567,7 +580,12 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     val destInnerFile = new File(destInnerDir, sourceFile.getName)
     assert(destInnerFile.isFile())
 
-    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val filePath =
+      if (Utils.isWindows) {
+        new Path("file:/" + sourceFile.getAbsolutePath.replace("\\", "/"))
+      } else {
+        new Path("file://" + sourceFile.getAbsolutePath)
+      }
     val testFileDir = new File(tempDir, "test-filename")
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
@@ -589,5 +607,70 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
 
     manager.runAll()
     assert(output.toList === List(4, 3, 2))
+  }
+
+  test("isInDirectory") {
+    val tmpDir = new File(sys.props("java.io.tmpdir"))
+    val parentDir = new File(tmpDir, "parent-dir")
+    val childDir1 = new File(parentDir, "child-dir-1")
+    val childDir1b = new File(parentDir, "child-dir-1b")
+    val childFile1 = new File(parentDir, "child-file-1.txt")
+    val childDir2 = new File(childDir1, "child-dir-2")
+    val childDir2b = new File(childDir1, "child-dir-2b")
+    val childFile2 = new File(childDir1, "child-file-2.txt")
+    val childFile3 = new File(childDir2, "child-file-3.txt")
+    val nullFile: File = null
+    parentDir.mkdir()
+    childDir1.mkdir()
+    childDir1b.mkdir()
+    childDir2.mkdir()
+    childDir2b.mkdir()
+    childFile1.createNewFile()
+    childFile2.createNewFile()
+    childFile3.createNewFile()
+
+    // Identity
+    assert(Utils.isInDirectory(parentDir, parentDir))
+    assert(Utils.isInDirectory(childDir1, childDir1))
+    assert(Utils.isInDirectory(childDir2, childDir2))
+
+    // Valid ancestor-descendant pairs
+    assert(Utils.isInDirectory(parentDir, childDir1))
+    assert(Utils.isInDirectory(parentDir, childFile1))
+    assert(Utils.isInDirectory(parentDir, childDir2))
+    assert(Utils.isInDirectory(parentDir, childFile2))
+    assert(Utils.isInDirectory(parentDir, childFile3))
+    assert(Utils.isInDirectory(childDir1, childDir2))
+    assert(Utils.isInDirectory(childDir1, childFile2))
+    assert(Utils.isInDirectory(childDir1, childFile3))
+    assert(Utils.isInDirectory(childDir2, childFile3))
+
+    // Inverted ancestor-descendant pairs should fail
+    assert(!Utils.isInDirectory(childDir1, parentDir))
+    assert(!Utils.isInDirectory(childDir2, parentDir))
+    assert(!Utils.isInDirectory(childDir2, childDir1))
+    assert(!Utils.isInDirectory(childFile1, parentDir))
+    assert(!Utils.isInDirectory(childFile2, parentDir))
+    assert(!Utils.isInDirectory(childFile3, parentDir))
+    assert(!Utils.isInDirectory(childFile2, childDir1))
+    assert(!Utils.isInDirectory(childFile3, childDir1))
+    assert(!Utils.isInDirectory(childFile3, childDir2))
+
+    // Non-existent files or directories should fail
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one.txt")))
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one/two.txt")))
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one/two/three.txt")))
+
+    // Siblings should fail
+    assert(!Utils.isInDirectory(childDir1, childDir1b))
+    assert(!Utils.isInDirectory(childDir1, childFile1))
+    assert(!Utils.isInDirectory(childDir2, childDir2b))
+    assert(!Utils.isInDirectory(childDir2, childFile2))
+
+    // Null files should fail without throwing NPE
+    assert(!Utils.isInDirectory(parentDir, nullFile))
+    assert(!Utils.isInDirectory(childFile3, nullFile))
+    assert(!Utils.isInDirectory(nullFile, parentDir))
+    assert(!Utils.isInDirectory(nullFile, childFile3))
   }
 }

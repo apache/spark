@@ -86,8 +86,6 @@ object TestData {
       TestData3(2, Some(2)) :: Nil).toDF()
   testData3.registerTempTable("testData3")
 
-  val emptyTableData = logical.LocalRelation($"a".int, $"b".int)
-
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
     TestSQLContext.sparkContext.parallelize(
@@ -111,8 +109,8 @@ object TestData {
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   val arrayData =
     TestSQLContext.sparkContext.parallelize(
-      ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
-      ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
+      ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
+      ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
   arrayData.toDF().registerTempTable("arrayData")
 
   case class MapData(data: scala.collection.Map[Int, String])
@@ -175,12 +173,6 @@ object TestData {
       "2, B2, false, null" ::
       "3, C3, true, null" ::
       "4, D4, true, 2147483644" :: Nil)
-
-  case class TimestampField(time: Timestamp)
-  val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
-    TimestampField(new Timestamp(i))
-  })
-  timestamps.toDF().registerTempTable("timestamps")
 
   case class IntField(i: Int)
   // An RDD with 4 elements and 8 partitions

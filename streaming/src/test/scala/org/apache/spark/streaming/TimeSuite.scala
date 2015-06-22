@@ -69,6 +69,9 @@ class TimeSuite extends TestSuiteBase {
     assert(new Time(1200).floor(new Duration(200)) == new Time(1200))
     assert(new Time(199).floor(new Duration(200)) == new Time(0))
     assert(new Time(1).floor(new Duration(1)) == new Time(1))
+    assert(new Time(1350).floor(new Duration(200), new Time(50)) == new Time(1250))
+    assert(new Time(1350).floor(new Duration(200), new Time(150)) == new Time(1350))
+    assert(new Time(1350).floor(new Duration(200), new Time(200)) == new Time(1200))
   }
 
   test("isMultipleOf") {
