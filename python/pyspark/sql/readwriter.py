@@ -339,7 +339,7 @@ class DataFrameWriter(object):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite.mode(mode).json(path)
+        self.mode(mode)._jwrite.json(path)
 
     @since(1.4)
     def parquet(self, path, mode=None, partitionBy=()):
