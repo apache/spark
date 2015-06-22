@@ -1105,4 +1105,8 @@ class JsonSuite extends QueryTest with TestJsonData {
     }
   }
 
+  test("SPARK-8093 Erase empty structs") {
+    val emptySchema = InferSchema(emptyRecords, 1.0, "")
+    assert(StructType(Seq()) === emptySchema)
+  }
 }

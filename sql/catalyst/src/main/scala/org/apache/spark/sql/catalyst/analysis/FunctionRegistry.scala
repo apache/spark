@@ -133,6 +133,9 @@ object FunctionRegistry {
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
 
+    // misc functions
+    expression[Md5]("md5"),
+
     // aggregate functions
     expression[Average]("avg"),
     expression[Count]("count"),
