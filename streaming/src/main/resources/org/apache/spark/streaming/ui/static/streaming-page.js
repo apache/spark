@@ -31,6 +31,8 @@ var maxXForHistogram = 0;
 var histogramBinCount = 10;
 var yValueFormat = d3.format(",.2f");
 
+var unitLabelYOffset = -10;
+
 // Show a tooltip "text" for "node"
 function showBootstrapTooltip(node, text) {
     $(node).tooltip({title: text, trigger: "manual", container: "body"});
@@ -133,7 +135,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         .attr("class", "y axis")
         .call(yAxis)
         .append("text")
-            .attr("transform", "translate(0," + (-3) + ")")
+            .attr("transform", "translate(0," + unitLabelYOffset + ")")
             .text(unitY);
 
 
@@ -248,7 +250,7 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
         .attr("class", "x axis")
         .call(xAxis)
         .append("text")
-            .attr("transform", "translate(" + (margin.left + width - 50) + ", 0)")
+            .attr("transform", "translate(" + (margin.left + width - 50) + ", " + unitLabelYOffset + ")")
             .text("#batches");
 
     svg.append("g")
