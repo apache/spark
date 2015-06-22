@@ -21,7 +21,7 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
@@ -78,6 +78,10 @@ class GroupedData protected[sql](
     }
 
     val aliasedAgg = aggregates.map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case u: UnresolvedAttribute => UnresolvedAlias(u)
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.prettyString)()
     }

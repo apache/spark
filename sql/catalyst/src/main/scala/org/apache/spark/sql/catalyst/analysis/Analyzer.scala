@@ -68,11 +68,11 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
-      ResolveAliases ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolveAliases ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
