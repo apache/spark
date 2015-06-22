@@ -122,7 +122,7 @@ trait CheckAnalysis {
 
           case o if o.schema.fieldNames.length != o.schema.fieldNames.distinct.length =>
             val duplicateFields = o.schema.fieldNames.groupBy(identity).collect{
-                                    case (x,ys) if ys.length > 1 => x
+                                    case (x, ys) if ys.length > 1 => x
                                   }.mkString(",")
 
             failAnalysis( s"""Duplicate Column(s) : "$duplicateFields" present""" )
