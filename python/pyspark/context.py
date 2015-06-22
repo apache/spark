@@ -292,6 +292,19 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
+    def applicationId(self):
+        """
+        applicationId - depends on used scheduler
+        (i.e.
+            in case of local spark app something like u'local-1433865536131'
+            in case of YARN something like u'application_1433865536131_34483'
+        )
+        >>> sc.applicationId()  # doctest:+ELLIPSIS
+        local-...
+        """
+        return self._jsc.sc().applicationId()
+
+    @property
     def startTime(self):
         """Return the epoch time when the Spark Context was started."""
         return self._jsc.startTime()
