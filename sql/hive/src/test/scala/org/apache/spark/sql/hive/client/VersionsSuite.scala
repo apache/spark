@@ -87,7 +87,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.createDatabase(db)
     }
 
-    test(s"$version: createTable") {
+    slowTest(s"$version: createTable") {
       val table =
         HiveTable(
           specifiedDatabase = Option("default"),
@@ -108,40 +108,40 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.createTable(table)
     }
 
-    test(s"$version: getTable") {
+    slowTest(s"$version: getTable") {
       client.getTable("default", "src")
     }
 
-    test(s"$version: listTables") {
+    slowTest(s"$version: listTables") {
       assert(client.listTables("default") === Seq("src"))
     }
 
-    test(s"$version: currentDatabase") {
+    slowTest(s"$version: currentDatabase") {
       assert(client.currentDatabase === "default")
     }
 
-    test(s"$version: getDatabase") {
+    slowTest(s"$version: getDatabase") {
       client.getDatabase("default")
     }
 
-    test(s"$version: alterTable") {
+    slowTest(s"$version: alterTable") {
       client.alterTable(client.getTable("default", "src"))
     }
 
-    test(s"$version: set command") {
+    slowTest(s"$version: set command") {
       client.runSqlHive("SET spark.sql.test.key=1")
     }
 
-    test(s"$version: create partitioned table DDL") {
+    slowTest(s"$version: create partitioned table DDL") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key INT)")
       client.runSqlHive("ALTER TABLE src_part ADD PARTITION (key = '1')")
     }
 
-    test(s"$version: getPartitions") {
+    slowTest(s"$version: getPartitions") {
       client.getAllPartitions(client.getTable("default", "src_part"))
     }
 
-    test(s"$version: loadPartition") {
+    slowTest(s"$version: loadPartition") {
       client.loadPartition(
         emptyDir,
         "default.src_part",
@@ -152,7 +152,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         false)
     }
 
-    test(s"$version: loadTable") {
+    slowTest(s"$version: loadTable") {
       client.loadTable(
         emptyDir,
         "src",
@@ -160,7 +160,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         false)
     }
 
-    test(s"$version: loadDynamicPartitions") {
+    slowTest(s"$version: loadDynamicPartitions") {
       client.loadDynamicPartitions(
         emptyDir,
         "default.src_part",
