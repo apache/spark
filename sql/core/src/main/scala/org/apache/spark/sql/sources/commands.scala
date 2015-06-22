@@ -21,11 +21,9 @@ import java.util.{Date, UUID}
 
 import scala.collection.mutable
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
-import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
@@ -71,7 +69,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       relation.paths.length == 1,
       s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
 
-    val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val outputPath = new Path(relation.paths.head)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -262,7 +260,7 @@ private[sql] abstract class BaseWriterContainer(
   with Logging
   with Serializable {
 
-  protected val serializableConf = new SerializableConfiguration(ContextUtil.getConfiguration(job))
+  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
 
   // This UUID is used to avoid output file name collision between different appending write jobs.
   // These jobs may belong to different SparkContext instances. Concrete data source implementations
@@ -298,8 +296,10 @@ private[sql] abstract class BaseWriterContainer(
     setupIDs(0, 0, 0)
     setupConf()
 
-    ContextUtil.getConfiguration(job).set(
-      "spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+    // This UUID is sent to executor side together with the serialized `Configuration` object within
+    // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
+    // unique task output files.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
