@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test._
 
