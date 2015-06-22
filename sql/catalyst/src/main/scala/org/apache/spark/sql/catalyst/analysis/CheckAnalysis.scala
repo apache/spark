@@ -95,14 +95,7 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            val cleaned = aggregateExprs.map(_.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g, _) => g
-            })
-
-            cleaned.foreach(checkValidAggregateExpression)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case _ => // Fallbacks to the following checks
         }
