@@ -75,8 +75,9 @@ class KMeansModel(Saveable, Loader):
     >>> sameModel = KMeansModel.load(sc, path)
     >>> sameModel.predict(sparse_data[0]) == model.predict(sparse_data[0])
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """

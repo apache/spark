@@ -23,6 +23,7 @@ import os
 import sys
 import tempfile
 import array as pyarray
+from shutil import rmtree
 
 from numpy import array, array_equal, zeros, inf
 from py4j.protocol import Py4JJavaError
@@ -379,7 +380,7 @@ class ListTests(MLlibTestCase):
         self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
 
         try:
-            os.removedirs(temp_dir)
+            rmtree(temp_dir)
         except OSError:
             pass
 
