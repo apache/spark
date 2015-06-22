@@ -16,14 +16,12 @@ containers used by the application use the same configuration. If the configurat
 Java system properties or environment variables not managed by YARN, they should also be set in the
 Spark application's configuration (driver, executors, and the AM when running in client mode).
 
-There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
-(Default: `--deploy-mode client`)
+There are two deploy modes that can be used to launch Spark applications on YARN. In `yarn-cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `yarn-client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the master parameter is yarn. For a specific yarn deployment, use --deploy-mode to specify yarn-cluster or yarn-client. 
+Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn-client` or `yarn-cluster`. 
+To launch a Spark application in `yarn-cluster` mode:
 
-To launch a Spark application in yarn-cluster mode:
-
-    ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]
+   `$ ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]`
     
 For example:
 
@@ -39,13 +37,13 @@ For example:
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
 
-To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".  To run spark-shell:
+To launch a Spark application in `yarn-client` mode, do the same, but replace `yarn-cluster` with `yarn-client`.  To run spark-shell:
 
     $ ./bin/spark-shell --master yarn-client
 
 ## Adding Other JARs
 
-In yarn-cluster mode, the driver runs on a different machine than the client, so `SparkContext.addJar` won't work out of the box with files that are local to the client. To make files on the client available to `SparkContext.addJar`, include them with the `--jars` option in the launch command. 
+In `yarn-cluster` mode, the driver runs on a different machine than the client, so `SparkContext.addJar` won't work out of the box with files that are local to the client. To make files on the client available to `SparkContext.addJar`, include them with the `--jars` option in the launch command. 
 
     $ ./bin/spark-submit --class my.main.Class \
         --master yarn-cluster \
@@ -129,8 +127,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td><code>spark.yarn.am.waitTime</code></td>
   <td>100s</td>
   <td>
-    In yarn-cluster mode, time for the application master to wait for the
-    SparkContext to be initialized. In yarn-client mode, time for the application master to wait
+    In `yarn-cluster` mode, time for the application master to wait for the
+    SparkContext to be initialized. In `yarn-client` mode, time for the application master to wait
     for the driver to connect to it.
   </td>
 </tr>
@@ -255,8 +253,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
      Add the environment variable specified by <code>EnvironmentVariableName</code> to the 
      Application Master process launched on YARN. The user can specify multiple of 
-     these and to set multiple environment variables. In yarn-cluster mode this controls 
-     the environment of the SPARK driver and in yarn-client mode it only controls 
+     these and to set multiple environment variables. In `yarn-cluster` mode this controls 
+     the environment of the SPARK driver and in `yarn-client` mode it only controls 
      the environment of the executor launcher. 
   </td>
 </tr>
@@ -272,7 +270,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
-  In cluster mode, use spark.driver.extraJavaOptions instead.
+  In cluster mode, use `spark.driver.extraJavaOptions` instead.
   </td>
 </tr>
 <tr>
