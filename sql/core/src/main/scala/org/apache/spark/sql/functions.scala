@@ -1397,6 +1397,22 @@ object functions {
    */
   def md5(columnName: String): Column = md5(Column(columnName))
 
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(e: Column, bit: Int): Column = Sha2(e.expr, lit(bit).expr)
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(columnName: String, bit: Int): Column = sha2(Column(columnName), bit)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
