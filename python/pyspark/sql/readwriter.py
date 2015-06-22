@@ -276,7 +276,15 @@ class DataFrameWriter(object):
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.mode(mode).options(**options)
+        if mode is not "error":
+            # At the JVM side, the default value of mode is already set to "error".
+            # So, if mode at here is "error", we will not call mode method.
+            # This behavior is used to prevent us accidentally overriding the mode because
+            # user can call mode method directly.
+            # We leave "error" as the default in the method signature, so users can
+            # see what is the default value in Python doc.
+            self.mode(mode)
+        self.options(**options)
         if format is not None:
             self.format(format)
         if path is None:
@@ -314,7 +322,15 @@ class DataFrameWriter(object):
         :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
         :param options: all other string options
         """
-        self.mode(mode).options(**options)
+        if mode is not "error":
+            # At the JVM side, the default value of mode is already set to "error".
+            # So, if mode at here is "error", we will not call mode method.
+            # This behavior is used to prevent us accidentally overriding the mode because
+            # user can call mode method directly.
+            # We leave "error" as the default in the method signature, so users can
+            # see what is the default value in Python doc.
+            self.mode(mode)
+        self.options(**options)
         if format is not None:
             self.format(format)
         self._jwrite.saveAsTable(name)
@@ -333,7 +349,15 @@ class DataFrameWriter(object):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite.mode(mode).json(path)
+        if mode is not "error":
+            # At the JVM side, the default value of mode is already set to "error".
+            # So, if mode at here is "error", we will not call mode method.
+            # This behavior is used to prevent us accidentally overriding the mode because
+            # user can call mode method directly.
+            # We leave "error" as the default in the method signature, so users can
+            # see what is the default value in Python doc.
+            self.mode(mode)
+        self._jwrite.json(path)
 
     @since(1.4)
     def parquet(self, path, mode="error"):
@@ -349,7 +373,15 @@ class DataFrameWriter(object):
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self._jwrite.mode(mode).parquet(path)
+        if mode is not "error":
+            # At the JVM side, the default value of mode is already set to "error".
+            # So, if mode at here is "error", we will not call mode method.
+            # This behavior is used to prevent us accidentally overriding the mode because
+            # user can call mode method directly.
+            # We leave "error" as the default in the method signature, so users can
+            # see what is the default value in Python doc.
+            self.mode(mode)
+        self._jwrite.parquet(path)
 
     @since(1.4)
     def jdbc(self, url, table, mode="error", properties={}):
@@ -370,10 +402,18 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
+        if mode is not "error":
+            # At the JVM side, the default value of mode is already set to "error".
+            # So, if mode at here is "error", we will not call mode method.
+            # This behavior is used to prevent us accidentally overriding the mode because
+            # user can call mode method directly.
+            # We leave "error" as the default in the method signature, so users can
+            # see what is the default value in Python doc.
+            self.mode(mode)
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
-        self._jwrite.mode(mode).jdbc(url, table, jprop)
+        self._jwrite.jdbc(url, table, jprop)
 
 
 def _test():
