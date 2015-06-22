@@ -18,18 +18,12 @@
 import sys
 import numpy as np
 import warnings
-try:
-    import scipy.sparse
-    _have_scipy = True
-except:
-    # No SciPy in environment, but that's okay
-    _have_scipy = False
 
 if sys.version > '3':
     xrange = range
 
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
-from pyspark.mllib.linalg import Vector, Vectors, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
 
 class MLUtils(object):
@@ -183,11 +177,11 @@ class MLUtils(object):
         """
         vec = _convert_to_vector(data)
         if isinstance(vec, SparseVector):
-            l = scipy.sparse.csc_matrix(np.append(vec.toArray(), 1.0))
-            return _convert_to_vector(l.T)
-        elif isinstance(vec, Vector):
-            vec = vec.toArray()
-        return _convert_to_vector(np.append(vec, 1.0).tolist())
+            entries = dict(zip(vec.indices, vec.values))
+            entries[len(vec)] = 1.0
+            return SparseVector(len(vec) + 1, entries)
+        else:
+            return _convert_to_vector(np.append(vec.toArray(), 1.0))
 
     @staticmethod
     def loadVectors(sc, path):
