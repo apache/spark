@@ -35,8 +35,6 @@ class HiveSparkSubmitSuite
   with ResetSystemProperties
   with Timeouts {
 
-  // TODO: rewrite these or mark them as slow tests to be run sparingly
-
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
