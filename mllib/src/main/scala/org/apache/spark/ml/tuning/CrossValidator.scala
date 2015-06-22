@@ -149,6 +149,17 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
       est.copy(paramMap).validateParams()
     }
   }
+
+  override def copy(extra: ParamMap): CrossValidator = {
+    val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
+    if (copied.isDefined(estimator)) {
+      copied.setEstimator(copied.getEstimator.copy(extra))
+    }
+    if (copied.isDefined(evaluator)) {
+      copied.setEvaluator(copied.getEvaluator.copy(extra))
+    }
+    copied
+  }
 }
 
 /**

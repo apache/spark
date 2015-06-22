@@ -103,7 +103,9 @@ public final class UnsafeRow extends BaseMutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
+          DoubleType,
+          DateType,
+          TimestampType
     })));
 
     // We support get() on a superset of the types for which we support set():
@@ -310,7 +312,6 @@ public final class UnsafeRow extends BaseMutableRow {
 
   public UTF8String getUTF8String(int i) {
     assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
     final long offsetToStringSize = getLong(i);
     final int stringSizeInBytes =
       (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
@@ -322,16 +323,13 @@ public final class UnsafeRow extends BaseMutableRow {
       PlatformDependent.BYTE_ARRAY_OFFSET,
       stringSizeInBytes
     );
-    str.set(strBytes);
-    return str;
+    return UTF8String.fromBytes(strBytes);
   }
 
   @Override
   public String getString(int i) {
     return getUTF8String(i).toString();
   }
-
-
 
   @Override
   public InternalRow copy() {

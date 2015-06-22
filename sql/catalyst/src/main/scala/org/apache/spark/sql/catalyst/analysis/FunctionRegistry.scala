@@ -103,6 +103,7 @@ object FunctionRegistry {
     expression[Asin]("asin"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -112,6 +113,7 @@ object FunctionRegistry {
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Hypot]("hypot"),
+    expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
@@ -120,6 +122,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
@@ -129,6 +132,9 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
 
     // aggregate functions
     expression[Average]("avg"),
@@ -158,27 +164,23 @@ object FunctionRegistry {
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
-    // Use the companion class to find apply methods.
-    val objectClass = Class.forName(tag.runtimeClass.getName + "$")
-    val companionObj = objectClass.getDeclaredField("MODULE$").get(null)
 
-    // See if we can find an apply that accepts Seq[Expression]
-    val varargApply = Try(objectClass.getDeclaredMethod("apply", classOf[Seq[_]])).toOption
-
+    // See if we can find a constructor that accepts Seq[Expression]
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
     val builder = (expressions: Seq[Expression]) => {
-      if (varargApply.isDefined) {
+      if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
-        varargApply.get.invoke(companionObj, expressions).asInstanceOf[Expression]
+        varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
       } else {
-        // Otherwise, find an apply method that matches the number of arguments, and use that.
+        // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(objectClass.getDeclaredMethod("apply", params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        f.invoke(companionObj, expressions : _*).asInstanceOf[Expression]
+        f.newInstance(expressions : _*).asInstanceOf[Expression]
       }
     }
     (name, builder)
