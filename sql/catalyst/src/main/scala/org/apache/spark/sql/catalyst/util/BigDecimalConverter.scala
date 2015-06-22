@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 trait BigDecimalConverter[T] {
-  def toBigDecimal(in: T) : BigDecimal
-  def fromBigDecimal(bd: BigDecimal) : T
+  def toBigDecimal(in: T): BigDecimal
+  def fromBigDecimal(bd: BigDecimal): T
 }
 
 /**
@@ -29,32 +29,32 @@ trait BigDecimalConverter[T] {
 object BigDecimalConverter {
 
   implicit object ByteConverter extends BigDecimalConverter[Byte] {
-    def toBigDecimal(in: Byte) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toByte
+    def toBigDecimal(in: Byte): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Byte = bd.toByte
   }
 
   implicit object ShortConverter extends BigDecimalConverter[Short] {
-    def toBigDecimal(in: Short) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toShort
+    def toBigDecimal(in: Short): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Short = bd.toShort
   }
 
   implicit object IntConverter extends BigDecimalConverter[Int] {
-    def toBigDecimal(in: Int) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toInt
+    def toBigDecimal(in: Int): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Int = bd.toInt
   }
 
   implicit object LongConverter extends BigDecimalConverter[Long] {
-    def toBigDecimal(in: Long) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toLong
+    def toBigDecimal(in: Long): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Long = bd.toLong
   }
 
   implicit object FloatConverter extends BigDecimalConverter[Float] {
-    def toBigDecimal(in: Float) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toFloat
+    def toBigDecimal(in: Float): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Float = bd.toFloat
   }
 
   implicit object DoubleConverter extends BigDecimalConverter[Double] {
-    def toBigDecimal(in: Double) = BigDecimal(in)
-    def fromBigDecimal(bd: BigDecimal) = bd.toDouble
+    def toBigDecimal(in: Double): BigDecimal = BigDecimal(in)
+    def fromBigDecimal(bd: BigDecimal): Double = bd.toDouble
   }
 }
