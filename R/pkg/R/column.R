@@ -91,16 +91,6 @@ createOperator <- function(op) {
             })
 }
 
-createInOperator <- function(op) {
-  setMethod("%in%",
-            signature(x = "Column"),
-            function(x, table) {
-              table <- listToSeq(as.list(table))
-              jc <- callJMethod(x@jc, "in", table)
-              return(column(jc))
-            })
-}
-
 createColumnFunction1 <- function(name) {
   setMethod(name,
             signature(x = "Column"),
@@ -149,7 +139,6 @@ createBinaryMathfunctions <- function(name) {
 }
 
 createMethods <- function() {
-  createInOperator()
   for (op in names(operators)) {
     createOperator(op)
   }
@@ -219,6 +208,18 @@ setMethod("cast",
             } else {
               stop("dataType should be character or list")
             }
+          })
+
+#' Specify multiple values
+#'
+#' @rdname column
+#' @return a matched value as a result of comparing with given values.
+setMethod("%in%",
+          signature(x = "Column"),
+          function(x, table) {
+            table <- listToSeq(as.list(table))
+            jc <- callJMethod(x@jc, "in", table)
+            return(column(jc))
           })
 
 #' Approx Count Distinct
