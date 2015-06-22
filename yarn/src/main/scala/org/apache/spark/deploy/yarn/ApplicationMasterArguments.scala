@@ -26,11 +26,11 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userClass: String = null
   var primaryPyFile: String = null
   var primaryRFile: String = null
-  var pyFiles: String = null
-  var userArgs: Seq[String] = Seq[String]()
+  var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
+  var propertiesFile: String = null
 
   parseArgs(args.toList)
 
@@ -59,10 +59,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
           primaryRFile = value
           args = tail
 
-        case ("--py-files") :: value :: tail =>
-          pyFiles = value
-          args = tail
-
         case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
           args = tail
@@ -77,6 +73,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
           executorCores = value
+          args = tail
+
+        case ("--properties-file") :: value :: tail =>
+          propertiesFile = value
           args = tail
 
         case _ =>

@@ -76,21 +76,25 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkTypePromotion(
       Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
 
-    checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(new Timestamp(intNumber.toLong),
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(intNumber)),
+        enforceCorrectType(intNumber, TimestampType))
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong)),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
-    checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
+    checkTypePromotion(DateUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
+        enforceCorrectType(strTime, TimestampType))
 
     val strDate = "2014-10-15"
     checkTypePromotion(
       DateUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
-    checkTypePromotion(new Timestamp(3601000), enforceCorrectType(ISO8601Time1, TimestampType))
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(3601000)),
+        enforceCorrectType(ISO8601Time1, TimestampType))
     checkTypePromotion(DateUtils.millisToDays(3601000), enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
-    checkTypePromotion(new Timestamp(10801000), enforceCorrectType(ISO8601Time2, TimestampType))
+    checkTypePromotion(DateUtils.fromJavaTimestamp(new Timestamp(10801000)),
+        enforceCorrectType(ISO8601Time2, TimestampType))
     checkTypePromotion(DateUtils.millisToDays(10801000), enforceCorrectType(ISO8601Time2, DateType))
   }
 
@@ -1073,14 +1077,14 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
-    val useStreaming = ctx.getConf(SQLConf.USE_JACKSON_STREAMING_API, "true")
+    val useStreaming = ctx.conf.useJacksonStreamingAPI
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
     ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val schemaWithSimpleMap = StructType(
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
     try{
-      for (useStreaming <- List("true", "false")) {
+      for (useStreaming <- List(true, false)) {
         ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
         val temp = Utils.createTempDir().getPath
 
@@ -1099,4 +1103,8 @@ class JsonSuite extends QueryTest with TestJsonData {
     }
   }
 
+  test("SPARK-8093 Erase empty structs") {
+    val emptySchema = InferSchema(emptyRecords, 1.0, "")
+    assert(StructType(Seq()) === emptySchema)
+  }
 }

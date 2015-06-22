@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.{StringType, BinaryType}
 
-/**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
- */
-class ExpressionOptimizationSuite extends SparkFunSuite with ExpressionEvalHelper {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
+class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  test("md5") {
+    checkEvaluation(Md5(Literal("ABC".getBytes)), "902fbdd2b1df0c4f70b4a5d23525e932")
+    checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+      "6ac1e56bc78f031059be7be854522c4c")
+    checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
   }
+
 }

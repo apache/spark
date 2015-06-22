@@ -27,6 +27,8 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
+import spray.revolver.RevolverPlugin._
+
 object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
@@ -53,9 +55,6 @@ object BuildCommons {
   val sparkHome = buildLocation
 
   val testTempDir = s"$sparkHome/target/tmp"
-  if (!new File(testTempDir).isDirectory()) {
-    require(new File(testTempDir).mkdirs())
-  }
 }
 
 object SparkBuild extends PomBuild {
@@ -149,7 +148,9 @@ object SparkBuild extends PomBuild {
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
-    }
+    },
+
+    javacOptions in Compile ++= Seq("-encoding", "UTF-8")
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -160,7 +161,7 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
+    .foreach(enable(sharedSettings ++ ExludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -514,7 +515,7 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+    javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
@@ -524,6 +525,13 @@ object TestSettings {
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
+    // Make sure the test temp directory exists.
+    resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
+      if (!new File(testTempDir).isDirectory()) {
+        require(new File(testTempDir).mkdirs())
+      }
+      Seq[File]()
+    },
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(

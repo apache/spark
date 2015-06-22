@@ -86,6 +86,8 @@ final class RandomForestRegressor(override val uid: String)
       oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
     RandomForestRegressionModel.fromOld(oldModel, this, categoricalFeatures)
   }
+
+  override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)
 }
 
 @Experimental

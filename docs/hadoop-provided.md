@@ -21,6 +21,6 @@ export SPARK_DIST_CLASSPATH=$(hadoop classpath)
 export SPARK_DIST_CLASSPATH=$(/path/to/hadoop/bin/hadoop classpath)
 
 # Passing a Hadoop configuration directory
-export SPARK_DIST_CLASSPATH=$(hadoop classpath --config /path/to/configs)
+export SPARK_DIST_CLASSPATH=$(hadoop --config /path/to/configs classpath)
 
 {% endhighlight %}

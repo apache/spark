@@ -24,7 +24,7 @@ abstract class BaseMutableProjection extends MutableProjection {}
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[Row]] for a fixed set of [[Expression Expressions]].
+ * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
 
@@ -47,9 +47,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         """
     }.mkString("\n")
     val code = s"""
-      import org.apache.spark.sql.Row;
-
-      public SpecificProjection generate($exprType[] expr) {
+      public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
       }
 
@@ -69,12 +67,12 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         }
 
         /* Provide immutable access to the last projected row. */
-        public Row currentValue() {
-          return mutableRow;
+        public InternalRow currentValue() {
+          return (InternalRow) mutableRow;
         }
 
         public Object apply(Object _i) {
-          Row i = (Row) _i;
+          InternalRow i = (InternalRow) _i;
           $projectionCode
 
           return mutableRow;
@@ -82,14 +80,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
-
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
     () => {
-      m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseMutableProjection]
+      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
     }
   }
 }
