@@ -19,8 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.BigDecimalConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -518,5 +521,97 @@ case class Logarithm(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
     """
+  }
+}
+
+case class Round(children: Seq[Expression]) extends Expression {
+
+  def nullable: Boolean = true
+
+  def dataType: DataType = {
+    children(0).dataType match {
+      case StringType | BinaryType => DoubleType
+      case t => t
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size < 1 || children.size > 2) {
+      return TypeCheckFailure(s"ROUND require one or two arguments, got ${children.size}")
+    }
+    children(0).dataType match {
+      case _: NumericType | NullType | BinaryType | StringType => // satisfy requirement
+      case dt =>
+        return TypeCheckFailure(s"Only numeric, string or binary data types" +
+          s" are allowed for ROUND function, got $dt")
+    }
+    if (children.size == 2) {
+      children(1) match {
+        case Literal(value, LongType) =>
+          if (value.asInstanceOf[Long] < Int.MinValue || value.asInstanceOf[Long] > Int.MaxValue) {
+            return TypeCheckFailure("ROUND scale argument out of allowed range")
+          }
+        case Literal(_, _: IntegralType) | Literal(_, NullType) => // satisfy requirement
+        case child =>
+          if (child.find { case _: AttributeReference => true; case _ => false } != None) {
+            return TypeCheckFailure("Only Integral Literal or Null Literal " +
+              s"are allowed for ROUND scale arguments, got ${child.dataType}")
+          }
+      }
+    }
+    TypeCheckSuccess
+  }
+
+  def eval(input: InternalRow): Any = {
+    val evalE1 = children(0).eval(input)
+    if (evalE1 == null) {
+      return null
+    }
+
+    var _scale: Int = 0
+    if (children.size == 2) {
+      val evalE2 = children(1).eval(input)
+      if (evalE2 == null) {
+        return null
+      } else {
+        _scale = evalE2.asInstanceOf[Int]
+      }
+    }
+
+    children(0).dataType match {
+      case decimalType: DecimalType =>
+        // TODO: Support Decimal Round
+      case ByteType =>
+        round(evalE1.asInstanceOf[Byte], _scale)
+      case ShortType =>
+        round(evalE1.asInstanceOf[Short], _scale)
+      case IntegerType =>
+        round(evalE1.asInstanceOf[Int], _scale)
+      case LongType =>
+        round(evalE1.asInstanceOf[Long], _scale)
+      case FloatType =>
+        round(evalE1.asInstanceOf[Float], _scale)
+      case DoubleType =>
+        round(evalE1.asInstanceOf[Double], _scale)
+      case StringType =>
+        round(evalE1.asInstanceOf[UTF8String].toString, _scale)
+      case BinaryType =>
+        round(UTF8String.fromBytes(evalE1.asInstanceOf[Array[Byte]]).toString, _scale)
+    }
+  }
+
+  private def round[T](input: T, scale: Int)(implicit bdc: BigDecimalConverter[T]): T = {
+    input match {
+      case f: Float if (f.isNaN || f.isInfinite) => return input
+      case d: Double if (d.isNaN || d.isInfinite) => return input
+      case _ =>
+    }
+    bdc.fromBigDecimal(bdc.toBigDecimal(input).setScale(scale, BigDecimal.RoundingMode.HALF_UP))
+  }
+
+  private def round(input: String, scale: Int): Any = {
+    try round(input.toDouble, scale) catch {
+      case _ : NumberFormatException => null
+    }
   }
 }

@@ -127,6 +127,7 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+    expression[Round]("round"),
 
     // misc functions
     expression[Md5]("md5"),

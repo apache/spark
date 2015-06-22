@@ -336,4 +336,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null,
       create_row(null))
   }
+
+  test("round test") {
+    val piRounds = Seq(
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0,
+      3.1, 3.14, 3.142, 3.1416, 3.14159, 3.141593, 3.1415927, 3.14159265, 3.141592654,
+      3.1415926536, 3.14159265359, 3.14159265359, 3.1415926535898, 3.14159265358979,
+      3.141592653589793, 3.141592653589793)
+    (-16 to 16).zipWithIndex.foreach {
+      case (scale, i) =>
+        checkEvaluation(Round(Seq(3.141592653589793, scale)), piRounds(i), EmptyRow)
+    }
+  }
 }
