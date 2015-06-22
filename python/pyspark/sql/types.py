@@ -67,9 +67,9 @@ class DataType(object):
             return "FloatType"
         elif data_type == "int" or data_type == "integer":
             return "IntegerType"
-        elif data_type == "double" or data_type == "numeric":
+        elif data_type == "double":
             return "DoubleType"
-        elif data_type == "string" or data_type == "character":
+        elif data_type == "string":
             return "StringType"
         elif data_type == "raw" or data_type == "binary":
             return "BinaryType"
@@ -400,9 +400,13 @@ class StructType(DataType):
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
 
-    def add(self, name_or_struct_field, data_type=None, nullable=True, metadata=None):
+    def add(self, name, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it to define the schema
+        Construct a StructType by adding new elements to it to define the schema. The method accepts
+        either:
+            a) A single parameter which is a StructField object.
+            b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
+             metadata(optional). The data_type parameter may be either a String or a DataType object
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True),\
@@ -422,17 +426,17 @@ class StructType(DataType):
         :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
-        if isinstance(name_or_struct_field, StructField):
-            self.fields.append(name_or_struct_field)
+        if isinstance(name, StructField):
+            self.fields.append(name)
         else:
-            if isinstance(name_or_struct_field, str) and data_type is None:
+            if isinstance(name, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
 
             if isinstance(data_type, str):
                 data_type_f = DataType().from_string(data_type)
             else:
                 data_type_f = data_type
-            self.fields.append(StructField(name_or_struct_field, data_type_f, nullable, metadata))
+            self.fields.append(StructField(name, data_type_f, nullable, metadata))
         return self
 
     def simpleString(self):
