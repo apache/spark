@@ -59,6 +59,10 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
+
+  override def validateParams(): Unit = {
+    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
+  }
 }
 
 /**
@@ -70,6 +74,8 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
  *
  * For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+ * Note that since zero values will probably be transformed to non-zero values, output of the
+ * transformer will be DenseVector even for sparse input.
  */
 @Experimental
 class MinMaxScaler(override val uid: String)
@@ -102,10 +108,6 @@ class MinMaxScaler(override val uid: String)
     validateAndTransformSchema(schema)
   }
 
-  override def validateParams(): Unit = {
-    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
-  }
-
 }
 
 /**
@@ -131,13 +133,8 @@ class MinMaxScalerModel private[ml] (
   /** @group setParam */
   def setMax(value: Double): this.type = set(max, value)
 
-  override def validateParams(): Unit = {
-    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
-  }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema, logging = true)
-
     val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
     val minArray = originalMin.toArray
 
@@ -156,8 +153,7 @@ class MinMaxScalerModel private[ml] (
       Vectors.dense(values)
     }
 
-    val metadata = outputSchema($(outputCol)).metadata
-    dataset.select(col("*"), reScale(col($(inputCol))).as($(outputCol), metadata))
+    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
