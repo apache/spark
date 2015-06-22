@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.Utils
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -210,6 +211,45 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     topics.foreach { topic =>
       val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
       assert(smalls.length == 3 && smalls.sum < 0.2)
+    }
+  }
+
+  test("model save/load") {
+    // Test for LocalLDAModel.
+    val localModel = new LocalLDAModel(tinyTopics)
+    val tempDir1 = Utils.createTempDir()
+    val path1 = tempDir1.toURI.toString
+
+    // Test for DistributedLDAModel.
+    val k = 3
+    val topicSmoothing = 1.2
+    val termSmoothing = 1.2
+    val lda = new LDA()
+    lda.setK(k)
+      .setDocConcentration(topicSmoothing)
+      .setTopicConcentration(termSmoothing)
+      .setMaxIterations(5)
+      .setSeed(12345)
+    val corpus = sc.parallelize(tinyCorpus, 2)
+    val distributedModel: DistributedLDAModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
+    val tempDir2 = Utils.createTempDir()
+    val path2 = tempDir2.toURI.toString
+
+    try {
+      localModel.save(sc, path1)
+      distributedModel.save(sc, path2)
+      val samelocalModel = LocalLDAModel.load(sc, path1)
+      assert(samelocalModel.topicsMatrix === localModel.topicsMatrix)
+      assert(samelocalModel.k === localModel.k)
+      assert(samelocalModel.vocabSize === localModel.vocabSize)
+
+      val sameDistributedModel = DistributedLDAModel.load(sc, path2)
+      assert(distributedModel.topicsMatrix === sameDistributedModel.topicsMatrix)
+      assert(distributedModel.k === sameDistributedModel.k)
+      assert(distributedModel.vocabSize === sameDistributedModel.vocabSize)
+    } finally {
+      Utils.deleteRecursively(tempDir1)
+      Utils.deleteRecursively(tempDir2)
     }
   }
 
