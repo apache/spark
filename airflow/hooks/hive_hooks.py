@@ -57,12 +57,16 @@ class HiveCliHook(BaseHook):
                     cwd=tmp_dir)
                 all_err = ''
                 self.sp = sp
+                stdout = ""
                 for line in iter(sp.stdout.readline, ''):
+                    stdout += line
                     logging.info(line.strip())
                 sp.wait()
 
                 if sp.returncode:
                     raise AirflowException(all_err)
+
+                return stdout
 
     def load_file(
             self,
