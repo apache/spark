@@ -257,7 +257,7 @@ class DataFrameWriter(object):
         return self
 
     @since(1.4)
-    def save(self, path=None, format=None, mode="error", **options):
+    def save(self, path=None, format=None, mode=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -276,13 +276,9 @@ class DataFrameWriter(object):
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        if mode is not "error":
+        if mode is not None:
             # At the JVM side, the default value of mode is already set to "error".
-            # So, if mode at here is "error", we will not call mode method.
-            # This behavior is used to prevent us accidentally overriding the mode because
-            # user can call mode method directly.
-            # We leave "error" as the default in the method signature, so users can
-            # see what is the default value in Python doc.
+            # We will only call mode method if the provided mode is not None.
             self.mode(mode)
         self.options(**options)
         if format is not None:
@@ -304,7 +300,7 @@ class DataFrameWriter(object):
         self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
 
     @since(1.4)
-    def saveAsTable(self, name, format=None, mode="error", **options):
+    def saveAsTable(self, name, format=None, mode=None, **options):
         """Saves the content of the :class:`DataFrame` as the specified table.
 
         In the case the table already exists, behavior of this function depends on the
@@ -322,13 +318,9 @@ class DataFrameWriter(object):
         :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
         :param options: all other string options
         """
-        if mode is not "error":
+        if mode is not None:
             # At the JVM side, the default value of mode is already set to "error".
-            # So, if mode at here is "error", we will not call mode method.
-            # This behavior is used to prevent us accidentally overriding the mode because
-            # user can call mode method directly.
-            # We leave "error" as the default in the method signature, so users can
-            # see what is the default value in Python doc.
+            # We will only call mode method if the provided mode is not None.
             self.mode(mode)
         self.options(**options)
         if format is not None:
@@ -336,7 +328,7 @@ class DataFrameWriter(object):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode="error"):
+    def json(self, path, mode=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -349,18 +341,14 @@ class DataFrameWriter(object):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        if mode is not "error":
+        if mode is not None:
             # At the JVM side, the default value of mode is already set to "error".
-            # So, if mode at here is "error", we will not call mode method.
-            # This behavior is used to prevent us accidentally overriding the mode because
-            # user can call mode method directly.
-            # We leave "error" as the default in the method signature, so users can
-            # see what is the default value in Python doc.
+            # We will only call mode method if the provided mode is not None.
             self.mode(mode)
         self._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode="error"):
+    def parquet(self, path, mode=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -373,18 +361,14 @@ class DataFrameWriter(object):
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        if mode is not "error":
+        if mode is not None:
             # At the JVM side, the default value of mode is already set to "error".
-            # So, if mode at here is "error", we will not call mode method.
-            # This behavior is used to prevent us accidentally overriding the mode because
-            # user can call mode method directly.
-            # We leave "error" as the default in the method signature, so users can
-            # see what is the default value in Python doc.
+            # We will only call mode method if the provided mode is not None.
             self.mode(mode)
         self._jwrite.parquet(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode="error", properties={}):
+    def jdbc(self, url, table, mode=None, properties={}):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -402,13 +386,9 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
-        if mode is not "error":
+        if mode is not None:
             # At the JVM side, the default value of mode is already set to "error".
-            # So, if mode at here is "error", we will not call mode method.
-            # This behavior is used to prevent us accidentally overriding the mode because
-            # user can call mode method directly.
-            # We leave "error" as the default in the method signature, so users can
-            # see what is the default value in Python doc.
+            # We will only call mode method if the provided mode is not None.
             self.mode(mode)
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
