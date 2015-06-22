@@ -26,6 +26,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {
@@ -122,8 +123,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     predictionsProbabilities.foreach { probabilities =>
       val sum = probabilities.sum
       // Check that prediction probabilities sum up to one
-      // with an epsilon of 10^-2
-      assert(sum > 0.99 && sum < 1.01)
+      // with an epsilon of 10^-5
+      assert(sum ~== 1.0 relTol 0.00001)
     }
 
     val wrongPredictions = predictionsProbabilities.zip(input).count {
