@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.{catalyst, AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
@@ -41,16 +41,22 @@ object ExtractValue {
       resolver: Resolver): ExtractValue = {
 
     (child.dataType, extraction) match {
-      case (StructType(fields), Literal(fieldName, StringType)) =>
-        val ordinal = findField(fields, fieldName.toString, resolver)
-        GetStructField(child, fields(ordinal), ordinal)
-      case (ArrayType(StructType(fields), containsNull), Literal(fieldName, StringType)) =>
-        val ordinal = findField(fields, fieldName.toString, resolver)
-        GetArrayStructFields(child, fields(ordinal), ordinal, containsNull)
+      case (StructType(fields), NonNullLiteral(v, StringType)) =>
+        val fieldName = v.toString
+        val ordinal = findField(fields, fieldName, resolver)
+        GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
+
+      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
+        val fieldName = v.toString
+        val ordinal = findField(fields, fieldName, resolver)
+        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName), ordinal, containsNull)
+
       case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
         GetArrayItem(child, extraction)
+
       case (_: MapType, _) =>
         GetMapValue(child, extraction)
+
       case (otherType, _) =>
         val errorMsg = otherType match {
           case StructType(_) | ArrayType(StructType(_), _) =>
@@ -94,16 +100,21 @@ trait ExtractValue extends UnaryExpression {
   self: Product =>
 }
 
+abstract class ExtractValueWithStruct extends ExtractValue {
+  self: Product =>
+
+  def field: StructField
+  override def toString: String = s"$child.${field.name}"
+}
+
 /**
  * Returns the value of fields in the Struct `child`.
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
-  extends ExtractValue {
+  extends ExtractValueWithStruct {
 
   override def dataType: DataType = field.dataType
   override def nullable: Boolean = child.nullable || field.nullable
-  override def foldable: Boolean = child.foldable
-  override def toString: String = s"$child.${field.name}"
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[InternalRow]
@@ -118,12 +129,9 @@ case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
-    containsNull: Boolean) extends ExtractValue {
+    containsNull: Boolean) extends ExtractValueWithStruct {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable
-  override def foldable: Boolean = child.foldable
-  override def toString: String = s"$child.${field.name}"
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]

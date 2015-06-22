@@ -35,6 +35,8 @@ class HiveSparkSubmitSuite
   with ResetSystemProperties
   with Timeouts {
 
+  // TODO: rewrite these or mark them as slow tests to be run sparingly
+
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
@@ -62,6 +64,17 @@ class HiveSparkSubmitSuite
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,512]",
       unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-8489: MissingRequirementError during reflection") {
+    // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
+    // a HiveContext and uses it to create a data frame from an RDD using reflection.
+    // Before the fix in SPARK-8470, this results in a MissingRequirementError because
+    // the HiveContext code mistakenly overrides the class loader that contains user classes.
+    // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
+    val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
+    val args = Seq("--class", "Main", testJar)
     runSparkSubmit(args)
   }
 
