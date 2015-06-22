@@ -147,9 +147,19 @@ class HistoryServer(
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  override def detachSparkUI(ui: SparkUI, refreshInProgress: Boolean) {
+  override def detachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
+  }
+
+  /**
+   * Notification of a refresh. This will be followed by the normal
+   * detach/attach operations
+   * @param key
+   * @param ui
+   */
+  override def refreshTriggered(key: String, ui: SparkUI): Unit = {
+    logDebug(s"Refreshing app $key")
   }
 
   /**

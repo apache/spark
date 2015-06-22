@@ -74,12 +74,19 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
      * @param refreshInProgress flag to indicate this was triggered by a refresh of an
      *                          incomplete application
      */
-    override def detachSparkUI(ui: SparkUI, refreshInProgress: Boolean): Unit = {
+    override def detachSparkUI(ui: SparkUI): Unit = {
       detachCount += 1
-      if (refreshInProgress) {
-        refreshCount += 1
-      }
       attached -= ui.appName
+    }
+
+    /**
+     * Notification of a refresh. This will be followed by the normal
+     * detach/attach operations
+     * @param key
+     * @param ui
+     */
+    override def refreshTriggered(key: String, ui: SparkUI): Unit = {
+      refreshCount += 1
     }
   }
 
@@ -125,11 +132,13 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
 
   /**
    * Test operations on completed UIs: they are loaded on demand, entries
-   * are removed on overload
+   * are removed on overload.
+   *
+   * This effectively tests the original behavior of the history server's cache.
    */
   test("Completed UI get") {
     val operations = new StubCacheOperations()
-    val ticker = new FakeTicker(0)
+    val ticker = new FakeTicker(1)
     val cache = new ApplicationCache(operations, 5, 2, ticker)
     // cache misses
     assertNotLoaded(cache, "1")
@@ -144,10 +153,12 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
 
     // now expect it to be found
     val cacheEntry = cache.get("1")
+    assert(1 === cacheEntry.timestamp)
+    assert(cacheEntry.completed)
     assert(3 == operations.getCount)
     assert(1 == operations.attachCount)
 
-    // and in the cache of attached
+    // and in the map of attached
     assert(None !== operations.attached.get("1"))
 
     //go forward in time
@@ -167,6 +178,54 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging {
     assert(1 === operations.detachCount)
     /// and entry "1" no longer attached
     assert(None === operations.attached.get("1"))
+
+  }
+
+  /**
+   * Now verify that incomplete applications are refreshed
+   */
+  test("Incomplete") {
+    val operations = new StubCacheOperations()
+    val ticker = new FakeTicker(1)
+    val cache = new ApplicationCache(operations, 5, 10, ticker)
+    //operations.instances += ("1" ->(newUI("1"), true))
+    // add the incomplete app
+    operations.instances += ("inc" ->(newUI("inc"), false))
+    val entry = cache.get("inc")
+    assert(1 === entry.timestamp)
+    assert(!entry.completed)
+
+    // a get within the refresh window returns the same value
+    ticker.set(3)
+    val entry2 = cache.get("inc")
+    assert (entry === entry2)
+
+    // but now move the ticker past that refresh
+    ticker.set(15)
+    assert((ticker.read() - entry.timestamp) > cache.refreshInterval)
+    val entry3 = cache.get("inc")
+    assert(entry !== entry3, s"updated entry test from $cache")
+    assert(1 === operations.refreshCount,  s"refresh count in $cache")
+    assert(1 === operations.detachCount, s"detach count in $cache")
+    assert(None !== operations.attached.get("inc"))
+    assert(entry3.timestamp === 15)
+
+    // go a little bit forward again
+    ticker.set(17)
+    val entry4 = cache.get("inc")
+    assert(entry3 === entry4)
+
+    // and a short time later, and again the entry can be updated.
+    // here with a now complete entry
+    ticker.set(30)
+    operations.instances += ("inc" ->(newUI("inc"), true))
+    val entry5 = cache.get("inc")
+    assert(entry5.completed)
+
+    // at which point, the refreshes stop
+    ticker.set(40)
+    val entry6 = cache.get("inc")
+    assert(entry5 === entry6)
 
   }
 
