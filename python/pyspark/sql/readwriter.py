@@ -276,6 +276,7 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
         :param options: all other string options
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -316,6 +317,7 @@ class DataFrameWriter(object):
         :param name: the table name
         :param format: the format used to save
         :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
+        :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
         self.partitionBy(partitionBy).mode(mode).options(**options)
@@ -350,7 +352,7 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
-
+        :param partitionBy: names of partitioning columns
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.partitionBy(partitionBy).mode(mode)
