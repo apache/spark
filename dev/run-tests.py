@@ -21,10 +21,10 @@ import itertools
 import os
 import re
 import sys
-import shutil
 import subprocess
 from collections import namedtuple
 
+from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 import sparktestsupport.modules as modules
 
 SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
@@ -123,60 +123,6 @@ def get_error_codes(err_code_file):
 
 
 ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
-
-
-def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", ' '.join(cmd), "; received return code", retcode
-    sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-
-def rm_r(path):
-    """Given an arbitrary path properly remove it with the correct python
-    construct if it exists
-    - from: http://stackoverflow.com/a/9559881"""
-
-    if os.path.isdir(path):
-        shutil.rmtree(path)
-    elif os.path.exists(path):
-        os.remove(path)
-
-
-def run_cmd(cmd):
-    """Given a command as a list of arguments will attempt to execute the
-    command from the determined SPARK_HOME directory and, on failure, print
-    an error message"""
-
-    if not isinstance(cmd, list):
-        cmd = cmd.split()
-    try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError as e:
-        exit_from_command_with_retcode(e.cmd, e.returncode)
-
-
-def is_exe(path):
-    """Check if a given path is an executable file
-    - from: http://stackoverflow.com/a/377028"""
-
-    return os.path.isfile(path) and os.access(path, os.X_OK)
-
-
-def which(program):
-    """Find and return the given program by its absolute path or 'None'
-    - from: http://stackoverflow.com/a/377028"""
-
-    fpath = os.path.split(program)[0]
-
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for path in os.environ.get("PATH").split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
-            if is_exe(exe_file):
-                return exe_file
-    return None
 
 
 def determine_java_executable():
