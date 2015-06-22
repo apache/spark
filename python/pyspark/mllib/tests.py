@@ -24,6 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 from time import time, sleep
+
 from numpy import array, array_equal, zeros, inf, all, random
 from numpy import sum as array_sum
 from py4j.protocol import Py4JJavaError
