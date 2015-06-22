@@ -28,7 +28,6 @@ import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -185,28 +184,5 @@ class FPGrowth private (
       i -= 1
     }
     output
-  }
-}
-
-/**
- * :: Experimental ::
- */
-@Experimental
-object FPGrowth {
-
-  /**
-   * Frequent itemset.
-   * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
-   * @param freq frequency
-   * @tparam Item item type
-   */
-  class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
-
-    /**
-     * Returns items in a Java List.
-     */
-    def javaItems: java.util.List[Item] = {
-      items.toList.asJava
-    }
   }
 }
