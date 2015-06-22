@@ -96,8 +96,8 @@ createInOperator <- function(op) {
             signature(x = "Column"),
             function(x, table) {
               table <- listToSeq(as.list(table))
-              bar <- callJMethod(x@jc, "in", table)
-              return(column(bar))
+              jc <- callJMethod(x@jc, "in", table)
+              return(column(jc))
             })
 }
 
