@@ -529,15 +529,17 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
 }
 
 class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
-  import TestHive.implicits._
-
   override val sqlContext = TestHive
 
+  // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
 
   test("SPARK-7684: commitTask() failure should fallback to abortTask()") {
     withTempPath { file =>
-      val df = (1 to 3).map(i => i -> s"val_$i").toDF("a", "b")
+      // Here we coalesce partition number to 1 to ensure that only a single task is issued.  This
+      // prevents race condition happened when FileOutputCommitter tries to remove the `_temporary`
+      // directory while committing/aborting the job.  See SPARK-8513 for more details.
+      val df = sqlContext.range(0, 10).coalesce(1)
       intercept[SparkException] {
         df.write.format(dataSourceName).save(file.getCanonicalPath)
       }
