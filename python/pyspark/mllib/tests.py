@@ -24,6 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 from time import time, sleep
+from shutil import rmtree
 
 from numpy import array, array_equal, zeros, inf, all, random
 from numpy import sum as array_sum
@@ -398,7 +399,7 @@ class ListTests(MLlibTestCase):
         self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
 
         try:
-            os.removedirs(temp_dir)
+            rmtree(temp_dir)
         except OSError:
             pass
 

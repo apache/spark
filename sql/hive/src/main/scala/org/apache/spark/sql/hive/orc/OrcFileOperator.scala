@@ -27,13 +27,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
 
-private[orc] object OrcFileOperator extends Logging{
+private[orc] object OrcFileOperator extends Logging {
   def getFileReader(pathStr: String, config: Option[Configuration] = None ): Reader = {
     val conf = config.getOrElse(new Configuration)
     val fspath = new Path(pathStr)
     val fs = fspath.getFileSystem(conf)
     val orcFiles = listOrcFiles(pathStr, conf)
-
+    logDebug(s"Creating ORC Reader from ${orcFiles.head}")
     // TODO Need to consider all files when schema evolution is taken into account.
     OrcFile.createReader(fs, orcFiles.head)
   }
@@ -42,6 +42,7 @@ private[orc] object OrcFileOperator extends Logging{
     val reader = getFileReader(path, conf)
     val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
     val schema = readerInspector.getTypeName
+    logDebug(s"Reading schema from file $path, got Hive schema string: $schema")
     HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
   }
 
@@ -52,14 +53,14 @@ private[orc] object OrcFileOperator extends Logging{
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
-    val path = origPath.makeQualified(fs)
+    val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
       .filterNot(_.isDir)
       .map(_.getPath)
       .filterNot(_.getName.startsWith("_"))
       .filterNot(_.getName.startsWith("."))
 
-    if (paths == null || paths.size == 0) {
+    if (paths == null || paths.isEmpty) {
       throw new IllegalArgumentException(
         s"orcFileOperator: path $path does not have valid orc files matching the pattern")
     }
