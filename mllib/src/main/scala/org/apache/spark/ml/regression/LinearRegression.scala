@@ -195,7 +195,6 @@ class LinearRegression(override val uid: String)
     // The intercept in R's GLMNET is computed using closed form after the coefficients are
     // converged. See the following discussion for detail.
     // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
-    // Also see the scikit learn impl at https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/base.py
     val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
     if (handlePersistence) instances.unpersist()
 

@@ -35,9 +35,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
    *
    * import org.apache.spark.mllib.util.LinearDataGenerator
    * val data =
-   *   sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2), Array(0.9, -1.3),
-   *    Array(0.7, 1.2), 10000, 42, 0.1), 2)
-   * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1).saveAsTextFile("path")
+   *   sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2),
+   *     Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2)
+   * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1)
+   *   .saveAsTextFile("path")
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -96,7 +97,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      * data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
      * features <- as.matrix(data.frame(as.numeric(data$V2), as.numeric(data$V3)))
      * label <- as.numeric(data$V1)
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0, intercept = FALSE))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0,
+     *   intercept = FALSE))
      * > weights
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
@@ -155,11 +157,13 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("linear regression without intercept with L1 regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57).setFitIntercept(false)
+    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+      .setFitIntercept(false)
     val model = trainer.fit(dataset)
 
     /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57, intercept=FALSE))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+     *   intercept=FALSE))
      * > weights
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
