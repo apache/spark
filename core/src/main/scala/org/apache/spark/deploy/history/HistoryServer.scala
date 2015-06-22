@@ -23,7 +23,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
 
-import com.google.common.cache._
+import com.google.common.base.Ticker
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -50,31 +50,18 @@ class HistoryServer(
     securityManager: SecurityManager,
     port: Int)
   extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"), port, conf)
-  with Logging with UIRoot {
+  with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  private val appLoader = new CacheLoader[String, SparkUI] {
-    override def load(key: String): SparkUI = {
-      val parts = key.split("/")
-      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
-      val ui = provider
-        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
-      attachSparkUI(ui)
-      ui
-    }
-  }
+  // configuration interval is in seconds; internally in nanoseconds
+  private val incompleteApplicationRefreshInterval =
+    conf.getLong("spark.history.refresh.interval", 30)* 1000000000
 
-  private val appCache = CacheBuilder.newBuilder()
-    .maximumSize(retainedApplications)
-    .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
-        detachSparkUI(rm.getValue())
-      }
-    })
-    .build(appLoader)
+
+  private val appCache = new ApplicationCache(this,
+      incompleteApplicationRefreshInterval, retainedApplications, Ticker.systemTicker())
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -117,17 +104,7 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
-    try {
-      val ui = appCache.get(appKey)
-      Some(ui)
-    } catch {
-      case NonFatal(e) => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          None
-
-        case cause: Exception => throw cause
-      }
-    }
+    appCache.get(appKey).map(_.ui)
   }
 
   initialize()
@@ -163,16 +140,34 @@ class HistoryServer(
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  private def attachSparkUI(ui: SparkUI) {
+  override def attachSparkUI(ui: SparkUI, completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  private def detachSparkUI(ui: SparkUI) {
+  override def detachSparkUI(ui: SparkUI, refreshInProgress: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
+  }
+
+  /**
+   * Get the application UI and whether or not it is completed
+   * @param appId application ID
+   * @param attemptId attemptd ID
+   * @return (the Spark UI, completed flag)
+   */
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Boolean)] = {
+    provider.getAppUI(appId,attemptId) match {
+      case Some(ui) =>
+        // look up the listing to see if it is listed as complete
+        val completed = provider.getListing().exists(
+          (info) => info.name == appId && info.attempts.last.completed)
+        Some(ui, completed)
+      case None =>
+        None
+    }
   }
 
   /**
