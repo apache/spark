@@ -91,6 +91,16 @@ createOperator <- function(op) {
             })
 }
 
+createInOperator <- function(op) {
+  setMethod("%in%",
+            signature(x = "Column"),
+            function(x, table) {
+              table <- listToSeq(as.list(table))
+              bar <- callJMethod(x@jc, "in", table)
+              return(column(bar))
+            })
+}
+
 createColumnFunction1 <- function(name) {
   setMethod(name,
             signature(x = "Column"),
@@ -139,6 +149,7 @@ createBinaryMathfunctions <- function(name) {
 }
 
 createMethods <- function() {
+  createInOperator()
   for (op in names(operators)) {
     createOperator(op)
   }
