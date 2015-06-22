@@ -56,32 +56,6 @@ class DataType(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def from_string(self, data_type):
-        assert(isinstance(data_type, str))
-
-        if data_type == "byte":
-            return "ByteType"
-        elif data_type == "long":
-            return "LongType"
-        elif data_type == "float":
-            return "FloatType"
-        elif data_type == "int" or data_type == "integer":
-            return "IntegerType"
-        elif data_type == "double":
-            return "DoubleType"
-        elif data_type == "string":
-            return "StringType"
-        elif data_type == "raw" or data_type == "binary":
-            return "BinaryType"
-        elif data_type == "boolean" or data_type == "logical":
-            return "BooleanType"
-        elif data_type == "timestamp":
-            return "TimestampType"
-        elif data_type == "date":
-            return "DateType"
-        else:
-            raise ValueError("Invalid type: " + data_type)
-
     @classmethod
     def typeName(cls):
         return cls.__name__[:-4].lower()
@@ -413,10 +387,12 @@ class StructType(DataType):
          StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
-        >>> struct1 = (StructType().add(StructField("f1", StringType(), True))
-        ...     .add(StructField("f2", StringType(), True, None)))
-        >>> struct2 = StructType([StructField("f1", StringType(), True),
-        ...     StructField("f2", StringType(), True, None)])
+        >>> struct1 = StructType().add(StructField("f1", StringType(), True))
+        >>> struct2 = StructType([StructField("f1", StringType(), True)])
+        >>> struct1 == struct2
+        True
+        >>> struct1 = StructType().add("f1", "string", True)
+        >>> struct2 = StructType([StructField("f1", StringType(), True)])
         >>> struct1 == struct2
         True
 
@@ -433,7 +409,7 @@ class StructType(DataType):
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
 
             if isinstance(data_type, str):
-                data_type_f = DataType().from_string(data_type)
+                data_type_f = _parse_datatype_json_value(data_type)
             else:
                 data_type_f = data_type
             self.fields.append(StructField(name, data_type_f, nullable, metadata))
