@@ -47,7 +47,8 @@ import static org.apache.spark.sql.types.DataTypes.*;
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
- * base address of the row) that points to the beginning of the variable-length field.
+ * base address of the row) that points to the beginning of the variable-length field, and length
+ * (they are combined into a long).
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
