@@ -102,6 +102,13 @@ follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.cache.interval</td>
+    <td>60</td>
+    <td>
+      Time in seconds between checks for changes in the history of incomplete applications. 
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.ui.port</td>
     <td>18080</td>
     <td>

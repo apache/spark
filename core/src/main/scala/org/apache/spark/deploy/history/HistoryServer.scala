@@ -57,7 +57,7 @@ class HistoryServer(
 
   // configuration interval is in seconds; internally in nanoseconds
   private val incompleteApplicationRefreshInterval =
-    conf.getLong("spark.history.refresh.interval", 30)* 1000000000
+    conf.getLong("spark.history.cache.interval", 60)* 1000000000
 
 
   private val appCache = new ApplicationCache(this,
