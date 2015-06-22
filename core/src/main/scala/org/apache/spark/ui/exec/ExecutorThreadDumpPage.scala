@@ -43,7 +43,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
         id
     }.getOrElse {
-      return Text(s"Missing executorId parameter")
+      throw new IllegalArgumentException(s"Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)

@@ -19,36 +19,44 @@ package org.apache.spark.streaming.kafka
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfter
 import kafka.common.TopicAndPartition
+import org.scalatest.BeforeAndAfterAll
 
-class KafkaClusterSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
-  val brokerHost = "localhost"
+import org.apache.spark.SparkFunSuite
 
-  val kafkaParams = Map("metadata.broker.list" -> s"$brokerHost:$brokerPort")
+class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
+  private val topic = "kcsuitetopic" + Random.nextInt(10000)
+  private val topicAndPartition = TopicAndPartition(topic, 0)
+  private var kc: KafkaCluster = null
 
-  val kc = new KafkaCluster(kafkaParams)
+  private var kafkaTestUtils: KafkaTestUtils = _
 
-  val topic = "kcsuitetopic" + Random.nextInt(10000)
+  override def beforeAll() {
+    kafkaTestUtils = new KafkaTestUtils
+    kafkaTestUtils.setup()
 
-  val topicAndPartition = TopicAndPartition(topic, 0)
-
-  before {
-    setupKafka()
-    createTopic(topic)
-    produceAndSendMessage(topic, Map("a" -> 1))
+    kafkaTestUtils.createTopic(topic)
+    kafkaTestUtils.sendMessages(topic, Map("a" -> 1))
+    kc = new KafkaCluster(Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress))
   }
 
-  after {
-    tearDownKafka()
+  override def afterAll() {
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown()
+      kafkaTestUtils = null
+    }
   }
 
   test("metadata apis") {
-    val leader = kc.findLeaders(Set(topicAndPartition)).right.get
-    assert(leader(topicAndPartition) === (brokerHost, brokerPort), "didn't get leader")
+    val leader = kc.findLeaders(Set(topicAndPartition)).right.get(topicAndPartition)
+    val leaderAddress = s"${leader._1}:${leader._2}"
+    assert(leaderAddress === kafkaTestUtils.brokerAddress, "didn't get leader")
 
     val parts = kc.getPartitions(Set(topic)).right.get
     assert(parts(topicAndPartition), "didn't get partitions")
+
+    val err = kc.getPartitions(Set(topic + "BAD"))
+    assert(err.isLeft, "getPartitions for a nonexistant topic should be an error")
   }
 
   test("leader offset apis") {

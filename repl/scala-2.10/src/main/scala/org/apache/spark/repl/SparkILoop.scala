@@ -206,7 +206,8 @@ class SparkILoop(
         // e.g. file:/C:/my/path.jar -> C:/my/path.jar
         SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
       } else {
-        SparkILoop.getAddedJars
+        // We need new URI(jar).getPath here for the case that `jar` includes encoded white space (%20).
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath }
       }
     // work around for Scala bug
     val totalClassPath = addedJars.foldLeft(
@@ -1028,7 +1029,7 @@ class SparkILoop(
       logInfo("Created sql context (with Hive support)..")
     }
     catch {
-      case cnf: java.lang.ClassNotFoundException =>
+      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
         sqlContext = new SQLContext(sparkContext)
         logInfo("Created sql context..")
     }
@@ -1064,15 +1065,16 @@ class SparkILoop(
   private def main(settings: Settings): Unit = process(settings)
 }
 
-object SparkILoop {
+object SparkILoop extends Logging {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
-    val propJars = sys.props.get("spark.jars").flatMap { p =>
-      if (p == "") None else Some(p)
+    if (envJars.isDefined) {
+      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
+    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
     val jars = propJars.orElse(envJars).getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
@@ -1108,7 +1110,7 @@ object SparkILoop {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        getAddedJars.foreach(settings.classpath.append(_))
+        getAddedJars.map(jar => new URI(jar).getPath).foreach(settings.classpath.append(_))
 
         repl process settings
       }

@@ -20,6 +20,7 @@ package org.apache.spark.mllib.regression
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
 import org.apache.spark.mllib.util.{Saveable, Loader}
 import org.apache.spark.rdd.RDD
@@ -34,7 +35,7 @@ class LassoModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable with Saveable {
+  with RegressionModel with Serializable with Saveable with PMMLExportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -58,7 +59,7 @@ object LassoModel extends Loader[LassoModel] {
     val classNameV1_0 = "org.apache.spark.mllib.regression.LassoModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val numFeatures = RegressionModel.getNumFeatures(metadata, classNameV1_0, path)
+        val numFeatures = RegressionModel.getNumFeatures(metadata)
         val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures)
         new LassoModel(data.weights, data.intercept)
       case _ => throw new Exception(

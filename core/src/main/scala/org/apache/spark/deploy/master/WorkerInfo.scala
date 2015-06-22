@@ -104,7 +104,7 @@ private[spark] class WorkerInfo(
     "http://" + this.publicAddress + ":" + this.webUiPort
   }
 
-  def setState(state: WorkerState.Value) = {
+  def setState(state: WorkerState.Value): Unit = {
     this.state = state
   }
 }

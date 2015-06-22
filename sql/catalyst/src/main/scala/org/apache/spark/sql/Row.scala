@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.DateUtils
+import org.apache.spark.sql.types.StructType
 
 object Row {
   /**
@@ -55,6 +55,9 @@ object Row {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
   }
+
+  /** Returns an empty row. */
+  val empty = apply()
 }
 
 
@@ -121,6 +124,11 @@ trait Row extends Serializable {
 
   /** Number of elements in the Row. */
   def length: Int
+
+  /**
+   * Schema for the row.
+   */
+  def schema: StructType = null
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -255,6 +263,13 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**
+   * Returns the value at position i of date type as java.sql.Timestamp.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
+
+  /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.
@@ -299,6 +314,38 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+
+  /**
+   * Returns the value of a given fieldName.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
+
+  /**
+   * Returns the index of a given field name.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   */
+  def fieldIndex(name: String): Int = {
+    throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+  }
+
+  /**
+   * Returns a Map(name -> value) for the requested fieldNames
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] = {
+    fieldNames.map { name =>
+      name -> getAs[T](name)
+    }.toMap
+  }
 
   override def toString(): String = s"[${this.mkString(",")}]"
 

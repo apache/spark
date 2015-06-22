@@ -17,12 +17,13 @@
 
 package org.apache.spark
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConversions._
 
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
@@ -50,7 +51,7 @@ private[spark] object TestUtils {
       classpathUrls: Seq[URL] = Seq()): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
-      createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls) 
+      createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
     }
     val files2 = for ((childName, baseName) <- classNamesWithBase) yield {
       createCompiledClass(childName, tempDir, toStringValue, baseName, classpathUrls)
@@ -59,6 +60,22 @@ private[spark] object TestUtils {
     createJar(files1 ++ files2, jarFile)
   }
 
+  /**
+   * Create a jar file containing multiple files. The `files` map contains a mapping of
+   * file names in the jar file to their contents.
+   */
+  def createJarWithFiles(files: Map[String, String], dir: File = null): URL = {
+    val tempDir = Option(dir).getOrElse(Utils.createTempDir())
+    val jarFile = File.createTempFile("testJar", ".jar", tempDir)
+    val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
+    files.foreach { case (k, v) =>
+      val entry = new JarEntry(k)
+      jarStream.putNextEntry(entry)
+      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(UTF_8)), jarStream)
+    }
+    jarStream.close()
+    jarFile.toURI.toURL
+  }
 
   /**
    * Create a jar file that contains this set of files. All files will be located at the root
@@ -88,23 +105,18 @@ private[spark] object TestUtils {
     URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
   }
 
-  private class JavaSourceFromString(val name: String, val code: String)
+  private[spark] class JavaSourceFromString(val name: String, val code: String)
     extends SimpleJavaFileObject(createURI(name), SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean) = code
+    override def getCharContent(ignoreEncodingErrors: Boolean): String = code
   }
 
-  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
+  /** Creates a compiled class with the source file. Class file will be placed in destDir. */
   def createCompiledClass(
       className: String,
       destDir: File,
-      toStringValue: String = "",
-      baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq()): File = {
+      sourceFile: JavaSourceFromString,
+      classpathUrls: Seq[URL]): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
-    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
-    val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + extendsText + " implements java.io.Serializable {" +
-      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
 
     // Calling this outputs a class file in pwd. It's easier to just rename the file than
     // build a custom FileManager that controls the output location.
@@ -126,5 +138,19 @@ private[spark] object TestUtils {
 
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
+  }
+
+  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
+  def createCompiledClass(
+      className: String,
+      destDir: File,
+      toStringValue: String = "",
+      baseClass: String = null,
+      classpathUrls: Seq[URL] = Seq()): File = {
+    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
+    val sourceFile = new JavaSourceFromString(className,
+      "public class " + className + extendsText + " implements java.io.Serializable {" +
+      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
+    createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 }

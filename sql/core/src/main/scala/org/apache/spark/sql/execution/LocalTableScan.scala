@@ -17,20 +17,32 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 
 /**
  * Physical plan node for scanning data from a local collection.
  */
-case class LocalTableScan(output: Seq[Attribute], rows: Seq[Row]) extends LeafNode {
+private[sql] case class LocalTableScan(
+    output: Seq[Attribute],
+    rows: Seq[InternalRow]) extends LeafNode {
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
-  override def execute() = rdd
+  protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override def executeCollect() = rows.toArray
 
-  override def executeTake(limit: Int) = rows.take(limit).toArray
+  override def executeCollect(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).toArray
+  }
+
+
+  override def executeTake(limit: Int): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    rows.map(converter(_).asInstanceOf[Row]).take(limit).toArray
+  }
 }

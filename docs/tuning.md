@@ -60,7 +60,7 @@ val sc = new SparkContext(conf)
 The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes more advanced
 registration options, such as adding custom serialization code.
 
-If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`
+If your objects are large, you may also need to increase the `spark.kryoserializer.buffer`
 config property. The default is 2, but this value needs to be large enough to hold the *largest*
 object you will serialize.
 
@@ -94,11 +94,13 @@ We will then cover tuning Spark's cache size and the Java garbage collector.
 
 ## Determining Memory Consumption
 
-The best way to size the amount of memory consumption your dataset will require is to create an RDD, put it into cache, and look at the SparkContext logs on your driver program. The logs will tell you how much memory each partition is consuming, which you can aggregate to get the total size of the RDD. You will see messages like this:
+The best way to size the amount of memory consumption a dataset will require is to create an RDD, put it
+into cache, and look at the "Storage" page in the web UI. The page will tell you how much memory the RDD
+is occupying.
 
-    INFO BlockManagerMasterActor: Added rdd_0_1 in memory on mbk.local:50311 (size: 717.5 KB, free: 332.3 MB)
-
-This means that partition 1 of RDD 0 consumed 717.5 KB.
+To estimate the memory consumption of a particular object, use `SizeEstimator`'s `estimate` method
+This is useful for experimenting with different data layouts to trim memory usage, as well as
+determining the amount of space a broadcast variable will occupy on each executor heap.
 
 ## Tuning Data Structures
 

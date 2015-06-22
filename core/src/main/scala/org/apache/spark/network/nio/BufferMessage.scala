@@ -31,9 +31,9 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
   val initialSize = currentSize()
   var gotChunkForSendingOnce = false
 
-  def size = initialSize
+  def size: Int = initialSize
 
-  def currentSize() = {
+  def currentSize(): Int = {
     if (buffers == null || buffers.isEmpty) {
       0
     } else {
@@ -100,11 +100,11 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
     buffers.foreach(_.flip)
   }
 
-  def hasAckId() = (ackId != 0)
+  def hasAckId(): Boolean = ackId != 0
 
-  def isCompletelyReceived() = !buffers(0).hasRemaining
+  def isCompletelyReceived: Boolean = !buffers(0).hasRemaining
 
-  override def toString = {
+  override def toString: String = {
     if (hasAckId) {
       "BufferAckMessage(aid = " + ackId + ", id = " + id + ", size = " + size + ")"
     } else {

@@ -19,7 +19,7 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.{OneToOneDependency, HashPartitioner, TaskContext}
+import org.apache.spark.{OneToOneDependency, HashPartitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -70,9 +70,9 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
-  override def getStorageLevel = partitionsRDD.getStorageLevel
+  override def getStorageLevel: StorageLevel = partitionsRDD.getStorageLevel
 
-  override def checkpoint() = {
+  override def checkpoint(): Unit = {
     partitionsRDD.checkpoint()
   }
 

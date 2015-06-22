@@ -17,85 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.Map
-
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.types._
 
-/**
- * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
- */
-case class GetItem(child: Expression, ordinal: Expression) extends Expression {
-  type EvaluatedType = Any
-
-  val children = child :: ordinal :: Nil
-  /** `Null` is returned for invalid ordinals. */
-  override def nullable = true
-  override def foldable = child.foldable && ordinal.foldable
-
-  def dataType = child.dataType match {
-    case ArrayType(dt, _) => dt
-    case MapType(_, vt, _) => vt
-  }
-  override lazy val resolved =
-    childrenResolved &&
-    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
-
-  override def toString = s"$child[$ordinal]"
-
-  override def eval(input: Row): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      null
-    } else {
-      val key = ordinal.eval(input)
-      if (key == null) {
-        null
-      } else {
-        if (child.dataType.isInstanceOf[ArrayType]) {
-          // TODO: consider using Array[_] for ArrayType child to avoid
-          // boxing of primitives
-          val baseValue = value.asInstanceOf[Seq[_]]
-          val o = key.asInstanceOf[Int]
-          if (o >= baseValue.size || o < 0) {
-            null
-          } else {
-            baseValue(o)
-          }
-        } else {
-          val baseValue = value.asInstanceOf[Map[Any, _]]
-          baseValue.get(key).orNull
-        }
-      }
-    }
-  }
-}
-
-/**
- * Returns the value of fields in the Struct `child`.
- */
-case class GetField(child: Expression, field: StructField, ordinal: Int) extends UnaryExpression {
-  type EvaluatedType = Any
-
-  def dataType = field.dataType
-  override def nullable = child.nullable || field.nullable
-  override def foldable = child.foldable
-
-  override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Row]
-    if (baseValue == null) null else baseValue(ordinal)
-  }
-
-  override def toString = s"$child.${field.name}"
-}
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
 case class CreateArray(children: Seq[Expression]) extends Expression {
-  override type EvaluatedType = Any
-  
-  override def foldable = !children.exists(!_.foldable)
-  
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
   lazy val childTypes = children.map(_.dataType).distinct
 
   override lazy val resolved =
@@ -110,9 +42,40 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     children.map(_.eval(input))
   }
 
-  override def toString = s"Array(${children.mkString(",")})"
+  override def toString: String = s"Array(${children.mkString(",")})"
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ * TODO: [[CreateStruct]] does not support codegen.
+ */
+case class CreateStruct(children: Seq[Expression]) extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override lazy val resolved: Boolean = childrenResolved
+
+  override lazy val dataType: StructType = {
+    assert(resolved,
+      s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
+      val fields = children.zipWithIndex.map { case (child, idx) =>
+        child match {
+          case ne: NamedExpression =>
+            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+          case _ =>
+            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
+        }
+      }
+    StructType(fields)
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    InternalRow(children.map(_.eval(input)): _*)
+  }
 }

@@ -19,11 +19,12 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.ExceptionFailure
+import org.apache.spark.{ExceptionFailure, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
 import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
   val listener = parent.executorsListener
@@ -54,20 +55,40 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
+  val executorIdToData = HashMap[String, ExecutorUIData]()
 
-  def storageStatusList = storageStatusListener.storageStatusList
+  def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
-  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) = synchronized {
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+    executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
+  override def onExecutorRemoved(
+      executorRemoved: SparkListenerExecutorRemoved): Unit = synchronized {
+    val eid = executorRemoved.executorId
+    val uiData = executorIdToData(eid)
+    uiData.finishTime = Some(executorRemoved.time)
+    uiData.finishReason = Some(executorRemoved.reason)
+  }
+
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+    applicationStart.driverLogs.foreach { logs =>
+      val storageStatus = storageStatusList.find { s =>
+        s.blockManagerId.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER ||
+        s.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER
+      }
+      storageStatus.foreach { s => executorToLogUrls(s.blockManagerId.executorId) = logs.toMap }
+    }
+  }
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val eid = taskStart.taskInfo.executorId
     executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = info.executorId

@@ -23,7 +23,9 @@ import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
+
+// Needed by ScalaDoc. See SPARK-7726
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /** Request to read a set of blocks. Returns {@link StreamHandle}. */
 public class OpenBlocks extends BlockTransferMessage {

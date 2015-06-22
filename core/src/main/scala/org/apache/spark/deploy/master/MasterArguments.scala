@@ -23,7 +23,7 @@ import org.apache.spark.util.{IntParam, Utils}
 /**
  * Command-line parser for the master.
  */
-private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
+private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
@@ -49,7 +49,7 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
     webUiPort = conf.get("spark.master.ui.port").toInt
   }
 
-  def parse(args: List[String]): Unit = args match {
+  private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
       host = value
@@ -84,7 +84,7 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int) {
     System.err.println(
       "Usage: Master [options]\n" +
       "\n" +

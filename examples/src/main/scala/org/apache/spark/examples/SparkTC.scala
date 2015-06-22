@@ -31,7 +31,7 @@ object SparkTC {
   val numVertices = 100
   val rand = new Random(42)
 
-  def generateGraph = {
+  def generateGraph: Seq[(Int, Int)] = {
     val edges: mutable.Set[(Int, Int)] = mutable.Set.empty
     while (edges.size < numEdges) {
       val from = rand.nextInt(numVertices)

@@ -22,12 +22,14 @@ import java.util.concurrent.Executors
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.thrift.TProtocolVersion
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.hive.service.cli.SessionHandle
+
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   extends SessionManager
@@ -49,8 +51,27 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
     initCompositeService(hiveConf)
   }
 
+  override def openSession(
+      protocol: TProtocolVersion,
+      username: String,
+      passwd: String,
+      sessionConf: java.util.Map[String, String],
+      withImpersonation: Boolean,
+      delegationToken: String): SessionHandle = {
+    hiveContext.openSession()
+    val sessionHandle = super.openSession(
+      protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+    val session = super.getSession(sessionHandle)
+    HiveThriftServer2.listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    sessionHandle
+  }
+
   override def closeSession(sessionHandle: SessionHandle) {
+    HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
+
+    hiveContext.detachSession()
   }
 }

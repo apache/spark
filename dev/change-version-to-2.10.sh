@@ -16,5 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-find . -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's|\(artifactId.*\)_2.11|\1_2.10|g' {}  
+
+# Note that this will not necessarily work as intended with non-GNU sed (e.g. OS X)
+BASEDIR=$(dirname $0)/..
+find $BASEDIR -name 'pom.xml' | grep -v target \
+  | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.11/\1_2.10/g' {}
+
+# Also update <scala.binary.version> in parent POM
+sed -i -e '0,/<scala\.binary\.version>2.11</s//<scala.binary.version>2.10</' $BASEDIR/pom.xml

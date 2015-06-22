@@ -21,14 +21,13 @@ import java.lang.Boolean
 import java.lang.Integer
 
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 /**
  * Tests for the REST application submission protocol.
  */
-class SubmitRestProtocolSuite extends FunSuite {
+class SubmitRestProtocolSuite extends SparkFunSuite {
 
   test("validate") {
     val request = new DummyRequest
@@ -129,7 +128,8 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newMessage.sparkProperties("spark.files") === "fireball.png")
     assert(newMessage.sparkProperties("spark.driver.memory") === "512m")
     assert(newMessage.sparkProperties("spark.driver.cores") === "180")
-    assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") === " -Dslices=5 -Dcolor=mostly_red")
+    assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") ===
+      " -Dslices=5 -Dcolor=mostly_red")
     assert(newMessage.sparkProperties("spark.driver.extraClassPath") === "food-coloring.jar")
     assert(newMessage.sparkProperties("spark.driver.extraLibraryPath") === "pickle.jar")
     assert(newMessage.sparkProperties("spark.driver.supervise") === "false")

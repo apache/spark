@@ -76,7 +76,12 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
     predictPoint(testData, weights, intercept)
   }
 
-  override def toString() = "(weights=%s, intercept=%s)".format(weights, intercept)
+  /**
+   * Print a summary of the model.
+   */
+  override def toString: String = {
+    s"${this.getClass.getName}: intercept = ${intercept}, numFeatures = ${weights.size}"
+  }
 }
 
 /**
@@ -126,7 +131,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * The dimension of training features.
    */
-  protected var numFeatures: Int = 0
+  def getNumFeatures: Int = this.numFeatures
+
+  /**
+   * The dimension of training features.
+   */
+  protected var numFeatures: Int = -1
 
   /**
    * Set if the algorithm should use feature scaling to improve the convergence during optimization.
@@ -140,6 +150,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Create a model given the weights and intercept
    */
   protected def createModel(weights: Vector, intercept: Double): M
+
+  /**
+   * Get if the algorithm uses addIntercept
+   */
+  def isAddIntercept: Boolean = this.addIntercept
 
   /**
    * Set if the algorithm should add an intercept. Default false.
@@ -163,7 +178,9 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[LabeledPoint]): M = {
-    numFeatures = input.first().features.size
+    if (numFeatures < 0) {
+      numFeatures = input.map(_.features.size).first()
+    }
 
     /**
      * When `numOfLinearPredictor > 1`, the intercepts are encapsulated into weights,
@@ -178,11 +195,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      */
     val initialWeights = {
       if (numOfLinearPredictor == 1) {
-        Vectors.dense(new Array[Double](numFeatures))
+        Vectors.zeros(numFeatures)
       } else if (addIntercept) {
-        Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+        Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
       } else {
-        Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
+        Vectors.zeros(numFeatures * numOfLinearPredictor)
       }
     }
     run(input, initialWeights)
@@ -193,7 +210,10 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
-    numFeatures = input.first().features.size
+
+    if (numFeatures < 0) {
+      numFeatures = input.map(_.features.size).first()
+    }
 
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -225,26 +245,27 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * Currently, it's only enabled in LogisticRegressionWithLBFGS
      */
     val scaler = if (useFeatureScaling) {
-      (new StandardScaler(withStd = true, withMean = false)).fit(input.map(x => x.features))
+      new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features))
     } else {
       null
     }
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
-    val data = if (addIntercept) {
-      if (useFeatureScaling) {
-        input.map(labeledPoint =>
-          (labeledPoint.label, appendBias(scaler.transform(labeledPoint.features))))
+    // TODO: Apply feature scaling to the weight vector instead of input data.
+    val data =
+      if (addIntercept) {
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, appendBias(scaler.transform(lp.features)))).cache()
+        } else {
+          input.map(lp => (lp.label, appendBias(lp.features))).cache()
+        }
       } else {
-        input.map(labeledPoint => (labeledPoint.label, appendBias(labeledPoint.features)))
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, scaler.transform(lp.features))).cache()
+        } else {
+          input.map(lp => (lp.label, lp.features))
+        }
       }
-    } else {
-      if (useFeatureScaling) {
-        input.map(labeledPoint => (labeledPoint.label, scaler.transform(labeledPoint.features)))
-      } else {
-        input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
-      }
-    }
 
     /**
      * TODO: For better convergence, in logistic regression, the intercepts should be computed

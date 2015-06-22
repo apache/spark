@@ -41,14 +41,15 @@ public class ExternalShuffleCleanupSuite {
   public void noCleanupAndCleanup() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
-    manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
-    manager.applicationRemoved("app", false /* cleanup */);
+    ExternalShuffleBlockResolver resolver =
+      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
+    resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.applicationRemoved("app", false /* cleanup */);
 
     assertStillThere(dataContext);
 
-    manager.registerExecutor("app", "exec1", dataContext.createExecutorInfo("shuffleMgr"));
-    manager.applicationRemoved("app", true /* cleanup */);
+    resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.applicationRemoved("app", true /* cleanup */);
 
     assertCleanedUp(dataContext);
   }
@@ -64,7 +65,7 @@ public class ExternalShuffleCleanupSuite {
       @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
     };
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, noThreadExecutor);
+    ExternalShuffleBlockResolver manager = new ExternalShuffleBlockResolver(conf, noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", true);
@@ -81,11 +82,12 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
+    ExternalShuffleBlockResolver resolver =
+      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
 
-    manager.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    manager.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
-    manager.applicationRemoved("app", true);
+    resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.applicationRemoved("app", true);
 
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
@@ -96,25 +98,26 @@ public class ExternalShuffleCleanupSuite {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf, sameThreadExecutor);
+    ExternalShuffleBlockResolver resolver =
+      new ExternalShuffleBlockResolver(conf, sameThreadExecutor);
 
-    manager.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    manager.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
 
-    manager.applicationRemoved("app-nonexistent", true);
+    resolver.applicationRemoved("app-nonexistent", true);
     assertStillThere(dataContext0);
     assertStillThere(dataContext1);
 
-    manager.applicationRemoved("app-0", true);
+    resolver.applicationRemoved("app-0", true);
     assertCleanedUp(dataContext0);
     assertStillThere(dataContext1);
 
-    manager.applicationRemoved("app-1", true);
+    resolver.applicationRemoved("app-1", true);
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
 
     // Make sure it's not an error to cleanup multiple times
-    manager.applicationRemoved("app-1", true);
+    resolver.applicationRemoved("app-1", true);
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
   }

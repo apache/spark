@@ -15,12 +15,15 @@
 # limitations under the License.
 #
 
+import sys
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callMLlibFunc
+if sys.version > '3':
+    xrange = range
+
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
-from pyspark.mllib.regression import LabeledPoint
 
 
 class MLUtils(object):
@@ -50,6 +53,7 @@ class MLUtils(object):
     @staticmethod
     def _convert_labeled_point_to_libsvm(p):
         """Converts a LabeledPoint to a string in LIBSVM format."""
+        from pyspark.mllib.regression import LabeledPoint
         assert isinstance(p, LabeledPoint)
         items = [str(p.label)]
         v = _convert_to_vector(p.features)
@@ -92,24 +96,20 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> tempFile = NamedTemporaryFile(delete=True)
-        >>> tempFile.write("+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
+        >>> _ = tempFile.write(b"+1 1:1.0 3:2.0 5:3.0\\n-1\\n-1 2:4.0 4:5.0 6:6.0")
         >>> tempFile.flush()
         >>> examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
         >>> tempFile.close()
-        >>> type(examples[0]) == LabeledPoint
-        True
-        >>> print examples[0]
-        (1.0,(6,[0,2,4],[1.0,2.0,3.0]))
-        >>> type(examples[1]) == LabeledPoint
-        True
-        >>> print examples[1]
-        (-1.0,(6,[],[]))
-        >>> type(examples[2]) == LabeledPoint
-        True
-        >>> print examples[2]
-        (-1.0,(6,[1,3,5],[4.0,5.0,6.0]))
+        >>> examples[0]
+        LabeledPoint(1.0, (6,[0,2,4],[1.0,2.0,3.0]))
+        >>> examples[1]
+        LabeledPoint(-1.0, (6,[],[]))
+        >>> examples[2]
+        LabeledPoint(-1.0, (6,[1,3,5],[4.0,5.0,6.0]))
         """
+        from pyspark.mllib.regression import LabeledPoint
         if multiclass is not None:
             warnings.warn("deprecated", DeprecationWarning)
 
@@ -130,6 +130,7 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from fileinput import input
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> from glob import glob
         >>> from pyspark.mllib.util import MLUtils
         >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
@@ -156,6 +157,7 @@ class MLUtils(object):
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
+        >>> from pyspark.mllib.regression import LabeledPoint
         >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
                         LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
@@ -166,6 +168,93 @@ class MLUtils(object):
         """
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
         return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
+
+
+class Saveable(object):
+    """
+    Mixin for models and transformers which may be saved as files.
+    """
+
+    def save(self, sc, path):
+        """
+        Save this model to the given path.
+
+        This saves:
+         * human-readable (JSON) model metadata to path/metadata/
+         * Parquet formatted data to path/data/
+
+        The model may be loaded using py:meth:`Loader.load`.
+
+        :param sc: Spark context used to save model data.
+        :param path: Path specifying the directory in which to save
+                     this model. If the directory already exists,
+                     this method throws an exception.
+        """
+        raise NotImplementedError
+
+
+@inherit_doc
+class JavaSaveable(Saveable):
+    """
+    Mixin for models that provide save() through their Scala
+    implementation.
+    """
+
+    def save(self, sc, path):
+        self._java_model.save(sc._jsc.sc(), path)
+
+
+class Loader(object):
+    """
+    Mixin for classes which can load saved models from files.
+    """
+
+    @classmethod
+    def load(cls, sc, path):
+        """
+        Load a model from the given path. The model should have been
+        saved using py:meth:`Saveable.save`.
+
+        :param sc: Spark context used for loading model files.
+        :param path: Path specifying the directory to which the model
+                     was saved.
+        :return: model instance
+        """
+        raise NotImplemented
+
+
+@inherit_doc
+class JavaLoader(Loader):
+    """
+    Mixin for classes which can load saved models using its Scala
+    implementation.
+    """
+
+    @classmethod
+    def _java_loader_class(cls):
+        """
+        Returns the full class name of the Java loader. The default
+        implementation replaces "pyspark" by "org.apache.spark" in
+        the Python full class name.
+        """
+        java_package = cls.__module__.replace("pyspark", "org.apache.spark")
+        return ".".join([java_package, cls.__name__])
+
+    @classmethod
+    def _load_java(cls, sc, path):
+        """
+        Load a Java model from the given path.
+        """
+        java_class = cls._java_loader_class()
+        java_obj = sc._jvm
+        for name in java_class.split("."):
+            java_obj = getattr(java_obj, name)
+        return java_obj.load(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = cls._load_java(sc, path)
+        return cls(java_model)
 
 
 def _test():

@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  * Writes simulated shuffle output from several threads and records the observed throughput.
  */
 object StoragePerfTester {
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     /** Total amount of data to generate. Distributed evenly amongst maps and reduce splits. */
     val dataSizeMb = Utils.memoryStringToMb(sys.env.getOrElse("OUTPUT_DATA", "1g"))
 
@@ -46,7 +46,8 @@ object StoragePerfTester {
     val totalRecords = dataSizeMb * 1000
     val recordsPerMap = totalRecords / numMaps
 
-    val writeData = "1" * recordLength
+    val writeKey = "1" * (recordLength / 2)
+    val writeValue = "1" * (recordLength / 2)
     val executor = Executors.newFixedThreadPool(numMaps)
 
     val conf = new SparkConf()
@@ -58,12 +59,12 @@ object StoragePerfTester {
     val sc = new SparkContext("local[4]", "Write Tester", conf)
     val hashShuffleManager = sc.env.shuffleManager.asInstanceOf[HashShuffleManager]
 
-    def writeOutputBytes(mapId: Int, total: AtomicLong) = {
-      val shuffle = hashShuffleManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
+    def writeOutputBytes(mapId: Int, total: AtomicLong): Unit = {
+      val shuffle = hashShuffleManager.shuffleBlockResolver.forMapTask(1, mapId, numOutputSplits,
         new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
-        writers(i % numOutputSplits).write(writeData)
+        writers(i % numOutputSplits).write(writeKey, writeValue)
       }
       writers.map { w =>
         w.commitAndClose()
@@ -78,7 +79,7 @@ object StoragePerfTester {
     val totalBytes = new AtomicLong()
     for (task <- 1 to numMaps) {
       executor.submit(new Runnable() {
-        override def run() = {
+        override def run(): Unit = {
           try {
             writeOutputBytes(task, totalBytes)
             latch.countDown()

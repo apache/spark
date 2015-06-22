@@ -33,7 +33,7 @@ import scala.reflect.ClassTag
  * The implementation of this trait defines how name-object pairs are stored or retrieved.
  */
 @DeveloperApi
-trait PersistenceEngine {
+abstract class PersistenceEngine {
 
   /**
    * Defines how the object is serialized and persisted. Implementation will
@@ -87,7 +87,7 @@ trait PersistenceEngine {
   def close() {}
 }
 
-private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
+private[master] class BlackHolePersistenceEngine extends PersistenceEngine {
 
   override def persist(name: String, obj: Object): Unit = {}
 

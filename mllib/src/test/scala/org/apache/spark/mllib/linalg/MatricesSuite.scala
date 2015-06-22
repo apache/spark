@@ -20,13 +20,13 @@ package org.apache.spark.mllib.linalg
 import java.util.Random
 
 import org.mockito.Mockito.when
-import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.TestingUtils._
 
-class MatricesSuite extends FunSuite {
+class MatricesSuite extends SparkFunSuite {
   test("dense matrix construction") {
     val m = 3
     val n = 2
@@ -423,5 +423,36 @@ class MatricesSuite extends FunSuite {
     assert(mat.numCols === 4)
     assert(mat.rowIndices.toSeq === Seq(3, 0, 2, 1))
     assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
+  }
+
+  test("MatrixUDT") {
+    val dm1 = new DenseMatrix(2, 2, Array(0.9, 1.2, 2.3, 9.8))
+    val dm2 = new DenseMatrix(3, 2, Array(0.0, 1.21, 2.3, 9.8, 9.0, 0.0))
+    val dm3 = new DenseMatrix(0, 0, Array())
+    val sm1 = dm1.toSparse
+    val sm2 = dm2.toSparse
+    val sm3 = dm3.toSparse
+    val mUDT = new MatrixUDT()
+    Seq(dm1, dm2, dm3, sm1, sm2, sm3).foreach {
+        mat => assert(mat.toArray === mUDT.deserialize(mUDT.serialize(mat)).toArray)
+    }
+    assert(mUDT.typeName == "matrix")
+    assert(mUDT.simpleString == "matrix")
+  }
+
+  test("toString") {
+    val empty = Matrices.ones(0, 0)
+    empty.toString(0, 0)
+
+    val mat = Matrices.rand(5, 10, new Random())
+    mat.toString(-1, -5)
+    mat.toString(0, 0)
+    mat.toString(Int.MinValue, Int.MinValue)
+    mat.toString(Int.MaxValue, Int.MaxValue)
+    var lines = mat.toString(6, 50).lines.toArray
+    assert(lines.size == 5 && lines.forall(_.size <= 50))
+
+    lines = mat.toString(5, 100).lines.toArray
+    assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
 }

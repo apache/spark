@@ -30,24 +30,28 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   override val output: Seq[AttributeReference] = relation.schema.toAttributes
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case l @ LogicalRelation(otherRelation) => relation == otherRelation && output == l.output
     case  _ => false
   }
 
-  override def sameResult(otherPlan: LogicalPlan) = otherPlan match {
+  override def hashCode: Int = {
+    com.google.common.base.Objects.hashCode(relation, output)
+  }
+
+  override def sameResult(otherPlan: LogicalPlan): Boolean = otherPlan match {
     case LogicalRelation(otherRelation) => relation == otherRelation
     case _ => false
   }
 
-  @transient override lazy val statistics = Statistics(
+  @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = BigInt(relation.sizeInBytes)
   )
 
   /** Used to lookup original attribute capitalization */
-  val attributeMap = AttributeMap(output.map(o => (o, o)))
+  val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
 
-  def newInstance() = LogicalRelation(relation).asInstanceOf[this.type]
+  def newInstance(): this.type = LogicalRelation(relation).asInstanceOf[this.type]
 
-  override def simpleString = s"Relation[${output.mkString(",")}] $relation"
+  override def simpleString: String = s"Relation[${output.mkString(",")}] $relation"
 }

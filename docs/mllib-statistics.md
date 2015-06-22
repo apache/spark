@@ -81,8 +81,8 @@ System.out.println(summary.numNonzeros()); // number of nonzeros in each column
 </div>
 
 <div data-lang="python" markdown="1">
-[`colStats()`](api/python/pyspark.mllib.stat.Statistics-class.html#colStats) returns an instance of
-[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.stat.MultivariateStatisticalSummary-class.html),
+[`colStats()`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics.colStats) returns an instance of
+[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
@@ -169,7 +169,7 @@ Matrix correlMatrix = Statistics.corr(data.rdd(), "pearson");
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/pyspark.mllib.stat.Statistics-class.html) provides methods to 
+[`Statistics`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) provides methods to 
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or 
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
@@ -258,7 +258,7 @@ JavaPairRDD<K, V> exactSample = data.sampleByKeyExact(false, fractions);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
-[`sampleByKey()`](api/python/pyspark.rdd.RDD-class.html#sampleByKey) allows users to
+[`sampleByKey()`](api/python/pyspark.html#pyspark.RDD.sampleByKey) allows users to
 sample approximately $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the 
 desired fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the 
 set of keys.
@@ -476,7 +476,7 @@ JavaDoubleRDD v = u.map(
 </div>
 
 <div data-lang="python" markdown="1">
-[`RandomRDDs`](api/python/pyspark.mllib.random.RandomRDDs-class.html) provides factory
+[`RandomRDDs`](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) provides factory
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.

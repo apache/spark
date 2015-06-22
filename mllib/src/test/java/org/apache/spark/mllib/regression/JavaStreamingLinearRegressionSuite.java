@@ -45,7 +45,7 @@ public class JavaStreamingLinearRegressionSuite implements Serializable {
     SparkConf conf = new SparkConf()
       .setMaster("local[2]")
       .setAppName("test")
-      .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+      .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
     ssc = new JavaStreamingContext(conf, new Duration(1000));
     ssc.checkpoint("checkpoint");
   }

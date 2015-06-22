@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
@@ -47,14 +49,14 @@ cqlsh:test> SELECT * FROM users;
 """
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print >> sys.stderr, """
+        print("""
         Usage: cassandra_inputformat <host> <keyspace> <cf>
 
         Run with example jar:
         ./bin/spark-submit --driver-class-path /path/to/example/jar \
         /path/to/examples/cassandra_inputformat.py <host> <keyspace> <cf>
         Assumes you have some data in Cassandra already, running on <host>, in <keyspace> and <cf>
-        """
+        """, file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
@@ -77,6 +79,6 @@ if __name__ == "__main__":
         conf=conf)
     output = cass_rdd.collect()
     for (k, v) in output:
-        print (k, v)
+        print((k, v))
 
     sc.stop()

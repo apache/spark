@@ -26,8 +26,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -35,18 +36,11 @@ import org.apache.spark.storage.StorageLevel
  * :: Experimental ::
  *
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
- * @param freqItemsets frequent itemset, which is an RDD of (itemset, frequency) pairs
+ * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
  * @tparam Item item type
  */
 @Experimental
-class FPGrowthModel[Item: ClassTag](
-    val freqItemsets: RDD[(Array[Item], Long)]) extends Serializable {
-
-  /** Returns frequent itemsets as a [[org.apache.spark.api.java.JavaPairRDD]]. */
-  def javaFreqItemsets(): JavaPairRDD[Array[Item], java.lang.Long] = {
-    JavaPairRDD.fromRDD(freqItemsets).asInstanceOf[JavaPairRDD[Array[Item], java.lang.Long]]
-  }
-}
+class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable
 
 /**
  * :: Experimental ::
@@ -151,7 +145,7 @@ class FPGrowth private (
       data: RDD[Array[Item]],
       minCount: Long,
       freqItems: Array[Item],
-      partitioner: Partitioner): RDD[(Array[Item], Long)] = {
+      partitioner: Partitioner): RDD[FreqItemset[Item]] = {
     val itemToRank = freqItems.zipWithIndex.toMap
     data.flatMap { transaction =>
       genCondTransactions(transaction, itemToRank, partitioner)
@@ -161,7 +155,7 @@ class FPGrowth private (
     .flatMap { case (part, tree) =>
       tree.extract(minCount, x => partitioner.getPartition(x) == part)
     }.map { case (ranks, count) =>
-      (ranks.map(i => freqItems(i)).toArray, count)
+      new FreqItemset(ranks.map(i => freqItems(i)).toArray, count)
     }
   }
 
@@ -191,5 +185,28 @@ class FPGrowth private (
       i -= 1
     }
     output
+  }
+}
+
+/**
+ * :: Experimental ::
+ */
+@Experimental
+object FPGrowth {
+
+  /**
+   * Frequent itemset.
+   * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
+   * @param freq frequency
+   * @tparam Item item type
+   */
+  class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
+
+    /**
+     * Returns items in a Java List.
+     */
+    def javaItems: java.util.List[Item] = {
+      items.toList.asJava
+    }
   }
 }

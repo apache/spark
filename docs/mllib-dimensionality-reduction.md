@@ -137,7 +137,7 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
+MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -157,6 +157,23 @@ val pc: Matrix = mat.computePrincipalComponents(10) // Principal components are 
 // Project the rows to the linear space spanned by the top 10 principal components.
 val projected: RowMatrix = mat.multiply(pc)
 {% endhighlight %}
+
+The following code demonstrates how to compute principal components on source vectors
+and use them to project the vectors into a low-dimensional space while keeping associated labels:
+
+{% highlight scala %}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.feature.PCA
+
+val data: RDD[LabeledPoint] = ...
+
+// Compute the top 10 principal components.
+val pca = new PCA(10).fit(data.map(_.features))
+
+// Project vectors to the linear space spanned by the top 10 principal components, keeping the label
+val projected = data.map(p => p.copy(features = pca.transform(p.features)))
+{% endhighlight %}
+
 </div>
 
 <div data-lang="java" markdown="1">

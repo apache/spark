@@ -37,7 +37,7 @@ object ConnectedComponents {
    */
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexId, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
-    def sendMessage(edge: EdgeTriplet[VertexId, ED]) = {
+    def sendMessage(edge: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, VertexId)] = {
       if (edge.srcAttr < edge.dstAttr) {
         Iterator((edge.dstId, edge.srcAttr))
       } else if (edge.srcAttr > edge.dstAttr) {

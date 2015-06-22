@@ -24,11 +24,10 @@ import java.io.FileOutputStream
 import scala.collection.immutable.IndexedSeq
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.Text
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodecFactory, GzipCodec}
 
@@ -37,12 +36,20 @@ import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodecFactory, Gzi
  * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
-class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
+class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 
   override def beforeAll() {
-    sc = new SparkContext("local", "test")
+    // Hadoop's FileSystem caching does not use the Configuration as part of its cache key, which
+    // can cause Filesystem.get(Configuration) to return a cached instance created with a different
+    // configuration than the one passed to get() (see HADOOP-8490 for more details). This caused
+    // hard-to-reproduce test failures, since any suites that were run after this one would inherit
+    // the new value of "fs.local.block.size" (see SPARK-5227 and SPARK-5679). To work around this,
+    // we disable FileSystem caching in this suite.
+    val conf = new SparkConf().set("spark.hadoop.fs.file.impl.disable.cache", "true")
+
+    sc = new SparkContext("local", "test", conf)
 
     // Set the block size of local file system to test whether files are split right or not.
     sc.hadoopConfiguration.setLong("fs.local.block.size", 32)

@@ -25,10 +25,11 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.activemq.broker.{TransportConnector, BrokerService}
+import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
@@ -36,14 +37,14 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
+class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
 
   private val batchDuration = Milliseconds(500)
-  private val master: String = "local[2]"
-  private val framework: String = this.getClass.getSimpleName
+  private val master = "local[2]"
+  private val framework = this.getClass.getSimpleName
   private val freePort = findFreePort()
   private val brokerUri = "//localhost:" + freePort
   private val topic = "def"
@@ -69,7 +70,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   test("mqtt input stream") {
     val sendMessage = "MQTT demo for spark streaming"
-    val receiveStream: ReceiverInputDStream[String] =
+    val receiveStream =
       MQTTUtils.createStream(ssc, "tcp:" + brokerUri, topic, StorageLevel.MEMORY_ONLY)
     @volatile var receiveMessage: List[String] = List()
     receiveStream.foreachRDD { rdd =>
@@ -93,6 +94,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   private def setupMQTT() {
     broker = new BrokerService()
+    broker.setDataDirectoryFile(Utils.createTempDir())
     connector = new TransportConnector()
     connector.setName("mqtt")
     connector.setUri(new URI("mqtt:" + brokerUri))
@@ -112,7 +114,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   }
 
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
@@ -122,12 +125,12 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   def publishData(data: String): Unit = {
     var client: MqttClient = null
     try {
-      val persistence: MqttClientPersistence = new MqttDefaultFilePersistence(persistenceDir.getAbsolutePath)
+      val persistence = new MqttDefaultFilePersistence(persistenceDir.getAbsolutePath)
       client = new MqttClient("tcp:" + brokerUri, MqttClient.generateClientId(), persistence)
       client.connect()
       if (client.isConnected) {
-        val msgTopic: MqttTopic = client.getTopic(topic)
-        val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
+        val msgTopic = client.getTopic(topic)
+        val message = new MqttMessage(data.getBytes("utf-8"))
         message.setQos(1)
         message.setRetained(true)
 
@@ -136,7 +139,8 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
             msgTopic.publish(message)
           } catch {
             case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
-              Thread.sleep(50) // wait for Spark streaming to consume something from the message queue
+              // wait for Spark streaming to consume something from the message queue
+              Thread.sleep(50)
           }
         }
       }

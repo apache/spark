@@ -22,17 +22,17 @@ Public classes:
 
   - :class:`SparkContext`:
       Main entry point for Spark functionality.
-  - L{RDD}
+  - :class:`RDD`:
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast}
+  - :class:`Broadcast`:
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator}
+  - :class:`Accumulator`:
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf}
+  - :class:`SparkConf`:
       For configuring Spark.
-  - L{SparkFiles}
+  - :class:`SparkFiles`:
       Access files shipped with jobs.
-  - L{StorageLevel}
+  - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
 
 """
@@ -45,6 +45,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
+from pyspark.status import *
 from pyspark.profiler import Profiler, BasicProfiler
 
 # for back compatibility
@@ -53,5 +54,5 @@ from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "Profiler", "BasicProfiler",
+    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler",
 ]

@@ -21,6 +21,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.annotations.VisibleForTesting
+import org.apache.spark.SparkContext
 
 /**
  * Asynchronously passes events to registered listeners.
@@ -37,6 +38,8 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   extends ListenerBus[L, E] {
 
   self =>
+
+  private var sparkContext: SparkContext = null
 
   /* Cap the capacity of the event queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
@@ -57,7 +60,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   private val listenerThread = new Thread(name) {
     setDaemon(true)
-    override def run(): Unit = Utils.logUncaughtExceptions {
+    override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
       while (true) {
         eventLock.acquire()
         self.synchronized {
@@ -89,9 +92,12 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
    * This first sends out all buffered events posted before this listener bus has started, then
    * listens for any additional events asynchronously while the listener bus is still running.
    * This should only be called once.
+   *
+   * @param sc Used to stop the SparkContext in case the listener thread dies.
    */
-  def start() {
+  def start(sc: SparkContext) {
     if (started.compareAndSet(false, true)) {
+      sparkContext = sc
       listenerThread.start()
     } else {
       throw new IllegalStateException(s"$name already started!")
@@ -114,21 +120,22 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   /**
    * For testing only. Wait until there are no more events in the queue, or until the specified
-   * time has elapsed. Return true if the queue has emptied and false is the specified time
-   * elapsed before the queue emptied.
+   * time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
+   * emptied.
    */
   @VisibleForTesting
-  def waitUntilEmpty(timeoutMillis: Int): Boolean = {
+  @throws(classOf[TimeoutException])
+  def waitUntilEmpty(timeoutMillis: Long): Unit = {
     val finishTime = System.currentTimeMillis + timeoutMillis
     while (!queueIsEmpty) {
       if (System.currentTimeMillis > finishTime) {
-        return false
+        throw new TimeoutException(
+          s"The event queue is not empty after $timeoutMillis milliseconds")
       }
       /* Sleep rather than using wait/notify, because this is used only for testing and
        * wait/notify add overhead in the general case. */
       Thread.sleep(10)
     }
-    true
   }
 
   /**

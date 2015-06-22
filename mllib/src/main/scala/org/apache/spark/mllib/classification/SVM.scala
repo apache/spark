@@ -22,10 +22,10 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
+import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
-
 
 /**
  * Model for Support Vector Machines (SVMs).
@@ -37,7 +37,7 @@ class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
-  with Saveable {
+  with Saveable with PMMLExportable {
 
   private var threshold: Option[Double] = Some(0.0)
 
@@ -87,6 +87,10 @@ class SVMModel (
   }
 
   override protected def formatVersion: String = "1.0"
+
+  override def toString: String = {
+    s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
+  }
 }
 
 object SVMModel extends Loader[SVMModel] {
@@ -97,8 +101,7 @@ object SVMModel extends Loader[SVMModel] {
     val classNameV1_0 = "org.apache.spark.mllib.classification.SVMModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val (numFeatures, numClasses) =
-          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
         val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
         val model = new SVMModel(data.weights, data.intercept)
         assert(model.weights.size == numFeatures, s"SVMModel.load with numFeatures=$numFeatures" +

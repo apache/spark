@@ -59,6 +59,8 @@ class StreamingLinearRegressionWithSGD private[mllib] (
 
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
 
+  protected var model: Option[LinearRegressionModel] = None
+
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
@@ -77,7 +79,7 @@ class StreamingLinearRegressionWithSGD private[mllib] (
     this
   }
 
-  /** Set the initial weights. Default: [0.0, 0.0]. */
+  /** Set the initial weights. */
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this

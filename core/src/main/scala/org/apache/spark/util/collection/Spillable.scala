@@ -42,9 +42,6 @@ private[spark] trait Spillable[C] extends Logging {
   // Memory manager that can be used to acquire/release memory
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
-  // Threshold for `elementsRead` before we start tracking this collection's memory usage
-  private[this] val trackMemoryThreshold = 1000
-
   // Initial threshold for the size of a collection before we start tracking its memory usage
   // Exposed for testing
   private[this] val initialMemoryThreshold: Long =
@@ -72,8 +69,7 @@ private[spark] trait Spillable[C] extends Logging {
    * @return true if `collection` was spilled to disk; false otherwise
    */
   protected def maybeSpill(collection: C, currentMemory: Long): Boolean = {
-    if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
-        currentMemory >= myMemoryThreshold) {
+    if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)

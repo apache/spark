@@ -63,6 +63,8 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
   protected val algorithm = new LogisticRegressionWithSGD(
     stepSize, numIterations, regParam, miniBatchFraction)
 
+  protected var model: Option[LogisticRegressionModel] = None
+
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)

@@ -19,19 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.rules
-import org.apache.spark.sql.catalyst.util
+import org.apache.spark.util.Utils
 
 /**
  * A collection of generators that build custom bytecode at runtime for performing the evaluation
  * of catalyst expression.
  */
 package object codegen {
-
-  /**
-   * A lock to protect invoking the scala compiler at runtime, since it is not thread safe in Scala
-   * 2.10.
-   */
-  protected[codegen] val globalLock = org.apache.spark.sql.catalyst.ScalaReflectionLock
 
   /** Canonicalizes an expression so those that differ only by names can reuse the same code. */
   object ExpressionCanonicalizer extends rules.RuleExecutor[Expression] {
@@ -52,7 +46,7 @@ package object codegen {
   @DeveloperApi
   object DumpByteCode {
     import scala.sys.process._
-    val dumpDirectory = util.getTempFilePath("sparkSqlByteCode")
+    val dumpDirectory = Utils.createTempDir()
     dumpDirectory.mkdir()
 
     def apply(obj: Any): Unit = {

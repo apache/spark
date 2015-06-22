@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
-class DataTypeSuite extends FunSuite {
+class DataTypeSuite extends SparkFunSuite {
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -53,6 +53,89 @@ class DataTypeSuite extends FunSuite {
     assert(expectedStruct === struct(Set("b", "d")))
     intercept[IllegalArgumentException] {
       struct(Set("b", "d", "e", "f"))
+    }
+  }
+
+  test("extract field index from a StructType") {
+    val struct = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    assert(struct.fieldIndex("a") === 0)
+    assert(struct.fieldIndex("b") === 1)
+
+    intercept[IllegalArgumentException] {
+      struct.fieldIndex("non_existent")
+    }
+  }
+
+  test("fieldsMap returns map of name to StructField") {
+    val struct = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    val mapped = StructType.fieldsMap(struct.fields)
+
+    val expected = Map(
+      "a" -> StructField("a", LongType),
+      "b" -> StructField("b", FloatType))
+
+    assert(mapped === expected)
+  }
+
+  test("merge where right is empty") {
+    val left = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    val right = StructType(List())
+    val merged = left.merge(right)
+
+    assert(merged === left)
+  }
+
+  test("merge where left is empty") {
+
+    val left = StructType(List())
+
+    val right = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    val merged = left.merge(right)
+
+    assert(right === merged)
+
+  }
+
+  test("merge where both are non-empty") {
+    val left = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    val right = StructType(
+      StructField("c", LongType) :: Nil)
+
+    val expected = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) ::
+      StructField("c", LongType) :: Nil)
+
+    val merged = left.merge(right)
+
+    assert(merged === expected)
+  }
+
+  test("merge where right contains type conflict") {
+    val left = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+
+    val right = StructType(
+      StructField("b", LongType) :: Nil)
+
+    intercept[SparkException] {
+      left.merge(right)
     }
   }
 
@@ -107,7 +190,7 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(DecimalType(10, 5), 4096)
   checkDefaultSize(DecimalType.Unlimited, 4096)
   checkDefaultSize(DateType, 4)
-  checkDefaultSize(TimestampType,12)
+  checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 4096)
   checkDefaultSize(BinaryType, 4096)
   checkDefaultSize(ArrayType(DoubleType, true), 800)
@@ -115,4 +198,87 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 410000)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
   checkDefaultSize(structType, 812)
+
+  def checkEqualsIgnoreCompatibleNullability(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName =
+      s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
+    test(testName) {
+      assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
+    }
+  }
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(StringType, containsNull = false),
+    expected = false)
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
+    expected = true)
+
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = true) :: Nil),
+    to = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = false) :: Nil),
+    expected = false)
 }

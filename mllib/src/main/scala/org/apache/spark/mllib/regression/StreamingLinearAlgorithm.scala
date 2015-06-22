@@ -60,7 +60,7 @@ abstract class StreamingLinearAlgorithm[
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  protected var model: Option[M] = None
+  protected var model: Option[M]
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
@@ -83,21 +83,15 @@ abstract class StreamingLinearAlgorithm[
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
     data.foreachRDD { (rdd, time) =>
-      val initialWeights =
-        model match {
-          case Some(m) =>
-            m.weights
-          case None =>
-            val numFeatures = rdd.first().features.size
-            Vectors.dense(numFeatures)
+      if (!rdd.isEmpty) {
+        model = Some(algorithm.run(rdd, model.get.weights))
+        logInfo(s"Model updated at time ${time.toString}")
+        val display = model.get.weights.size match {
+          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
+          case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
-      model = Some(algorithm.run(rdd, initialWeights))
-      logInfo("Model updated at time %s".format(time.toString))
-      val display = model.get.weights.size match {
-        case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
-        case _ => model.get.weights.toArray.mkString("[", ",", "]")
+        logInfo(s"Current model: weights, ${display}")
       }
-      logInfo("Current model: weights, %s".format (display))
     }
   }
 
@@ -114,7 +108,7 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction.")
     }
-    data.map(model.get.predict)
+    data.map{x => model.get.predict(x)}
   }
 
   /** Java-friendly version of `predictOn`. */
@@ -132,7 +126,7 @@ abstract class StreamingLinearAlgorithm[
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction")
     }
-    data.mapValues(model.get.predict)
+    data.mapValues{x => model.get.predict(x)}
   }
 
 

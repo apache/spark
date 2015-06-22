@@ -18,12 +18,12 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.classification.{Classifier, ClassifierParams, ClassificationModel}
-import org.apache.spark.ml.param.{Params, IntParam, ParamMap}
+import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
+import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,
@@ -58,7 +58,7 @@ object DeveloperApiExample {
     lr.setMaxIter(10)
 
     // Learn a LogisticRegression model.  This uses the parameters stored in lr.
-    val model = lr.fit(training)
+    val model = lr.fit(training.toDF())
 
     // Prepare test data.
     val test = sc.parallelize(Seq(
@@ -67,7 +67,7 @@ object DeveloperApiExample {
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
     // Make predictions on test data.
-    val sumPredictions: Double = model.transform(test)
+    val sumPredictions: Double = model.transform(test.toDF())
       .select("features", "label", "prediction")
       .collect()
       .map { case Row(features: Vector, label: Double, prediction: Double) =>
@@ -99,7 +99,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-  def getMaxIter: Int = get(maxIter)
+  def getMaxIter: Int = $(maxIter)
 }
 
 /**
@@ -107,9 +107,11 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
  *
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
-private class MyLogisticRegression
+private class MyLogisticRegression(override val uid: String)
   extends Classifier[Vector, MyLogisticRegression, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
+
+  def this() = this(Identifiable.randomUID("myLogReg"))
 
   setMaxIter(100) // Initialize
 
@@ -117,19 +119,19 @@ private class MyLogisticRegression
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   // This method is used by fit()
-  override protected def train(
-      dataset: DataFrame,
-      paramMap: ParamMap): MyLogisticRegressionModel = {
+  override protected def train(dataset: DataFrame): MyLogisticRegressionModel = {
     // Extract columns from data using helper method.
-    val oldDataset = extractLabeledPoints(dataset, paramMap)
+    val oldDataset = extractLabeledPoints(dataset)
 
     // Do learning to estimate the weight vector.
     val numFeatures = oldDataset.take(1)(0).features.size
     val weights = Vectors.zeros(numFeatures) // Learning would happen here.
 
     // Create a model, and return it.
-    new MyLogisticRegressionModel(this, paramMap, weights)
+    new MyLogisticRegressionModel(uid, weights).setParent(this)
   }
+
+  override def copy(extra: ParamMap): MyLogisticRegression = defaultCopy(extra)
 }
 
 /**
@@ -138,8 +140,7 @@ private class MyLogisticRegression
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
 private class MyLogisticRegressionModel(
-    override val parent: MyLogisticRegression,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     val weights: Vector)
   extends ClassificationModel[Vector, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
@@ -174,11 +175,9 @@ private class MyLogisticRegressionModel(
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
    *
-   * This is used for the defaul implementation of [[transform()]].
+   * This is used for the default implementation of [[transform()]].
    */
-  override protected def copy(): MyLogisticRegressionModel = {
-    val m = new MyLogisticRegressionModel(parent, fittingParamMap, weights)
-    Params.inheritValues(this.paramMap, this, m)
-    m
+  override def copy(extra: ParamMap): MyLogisticRegressionModel = {
+    copyValues(new MyLogisticRegressionModel(uid, weights), extra)
   }
 }

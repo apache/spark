@@ -29,6 +29,14 @@ Core classes:
 
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
 
+    :class:`pyspark.sql.SQLContext`
+
+    Main entry point for DataFrame and SQL functionality.
+
+    :class:`pyspark.sql.DataFrame`
+
+    A distributed collection of data grouped into named columns.
+
 
 Indices and tables
 ==================

@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
 private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
-  private val listener = parent.listener
+  private val listener = parent.progressListener
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {

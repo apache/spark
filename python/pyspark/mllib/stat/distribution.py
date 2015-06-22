@@ -22,7 +22,8 @@ __all__ = ['MultivariateGaussian']
 
 class MultivariateGaussian(namedtuple('MultivariateGaussian', ['mu', 'sigma'])):
 
-    """ Represents a (mu, sigma) tuple
+    """Represents a (mu, sigma) tuple
+
     >>> m = MultivariateGaussian(Vectors.dense([11,12]),DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
     >>> (m.mu, m.sigma.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1., 5.],[ 3., 2.]]))

@@ -33,6 +33,7 @@ class StageInfo(
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
+    val parentIds: Seq[Int],
     val details: String) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
@@ -46,6 +47,18 @@ class StageInfo(
   def stageFailed(reason: String) {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
+  }
+
+  private[spark] def getStatusString: String = {
+    if (completionTime.isDefined) {
+      if (failureReason.isDefined) {
+        "failed"
+      } else {
+        "succeeded"
+      }
+    } else {
+      "running"
+    }
   }
 }
 
@@ -66,6 +79,7 @@ private[spark] object StageInfo {
       stage.name,
       numTasks.getOrElse(stage.numTasks),
       rddInfos,
+      stage.parents.map(_.id),
       stage.details)
   }
 }

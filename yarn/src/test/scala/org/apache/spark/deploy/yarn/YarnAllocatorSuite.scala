@@ -26,13 +26,13 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkFunSuite}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.scheduler.SplitInfo
 
-import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 class MockResolver extends DNSToSwitchMapping {
 
@@ -46,7 +46,7 @@ class MockResolver extends DNSToSwitchMapping {
   def reloadCachedMappings(names: JList[String]) {}
 }
 
-class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach {
+class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new Configuration()
   conf.setClass(
     CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
@@ -79,7 +79,7 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
-    override def equals(other: Any) = false
+    override def equals(other: Any): Boolean = false
   }
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
@@ -90,6 +90,7 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
       "--jar", "somejar.jar",
       "--class", "SomeClass")
     new YarnAllocator(
+      "not used",
       conf,
       sparkConf,
       rmClient,
@@ -118,7 +119,9 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
     handler.allocatedHostToContainersMap.get("host1").get should contain (container.getId)
-    rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size should be (0)
+
+    val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
+    size should be (0)
   }
 
   test("some containers allocated") {
@@ -204,6 +207,28 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
     handler.updateResourceRequests()
     handler.getNumPendingAllocate should be (0)
     handler.getNumExecutorsRunning should be (2)
+  }
+
+  test("kill executors") {
+    val handler = createAllocator(4)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getNumPendingAllocate should be (4)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+
+    handler.requestTotalExecutors(1)
+    handler.executorIdToContainer.keys.foreach { id => handler.killExecutor(id ) }
+
+    val statuses = Seq(container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)
+    }
+    handler.updateResourceRequests()
+    handler.processCompletedContainers(statuses.toSeq)
+    handler.getNumExecutorsRunning should be (0)
+    handler.getNumPendingAllocate should be (1)
   }
 
   test("memory exceeded diagnostic regexes") {

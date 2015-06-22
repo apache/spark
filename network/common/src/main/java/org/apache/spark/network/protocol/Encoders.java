@@ -20,7 +20,6 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Charsets;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 
 /** Provides a canonical set of Encoders for simple types. */
 public class Encoders {

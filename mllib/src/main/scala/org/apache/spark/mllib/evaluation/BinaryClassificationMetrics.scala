@@ -22,6 +22,7 @@ import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: Experimental ::
@@ -52,6 +53,13 @@ class BinaryClassificationMetrics(
    * Defaults `numBins` to 0.
    */
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param scoreAndLabels a DataFrame with two double columns: score and label
+   */
+  private[mllib] def this(scoreAndLabels: DataFrame) =
+    this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {

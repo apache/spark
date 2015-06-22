@@ -21,25 +21,21 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.execution.{SparkPlan, RunnableCommand}
-import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
  * Implementation for "describe [extended] table".
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
+private[hive]
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
     override val output: Seq[Attribute],
     isExtended: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 
@@ -61,7 +57,7 @@ case class DescribeHiveTableCommand(
     }
 
     results.map { case (name, dataType, comment) =>
-      Row(name, dataType, comment)
+      InternalRow(name, dataType, comment)
     }
   }
 }

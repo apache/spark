@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}
@@ -27,10 +26,10 @@ import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.scheduler.InputInfo
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -50,14 +49,13 @@ import org.apache.spark.streaming.dstream._
  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
  *  starting point of the stream
  * @param messageHandler function for translating each message into the desired type
- * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
  */
 private[streaming]
 class DirectKafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
-  U <: Decoder[_]: ClassTag,
-  T <: Decoder[_]: ClassTag,
+  U <: Decoder[K]: ClassTag,
+  T <: Decoder[V]: ClassTag,
   R: ClassTag](
     @transient ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
@@ -66,6 +64,9 @@ class DirectKafkaInputDStream[
 ) extends InputDStream[R](ssc_) with Logging {
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
+
+  // Keep this consistent with how other streams are named (e.g. "Flume polling stream [2]")
+  private[streaming] override def name: String = s"Kafka direct stream [$id]"
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData
@@ -118,6 +119,10 @@ class DirectKafkaInputDStream[
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
+    // Report the record number of this batch interval to InputInfoTracker.
+    val inputInfo = InputInfo(id, rdd.count)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)
   }
@@ -130,8 +135,9 @@ class DirectKafkaInputDStream[
 
   private[streaming]
   class DirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
-    def batchForTime = data.asInstanceOf[mutable.HashMap[
-      Time, Array[OffsetRange.OffsetRangeTuple]]]
+    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {
+      data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
+    }
 
     override def update(time: Time) {
       batchForTime.clear()
@@ -146,10 +152,7 @@ class DirectKafkaInputDStream[
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
       val topics = fromOffsets.keySet
-      val leaders = kc.findLeaders(topics).fold(
-        errs => throw new SparkException(errs.mkString("\n")),
-        ok => ok
-      )
+      val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
           logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")

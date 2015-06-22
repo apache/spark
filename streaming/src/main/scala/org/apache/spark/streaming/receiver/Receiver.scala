@@ -245,7 +245,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * Get the unique identifier the receiver input stream that this
    * receiver is associated with.
    */
-  def streamId = id
+  def streamId: Int = id
 
   /*
    * =================

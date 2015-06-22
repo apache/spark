@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import akka.serialization.Serialization
 
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 
 /**
@@ -33,7 +34,7 @@ import org.apache.spark.Logging
  * @param dir Directory to store files. Created if non-existent (but not recursively).
  * @param serialization Used to serialize our objects.
  */
-private[spark] class FileSystemPersistenceEngine(
+private[master] class FileSystemPersistenceEngine(
     val dir: String,
     val serialization: Serialization)
   extends PersistenceEngine with Logging {
@@ -48,7 +49,7 @@ private[spark] class FileSystemPersistenceEngine(
     new File(dir + File.separator + name).delete()
   }
 
-  override def read[T: ClassTag](prefix: String) = {
+  override def read[T: ClassTag](prefix: String): Seq[T] = {
     val files = new File(dir).listFiles().filter(_.getName.startsWith(prefix))
     files.map(deserializeFromFile[T])
   }
@@ -59,9 +60,9 @@ private[spark] class FileSystemPersistenceEngine(
     val serializer = serialization.findSerializerFor(value)
     val serialized = serializer.toBinary(value)
     val out = new FileOutputStream(file)
-    try {
+    Utils.tryWithSafeFinally {
       out.write(serialized)
-    } finally {
+    } {
       out.close()
     }
   }

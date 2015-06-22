@@ -56,7 +56,7 @@ class UniformGenerator extends RandomDataGenerator[Double] {
     random.nextDouble()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
   override def copy(): UniformGenerator = new UniformGenerator()
 }
@@ -75,7 +75,7 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
       random.nextGaussian()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
   override def copy(): StandardNormalGenerator = new StandardNormalGenerator()
 }

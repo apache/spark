@@ -76,7 +76,7 @@ object Partitioner {
  * produce an unexpected or incorrect result.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
-  def numPartitions = partitions
+  def numPartitions: Int = partitions
 
   def getPartition(key: Any): Int = key match {
     case null => 0
@@ -103,7 +103,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
     @transient partitions: Int,
-    @transient rdd: RDD[_ <: Product2[K,V]],
+    @transient rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true)
   extends Partitioner {
 
@@ -154,7 +154,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
-  def numPartitions = rangeBounds.length + 1
+  def numPartitions: Int = rangeBounds.length + 1
 
   private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
@@ -185,7 +185,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   override def equals(other: Any): Boolean = other match {
-    case r: RangePartitioner[_,_] =>
+    case r: RangePartitioner[_, _] =>
       r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending
     case _ =>
       false
@@ -249,7 +249,7 @@ private[spark] object RangePartitioner {
    * @param sampleSizePerPartition max sample size per partition
    * @return (total number of items, an array of (partitionId, number of items, sample))
    */
-  def sketch[K:ClassTag](
+  def sketch[K : ClassTag](
       rdd: RDD[K],
       sampleSizePerPartition: Int): (Long, Array[(Int, Int, Array[K])]) = {
     val shift = rdd.id
@@ -272,7 +272,7 @@ private[spark] object RangePartitioner {
    * @param partitions number of partitions
    * @return selected bounds
    */
-  def determineBounds[K:Ordering:ClassTag](
+  def determineBounds[K : Ordering : ClassTag](
       candidates: ArrayBuffer[(K, Float)],
       partitions: Int): Array[K] = {
     val ordering = implicitly[Ordering[K]]
