@@ -257,7 +257,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test(expected=PandaException.class)
-  public void writeFailurePropegates() throws Exception {
+  public void writeFailurePropagates() throws Exception {
     class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
       @Override public boolean hasNext() {
         throw new PandaException();
