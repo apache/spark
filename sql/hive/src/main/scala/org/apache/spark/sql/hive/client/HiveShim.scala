@@ -21,6 +21,7 @@ import java.lang.{Boolean => JBoolean, Integer => JInteger}
 import java.lang.reflect.{Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 
@@ -63,6 +64,8 @@ private[client] sealed abstract class Shim {
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
   def getDriverResults(driver: Driver): Seq[String]
+
+  def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long
 
   def loadPartition(
       hive: Hive,
@@ -190,6 +193,10 @@ private[client] class Shim_v0_12 extends Shim {
     val res = new JArrayList[String]()
     getDriverResultsMethod.invoke(driver, res)
     res.toSeq
+  }
+
+  override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
+    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000
   }
 
   override def loadPartition(
@@ -321,6 +328,12 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       JBoolean.TYPE,
       JBoolean.TYPE,
       JBoolean.TYPE)
+  private lazy val getTimeVarMethod =
+    findMethod(
+      classOf[HiveConf],
+      "getTimeVar",
+      classOf[HiveConf.ConfVars],
+      classOf[TimeUnit])
 
   override def loadPartition(
       hive: Hive,
@@ -359,4 +372,10 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE)
   }
 
+  override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
+    getTimeVarMethod.invoke(
+      conf,
+      HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY,
+      TimeUnit.MILLISECONDS).asInstanceOf[Long]
+  }
 }

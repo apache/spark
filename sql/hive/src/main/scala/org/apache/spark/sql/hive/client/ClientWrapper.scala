@@ -142,14 +142,7 @@ private[hive] class ClientWrapper(
 
   // We use hive's conf for compatibility.
   private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
-  private val retryDelayMillis = 1000 * {
-    val strRep = conf.getVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY)
-    if (strRep.endsWith("s")) {
-      strRep.dropRight(1).toInt  // hive 0.14+
-    } else {
-      strRep.toInt  // pre-0.14
-    }
-  }
+  private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
 
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
