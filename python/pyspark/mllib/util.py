@@ -177,9 +177,9 @@ class MLUtils(object):
         """
         vec = _convert_to_vector(data)
         if isinstance(vec, SparseVector):
-            entries = dict(zip(vec.indices, vec.values))
-            entries[len(vec)] = 1.0
-            return SparseVector(len(vec) + 1, entries)
+            newIndices = np.append(vec.indices, len(vec))
+            newValues = np.append(vec.values, 1.0)
+            return SparseVector(len(vec) + 1, newIndices, newValues)
         else:
             return _convert_to_vector(np.append(vec.toArray(), 1.0))
 
