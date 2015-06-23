@@ -528,9 +528,13 @@ case class Round(children: Seq[Expression]) extends Expression {
 
   def nullable: Boolean = true
 
-  def dataType: DataType = {
+  private lazy val evalE2 = if (children.size == 2) children(1).eval(EmptyRow) else null
+  private lazy val _scale = if (evalE2 != null) evalE2.asInstanceOf[Int] else 0
+
+  override lazy val dataType: DataType = {
     children(0).dataType match {
       case StringType | BinaryType => DoubleType
+      case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
       case t => t
     }
   }
@@ -564,23 +568,14 @@ case class Round(children: Seq[Expression]) extends Expression {
 
   def eval(input: InternalRow): Any = {
     val evalE1 = children(0).eval(input)
-    if (evalE1 == null) {
-      return null
-    }
 
-    var _scale: Int = 0
-    if (children.size == 2) {
-      val evalE2 = children(1).eval(input)
-      if (evalE2 == null) {
-        return null
-      } else {
-        _scale = evalE2.asInstanceOf[Int]
-      }
-    }
+    if (evalE1 == null) return null
+    if (children.size == 2 && evalE2 == null) return null
 
     children(0).dataType match {
       case decimalType: DecimalType =>
-        // TODO: Support Decimal Round
+        val decimal = evalE1.asInstanceOf[Decimal]
+        if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
       case ByteType =>
         round(evalE1.asInstanceOf[Byte], _scale)
       case ShortType =>
