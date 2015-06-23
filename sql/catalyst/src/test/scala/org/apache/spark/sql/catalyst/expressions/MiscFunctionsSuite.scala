@@ -29,4 +29,13 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
   }
 
+  test("sha1") {
+    checkEvaluation(Sha1(Literal("ABC")), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
+    checkEvaluation(Sha1(Literal("ABC".getBytes)), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
+    checkEvaluation(Sha1(Literal.create(null, StringType)), null)
+    checkEvaluation(Sha1(Literal.create(null, BinaryType)), null)
+    checkEvaluation(Sha1(Literal("")), "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+    checkEvaluation(Sha1(Literal("".getBytes)), "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+  }
+
 }

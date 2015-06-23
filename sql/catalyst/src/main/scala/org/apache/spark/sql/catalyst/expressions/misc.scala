@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{BinaryType, StringType, DataType}
+import org.apache.spark.sql.types.{LongType, BinaryType, StringType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -46,5 +46,40 @@ case class Md5(child: Expression)
     defineCodeGen(ctx, ev, c =>
       "org.apache.spark.unsafe.types.UTF8String.fromString" +
         s"(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+  }
+}
+
+/**
+ * A function that calculates a sha1 hash value and returns it as a hex string
+ * For input of type [[BinaryType]] or [[StringType]]
+ */
+case class Sha1(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      value match {
+        case b: Array[Byte] =>
+          UTF8String.fromString(DigestUtils.sha1Hex(value.asInstanceOf[Array[Byte]]))
+        case s: UTF8String =>
+          UTF8String.fromString(DigestUtils.sha1Hex(s.getBytes))
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c =>
+      child.dataType match {
+        case BinaryType =>
+          "org.apache.spark.unsafe.types.UTF8String.fromString" +
+            s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+        case StringType =>
+          "org.apache.spark.unsafe.types.UTF8String.fromString" +
+            s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c.getBytes()))"
+      })
   }
 }

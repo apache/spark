@@ -42,6 +42,7 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha1',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -360,6 +361,26 @@ def randn(seed=None):
         jc = sc._jvm.functions.randn(seed)
     else:
         jc = sc._jvm.functions.randn()
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha1(col, length):
+    """Returns the hex string result of SHA-1.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col), length)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha(col, length):
+    """Returns the hex string result of SHA-1.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha(_to_java_column(col), length)
     return Column(jc)
 
 
