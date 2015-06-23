@@ -330,6 +330,25 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def mask[VD2: ClassTag, ED2: ClassTag](other: Graph[VD2, ED2]): Graph[VD, ED]
 
   /**
+   * Union current Graph with other Graph.
+   * The union of two graphs G(VG, EG) and H(VH, EH) is the union of their vertex sets
+   * and their edge families. Which means G u H = (VG u VH, EG u EH).
+   * @param other the other Graph will union
+   * @param mergeSameVertexAttr merge same vertex attribute function
+   * @param mergeSameEdgeAttr merge same edge attribute function
+   * @tparam VD2 other Graph Vertex Type
+   * @tparam ED2 other Graph Edge Type
+   * @tparam VD3 result joined Graph Vertex Type
+   * @tparam ED3 result joined Graph Edge Type
+   * @return a graph join withe the two graph's vertex and edge set
+   */
+  def union[VD2: ClassTag, ED2: ClassTag, VD3: ClassTag, ED3: ClassTag](
+    other: Graph[VD2, ED2],
+    mergeSameVertexAttr: (Option[VD], Option[VD2]) => VD3,
+    mergeSameEdgeAttr: (Option[ED], Option[ED2]) => ED3)
+  : Graph[VD3, ED3]
+
+  /**
    * Merges multiple edges between two vertices into a single edge. For correct results, the graph
    * must have been partitioned using [[partitionBy]].
    *
