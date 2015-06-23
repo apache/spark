@@ -166,7 +166,8 @@ case class TakeOrderedAndProject(
 
   private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
 
-  private val projection = projectList.map(newProjection(_, child.output))
+  // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
+  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
