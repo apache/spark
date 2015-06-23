@@ -27,7 +27,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, RowMatrix}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrix, Vector, VectorUDT}
 import org.apache.spark.sql.{SQLContext, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions._
 
@@ -139,6 +139,8 @@ class RPModel(override val uid: String,
     mat
   }
 
+  override def copy(extra: ParamMap): RPModel = defaultCopy(extra)
+
 }
 
 /**
@@ -198,4 +200,6 @@ class RandomProjection(override val uid: String)
   def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, extractParamMap)
   }
+
+  override def copy(extra: ParamMap): RandomProjection = defaultCopy(extra)
 }

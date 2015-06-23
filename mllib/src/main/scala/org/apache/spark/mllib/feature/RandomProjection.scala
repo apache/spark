@@ -107,12 +107,7 @@ class RandomProjection(intrinsicDimension: Int) {
       merged.toList
     }
 
-    /**
-     * make sure the matrix has the correct dimension while initializing it with the
-     * required dimensions
-     */
-    val initialSize = List(new MatrixEntry(origDimensions - 1, intrinsicDimension - 1, 0.0))
-    initialSize ++ rows.flatten.toList
+    rows.flatten.toList
   }
 
   /**
@@ -124,7 +119,7 @@ class RandomProjection(intrinsicDimension: Int) {
     val density = getDensity
     val rows = computeRPRows(origDimensions, density)
     val rdd = sparkContext.parallelize(rows)
-    new CoordinateMatrix(rdd).toBlockMatrix()
+    new CoordinateMatrix(rdd, origDimensions -1, intrinsicDimension -1).toBlockMatrix()
   }
 
   /**
