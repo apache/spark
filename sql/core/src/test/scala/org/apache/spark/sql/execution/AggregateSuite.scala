@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types.DataTypes._
@@ -36,17 +37,17 @@ class AggregateSuite extends SparkPlanTest {
     val two = Seq(Tuple1(0L), Tuple1(0L))
     val empty = Seq.empty[Tuple1[Long]]
 
-    val codegenDefault = TestSQLContext.conf.getConfString("spark.sql.codegen")
+    val codegenDefault = TestSQLContext.getConf(SQLConf.CODEGEN_ENABLED)
     try {
       for ((codegen, unsafe) <- Seq((false, false), (true, false), (true, true));
            partial <- Seq(false, true); groupExpr <- Seq(colB :: Nil, Seq.empty)) {
-        TestSQLContext.conf.setConfString("spark.sql.codegen", String.valueOf(codegen))
+        TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, codegen)
         checkAnswer(df,
           GeneratedAggregate(partial, groupExpr, aggrExpr :: Nil, unsafe, _: SparkPlan),
           if (groupExpr.isEmpty && !partial) two else empty)
       }
     } finally {
-      TestSQLContext.conf.setConfString("spark.sql.codegen", codegenDefault)
+      TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
     }
   }
 }
