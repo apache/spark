@@ -49,7 +49,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InternalRow, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.{SparkContext, Logging, TaskContext}
 import org.apache.spark.util.SerializableConfiguration
 
 /**

@@ -153,13 +153,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   protected def newProjection(
-      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute], mutableRow: Boolean = false): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled && expressions.forall(_.isThreadSafe)) {
       GenerateProjection.generate(expressions, inputSchema)
     } else {
-      new InterpretedProjection(expressions, inputSchema)
+      new InterpretedProjection(expressions, inputSchema, mutableRow)
     }
   }
 
