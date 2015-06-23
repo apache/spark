@@ -1394,12 +1394,12 @@ object functions {
   def round(e: Column): Column = round(e.expr, 0)
 
   /**
-   * Returns the value of the given column `e` rounded to the value of `scale` decimal places.
+   * Returns the value of the given column rounded to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.5.0
    */
-  def round(e: Column, scale: Column): Column = Round(e.expr, scale.expr)
+  def round(columnName: String): Column = round(Column(columnName), 0)
 
   /**
    * Returns the value of `e` rounded to `scale` decimal places.
@@ -1407,7 +1407,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def round(e: Column, scale: Int): Column = round(e, lit(scale))
+  def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
 
   /**
    * Returns the value of the given column rounded to `scale` decimal places.

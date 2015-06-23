@@ -200,10 +200,9 @@ class MathExpressionsSuite extends QueryTest {
 
   test("round") {
     checkAnswer(
-      ctx.sql("SELECT round(-32768), round(1809242.3151111344, 9), round(1809242.3151111344, 9)"),
+      ctx.sql("SELECT round(-32768), round(1809242.3151111344, 9)"),
       Seq((1, 2)).toDF().select(
         round(lit(-32768)),
-        round(lit(1809242.3151111344), lit(9)),
         round(lit(1809242.3151111344), 9))
     )
   }
