@@ -158,6 +158,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           // error.
           if (success) {
             throw e;
+          } else {
+            logger.error("In addition to a failure during writing, we failed during " +
+                         "cleanup.", e);
           }
         }
       }
