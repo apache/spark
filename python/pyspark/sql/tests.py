@@ -165,11 +165,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(result[0][1], "b")
 
     def test_and_in_expression(self):
-        self.assertEqual(4, self.df.filter(self.df.key <= 10 & self.df.value <= "2").count())
-        self.assertRaises(ValueError, lambda: self.df.key <= 10 & self.df.value <= "2")
-        self.assertEqual(2, self.df.filter(self.df.key <= 3 | self.df.value < "2").count())
-        self.assertRaises(ValueError,
-                          lambda: self.df.filter(self.df.key <= 3 | self.df.value < "2").count())
+        self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
+        self.assertRaises(ValueError, lambda: (self.df.key <= 10) and (self.df.value <= "2"))
+        self.assertEqual(14, self.df.filter((self.df.key <= 3) | (self.df.value < "2")).count())
+        self.assertRaises(ValueError, lambda: self.df.key <= 3 or self.df.value < "2")
+        self.assertEqual(99, self.df.filter(~(self.df.key == 1)).count())
+        self.assertRaises(ValueError, lambda: not self.df.key == 1)
 
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]

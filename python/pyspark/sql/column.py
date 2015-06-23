@@ -397,8 +397,8 @@ class Column(object):
         return Column(jc)
 
     def __nonzero__(self):
-        raise ValueError("Can't convert column into bool: please use '&' for 'and', '|' for 'or', "
-                         "when using Column in a boolean expression.")
+        raise ValueError("Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+                         "'~'for 'not', when using Column in a boolean expression.")
     __bool__ = __nonzero__
 
     def __repr__(self):
