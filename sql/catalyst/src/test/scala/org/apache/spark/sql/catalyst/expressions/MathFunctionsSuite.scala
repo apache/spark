@@ -347,24 +347,24 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val bdPi = BigDecimal(31415926535897932L, 10)
 
     domain.foreach { scale =>
-      checkEvaluation(Round(Seq(doublePi, scale)),
+      checkEvaluation(Round(doublePi, scale),
         BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
-      checkEvaluation(Round(Seq(stringPi, scale)),
+      checkEvaluation(Round(stringPi, scale),
         BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
-      checkEvaluation(Round(Seq(intPi, scale)),
+      checkEvaluation(Round(intPi, scale),
         BigDecimal.valueOf(intPi).setScale(scale, RoundingMode.HALF_UP).toInt, EmptyRow)
     }
-    checkEvaluation(Round(Seq("invalid input")), null, EmptyRow)
+    checkEvaluation(new Round(Literal("invalid input")), null, EmptyRow)
 
     // round_scale > current_scale would result in precision increase
     // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
     val (validScales, nullScales) = domain.splitAt(27)
     validScales.foreach { scale =>
-      checkEvaluation(Round(Seq(bdPi, scale)),
+      checkEvaluation(Round(bdPi, scale),
         Decimal(bdPi.setScale(scale, RoundingMode.HALF_UP)), EmptyRow)
     }
     nullScales.foreach { scale =>
-      checkEvaluation(Round(Seq(bdPi, scale)), null, EmptyRow)
+      checkEvaluation(Round(bdPi, scale), null, EmptyRow)
     }
   }
 }

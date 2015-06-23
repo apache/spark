@@ -116,6 +116,7 @@ object FunctionRegistry {
     expression[Pow]("power"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
@@ -127,7 +128,6 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
-    expression[Round]("round"),
 
     // misc functions
     expression[Md5]("md5"),
