@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.param.{DoubleParam, Params}
+import org.apache.spark.ml.param.{ParamMap, DoubleParam, Params}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
@@ -108,6 +108,7 @@ class MinMaxScaler(override val uid: String)
     validateAndTransformSchema(schema)
   }
 
+  override def copy(extra: ParamMap): MinMaxScaler = defaultCopy(extra)
 }
 
 /**
@@ -158,5 +159,10 @@ class MinMaxScalerModel private[ml] (
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
+  }
+
+  override def copy(extra: ParamMap): MinMaxScalerModel = {
+    val copied = new MinMaxScalerModel(uid, originalMin, originalMax)
+    copyValues(copied, extra)
   }
 }
