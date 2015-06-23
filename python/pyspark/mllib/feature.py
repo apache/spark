@@ -36,7 +36,6 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
     Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.util import inherit_doc
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
@@ -210,13 +209,20 @@ class StandardScaler(object):
         return StandardScalerModel(jmodel)
 
 
-@inherit_doc
 class ChiSqSelectorModel(JavaVectorTransformer):
     """
     .. note:: Experimental
 
     Represents a Chi Squared selector model.
     """
+    def transform(self, vector):
+        """
+        Applies transformation on a vector.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        :return: transformed vector.
+        """
+        return JavaVectorTransformer.transform(self, vector)
 
 
 class ChiSqSelector(object):
