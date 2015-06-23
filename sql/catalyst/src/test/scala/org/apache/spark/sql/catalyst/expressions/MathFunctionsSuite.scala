@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.math.BigDecimal.RoundingMode
+
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
@@ -338,14 +340,31 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("round test") {
-    val piRounds = Seq(
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0,
-      3.1, 3.14, 3.142, 3.1416, 3.14159, 3.141593, 3.1415927, 3.14159265, 3.141592654,
-      3.1415926536, 3.14159265359, 3.14159265359, 3.1415926535898, 3.14159265358979,
-      3.141592653589793, 3.141592653589793)
-    (-16 to 16).zipWithIndex.foreach {
-      case (scale, i) =>
-        checkEvaluation(Round(Seq(3.141592653589793, scale)), piRounds(i), EmptyRow)
+    val domain = -16 to 16
+    val doublePi = math.Pi
+    val stringPi = "3.141592653589793"
+    val intPi = 314159265
+    val bdPi = BigDecimal(31415926535897932L, 10)
+
+    domain.foreach { scale =>
+      checkEvaluation(Round(Seq(doublePi, scale)),
+        BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
+      checkEvaluation(Round(Seq(stringPi, scale)),
+        BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
+      checkEvaluation(Round(Seq(intPi, scale)),
+        BigDecimal.valueOf(intPi).setScale(scale, RoundingMode.HALF_UP).toInt, EmptyRow)
+    }
+    checkEvaluation(Round(Seq("invalid input")), null, EmptyRow)
+
+    // round_scale > current_scale would result in precision increase
+    // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
+    val (validScales, nullScales) = domain.splitAt(27)
+    validScales.foreach { scale =>
+      checkEvaluation(Round(Seq(bdPi, scale)),
+        Decimal(bdPi.setScale(scale, RoundingMode.HALF_UP)), EmptyRow)
+    }
+    nullScales.foreach { scale =>
+      checkEvaluation(Round(Seq(bdPi, scale)), null, EmptyRow)
     }
   }
 }
