@@ -26,7 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasFitIntercept, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._

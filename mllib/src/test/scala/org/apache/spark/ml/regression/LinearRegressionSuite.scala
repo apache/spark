@@ -125,7 +125,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(modelWithoutIntercept.weights(1) ~== weightsWithoutInterceptR(1) relTol 1E-3)
   }
 
-
   test("linear regression with intercept with L1 regularization") {
     val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
     val model = trainer.fit(dataset)
@@ -299,5 +298,4 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
-
 }
