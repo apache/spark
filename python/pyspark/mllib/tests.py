@@ -444,6 +444,13 @@ class ListTests(MLlibTestCase):
         except ValueError:
             self.fail()
 
+        # Verify that maxBins is being passed through
+        GradientBoostedTrees.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32)
+        with self.assertRaises(Exception) as cm:
+            GradientBoostedTrees.trainRegressor(
+                rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1)
+
 
 class StatTests(MLlibTestCase):
     # SPARK-4023

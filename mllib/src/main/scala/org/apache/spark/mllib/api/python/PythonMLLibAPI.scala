@@ -685,12 +685,14 @@ private[python] class PythonMLLibAPI extends Serializable {
       lossStr: String,
       numIterations: Int,
       learningRate: Double,
-      maxDepth: Int): GradientBoostedTreesModel = {
+      maxDepth: Int,
+      maxBins: Int): GradientBoostedTreesModel = {
     val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
     boostingStrategy.setLoss(Losses.fromString(lossStr))
     boostingStrategy.setNumIterations(numIterations)
     boostingStrategy.setLearningRate(learningRate)
     boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.setMaxBins(maxBins)
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
 
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
