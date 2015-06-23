@@ -172,9 +172,9 @@ private[ui] object RDDOperationGraph extends Logging {
       graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
       dotFile.append("}")
     } catch {
-      case t: Throwable =>
+      case NonFatal(e) =>
         dotFile.clear()
-        logError(s"Failed to making dot file of $stageId", t)
+        logError(s"Failed to make dot file of $stageId", e)
         return ""
     }
 
