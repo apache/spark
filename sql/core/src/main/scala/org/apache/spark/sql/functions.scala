@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
+ * @groupname misc_funcs Misc functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
@@ -890,6 +891,24 @@ object functions {
   def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
 
   /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(e: Column): Column = Bin(e.expr)
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
+
+  /**
    * Computes the cube-root of the given value.
    *
    * @group math_funcs
@@ -1359,6 +1378,26 @@ object functions {
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Misc functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(e: Column): Column = Md5(e.expr)
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(columnName: String): Column = md5(Column(columnName))
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1409,7 +1448,9 @@ object functions {
      *
      * @group udf_funcs
      * @since 1.3.0
+     * @deprecated As of 1.5.0, since it's redundant with udf()
      */
+    @deprecated("Use udf", "1.5.0")
     def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
       ScalaUdf(f, returnType, Seq($argsInUdf))
     }""")
@@ -1545,7 +1586,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function0[_], returnType: DataType): Column = {
     ScalaUdf(f, returnType, Seq())
   }
@@ -1556,7 +1599,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr))
   }
@@ -1567,7 +1612,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr))
   }
@@ -1578,7 +1625,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
   }
@@ -1589,7 +1638,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
   }
@@ -1600,7 +1651,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
   }
@@ -1611,7 +1664,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
   }
@@ -1622,7 +1677,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
   }
@@ -1633,7 +1690,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
   }
@@ -1644,7 +1703,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
   }
@@ -1655,7 +1716,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
@@ -1671,12 +1734,33 @@ object functions {
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
    *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", callUDF("simpleUdf", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   * @since 1.5.0
+   */
+  def callUDF(udfName: String, cols: Column*): Column = {
+    UnresolvedFunction(udfName, cols.map(_.expr))
+  }
+
+  /**
+   * Call an user-defined function.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlContext = df.sqlContext
+   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
    *  df.select($"id", callUdf("simpleUdf", $"value"))
    * }}}
    *
    * @group udf_funcs
    * @since 1.4.0
+   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF
    */
+  @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }

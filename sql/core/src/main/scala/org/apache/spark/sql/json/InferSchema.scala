@@ -43,7 +43,7 @@ private[sql] object InferSchema {
     }
 
     // perform schema inference on each row and merge afterwards
-    schemaData.mapPartitions { iter =>
+    val rootType = schemaData.mapPartitions { iter =>
       val factory = new JsonFactory()
       iter.map { row =>
         try {
@@ -55,8 +55,13 @@ private[sql] object InferSchema {
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
         }
       }
-    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType) match {
-      case st: StructType => nullTypeToStringType(st)
+    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        StructType(Seq())
     }
   }
 
@@ -116,22 +121,35 @@ private[sql] object InferSchema {
     }
   }
 
-  private def nullTypeToStringType(struct: StructType): StructType = {
-    val fields = struct.fields.map {
-      case StructField(fieldName, dataType, nullable, _) =>
-        val newType = dataType match {
-          case NullType => StringType
-          case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
-          case ArrayType(struct: StructType, containsNull) =>
-            ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType => nullTypeToStringType(struct)
-          case other: DataType => other
-        }
+  /**
+   * Convert NullType to StringType and remove StructTypes with no fields
+   */
+  private def canonicalizeType: DataType => Option[DataType] = {
+    case at@ArrayType(elementType, _) =>
+      for {
+        canonicalType <- canonicalizeType(elementType)
+      } yield {
+        at.copy(canonicalType)
+      }
 
-        StructField(fieldName, newType, nullable)
-    }
+    case StructType(fields) =>
+      val canonicalFields = for {
+        field <- fields
+        if field.name.nonEmpty
+        canonicalType <- canonicalizeType(field.dataType)
+      } yield {
+        field.copy(dataType = canonicalType)
+      }
 
-    StructType(fields)
+      if (canonicalFields.nonEmpty) {
+        Some(StructType(canonicalFields))
+      } else {
+        // per SPARK-8093: empty structs should be deleted
+        None
+      }
+
+    case NullType => Some(StringType)
+    case other => Some(other)
   }
 
   /**

@@ -147,8 +147,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n")
 
     val code = s"""
-    import org.apache.spark.sql.catalyst.InternalRow;
-
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
     }
@@ -220,9 +218,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
 
-    val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
-    m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[Projection]
+    compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }
 }

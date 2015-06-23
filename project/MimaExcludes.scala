@@ -44,6 +44,9 @@ object MimaExcludes {
             // JavaRDDLike is not meant to be extended by user programs
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.partitioner"),
+            // Modification of private static method
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaUtils.org$apache$spark$streaming$kafka$KafkaUtils$$leadersForRanges"),
             // Mima false positive (was a private[spark] class)
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.util.collection.PairIterator"),
@@ -51,7 +54,17 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
             // SQL execution is considered private.
-            excludePackage("org.apache.spark.sql.execution")
+            excludePackage("org.apache.spark.sql.execution"),
+            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
+            // not needed anymore
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
+              ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
           )
         case v if v.startsWith("1.4") =>
           Seq(
