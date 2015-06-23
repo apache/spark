@@ -140,7 +140,7 @@ function renderDagViz(forJob) {
    for (var i = 0; i < dotFiles.length; i++) {
      if (dotFiles[i] == "") {
        var message =
-       "<b>Throwable occurs while getting metadata of the " + jobOrStage +
+       "<b>NonFatal occurs while getting metadata of the " + jobOrStage +
        "! More information can get from server log.</b>";
        graphContainer().append("div").attr("id", "empty-dag-viz-message").html(message);
        return;
