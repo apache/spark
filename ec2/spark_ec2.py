@@ -308,7 +308,8 @@ def parse_args():
              "requires that.")
     parser.add_option(
         "--instance-initiated-shutdown-behavior", default="stop",
-        choices=["stop", "terminate"])
+        choices=["stop", "terminate"],
+        help="Whether instances should terminate when shut down or just stop")
     parser.add_option(
         "--instance-profile-name", default=None,
         help="IAM profile name to launch instances under")
