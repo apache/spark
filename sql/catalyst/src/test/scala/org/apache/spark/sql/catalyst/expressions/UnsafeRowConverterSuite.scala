@@ -170,7 +170,12 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       IntegerType,
       LongType,
       FloatType,
-      DoubleType)
+      DoubleType,
+      StringType,
+      BinaryType,
+      DecimalType.Unlimited,
+      ArrayType(IntegerType)
+    )
     val converter = new UnsafeRowConverter(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
@@ -199,7 +204,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     createdFromNull.getInt(4) should be (0)
     createdFromNull.getLong(5) should be (0)
     assert(java.lang.Float.isNaN(createdFromNull.getFloat(6)))
-    assert(java.lang.Double.isNaN(createdFromNull.getFloat(7)))
+    assert(java.lang.Double.isNaN(createdFromNull.getDouble(7)))
+    createdFromNull.getString(8) should be (null)
+    createdFromNull.get(9) should be (null)
+    createdFromNull.get(10) should be (null)
+    createdFromNull.get(11) should be (null)
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
@@ -214,14 +223,19 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r.setLong(5, 500)
       r.setFloat(6, 600)
       r.setDouble(7, 700)
+      r.update(8, UTF8String.fromString("hello"))
+      r.update(9, "world".getBytes)
+      r.update(10, Decimal(10))
+      r.update(11, Array(11))
       r
     }
-    val setToNullAfterCreationBuffer: Array[Long] = new Array[Long](sizeRequired / 8)
+    val pool = new ObjectPool(1)
+    val setToNullAfterCreationBuffer: Array[Long] = new Array[Long](sizeRequired / 8 + 2)
     converter.writeRow(
-      rowWithNoNullColumns, setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
+      rowWithNoNullColumns, setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, pool)
     val setToNullAfterCreation = new UnsafeRow()
     setToNullAfterCreation.pointTo(
-      setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
+      setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
 
     setToNullAfterCreation.isNullAt(0) should be (rowWithNoNullColumns.isNullAt(0))
     setToNullAfterCreation.getBoolean(1) should be (rowWithNoNullColumns.getBoolean(1))
@@ -231,11 +245,17 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     setToNullAfterCreation.getLong(5) should be (rowWithNoNullColumns.getLong(5))
     setToNullAfterCreation.getFloat(6) should be (rowWithNoNullColumns.getFloat(6))
     setToNullAfterCreation.getDouble(7) should be (rowWithNoNullColumns.getDouble(7))
+    setToNullAfterCreation.getString(8) should be (rowWithNoNullColumns.getString(8))
+    setToNullAfterCreation.get(9) should be (rowWithNoNullColumns.get(9))
+    setToNullAfterCreation.get(10) should be (rowWithNoNullColumns.get(10))
+    setToNullAfterCreation.get(11) should be (rowWithNoNullColumns.get(11))
 
     for (i <- 0 to fieldTypes.length - 1) {
       setToNullAfterCreation.setNullAt(i)
     }
-    assert(Arrays.equals(createdFromNullBuffer, setToNullAfterCreationBuffer))
+    // There are some garbage left in the var-length area
+    assert(Arrays.equals(createdFromNullBuffer,
+      java.util.Arrays.copyOf(setToNullAfterCreationBuffer, sizeRequired / 8)))
   }
 
 }

@@ -308,7 +308,11 @@ public final class UnsafeRow extends BaseMutableRow {
   @Override
   public String getString(int i) {
     // This is slow, should not be used internally.
-    return get(i).toString();
+    if (isNullAt(i)) {
+      return null;
+    } else {
+      return get(i).toString();
+    }
   }
 
   @Override
