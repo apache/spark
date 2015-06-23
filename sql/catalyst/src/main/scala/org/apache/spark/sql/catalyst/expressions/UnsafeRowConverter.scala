@@ -245,7 +245,7 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
       numBytes
     )
     val flag = if (isString) 1L << 62 else 0
-    target.setLong(column,  flag | (cursor.toLong << 31L) | numBytes.toLong)
+    target.setLong(column, flag | (cursor.toLong << 31L) | numBytes.toLong)
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 }
@@ -266,7 +266,6 @@ private class BinaryUnsafeColumnWriter private() extends BytesUnsafeColumnWriter
 
 private class ObjectUnsafeColumnWriter private() extends UnsafeColumnWriter {
   def getSize(sourceRow: InternalRow, column: Int): Int = 0
-  
   override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     val obj = source.get(column)
     val idx = target.getPool.put(obj)

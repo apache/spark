@@ -37,7 +37,7 @@ class UnsafeFixedWidthAggregationMapSuite
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
   private def emptyProjection: Projection =
-    GenerateProjection.generate(Seq(Literal(0)), Seq(AttributeReference("price", IntegerType, true)()))
+    GenerateProjection.generate(Seq(Literal(0)), Seq(AttributeReference("price", IntegerType)()))
   private def emptyAggregationBuffer: InternalRow = new GenericRow(Array[Any](0))
 
   private var memoryManager: TaskMemoryManager = null
