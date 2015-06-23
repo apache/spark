@@ -515,12 +515,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       checkpointInterval: Int,
       optimizer: String): LDAModel = {
     val algo = new LDA()
-        .setK(k)
-        .setMaxIterations(maxIterations)
-        .setDocConcentration(docConcentration)
-        .setTopicConcentration(topicConcentration)
-        .setCheckpointInterval(checkpointInterval)
-        .setOptimizer(optimizer)
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setDocConcentration(docConcentration)
+      .setTopicConcentration(topicConcentration)
+      .setCheckpointInterval(checkpointInterval)
+      .setOptimizer(optimizer)
 
     if (seed != null) algo.setSeed(seed)
 
