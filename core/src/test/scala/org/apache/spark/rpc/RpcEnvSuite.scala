@@ -162,16 +162,14 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
-      val e = intercept[Exception] {
+      // Any exception thrown in askWithRetry is wrapped with a SparkException and set as the cause
+      val e = intercept[SparkException] {
         rpcEndpointRef.askWithRetry[String]("hello", new RpcTimeout(1 millis, shortProp))
       }
-      assert(e.isInstanceOf[TimeoutException] || e.getCause.isInstanceOf[TimeoutException])
-      e match {
-        case te: TimeoutException =>
-          assert(te.getMessage().contains(shortProp))
-        case e: Exception =>
-          assert(e.getCause().getMessage().contains(shortProp))
-      }
+      // The SparkException cause should be a RpcTimeoutException with message indicating the
+      // controlling timeout property
+      assert(e.getCause.isInstanceOf[RpcTimeoutException])
+      assert(e.getCause().getMessage().contains(shortProp))
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
