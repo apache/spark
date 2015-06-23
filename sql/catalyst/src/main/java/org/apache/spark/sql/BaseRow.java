@@ -142,7 +142,7 @@ public abstract class BaseRow extends InternalRow {
 
   @Override
   public <T> T getAs(int i) {
-    throw new UnsupportedOperationException();
+    return (T) get(i);
   }
 
   @Override

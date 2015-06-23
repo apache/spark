@@ -23,8 +23,9 @@ import scala.util.Random
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -33,10 +34,10 @@ class UnsafeFixedWidthAggregationMapSuite
   with Matchers
   with BeforeAndAfterEach {
 
-  import UnsafeFixedWidthAggregationMap._
-
   private val groupKeySchema = StructType(StructField("product", StringType) :: Nil)
   private val aggBufferSchema = StructType(StructField("salePrice", IntegerType) :: Nil)
+  private def emptyProjection: Projection =
+    GenerateProjection.generate(Seq(Literal(0)), Seq(AttributeReference("price", IntegerType, true)()))
   private def emptyAggregationBuffer: InternalRow = new GenericRow(Array[Any](0))
 
   private var memoryManager: TaskMemoryManager = null
@@ -52,21 +53,11 @@ class UnsafeFixedWidthAggregationMapSuite
     }
   }
 
-  test("supported schemas") {
-    assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
-    assert(supportsGroupKeySchema(StructType(StructField("x", StringType) :: Nil)))
-
-    assert(
-      !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
-    assert(
-      !supportsGroupKeySchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
-  }
-
   test("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyAggregationBuffer,
-      aggBufferSchema,
-      groupKeySchema,
+      emptyProjection,
+      new UnsafeRowConverter(groupKeySchema),
+      new UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       1024, // initial capacity
       false // disable perf metrics
@@ -77,9 +68,9 @@ class UnsafeFixedWidthAggregationMapSuite
 
   test("updating values for a single key") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyAggregationBuffer,
-      aggBufferSchema,
-      groupKeySchema,
+      emptyProjection,
+      new UnsafeRowConverter(groupKeySchema),
+      new UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       1024, // initial capacity
       false // disable perf metrics
@@ -103,9 +94,9 @@ class UnsafeFixedWidthAggregationMapSuite
 
   test("inserting large random keys") {
     val map = new UnsafeFixedWidthAggregationMap(
-      emptyAggregationBuffer,
-      aggBufferSchema,
-      groupKeySchema,
+      emptyProjection,
+      new UnsafeRowConverter(groupKeySchema),
+      new UnsafeRowConverter(aggBufferSchema),
       memoryManager,
       128, // initial capacity
       false // disable perf metrics

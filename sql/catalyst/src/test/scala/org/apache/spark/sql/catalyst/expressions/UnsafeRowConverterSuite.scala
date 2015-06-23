@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
@@ -42,7 +43,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val sizeRequired: Int = converter.getSizeRequirement(row)
     sizeRequired should be (8 + (3 * 8))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
-    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
+    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
     numBytesWritten should be (sizeRequired)
 
     val unsafeRow = new UnsafeRow()
@@ -58,7 +59,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
-    row.setString(1, "Hello")
+    row.update(1, UTF8String.fromString("Hello"))
     row.update(2, "World".getBytes)
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
@@ -66,14 +67,37 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length) +
       ByteArrayMethods.roundNumberOfBytesToNearestWord("World".getBytes.length))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
-    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
+    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
     numBytesWritten should be (sizeRequired)
 
     val unsafeRow = new UnsafeRow()
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getString(1) should be ("Hello")
-    unsafeRow.getBinary(2) should be ("World".getBytes)
+    unsafeRow.get(2) should be ("World".getBytes)
+  }
+
+  test("basic conversion with primitive, decimal and array") {
+    val fieldTypes: Array[DataType] = Array(LongType, DecimalType(10, 0), ArrayType(StringType))
+    val converter = new UnsafeRowConverter(fieldTypes)
+
+    val row = new SpecificMutableRow(fieldTypes)
+    row.setLong(0, 0)
+    row.update(1, Decimal(1))
+    row.update(2, Array(2))
+
+    val pool = new ObjectPool(10)
+    val sizeRequired: Int = converter.getSizeRequirement(row)
+    sizeRequired should be (8 + (8 * 3))
+    val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
+    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, pool)
+    numBytesWritten should be (sizeRequired)
+
+    val unsafeRow = new UnsafeRow()
+    unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
+    unsafeRow.getLong(0) should be (0)
+    unsafeRow.get(1) should be (Decimal(1))
+    unsafeRow.get(2) should be (Array(2))
   }
 
   test("basic conversion with primitive, string, date and timestamp types") {
@@ -90,7 +114,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     sizeRequired should be (8 + (8 * 4) +
       ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
-    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
+    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
     numBytesWritten should be (sizeRequired)
 
     val unsafeRow = new UnsafeRow()
@@ -127,7 +151,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val sizeRequired: Int = converter.getSizeRequirement(rowWithAllNullColumns)
     val createdFromNullBuffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(
-      rowWithAllNullColumns, createdFromNullBuffer, PlatformDependent.LONG_ARRAY_OFFSET)
+      rowWithAllNullColumns, createdFromNullBuffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
     numBytesWritten should be (sizeRequired)
 
     val createdFromNull = new UnsafeRow()
@@ -161,7 +185,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     }
     val setToNullAfterCreationBuffer: Array[Long] = new Array[Long](sizeRequired / 8)
     converter.writeRow(
-      rowWithNoNullColumns, setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET)
+      rowWithNoNullColumns, setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
     val setToNullAfterCreation = new UnsafeRow()
     setToNullAfterCreation.pointTo(
       setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
