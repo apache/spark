@@ -44,12 +44,28 @@ class MQTTUtils(object):
 
         try:
             jstream = ssc._jvm.MQTTUtils.createStream(ssc._jssc, brokerUrl, topic, jlevel)
-
         except Py4JError, e:
-            # TODO: use --jar once it also work on driver
-            if not e.message or 'call a package' in e.message:
-                print "No Mqtt package, please put the assembly jar into classpath:"
-                print " $ bin/spark-submit --driver-class-path external/mqtt-assembly/target/" + \
-                      "scala-*/spark-streaming-mqtt-assembly-*.jar"
+	    if 'ClassNotFoundException' in str(e.java_exception):
+                MQTTUtils._printErrorMsg(ssc.sparkContext)
             raise e
         return DStream(jstream, ssc, UTF8Deserializer())
+	
+	@staticmethod
+	def _printErrorMsg(sc):
+	    print("""
+________________________________________________________________________________________________
+
+  Spark Streaming's MQTT libraries not found in class path. Try one of the following.
+
+  1. Include the MQTT library and its dependencies with in the
+     spark-submit command as
+
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-mqtt:%s ...
+
+  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-mqtt-assembly, Version = %s.
+     Then, include the jar in the spark-submit command as
+
+     $ bin/spark-submit --jars <spark-streaming-mqtt-assembly.jar> ...
+________________________________________________________________________________________________
+""" % (sc.version, sc.version))

@@ -25,7 +25,7 @@
   `$ bin/run-example \
        org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
  and then run the example as
-    `$ bin/spark-submit --driver-class-path external/mqtt-assembly/target/scala-*/\
+    `$ bin/spark-submit --jars external/mqtt-assembly/target/scala-*/\
       spark-streaming-mqtt-assembly-*.jar examples/src/main/python/streaming/mqtt_wordcount.py \
       tcp://localhost:1883 foo`
 """
