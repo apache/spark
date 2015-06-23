@@ -17,7 +17,6 @@
 
 .First <- function() {
   home <- Sys.getenv("SPARK_HOME")
-  sparkVer <- Sys.getenv("SPARK_VERSION")
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
   Sys.setenv(NOAWT=1)
 
@@ -28,8 +27,9 @@
   sc <- SparkR::sparkR.init()
   assign("sc", sc, envir=.GlobalEnv)
   sqlContext <- SparkR::sparkRSQL.init(sc)
+  sparkVer <- SparkR:::callJMethod(sc, "version")
   assign("sqlContext", sqlContext, envir=.GlobalEnv)
-  cat("\n Welcome to SparkR!")
+  cat("\n Welcome to")
   cat("\n")
   cat("    ____              __", "\n")
   cat("   / __/__  ___ _____/ /__", "\n")
