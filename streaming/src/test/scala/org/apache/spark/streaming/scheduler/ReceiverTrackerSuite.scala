@@ -55,7 +55,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
     }
     testScheduler(numReceivers = 5, preferredLocation = false, allocation = "0|1|2|3|0")
     testScheduler(numReceivers = 3, preferredLocation = false, allocation = "0,3|1|2")
-    testScheduler(numReceivers = 4, preferredLocation = true,  allocation = "1|2|3|0")
+    testScheduler(numReceivers = 4, preferredLocation = true, allocation = "1|2|3|0")
   }
 
   test("receiver scheduling - some have preferred location") {
