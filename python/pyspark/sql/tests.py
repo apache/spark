@@ -149,6 +149,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
 
+    def test_and_in_expression(self):
+        self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
+        self.assertRaises(ValueError, lambda: (self.df.key <= 10) and (self.df.value <= "2"))
+        self.assertEqual(14, self.df.filter((self.df.key <= 3) | (self.df.value < "2")).count())
+        self.assertRaises(ValueError, lambda: self.df.key <= 3 or self.df.value < "2")
+        self.assertEqual(99, self.df.filter(~(self.df.key == 1)).count())
+        self.assertRaises(ValueError, lambda: not self.df.key == 1)
+
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -393,7 +401,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance((- ci - 1 - 2) % 3 * 2.5 / 3.5, Column))
         rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci)
         self.assertTrue(all(isinstance(c, Column) for c in rcc))
-        cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7, ci and cs, ci or cs]
+        cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7]
         self.assertTrue(all(isinstance(c, Column) for c in cb))
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
