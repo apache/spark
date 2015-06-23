@@ -19,14 +19,26 @@ package org.apache.spark.sql.hive
 
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
-  private[client] abstract class HiveVersion(val fullVersion: String, val hasBuiltinsJar: Boolean)
+  private[client] abstract class HiveVersion(
+      val fullVersion: String,
+      val extraDeps: Seq[String] = Nil,
+      val exclusions: Seq[String] = Nil)
 
   // scalastyle:off
   private[client] object hive {
-    case object v10 extends HiveVersion("0.10.0", true)
-    case object v11 extends HiveVersion("0.11.0", false)
-    case object v12 extends HiveVersion("0.12.0", false)
-    case object v13 extends HiveVersion("0.13.1", false)
+    case object v12 extends HiveVersion("0.12.0")
+    case object v13 extends HiveVersion("0.13.1")
+
+    // Hive 0.14 depends on calcite 0.9.2-incubating-SNAPSHOT which does not exist in
+    // maven central anymore, so override those with a version that exists.
+    //
+    // org.pentaho:pentaho-aggdesigner-algorithm is also nowhere to be found, so exclude
+    // it explicitly. If it's needed by the metastore client, users will have to dig it
+    // out of somewhere and use configuration to point Spark at the correct jars.
+    case object v14 extends HiveVersion("0.14.0",
+      Seq("org.apache.calcite:calcite-core:1.3.0-incubating",
+        "org.apache.calcite:calcite-avatica:1.3.0-incubating"),
+      Seq("org.pentaho:pentaho-aggdesigner-algorithm"))
   }
   // scalastyle:on
 

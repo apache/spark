@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.3.1"
+SPARK_EC2_VERSION = "1.4.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -70,6 +70,7 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
     "1.3.0",
     "1.3.1",
+    "1.4.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -82,6 +83,7 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
+    "1.4.0": "0.6.4",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -89,7 +91,7 @@ DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
 # Default location to get the spark-ec2 scripts (and ami-list) from
 DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
-DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.4"
 
 
 def setup_external_libs(libs):
@@ -288,6 +290,10 @@ def parse_args():
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
     parser.add_option(
+        "--additional-tags", type="string", default="",
+        help="Additional tags to set on the machines; tags are comma-separated, while name and " +
+             "value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
+    parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
@@ -356,7 +362,7 @@ def get_validate_spark_version(version, repo):
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
-# Last Updated: 2015-05-08
+# Last Updated: 2015-06-19
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 EC2_INSTANCE_TYPES = {
     "c1.medium":   "pvm",
@@ -398,6 +404,11 @@ EC2_INSTANCE_TYPES = {
     "m3.large":    "hvm",
     "m3.xlarge":   "hvm",
     "m3.2xlarge":  "hvm",
+    "m4.large":    "hvm",
+    "m4.xlarge":   "hvm",
+    "m4.2xlarge":  "hvm",
+    "m4.4xlarge":  "hvm",
+    "m4.10xlarge": "hvm",
     "r3.large":    "hvm",
     "r3.xlarge":   "hvm",
     "r3.2xlarge":  "hvm",
@@ -407,6 +418,7 @@ EC2_INSTANCE_TYPES = {
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
     "t2.medium":   "hvm",
+    "t2.large":    "hvm",
 }
 
 
@@ -682,16 +694,24 @@ def launch_cluster(conn, opts, cluster_name):
 
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
-    time.sleep(5)
-    # Give the instances descriptive names
+    time.sleep(15)
+
+    # Give the instances descriptive names and set additional tags
+    additional_tags = {}
+    if opts.additional_tags.strip():
+        additional_tags = dict(
+            map(str.strip, tag.split(':', 1)) for tag in opts.additional_tags.split(',')
+        )
+
     for master in master_nodes:
-        master.add_tag(
-            key='Name',
-            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        master.add_tags(
+            dict(additional_tags, Name='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        )
+
     for slave in slave_nodes:
-        slave.add_tag(
-            key='Name',
-            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        slave.add_tags(
+            dict(additional_tags, Name='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        )
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -909,7 +929,7 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Last Updated: 2015-05-08
+    # Last Updated: 2015-06-19
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
@@ -951,6 +971,11 @@ def get_num_disks(instance_type):
         "m3.large":    1,
         "m3.xlarge":   2,
         "m3.2xlarge":  2,
+        "m4.large":    0,
+        "m4.xlarge":   0,
+        "m4.2xlarge":  0,
+        "m4.4xlarge":  0,
+        "m4.10xlarge": 0,
         "r3.large":    1,
         "r3.xlarge":   1,
         "r3.2xlarge":  1,
@@ -960,6 +985,7 @@ def get_num_disks(instance_type):
         "t2.micro":    0,
         "t2.small":    0,
         "t2.medium":   0,
+        "t2.large":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]

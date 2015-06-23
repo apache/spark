@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution
 import java.util
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -112,16 +111,16 @@ case class Window(
     }
   }
 
-  protected override def doExecute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      new Iterator[Row] {
+      new Iterator[InternalRow] {
 
         // Although input rows are grouped based on windowSpec.partitionSpec, we need to
         // know when we have a new partition.
         // This is to manually construct an ordering that can be used to compare rows.
         // TODO: We may want to have a newOrdering that takes BoundReferences.
         // So, we can take advantave of code gen.
-        private val partitionOrdering: Ordering[Row] =
+        private val partitionOrdering: Ordering[InternalRow] =
           RowOrdering.forSchema(windowSpec.partitionSpec.map(_.dataType))
 
         // This is used to project expressions for the partition specification.
@@ -137,13 +136,13 @@ case class Window(
         // The number of buffered rows in the inputRowBuffer (the size of the current partition).
         var partitionSize: Int = 0
         // The buffer used to buffer rows in a partition.
-        var inputRowBuffer: CompactBuffer[Row] = _
+        var inputRowBuffer: CompactBuffer[InternalRow] = _
         // The partition key of the current partition.
-        var currentPartitionKey: Row = _
+        var currentPartitionKey: InternalRow = _
         // The partition key of next partition.
-        var nextPartitionKey: Row = _
+        var nextPartitionKey: InternalRow = _
         // The first row of next partition.
-        var firstRowInNextPartition: Row = _
+        var firstRowInNextPartition: InternalRow = _
         // Indicates if this partition is the last one in the iter.
         var lastPartition: Boolean = false
 
@@ -316,7 +315,7 @@ case class Window(
           !lastPartition || (rowPosition < partitionSize)
         }
 
-        override final def next(): Row = {
+        override final def next(): InternalRow = {
           if (hasNext) {
             if (rowPosition == partitionSize) {
               // All rows of this buffer have been consumed.
@@ -353,7 +352,7 @@ case class Window(
         // Fetch the next partition.
         private def fetchNextPartition(): Unit = {
           // Create a new buffer for input rows.
-          inputRowBuffer = new CompactBuffer[Row]()
+          inputRowBuffer = new CompactBuffer[InternalRow]()
           // We already have the first row for this partition
           // (recorded in firstRowInNextPartition). Add it back.
           inputRowBuffer += firstRowInNextPartition
