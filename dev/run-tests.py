@@ -683,7 +683,7 @@ def run_scala_tests_sbt(test_modules, test_profiles, tags_to_exclude):
             new_sbt_test_goals.append(g)
         sbt_test_goals = new_sbt_test_goals
 
-    profiles_and_goals = test_profiles + sbt_test_goals
+    profiles_and_goals = test_profiles + list(sbt_test_goals)
 
     print "[info] Running Spark tests using SBT with these arguments:",
     print format_cmd(profiles_and_goals)
