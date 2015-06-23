@@ -20,7 +20,6 @@ package org.apache.spark.repl
 import java.io.File
 
 import scala.tools.nsc.Settings
-import scala.tools.nsc.interpreter.SparkILoop
 
 import org.apache.spark.util.Utils
 import org.apache.spark._
@@ -35,7 +34,6 @@ object Main extends Logging {
   val s = new Settings()
   s.processArguments(List("-Yrepl-class-based",
     "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-    "-Yrepl-sync",
     "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
   val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
