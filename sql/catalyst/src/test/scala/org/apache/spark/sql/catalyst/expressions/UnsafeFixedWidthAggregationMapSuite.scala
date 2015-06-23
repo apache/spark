@@ -111,6 +111,36 @@ class UnsafeFixedWidthAggregationMapSuite
     }.toSet
     seenKeys.size should be (groupKeys.size)
     seenKeys should be (groupKeys)
+
+    map.free()
+  }
+
+  test("with decimal in the key and values") {
+    val groupKeySchema = StructType(StructField("price", DecimalType(10, 0)) :: Nil)
+    val aggBufferSchema = StructType(StructField("amount", DecimalType.Unlimited) :: Nil)
+    val emptyProjection = GenerateProjection.generate(Seq(Literal(Decimal(0))),
+      Seq(AttributeReference("price", DecimalType.Unlimited)()))
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyProjection,
+      new UnsafeRowConverter(groupKeySchema),
+      new UnsafeRowConverter(aggBufferSchema),
+      memoryManager,
+      1, // initial capacity
+      false // disable perf metrics
+    )
+
+    (0 until 100).foreach { i =>
+      val groupKey = new GenericRow(Array[Any](Decimal(i % 10)))
+      val row = map.getAggregationBuffer(groupKey)
+      row.update(0, Decimal(i))
+    }
+    val seenKeys: Set[Int] = map.iterator().asScala.map { entry =>
+      entry.key.getAs[Decimal](0).toInt
+    }.toSet
+    seenKeys.size should be (10)
+    seenKeys should be ((0 until 10).toSet)
+
+    map.free()
   }
 
 }
