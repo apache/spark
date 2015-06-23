@@ -207,7 +207,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     if (resolver(attribute.name, nameParts.head)) {
-      Option((attribute, nameParts.tail.toList))
+      Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
     }
