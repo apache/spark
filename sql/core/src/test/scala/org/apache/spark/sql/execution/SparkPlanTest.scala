@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.scalatest.Tag
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -41,6 +43,14 @@ class SparkPlanTest extends SparkFunSuite {
    */
   implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
     TestSQLContext.implicits.localSeqToDataFrameHolder(data)
+  }
+
+  protected override def test(testName: String, testTags: Tag*)(testFun: => Unit): Unit = {
+    try {
+      super.test(testName, testTags: _*)(testFun)
+    } finally {
+      TestSQLContext.resetConf()
+    }
   }
 
   /**

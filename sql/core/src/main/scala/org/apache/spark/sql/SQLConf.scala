@@ -550,6 +550,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     props.foreach { case (k, v) => setConfString(k, v) }
   }
 
+  def setConf(props: Map[String, String]): Unit = settings.synchronized {
+    props.foreach { case (k, v) => setConfString(k, v) }
+  }
+
   /** Set the given Spark SQL configuration property using a `string` value. */
   def setConfString(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
