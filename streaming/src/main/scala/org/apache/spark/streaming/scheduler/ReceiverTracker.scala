@@ -287,23 +287,20 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     private[streaming] def scheduleReceivers(receivers: Seq[Receiver[_]],
       executors: List[String]): Array[ArrayBuffer[String]] = {
       val locations = new Array[ArrayBuffer[String]](receivers.length)
-      if (!executors.isEmpty) {
-        var i = 0
-        for (i <- 0 until receivers.length) {
-          locations(i) = new ArrayBuffer[String]()
-          if (receivers(i).preferredLocation.isDefined) {
-            locations(i) += receivers(i).preferredLocation.get
-          }
+      var i = 0
+      for (i <- 0 until receivers.length) {
+        locations(i) = new ArrayBuffer[String]()
+        if (receivers(i).preferredLocation.isDefined) {
+          locations(i) += receivers(i).preferredLocation.get
         }
-
-        var count = 0;
-        for (i <- 0 until max(receivers.length, executors.length)) {
-          if (!receivers(i % receivers.length).preferredLocation.isDefined) {
-            locations(i % receivers.length) += executors(count)
-            count += 1;
-            if (count == executors.length) {
-              count = 0;
-            }
+      }
+      var count = 0
+      for (i <- 0 until max(receivers.length, executors.length)) {
+        if (!receivers(i % receivers.length).preferredLocation.isDefined) {
+          locations(i % receivers.length) += executors(count)
+          count += 1
+          if (count == executors.length) {
+            count = 0
           }
         }
       }
@@ -345,9 +342,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Get the list of executors and schedule receivers
       val executors = getExecutors(ssc)
-      val locations = scheduleReceivers(receivers, executors)
       val tempRDD =
-        if (locations(0) != null) {
+        if (!executors.isEmpty) {
+          val locations = scheduleReceivers(receivers, executors)
           val roundRobinReceivers = (0 until receivers.length).map(i =>
             (receivers(i), locations(i)))
           ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
