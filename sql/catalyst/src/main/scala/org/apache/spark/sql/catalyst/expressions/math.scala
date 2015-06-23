@@ -572,8 +572,8 @@ case class Round(child: Expression, scale: Expression) extends Expression {
 
     if (evalE == null || scaleV == null) return null
 
-    children(0).dataType match {
-      case decimalType: DecimalType =>
+    child.dataType match {
+      case _: DecimalType =>
         val decimal = evalE.asInstanceOf[Decimal]
         if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
       case ByteType =>
@@ -593,6 +593,84 @@ case class Round(child: Expression, scale: Expression) extends Expression {
       case BinaryType =>
         round(UTF8String.fromBytes(evalE.asInstanceOf[Array[Byte]]).toString, _scale)
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val ce = child.gen(ctx)
+
+    def integralRound(primitive: String): String = {
+      s"""
+      ${ev.primitive} = new java.math.BigDecimal(${primitive}).
+        setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP)"""
+    }
+
+    def fractionalRound(primitive: String): String = {
+      s"""
+      ${ev.primitive} = java.math.BigDecimal.valueOf(${primitive}).
+        setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP)"""
+    }
+
+    def check(primitive: String, function: String): String = {
+      s"""
+      if (Double.isNaN(${primitive}) || Double.isInfinite(${primitive})){
+        ${ev.primitive} = ${primitive};
+      } else {
+        ${fractionalRound(primitive)}.${function};
+      }"""
+    }
+
+    def convert(primitive: String): String = {
+      val dName = ctx.freshName("converter")
+      s"""
+      Double $dName = 0.0;
+      try {
+        $dName = Double.valueOf(${primitive}.toString());
+      } catch (NumberFormatException e) {
+        ${ev.isNull} = true;
+      }
+      ${check(dName, "doubleValue()")}
+      """
+    }
+
+    def decimalRound(): String = {
+      s"""
+      if (${ce.primitive}.changePrecision(${ce.primitive}.precision(), ${_scale})) {
+        ${ev.primitive} = ${ce.primitive};
+      } else {
+        ${ev.isNull} = true;
+      }
+      """
+    }
+
+    val roundCode = child.dataType match {
+      case NullType => ";"
+      case _: DecimalType =>
+        decimalRound()
+      case ByteType =>
+        integralRound(ce.primitive) + ".byteValue();"
+      case ShortType =>
+        integralRound(ce.primitive) + ".shortValue();"
+      case IntegerType =>
+        integralRound(ce.primitive) + ".intValue();"
+      case LongType =>
+        integralRound(ce.primitive) + ".longValue();"
+      case FloatType =>
+        check(ce.primitive, "floatValue()")
+      case DoubleType =>
+        check(ce.primitive, "doubleValue()")
+      case StringType =>
+        convert(ce.primitive)
+      case BinaryType =>
+        convert(s"${ctx.stringType}.fromBytes(${ce.primitive})")
+    }
+
+    ce.code + s"""
+      boolean ${ev.isNull} = ${ce.isNull} || ${scaleV == null};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${roundCode}
+      }
+      """
   }
 
   private def round[T](input: T, scale: Int)(implicit bdc: BigDecimalConverter[T]): T = {

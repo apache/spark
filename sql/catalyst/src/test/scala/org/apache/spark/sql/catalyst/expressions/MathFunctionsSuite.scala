@@ -343,7 +343,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val domain = -16 to 16
     val doublePi = math.Pi
     val stringPi = "3.141592653589793"
+    val arrayPi: Array[Byte] = stringPi.toCharArray.map(_.toByte)
+    val shortPi: Short = 31415
     val intPi = 314159265
+    val longPi = 31415926535897932L
     val bdPi = BigDecimal(31415926535897932L, 10)
 
     domain.foreach { scale =>
@@ -351,8 +354,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
       checkEvaluation(Round(stringPi, scale),
         BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
+      checkEvaluation(Round(arrayPi, scale),
+        BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
+      checkEvaluation(Round(shortPi, scale),
+        BigDecimal.valueOf(shortPi).setScale(scale, RoundingMode.HALF_UP).toShort, EmptyRow)
       checkEvaluation(Round(intPi, scale),
         BigDecimal.valueOf(intPi).setScale(scale, RoundingMode.HALF_UP).toInt, EmptyRow)
+      checkEvaluation(Round(longPi, scale),
+        BigDecimal.valueOf(longPi).setScale(scale, RoundingMode.HALF_UP).toLong, EmptyRow)
     }
     checkEvaluation(new Round(Literal("invalid input")), null, EmptyRow)
 
