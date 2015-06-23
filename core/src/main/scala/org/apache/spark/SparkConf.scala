@@ -20,9 +20,12 @@ package org.apache.spark
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.avro.{Schema, SchemaNormalization}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
+import org.apache.spark.serializer.GenericAvroSerializer.avroSchemaKey
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -160,6 +163,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.serializer", classOf[KryoSerializer].getName)
     this
   }
+
+  /**
+   * Use Kryo serialization and register the given set of Avro schemas so that the generic
+   * record serializer can decrease network IO
+   */
+  def registerAvroSchema(schemas: Array[Schema]): SparkConf =
+    schemas.foldLeft(this) { (conf, schema) =>
+      conf.set(avroSchemaKey(SchemaNormalization.parsingFingerprint64(schema)), schema.toString)
+    }
 
   /** Remove a parameter from the configuration */
   def remove(key: String): SparkConf = {
