@@ -526,8 +526,8 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     val documents = data.rdd.map(_.asScala.toArray).map { r =>
       r(0).getClass.getSimpleName match {
-        case "Integer" =>  (r(0).asInstanceOf[java.lang.Integer].toLong, r(1).asInstanceOf[Vector])
-        case "Long" =>  (r(0).asInstanceOf[java.lang.Long].toLong, r(1).asInstanceOf[Vector])
+        case "Integer" => (r(0).asInstanceOf[java.lang.Integer].toLong, r(1).asInstanceOf[Vector])
+        case "Long" => (r(0).asInstanceOf[java.lang.Long].toLong, r(1).asInstanceOf[Vector])
         case _ => throw new IllegalArgumentException("input values contains invalid type value.")
       }
     }
