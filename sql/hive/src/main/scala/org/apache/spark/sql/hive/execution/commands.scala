@@ -56,6 +56,7 @@ case class DropTable(
   override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    val databaseName = hiveContext.catalog.client.currentDatabase
     try {
       hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
     } catch {
@@ -68,8 +69,8 @@ case class DropTable(
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
     hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(Seq(tableName))
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$databaseName.$tableName")
+    hiveContext.catalog.unregisterTable(Seq(databaseName, tableName))
     Seq.empty[InternalRow]
   }
 }
