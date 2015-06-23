@@ -2335,11 +2335,13 @@ private[spark] class RedirectThread(
 }
 
 /**
- * Circular buffer, which consume all of the data write to it.
+ * An [[OutputStream]] that will store the last 10 kilobytes (by default) written to it
+ * in a circular buffer. The current contents of the buffer can be accessed using
+ * the toString method.
  */
-private[spark] class CircularBuffer extends java.io.OutputStream {
+private[spark] class CircularBuffer(sizeInByte: Int = 10240) extends java.io.OutputStream {
   var pos: Int = 0
-  var buffer = new Array[Int](10240)
+  var buffer = new Array[Int](sizeInByte / 4)
 
   def write(i: Int): Unit = {
     buffer(pos) = i

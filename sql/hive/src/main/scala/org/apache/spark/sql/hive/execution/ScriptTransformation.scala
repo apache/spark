@@ -150,35 +150,43 @@ case class ScriptTransformation(
       val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
 
+      // TODO make the 2048 configurable?
+      val stderrBuffer = new CircularBuffer(2048)
+      // Consume the error stream from the pipeline, otherwise it will be blocked if
+      // the pipeline is full.
+      new RedirectThread(errorStream, // input stream from the pipeline
+        stderrBuffer,                 // output to a circular buffer
+        "Thread-ScriptTransformation-STDERR-Consumer").start()
+
       // Put the write(output to the pipeline) into a single thread
       // and keep the collector as remain in the main thread.
       // otherwise it will causes deadlock if the data size greater than
       // the pipeline / buffer capacity.
       new Thread(new Runnable() {
         override def run(): Unit = {
-          iter
-            .map(outputProjection)
-            .foreach { row =>
-            if (inputSerde == null) {
-              val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-                ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+          Utils.tryWithSafeFinally {
+            iter
+              .map(outputProjection)
+              .foreach { row =>
+              if (inputSerde == null) {
+                val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+                  ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
 
-              outputStream.write(data)
-            } else {
-              val writable = inputSerde.serialize(
-                row.asInstanceOf[GenericInternalRow].values, inputSoi)
-              prepareWritable(writable).write(dataOutputStream)
+                outputStream.write(data)
+              } else {
+                val writable = inputSerde.serialize(
+                  row.asInstanceOf[GenericInternalRow].values, inputSoi)
+                prepareWritable(writable).write(dataOutputStream)
+              }
+            }
+            outputStream.close()
+          } {
+            if (proc.waitFor() != 0) {
+              logError(stderrBuffer.toString) // log the stderr circular buffer
             }
           }
-          outputStream.close()
         }
       }, "Thread-ScriptTransformation-Feed").start()
-
-      // Consume the error stream from the pipeline, otherwise it will be blocked if
-      // the pipeline is full.
-      new RedirectThread(errorStream, // input stream from the pipeline
-        new CircularBuffer(),         // output to a circular buffer
-        "Thread-ScriptTransformation-STDERR-Consumer").start()
 
       iterator
     }
