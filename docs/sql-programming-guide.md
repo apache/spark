@@ -1911,20 +1911,6 @@ that these options will be deprecated in future release as more optimizations ar
       When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
     </td>
   </tr>
-  <tr>
-    <td><code>spark.sql.sources.outputCommitterClass</code></td>
-    <td></td>
-    <td>
-      <p>
-        The output committer class used by data sources that extend <code>HadoopFsRelation</code>. The
-        specified class needs to be a subclass of <code>org.apache.hadoop.mapreduce.OutputCommitter</code>.
-      </p>
-      <p>
-        <b>Note:</b> This option must be set via Hadoop <code>Configuration</code> rather than Spark
-        <code>SQLConf</code>.
-      </p>
-    </td>
-  </tr>
 </table>
 
 # Distributed SQL Engine
