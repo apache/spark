@@ -41,10 +41,10 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
   var callsToRetain = 0
   var callsToRelease = 0
 
-  override def size() = underlyingBuffer.size()
-  override def nioByteBuffer() = underlyingBuffer.nioByteBuffer()
-  override def createInputStream() = underlyingBuffer.createInputStream()
-  override def convertToNetty() = underlyingBuffer.convertToNetty()
+  override def size(): Long = underlyingBuffer.size()
+  override def nioByteBuffer(): ByteBuffer = underlyingBuffer.nioByteBuffer()
+  override def createInputStream(): InputStream = underlyingBuffer.createInputStream()
+  override def convertToNetty(): AnyRef = underlyingBuffer.convertToNetty()
 
   override def retain(): ManagedBuffer = {
     callsToRetain += 1
@@ -81,7 +81,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
     // Create a return function to use for the mocked wrapForCompression method that just returns
     // the original input stream.
     val dummyCompressionFunction = new Answer[InputStream] {
-      override def answer(invocation: InvocationOnMock) =
+      override def answer(invocation: InvocationOnMock): InputStream =
         invocation.getArguments()(1).asInstanceOf[InputStream]
     }
 
@@ -118,7 +118,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
     // Test a scenario where all data is local, just to avoid creating a bunch of additional mocks
     // for the code to read data over the network.
     val statuses: Array[(BlockManagerId, Long)] =
-      Array.fill(numMaps)((localBlockManagerId, byteOutputStream.size()))
+      Array.fill(numMaps)((localBlockManagerId, byteOutputStream.size().toLong))
     when(mapOutputTracker.getServerStatuses(shuffleId, reduceId)).thenReturn(statuses)
 
     // Create a mocked shuffle handle to pass into HashShuffleReader.
