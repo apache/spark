@@ -21,7 +21,7 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-PYTHONPATH="$FWDIR/dev/" exec python -u ./python/run-tests.py
+exec python -u ./python/run-tests.py
 
 exit
 

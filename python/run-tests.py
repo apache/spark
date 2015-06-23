@@ -21,11 +21,17 @@ from __future__ import print_function
 import os
 import re
 import subprocess
+import sys
 import time
 
-from sparktestsupport import SPARK_HOME
-from sparktestsupport.shellutils import which
-from sparktestsupport.modules import all_modules
+
+# Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
+
+
+from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
+from sparktestsupport.shellutils import which  # noqa
+from sparktestsupport.modules import all_modules  # noqa
 
 
 def print_red(text):
