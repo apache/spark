@@ -35,8 +35,10 @@ else:
     import unittest
 
 from pyspark.context import SparkConf, SparkContext, RDD
+from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -675,6 +677,22 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.sendMessages(topic, sendData)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
         self._validateRddResult(sendData, rdd)
+
+
+class KinesisStreamTests(PySparkStreamingTestCase):
+
+    def test_kinesis_stream(self):
+        # Don't start the StreamingContext because we cannot test it in Jenkins
+        kinesisStream1 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
+        kinesisStream2 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
+            "awsAccessKey", "awsSecretKey")
+
 
 if __name__ == "__main__":
     unittest.main()

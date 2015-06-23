@@ -155,6 +155,18 @@ streaming_kinesis_asl = Module(
 )
 
 
+streaming_kinesis_asl_assembly = Module(
+    name="kinesis-asl-assembly",
+    dependencies=[streaming_kinesis_asl],
+    source_file_regexes=[
+        "extras/kinesis-asl-assembly/",
+    ],
+    build_profile_flags=[
+        "-Pkinesis-asl",
+    ]
+)
+
+
 streaming_zeromq = Module(
     name="streaming-zeromq",
     dependencies=[streaming],
@@ -255,7 +267,7 @@ examples = Module(
 
 pyspark = Module(
     name="pyspark",
-    dependencies=[mllib, streaming, streaming_kafka, sql],
+    dependencies=[mllib, streaming, streaming_kafka, streaming_kinesis_asl_assembly, sql],
     source_file_regexes=[
         "python/"
     ],
@@ -611,7 +623,8 @@ def build_spark_sbt(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
     sbt_goals = ["package",
                  "assembly/assembly",
-                 "streaming-kafka-assembly/assembly"]
+                 "streaming-kafka-assembly/assembly",
+                 "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print "[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments:",

@@ -126,7 +126,20 @@ function run_streaming_tests() {
       KAFKA_ASSEMBLY_JAR="$f"
     done
 
-    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR} pyspark-shell"
+    KINESIS_ASL_ASSEMBLY_DIR="$FWDIR"/extras/kinesis-asl-assembly
+    JAR_PATH="${KINESIS_ASL_ASSEMBLY_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+    for f in "${JAR_PATH}"/spark-streaming-kinesis-asl-assembly-*.jar; do
+      if [[ ! -e "$f" ]]; then
+        echo "Failed to find Spark Streaming Kinesis assembly jar in $KINESIS_ASL_ASSEMBLY_DIR" 1>&2
+        echo "You need to build Spark with " \
+             "'build/sbt assembly/assembly streaming-kinesis-asl-assembly/assembly' or" \
+             "'build/mvn -Pkinesis-asl package' before running this program" 1>&2
+        exit 1
+      fi
+      KINESIS_ASL_ASSEMBLY_JAR="$f"
+    done
+
+    export PYSPARK_SUBMIT_ARGS="--jars ${KAFKA_ASSEMBLY_JAR},${KINESIS_ASL_ASSEMBLY_JAR} pyspark-shell"
     run_test "pyspark.streaming.util"
     run_test "pyspark.streaming.tests"
 }
