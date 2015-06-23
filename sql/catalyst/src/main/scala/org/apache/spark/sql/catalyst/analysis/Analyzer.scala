@@ -192,49 +192,17 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
-    /**
-     * Create an array of Projections for the child projection, and replace the projections'
-     * expressions which equal GroupBy expressions with Literal(null), if those expressions
-     * are not set for this grouping set (according to the bit mask).
-     */
-    private[this] def expand(g: GroupingSets): Seq[Seq[Expression]] = {
-      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
-
-      g.bitmasks.foreach { bitmask =>
-        // get the non selected grouping attributes according to the bit mask
-        val nonSelectedGroupExprs = ArrayBuffer.empty[Expression]
-        var bit = g.groupByExprs.length - 1
-        while (bit >= 0) {
-          if (((bitmask >> bit) & 1) == 0) nonSelectedGroupExprs += g.groupByExprs(bit)
-          bit -= 1
-        }
-
-        val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprs.find(_ semanticEquals x).isDefined =>
-            // if the input attribute in the Invalid Grouping Expression set of for this group
-            // replace it with constant null
-            Literal.create(null, expr.dataType)
-          case x if x == g.gid =>
-            // replace the groupingId with concrete value (the bit mask)
-            Literal.create(bitmask, IntegerType)
-        })
-
-        result += substitution
-      }
-
-      result.toSeq
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case a: Cube if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case a: Rollup if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case x: GroupingSets if x.resolved =>
+      case a: Cube =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case a: Rollup =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case x: GroupingSets =>
+        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
         Aggregate(
-          x.groupByExprs :+ x.gid,
+          x.groupByExprs :+ VirtualColumn.groupingIdAttribute,
           x.aggregations,
-          Expand(expand(x), x.child.output :+ x.gid, x.child))
+          Expand(x.bitmasks, x.groupByExprs, gid, x.child))
     }
   }
 
@@ -368,12 +336,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp {
-          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
-            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
-            q.isInstanceOf[GroupingAnalytics] =>
-            // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
-            q.asInstanceOf[GroupingAnalytics].gid
+        q transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =

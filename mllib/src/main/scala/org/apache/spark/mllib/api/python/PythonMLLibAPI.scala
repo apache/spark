@@ -51,6 +51,7 @@ import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel, RandomForestModel}
 import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
@@ -972,7 +973,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def estimateKernelDensity(
       sample: JavaRDD[Double],
       bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
-    return new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
+    new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
       points.asScala.toArray)
   }
 
@@ -991,6 +992,35 @@ private[python] class PythonMLLibAPI extends Serializable {
       List[AnyRef](model.clusterCenters, Vectors.dense(model.clusterWeights)).asJava
   }
 
+  /**
+   * Wrapper around the generateLinearInput method of LinearDataGenerator.
+   */
+  def generateLinearInputWrapper(
+      intercept: Double,
+      weights: JList[Double],
+      xMean: JList[Double],
+      xVariance: JList[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Array[LabeledPoint] = {
+    LinearDataGenerator.generateLinearInput(
+      intercept, weights.asScala.toArray, xMean.asScala.toArray,
+      xVariance.asScala.toArray, nPoints, seed, eps).toArray
+  }
+
+  /**
+   * Wrapper around the generateLinearRDD method of LinearDataGenerator.
+   */
+  def generateLinearRDDWrapper(
+      sc: JavaSparkContext,
+      nexamples: Int,
+      nfeatures: Int,
+      eps: Double,
+      nparts: Int,
+      intercept: Double): JavaRDD[LabeledPoint] = {
+    LinearDataGenerator.generateLinearRDD(
+      sc, nexamples, nfeatures, eps, nparts, intercept)
+  }
 }
 
 /**
