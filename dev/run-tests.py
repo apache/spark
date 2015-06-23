@@ -228,6 +228,15 @@ streaming_flume = Module(
 )
 
 
+streaming_flume_assembly = Module(
+    name="streaming-flume-assembly",
+    dependencies=[streaming_flume_sink, streaming_flume],
+    source_file_regexes=[
+        "external/flume-assembly",
+    ]
+)
+
+
 mllib = Module(
     name="mllib",
     dependencies=[streaming, sql],
@@ -255,7 +264,7 @@ examples = Module(
 
 pyspark = Module(
     name="pyspark",
-    dependencies=[mllib, streaming, streaming_kafka, sql],
+    dependencies=[mllib, streaming, streaming_kafka, streaming_flume_assembly, sql],
     source_file_regexes=[
         "python/"
     ],
