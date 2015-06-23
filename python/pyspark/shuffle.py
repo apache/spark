@@ -486,7 +486,7 @@ class ExternalSorter(object):
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch, limit = 100, self.memory_limit
+        batch, limit = 100, self._next_limit()
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:
@@ -512,9 +512,6 @@ class ExternalSorter(object):
                     f.close()
                 chunks.append(load(open(path, 'rb')))
                 current_chunk = []
-                gc.collect()
-                batch //= 2
-                limit = self._next_limit()
                 MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
                 DiskBytesSpilled += os.path.getsize(path)
                 os.unlink(path)  # data will be deleted after close

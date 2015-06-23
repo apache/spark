@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.sources
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommitter => MapReduceFileOutputCommitter}
-import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.util.SerializableConfiguration
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -58,6 +58,28 @@ private[sql] case class InsertIntoDataSource(
   }
 }
 
+/**
+ * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
+ * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelation]] issues a
+ * single write job, and owns a UUID that identifies this job.  Each concrete implementation of
+ * [[HadoopFsRelation]] should use this UUID together with task id to generate unique file path for
+ * each task output file.  This UUID is passed to executor side via a property named
+ * `spark.sql.sources.writeJobUUID`.
+ *
+ * Different writer containers, [[DefaultWriterContainer]] and [[DynamicPartitionWriterContainer]]
+ * are used to write to normal tables and tables with dynamic partitions.
+ *
+ * Basic work flow of this command is:
+ *
+ *   1. Driver side setup, including output committer initialization and data source specific
+ *      preparation work for the write job to be issued.
+ *   2. Issues a write job consists of one or more executor side tasks, each of which writes all
+ *      rows within an RDD partition.
+ *   3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
+ *      exception is thrown during task commitment, also aborts that task.
+ *   4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
+ *      thrown during job commitment, also aborts the job.
+ */
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
@@ -260,7 +282,14 @@ private[sql] abstract class BaseWriterContainer(
   with Logging
   with Serializable {
 
-  protected val serializableConf = new SerializableWritable(ContextUtil.getConfiguration(job))
+  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
+
+  // This UUID is used to avoid output file name collision between different appending write jobs.
+  // These jobs may belong to different SparkContext instances. Concrete data source implementations
+  // may use this UUID to generate unique file names (e.g., `part-r-<task-id>-<job-uuid>.parquet`).
+  //  The reason why this ID is used to identify a job rather than a single task output file is
+  // that, speculative tasks must generate the same output file name as the original task.
+  private val uniqueWriteJobId = UUID.randomUUID()
 
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
@@ -288,6 +317,11 @@ private[sql] abstract class BaseWriterContainer(
   def driverSideSetup(): Unit = {
     setupIDs(0, 0, 0)
     setupConf()
+
+    // This UUID is sent to executor side together with the serialized `Configuration` object within
+    // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
+    // unique task output files.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
@@ -323,7 +357,7 @@ private[sql] abstract class BaseWriterContainer(
 
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     val committerClass = context.getConfiguration.getClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS, null, classOf[OutputCommitter])
+      SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
     Option(committerClass).map { clazz =>
       logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
@@ -416,15 +450,16 @@ private[sql] class DefaultWriterContainer(
       assert(writer != null, "OutputWriter instance should have been initialized")
       writer.close()
       super.commitTask()
-    } catch {
-      case cause: Throwable =>
-        super.abortTask()
-        throw new RuntimeException("Failed to commit task", cause)
+    } catch { case cause: Throwable =>
+      // This exception will be handled in `InsertIntoHadoopFsRelation.insert$writeRows`, and will
+      // cause `abortTask()` to be invoked.
+      throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
+      // It's possible that the task fails before `writer` gets initialized
       if (writer != null) {
         writer.close()
       }
@@ -468,21 +503,25 @@ private[sql] class DynamicPartitionWriterContainer(
     })
   }
 
-  override def commitTask(): Unit = {
-    try {
+  private def clearOutputWriters(): Unit = {
+    if (outputWriters.nonEmpty) {
       outputWriters.values.foreach(_.close())
       outputWriters.clear()
+    }
+  }
+
+  override def commitTask(): Unit = {
+    try {
+      clearOutputWriters()
       super.commitTask()
     } catch { case cause: Throwable =>
-      super.abortTask()
       throw new RuntimeException("Failed to commit task", cause)
     }
   }
 
   override def abortTask(): Unit = {
     try {
-      outputWriters.values.foreach(_.close())
-      outputWriters.clear()
+      clearOutputWriters()
     } finally {
       super.abortTask()
     }

@@ -27,12 +27,12 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SerializableWritable
 import org.apache.spark.sql.execution.RDDConversions
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * ::DeveloperApi::
@@ -518,7 +518,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -648,7 +648,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
     buildScan(requiredColumns, filters, inputFiles)
   }
 

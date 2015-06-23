@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.util.Try
 
 import com.google.common.base.Objects
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -42,8 +41,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SerializableWritable, SparkException, Partition => SparkPartition}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -61,50 +60,21 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
   extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
-    val conf = context.getConfiguration
     val outputFormat = {
-      // When appending new Parquet files to an existing Parquet file directory, to avoid
-      // overwriting existing data files, we need to find out the max task ID encoded in these data
-      // file names.
-      // TODO Make this snippet a utility function for other data source developers
-      val maxExistingTaskId = {
-        // Note that `path` may point to a temporary location.  Here we retrieve the real
-        // destination path from the configuration
-        val outputPath = new Path(conf.get("spark.sql.sources.output.path"))
-        val fs = outputPath.getFileSystem(conf)
-
-        if (fs.exists(outputPath)) {
-          // Pattern used to match task ID in part file names, e.g.:
-          //
-          //   part-r-00001.gz.parquet
-          //          ^~~~~
-          val partFilePattern = """part-.-(\d{1,}).*""".r
-
-          fs.listStatus(outputPath).map(_.getPath.getName).map {
-            case partFilePattern(id) => id.toInt
-            case name if name.startsWith("_") => 0
-            case name if name.startsWith(".") => 0
-            case name => throw new AnalysisException(
-              s"Trying to write Parquet files to directory $outputPath, " +
-                s"but found items with illegal name '$name'.")
-          }.reduceOption(_ max _).getOrElse(0)
-        } else {
-          0
-        }
-      }
-
       new ParquetOutputFormat[InternalRow]() {
         // Here we override `getDefaultWorkFile` for two reasons:
         //
-        //  1. To allow appending.  We need to generate output file name based on the max available
-        //     task ID computed above.
+        //  1. To allow appending.  We need to generate unique output file names to avoid
+        //     overwriting existing files (either exist before the write job, or are just written
+        //     by other tasks within the same write job).
         //
         //  2. To allow dynamic partitioning.  Default `getDefaultWorkFile` uses
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-          val split = context.getTaskAttemptID.getTaskID.getId + maxExistingTaskId + 1
-          new Path(path, f"part-r-$split%05d$extension")
+          val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
+          val split = context.getTaskAttemptID.getTaskID.getId
+          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
         }
       }
     }
@@ -220,7 +190,7 @@ private[sql] class ParquetRelation2(
     }
 
     conf.setClass(
-      SQLConf.OUTPUT_COMMITTER_CLASS,
+      SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
       classOf[ParquetOutputCommitter])
 
@@ -258,8 +228,8 @@ private[sql] class ParquetRelation2(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]]): RDD[Row] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true").toBoolean
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
@@ -498,7 +468,7 @@ private[sql] object ParquetRelation2 extends Logging {
       ParquetTypesConverter.convertToString(dataSchema.toAttributes))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(SQLConf.PARQUET_CACHE_METADATA, useMetadataCache.toString)
+    conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
   }
 
   /** This closure sets input paths at the driver side. */
