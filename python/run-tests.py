@@ -55,7 +55,7 @@ def run_individual_python_test(test_name, pyspark_python=None):
         print_red("\nHad test failures in %s; see logs." % test_name)
         exit(-1)
     else:
-        print("ok (%fs)" % (duration / 10000.0))
+        print("ok (%is)" % duration)
 
 
 def main():
@@ -79,7 +79,7 @@ def main():
             for test_goal in module.python_test_goals:
                 run_individual_python_test(test_goal)
     total_duration = time.time() - start_time
-    print("Tests passed in %f seconds" % (total_duration / 1000.0))
+    print("Tests passed in %i seconds" % total_duration)
 
 
 if __name__ == "__main__":
