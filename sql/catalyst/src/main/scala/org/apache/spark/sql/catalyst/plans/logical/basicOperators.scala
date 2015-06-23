@@ -130,6 +130,14 @@ case class Join(
   }
 }
 
+/**
+ * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
+ */
+case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
+
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
 }
@@ -242,6 +250,8 @@ trait GroupingAnalytics extends UnaryNode {
   def aggregations: Seq[NamedExpression]
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
 }
 
 /**
@@ -266,7 +276,11 @@ case class GroupingSets(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 /**
  * Cube is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -284,7 +298,11 @@ case class Cube(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 /**
  * Rollup is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -303,7 +321,11 @@ case class Rollup(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output

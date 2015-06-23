@@ -67,7 +67,7 @@ test_that("structType and structField", {
   expect_true(inherits(testField, "structField"))
   expect_true(testField$name() == "a")
   expect_true(testField$nullable())
-  
+
   testSchema <- structType(testField, structField("b", "integer"))
   expect_true(inherits(testSchema, "structType"))
   expect_true(inherits(testSchema$fields()[[2]], "structField"))
@@ -598,7 +598,7 @@ test_that("column functions", {
   c3 <- lower(c) + upper(c) + first(c) + last(c)
   c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
   c5 <- n(c) + n_distinct(c)
-  c5 <- acos(c) + asin(c) + atan(c) + cbrt(c) 
+  c5 <- acos(c) + asin(c) + atan(c) + cbrt(c)
   c6 <- ceiling(c) + cos(c) + cosh(c) + exp(c) + expm1(c)
   c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
   c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
@@ -693,6 +693,16 @@ test_that("filter() on a DataFrame", {
   filtered2 <- where(df, df$name != "Michael")
   expect_true(count(filtered2) == 2)
   expect_true(collect(filtered2)$age[2] == 19)
+
+  # test suites for %in%
+  filtered3 <- filter(df, "age in (19)")
+  expect_equal(count(filtered3), 1)
+  filtered4 <- filter(df, "age in (19, 30)")
+  expect_equal(count(filtered4), 2)
+  filtered5 <- where(df, df$age %in% c(19))
+  expect_equal(count(filtered5), 1)
+  filtered6 <- where(df, df$age %in% c(19, 30))
+  expect_equal(count(filtered6), 2)
 })
 
 test_that("join() on a DataFrame", {
@@ -829,7 +839,7 @@ test_that("dropna() on a DataFrame", {
   rows <- collect(df)
 
   # drop with columns
-  
+
   expected <- rows[!is.na(rows$name),]
   actual <- collect(dropna(df, cols = "name"))
   expect_true(identical(expected, actual))
@@ -842,7 +852,7 @@ test_that("dropna() on a DataFrame", {
   expect_true(identical(expected$age, actual$age))
   expect_true(identical(expected$height, actual$height))
   expect_true(identical(expected$name, actual$name))
-  
+
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, cols = c("age", "height")))
   expect_true(identical(expected, actual))
@@ -850,7 +860,7 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
   expect_true(identical(expected, actual))
-  
+
   # drop with how
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
@@ -860,7 +870,7 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
   actual <- collect(dropna(df, "all"))
   expect_true(identical(expected, actual))
-  
+
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df, "any"))
   expect_true(identical(expected, actual))
@@ -872,14 +882,14 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
   expect_true(identical(expected, actual))
-  
+
   # drop with threshold
-  
+
   expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
-  expect_true(identical(expected, actual))  
+  expect_true(identical(expected, actual))
 
-  expected <- rows[as.integer(!is.na(rows$age)) + 
+  expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
                    as.integer(!is.na(rows$name)) >= 3,]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
@@ -889,9 +899,9 @@ test_that("dropna() on a DataFrame", {
 test_that("fillna() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPathNa)
   rows <- collect(df)
-  
+
   # fill with value
-  
+
   expected <- rows
   expected$age[is.na(expected$age)] <- 50
   expected$height[is.na(expected$height)] <- 50.6
@@ -912,7 +922,7 @@ test_that("fillna() on a DataFrame", {
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, "unknown", c("age", "name")))
   expect_true(identical(expected, actual))
-  
+
   # fill with named list
 
   expected <- rows
@@ -920,7 +930,7 @@ test_that("fillna() on a DataFrame", {
   expected$height[is.na(expected$height)] <- 50.6
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
-  expect_true(identical(expected, actual))  
+  expect_true(identical(expected, actual))
 })
 
 unlink(parquetPath)

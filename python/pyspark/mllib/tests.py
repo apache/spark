@@ -24,6 +24,7 @@ import sys
 import tempfile
 import array as pyarray
 from time import time, sleep
+from shutil import rmtree
 
 from numpy import array, array_equal, zeros, inf, all, random
 from numpy import sum as array_sum
@@ -399,7 +400,7 @@ class ListTests(MLlibTestCase):
         self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
 
         try:
-            os.removedirs(temp_dir)
+            rmtree(temp_dir)
         except OSError:
             pass
 
@@ -462,6 +463,13 @@ class ListTests(MLlibTestCase):
             RidgeRegressionWithSGD.train(rdd, initialWeights=array([1.0, 1.0]), iterations=10)
         except ValueError:
             self.fail()
+
+        # Verify that maxBins is being passed through
+        GradientBoostedTrees.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32)
+        with self.assertRaises(Exception) as cm:
+            GradientBoostedTrees.trainRegressor(
+                rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1)
 
 
 class StatTests(MLlibTestCase):
