@@ -24,6 +24,8 @@ import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
+import scala.util.control.NonFatal
+
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
  *
