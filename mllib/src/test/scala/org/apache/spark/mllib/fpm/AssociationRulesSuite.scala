@@ -30,7 +30,28 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Set("y", "x", "z"), 3L), (Set("t", "x", "z"), 3L), (Set("t", "y", "z"), 3L),
       (Set("t", "y", "x"), 3L),
       (Set("t", "y", "x", "z"), 3L))
-        .map({ case (items, freq) => new FreqItemset(items.toArray, freq) })
+      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) })
+    val rdd = sc.parallelize(freqItemsets, 2).cache()
+
+    val ar = new AssociationRules()
+
+    val results1 = ar
+      .setMinConfidence(0.9)
+      .run(rdd)
+    assert(results1.count() === 0)
+
+    val results2 = ar
+      .setMinConfidence(0)
+      .run(rdd)
+    assert(results2.count() === 0)
+  }
+
+  test("association rulies using Int type") {
+    val freqItemsets = Seq(
+      (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),
+      (Set(1, 2), 4L), (Set(1, 3), 5L), (Set(2, 3), 4L),
+      (Set(2, 4), 4L), (Set(1, 2, 3), 4L))
+      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) })
     val rdd = sc.parallelize(freqItemsets, 2).cache()
 
     val ar = new AssociationRules()
@@ -38,15 +59,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val associationRules = ar
       .setMinConfidence(0.9)
       .run(rdd)
-
     assert(associationRules.count() === 0)
-  }
-
-  test("association rulies using Int type") {
-    val expected = Set(
-      (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),
-      (Set(1, 2), 4L), (Set(1, 3), 5L), (Set(2, 3), 4L),
-      (Set(2, 4), 4L), (Set(1, 2, 3), 4L))
   }
 }
 

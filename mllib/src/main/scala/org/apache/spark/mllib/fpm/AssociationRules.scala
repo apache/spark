@@ -16,8 +16,6 @@
  */
 package org.apache.spark.mllib.fpm
 
-import org.apache.spark.mllib.fpm.FreqItemset
-
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -49,10 +47,15 @@ class AssociationRules private (
     this
   }
 
-  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Set[Rule[Item]]] = {
-    freqItemsets.flatMap { itemset =>
-      itemset.items.map(item => (itemset.items.toSet, Set(Set(item))))
-    }.map({ case (itemset, consequents) => generateRules(freqItemsets, itemset, consequents)})
+  /**
+   * Computes the association rules with confidence supported above [[minConfidence]].
+   * @param freqItemsets frequent itemsets to compute association rules over.
+   * @return a [[RDD[Rule[Item]]] containing the assocation rules.
+   */
+  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
+    freqItemsets.map { itemset =>
+      (itemset.items.toSet, itemset.items.map(Set(_)).toSet)
+    }.flatMap({ case (itemset, consequents) => generateRules(freqItemsets, itemset, consequents)})
   }
 
   private def generateRules[Item: ClassTag](
@@ -60,17 +63,20 @@ class AssociationRules private (
       itemset: Set[Item],
       consequents: Set[Set[Item]]): Set[Rule[Item]] = {
     val k = itemset.size
-    val m = consequents.size
+    val m = consequents.head.size
 
     val rules = mutable.Set[Rule[Item]]()
     if (k > m+1) {
       val nextConsequents = mutable.Set(aprioriGen[Item](consequents).toSeq: _*)
       for (nextConsequent <- nextConsequents) {
         val proposedRule = Rule[Item](freqItemsets, itemset -- nextConsequent, nextConsequent)
-        if (proposedRule.confidence() >= minConfidence) rules.add(proposedRule)
-        else nextConsequents -= nextConsequent
+        if (proposedRule.confidence() >= minConfidence) {
+          rules += proposedRule
+        } else {
+          nextConsequents -= nextConsequent
+        }
       }
-      rules ++= generateRules[Item](freqItemsets, itemset, nextConsequents.toSet)
+      if (!nextConsequents.isEmpty) rules ++= generateRules[Item](freqItemsets, itemset, nextConsequents.toSet)
     }
     rules.toSet
   }
@@ -79,9 +85,9 @@ class AssociationRules private (
     val k = itemsets.head.size
     (for {
       p <- itemsets;
-      q <- itemsets if p.intersect(q) == k - 1
+      q <- itemsets if p.intersect(q).size == k - 1
     } yield (p ++ q))
-      .filter(_.subsets(k-1).exists(subset => itemsets.contains(subset)))
+      //.filter(_.subsets(k-1).exists(subset => itemsets.contains(subset)))
   }
 }
 
