@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
-import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
@@ -50,16 +49,17 @@ class AssociationRules private (
   /**
    * Computes the association rules with confidence supported above [[minConfidence]].
    * @param freqItemsets frequent itemsets to compute association rules over.
-   * @return a [[RDD[Rule[Item]]] containing the assocation rules.
+   * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
-  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
+  def run[Item: ClassTag](freqItemsets: Set[FreqItemset[Item]]): List[Rule[Item]] = {
     freqItemsets.map { itemset =>
       (itemset.items.toSet, itemset.items.map(Set(_)).toSet)
     }.flatMap({ case (itemset, consequents) => generateRules(freqItemsets, itemset, consequents)})
+    .toList
   }
 
   private def generateRules[Item: ClassTag](
-      freqItemsets: RDD[FreqItemset[Item]],
+      freqItemsets: Set[FreqItemset[Item]],
       itemset: Set[Item],
       consequents: Set[Set[Item]]): Set[Rule[Item]] = {
     val k = itemset.size
@@ -87,6 +87,8 @@ class AssociationRules private (
       p <- itemsets;
       q <- itemsets if p.intersect(q).size == k - 1
     } yield (p ++ q))
+      // TODO: A-priori pruning : if a k-1 subset of the proposed set is not frequent, then this
+      // propsoed set cannot possibly be frequent (downward closure)
       //.filter(_.subsets(k-1).exists(subset => itemsets.contains(subset)))
   }
 }
@@ -104,7 +106,7 @@ object AssociationRules {
    */
   @Experimental
   case class Rule[Item: ClassTag](
-    freqItemsets: RDD[FreqItemset[Item]],
+    freqItemsets: Set[FreqItemset[Item]],
     antecedent: Set[Item],
     consequent: Set[Item])
     extends Serializable {
@@ -117,12 +119,12 @@ object AssociationRules {
 
     def confidence(): Double = {
       val num = freqItemsets
-        .filter(_.items.toSet == (antecedent ++ consequent))
-        .first()
+        .find(_.items.toSet == (antecedent ++ consequent))
+        .get
         .freq
       val denom = freqItemsets
-        .filter(_.items.toSet == antecedent)
-        .first()
+        .find(_.items.toSet == antecedent)
+        .get
         .freq
 
       num.toDouble / denom.toDouble
