@@ -25,18 +25,28 @@ class AggregateSuite extends SparkPlanTest {
 
   test("SPARK-8357 Memory leakage on unsafe aggregation path with empty input") {
 
-    val df = Seq.empty[(String, Int, Double)].toDF("a", "b", "c")
+    val input = Seq.empty[(String, Int, Double)]
+    val df = input.toDF("a", "b", "c")
 
-    val groupExpr = df.col("b").expr
-    val aggrExpr = Alias(Count(Cast(groupExpr, LongType)), "Count")()
+    val colB = df.col("b").expr
+    val colC = df.col("c").expr
+    val aggrExpr = Alias(Count(Cast(colC, LongType)), "Count")()
 
-    for ((codegen, unsafe) <- Seq((false, false), (true, false), (true, true));
-         partial <- Seq(false, true)) {
-      TestSQLContext.conf.setConfString("spark.sql.codegen", String.valueOf(codegen))
-      checkAnswer(
-        df,
-        GeneratedAggregate(partial, groupExpr :: Nil, aggrExpr :: Nil, unsafe, _: SparkPlan),
-        Seq.empty[(String, Int, Double)])
+    // hack : current default parallelism of test local backend is two
+    val two = Seq(Tuple1(0L), Tuple1(0L))
+    val empty = Seq.empty[Tuple1[Long]]
+
+    val codegenDefault = TestSQLContext.conf.getConfString("spark.sql.codegen")
+    try {
+      for ((codegen, unsafe) <- Seq((false, false), (true, false), (true, true));
+           partial <- Seq(false, true); groupExpr <- Seq(colB :: Nil, Seq.empty)) {
+        TestSQLContext.conf.setConfString("spark.sql.codegen", String.valueOf(codegen))
+        checkAnswer(df,
+          GeneratedAggregate(partial, groupExpr, aggrExpr :: Nil, unsafe, _: SparkPlan),
+          if (groupExpr.isEmpty && !partial) two else empty)
+      }
+    } finally {
+      TestSQLContext.conf.setConfString("spark.sql.codegen", codegenDefault)
     }
   }
 }

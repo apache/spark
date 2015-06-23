@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.test
 
-import scala.collection.immutable
 import scala.language.implicitConversions
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -37,18 +36,9 @@ class LocalSQLContext
   }
 
   protected[sql] class SQLSession extends super.SQLSession {
-    var backup: immutable.Map[String, String] = null
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
       /** Fewer partitions to speed up testing. */
       override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
-      backup = getAllConfs
-    }
-
-    protected[sql] def reset() = {
-      if (backup != null) {
-        conf.clear()
-        conf.setConf(backup)
-      }
     }
   }
 
@@ -59,11 +49,6 @@ class LocalSQLContext
   protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     DataFrame(this, plan)
   }
-
-  /**
-   * Reset session conf to initial state
-   */
-  protected[sql] def resetConf(): Unit = currentSession().asInstanceOf[SQLSession].reset
 
 }
 
