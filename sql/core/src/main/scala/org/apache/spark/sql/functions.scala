@@ -1414,7 +1414,7 @@ object functions {
    */
   def md5(columnName: String): Column = md5(Column(columnName))
 
-  /*
+  /**
    * Calculates the SHA digest and returns the value as a hex string.
    *
    * @group misc_funcs
@@ -1423,27 +1423,45 @@ object functions {
   def sha(e: Column): Column = Sha(e.expr)
 
   /**
- * Calculates the SHA digest and returns the value as a hex string.
- *
- * @group misc_funcs
- * @since 1.5.0
- */
+   * Calculates the SHA digest and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
   def sha(columnName: String): Column = sha(Column(columnName))
 
   /**
- * Calculates the cyclic redundancy check value and returns the value as a bigint.
- *
- * @group misc_funcs
- * @since 1.5.0
- */
+   * Calculates the SHA digest and returns the value as a hex string.
+   * Alias for sha.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha1(e: Column): Column = Sha(e.expr)
+
+  /**
+   * Calculates the SHA digest and returns the value as a hex string.
+   * Alias for sha.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha1(columnName: String): Column = sha1(Column(columnName))
+
+  /**
+   * Calculates the cyclic redundancy check value and returns the value as a bigint.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
   def crc32(e: Column): Column = Crc32(e.expr)
 
   /**
- * Calculates the cyclic redundancy check value and returns the value as a bigint.
- *
- * @group misc_funcs
- * @since 1.5.0
- */
+   * Calculates the cyclic redundancy check value and returns the value as a bigint.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
   def crc32(columnName: String): Column = crc32(Column(columnName))
 
   /**

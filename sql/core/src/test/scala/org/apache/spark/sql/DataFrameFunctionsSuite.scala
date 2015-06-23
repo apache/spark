@@ -156,6 +156,16 @@ class DataFrameFunctionsSuite extends QueryTest {
       df.selectExpr("sha(a)", "sha(b)"),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
         "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+
+    checkAnswer(
+      df.select(sha1($"a"), sha1("b")),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+
+    checkAnswer(
+      df.selectExpr("sha1(a)", "sha1(b)"),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
   }
 
   test("misc crc32 function") {
