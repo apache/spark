@@ -42,6 +42,7 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha',
     'sha1',
     'sparkPartitionId',
     'struct',
