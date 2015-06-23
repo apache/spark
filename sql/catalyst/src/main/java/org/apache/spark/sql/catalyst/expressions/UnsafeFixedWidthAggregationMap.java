@@ -39,17 +39,21 @@ public final class UnsafeFixedWidthAggregationMap {
    * map, we copy this buffer and use it as the value.
    */
   private final byte[] emptyBuffer;
-  private final InternalRow emptyRow;
 
   /**
-   * Whether can the empty aggregation buffer be reuse without calling `initProj` or not.
+   * A empty row used by `initProjection`
+   */
+  private static final InternalRow emptyRow = new GenericRow();
+
+  /**
+   * Whether can the empty aggregation buffer be reuse without calling `initProjection` or not.
    */
   private boolean reuseEmptyBuffer;
 
   /**
    * The projection used to initialize the emptyBuffer
    */
-  private final Function1<InternalRow, InternalRow> initProj;
+  private final Function1<InternalRow, InternalRow> initProjection;
 
   /**
    * Encodes grouping keys or buffers as UnsafeRows.
@@ -90,7 +94,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Create a new UnsafeFixedWidthAggregationMap.
    *
-   * @param initProj the default value for new keys (a "zero" of the agg. function)
+   * @param initProjection the default value for new keys (a "zero" of the agg. function)
    * @param keyConverter the converter of the grouping key, used for row conversion.
    * @param bufferConverter the converter of the aggregation buffer, used for row conversion.
    * @param memoryManager the memory manager used to allocate our Unsafe memory structures.
@@ -98,26 +102,25 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
    */
   public UnsafeFixedWidthAggregationMap(
-      Function1<InternalRow, InternalRow> initProj,
+      Function1<InternalRow, InternalRow> initProjection,
       UnsafeRowConverter keyConverter,
       UnsafeRowConverter bufferConverter,
       TaskMemoryManager memoryManager,
       int initialCapacity,
       boolean enablePerfMetrics) {
-    this.initProj = initProj;
+    this.initProjection = initProjection;
     this.keyConverter = keyConverter;
     this.bufferConverter = bufferConverter;
     this.enablePerfMetrics = enablePerfMetrics;
 
-    this.emptyRow = new GenericRow();
     this.map = new BytesToBytesMap(memoryManager, initialCapacity, enablePerfMetrics);
     this.keyPool = new UniqueObjectPool(100);
     this.bufferPool = new ObjectPool(initialCapacity);
 
-    InternalRow initRow = initProj.apply(emptyRow);
+    InternalRow initRow = initProjection.apply(emptyRow);
     this.emptyBuffer = new byte[bufferConverter.getSizeRequirement(initRow)];
-    int writtenLength =
-            bufferConverter.writeRow(initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, bufferPool);
+    int writtenLength = bufferConverter.writeRow(
+      initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, bufferPool);
     assert (writtenLength == emptyBuffer.length): "Size requirement calculation was wrong!";
     // re-use the empty buffer only when there is no object saved in pool.
     reuseEmptyBuffer = bufferPool.size() == 0;
@@ -150,9 +153,9 @@ public final class UnsafeFixedWidthAggregationMap {
       // empty aggregation buffer into the map:
       if (!reuseEmptyBuffer) {
         // There is some objects referenced by emptyBuffer, so generate a new one
-        InternalRow initRow = initProj.apply(emptyRow);
+        InternalRow initRow = initProjection.apply(emptyRow);
         bufferConverter.writeRow(initRow, emptyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-                bufferPool);
+          bufferPool);
       }
       loc.putNewKey(
         groupingKeyConversionScratchSpace,
@@ -170,7 +173,7 @@ public final class UnsafeFixedWidthAggregationMap {
       address.getBaseObject(),
       address.getBaseOffset(),
       bufferConverter.numFields(),
-            bufferPool
+      bufferPool
     );
     return currentBuffer;
   }
@@ -215,7 +218,7 @@ public final class UnsafeFixedWidthAggregationMap {
           valueAddress.getBaseObject(),
           valueAddress.getBaseOffset(),
           bufferConverter.numFields(),
-                bufferPool
+          bufferPool
         );
         return entry;
       }
@@ -243,7 +246,7 @@ public final class UnsafeFixedWidthAggregationMap {
     System.out.println("Number of hash collisions: " + map.getNumHashCollisions());
     System.out.println("Time spent resizing (ns): " + map.getTimeSpentResizingNs());
     System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
-    System.out.println("Number of objects in keys: " + keyPool.size());
+    System.out.println("Number of unique objects in keys: " + keyPool.size());
     System.out.println("Number of objects in buffers: " + bufferPool.size());
   }
 

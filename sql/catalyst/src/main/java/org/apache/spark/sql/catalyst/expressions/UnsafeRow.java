@@ -38,7 +38,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
  * base address of the row) that points to the beginning of the variable-length field, and length
- * (they are combined into a long). For other objects, we
+ * (they are combined into a long). For other objects, they are stored in a pool, the indexes of
+ * them are hold in the the word.
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
@@ -114,24 +115,51 @@ public final class UnsafeRow extends BaseMutableRow {
   @Override
   public void update(int i, Object value) {
     if (value == null) {
-      // There will be some garbage left in pool
-      setNullAt(i);
+      if (!isNullAt(i)) {
+        long idx = getLong(i);
+        if (idx <= 0) {
+          pool.replace((int)-idx, null);
+        } else {
+          // there will be some garbage left (UTF8String or byte[])
+        }
+        setNullAt(i);
+      }
       return;
     }
 
     if (isNullAt(i)) {
       int idx = pool.put(value);
-      PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), (long)-idx);
+      setLong(i, (long)-idx);
     } else {
-      long v = PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(i));
+      long v = getLong(i);
       if (v <= 0) {
         int idx = (int)-v;
         pool.replace(idx, value);
       } else {
-        // old object are UTF8String or Binary, the space will be wasted
-        // TODO: try to re-use the buffer
-        int idx = pool.put(value);
-        PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), (long)-idx);
+        // old object are UTF8String or byte[], try to reuse the space
+        boolean is_string = (v >> 62) > 0;
+        int offset = (int)((v >> 31) & Integer.MAX_VALUE);
+        int size = (int)(v & Integer.MAX_VALUE);
+        byte[] bytes;
+        if (value instanceof UTF8String) {
+          bytes = ((UTF8String)value).getBytes();
+        } else {
+          bytes = (byte[]) value;
+        }
+        if (bytes.length <= size) {
+          PlatformDependent.copyMemory(
+            bytes,
+            PlatformDependent.BYTE_ARRAY_OFFSET,
+            baseObject,
+            baseOffset + offset,
+            bytes.length);
+          long flag = is_string ? 1L << 62 : 0L;
+          setLong(i, flag | (((long)offset) << 31) | (long)bytes.length);
+        } else {
+          // Can not fit in the buffer
+          int idx = pool.put(value);
+          setLong(i, (long)-idx);
+        }
       }
     }
     setNotNullAt(i);

@@ -51,6 +51,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getLong(1) should be (1)
     unsafeRow.getInt(2) should be (2)
+
+    unsafeRow.setLong(1, 3)
+    unsafeRow.getLong(1) should be (3)
+    unsafeRow.setInt(2, 4)
+    unsafeRow.getInt(2) should be (4)
   }
 
   test("basic conversion with primitive, string and binary types") {
@@ -71,10 +76,25 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     numBytesWritten should be (sizeRequired)
 
     val unsafeRow = new UnsafeRow()
-    unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
+    val pool = new ObjectPool(10)
+    unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getString(1) should be ("Hello")
     unsafeRow.get(2) should be ("World".getBytes)
+
+    unsafeRow.update(1, UTF8String.fromString("World"))
+    unsafeRow.getString(1) should be ("World")
+    assert(pool.size === 0)
+    unsafeRow.update(1, UTF8String.fromString("Hello World"))
+    unsafeRow.getString(1) should be ("Hello World")
+    assert(pool.size === 1)
+
+    unsafeRow.update(2, "World".getBytes)
+    unsafeRow.get(2) should be ("World".getBytes)
+    assert(pool.size === 1)
+    unsafeRow.update(2, "Hello World".getBytes)
+    unsafeRow.get(2) should be ("Hello World".getBytes)
+    assert(pool.size === 2)
   }
 
   test("basic conversion with primitive, decimal and array") {
@@ -92,12 +112,19 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, pool)
     numBytesWritten should be (sizeRequired)
+    assert(pool.size === 2)
 
     val unsafeRow = new UnsafeRow()
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
     unsafeRow.getLong(0) should be (0)
     unsafeRow.get(1) should be (Decimal(1))
     unsafeRow.get(2) should be (Array(2))
+
+    unsafeRow.update(1, Decimal(2))
+    unsafeRow.get(1) should be (Decimal(2))
+    unsafeRow.update(2, Array(3, 4))
+    unsafeRow.get(2) should be (Array(3, 4))
+    assert(pool.size === 2)
   }
 
   test("basic conversion with primitive, string, date and timestamp types") {
@@ -126,6 +153,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // Timestamp is represented as Long in unsafeRow
     DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
       (Timestamp.valueOf("2015-05-08 08:10:25"))
+
+    unsafeRow.setInt(2, DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-22")))
+    DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("2015-06-22"))
+
   }
 
   test("null handling") {
