@@ -17,7 +17,6 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.storage.BlockManager
 import org.apache.spark.{InterruptibleIterator, SparkEnv, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
@@ -28,19 +27,18 @@ private[spark] class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
     endPartition: Int,
-    context: TaskContext,
-    blockManager: BlockManager = SparkEnv.get.blockManager,
-    blockStoreShuffleFetcher: BlockStoreShuffleFetcher = new BlockStoreShuffleFetcher)
+    context: TaskContext)
   extends ShuffleReader[K, C]
 {
   require(endPartition == startPartition + 1,
     "Hash shuffle currently only supports fetching one partition")
 
   private val dep = handle.dependency
+  private val blockManager = SparkEnv.get.blockManager
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blockStreams = blockStoreShuffleFetcher.fetchBlockStreams(
+    val blockStreams = BlockStoreShuffleFetcher.fetchBlockStreams(
       handle.shuffleId, startPartition, context)
 
     // Wrap the streams for compression based on configuration
