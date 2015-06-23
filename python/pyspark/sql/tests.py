@@ -416,7 +416,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance((- ci - 1 - 2) % 3 * 2.5 / 3.5, Column))
         rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci)
         self.assertTrue(all(isinstance(c, Column) for c in rcc))
-        cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7, ci and cs, ci or cs]
+        cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7]
         self.assertTrue(all(isinstance(c, Column) for c in cb))
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
