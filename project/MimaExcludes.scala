@@ -64,7 +64,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$"),
+            //  SPARK-7984
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.union")
           )
         case v if v.startsWith("1.4") =>
           Seq(
