@@ -480,11 +480,8 @@ def determine_java_version(java_exe):
 
     raw_output_lines = raw_output.split('\n')
 
-    # find raw version string, eg 'java version "1.8.0_25"'. Skip _JAVA_OPTIONS line if present
-    if raw_output_lines[0].startswith("Picked up _JAVA_OPTIONS"):
-        raw_version_str = raw_output_lines[1]
-    else:
-        raw_version_str = raw_output_lines[0]
+    # find raw version string, eg 'java version "1.8.0_25"'
+    raw_version_str = next(str for str in raw_output_lines if str.startswith("java version"))
 
     version_str = raw_version_str.split()[-1].strip('"')  # eg '1.8.0_25'
     version, update = version_str.split('_')  # eg ['1.8.0', '25']
