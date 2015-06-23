@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -563,6 +564,22 @@ object functions {
    */
   def array(colName: String, colNames: String*): Column = {
     array((colName +: colNames).map(col) : _*)
+  }
+
+  /**
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def broadcast(df: DataFrame): DataFrame = {
+    DataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
