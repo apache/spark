@@ -1271,6 +1271,15 @@ sqlContext.refreshTable("my_table")
 
 </div>
 
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# sqlContext is an existing HiveContext
+sqlContext.refreshTable("my_table")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -1518,8 +1527,8 @@ This command builds a new assembly jar that includes Hive. Note that this Hive a
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. Please note when running 
-the query on a YARN cluster (`yarn-cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory 
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. Please note when running
+the query on a YARN cluster (`yarn-cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory
 and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
 YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
 `spark-submit` command.
@@ -1962,7 +1971,7 @@ options.
 #### DataFrame data reader/writer interface
 
 Based on user feedback, we created a new, more fluid API for reading data in (`SQLContext.read`)
-and writing data out (`DataFrame.write`), 
+and writing data out (`DataFrame.write`),
 and deprecated the old APIs (e.g. `SQLContext.parquetFile`, `SQLContext.jsonFile`).
 
 See the API docs for `SQLContext.read` (
