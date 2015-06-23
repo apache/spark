@@ -26,7 +26,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
-  @transient var datasetNR: DataFrame = _
+  @transient var datasetWithoutIntercept: DataFrame = _
 
   /**
    * In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -45,7 +45,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
-    datasetNR = sqlContext.createDataFrame(
+    /**
+     * datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
+     * training model without intercept
+     */
+    datasetWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         0.0, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2))
 
@@ -88,15 +92,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("linear regression without intercept without regularization") {
     val trainer = (new LinearRegression).setFitIntercept(false)
     val model = trainer.fit(dataset)
-    val modelNR = trainer.fit(datasetNR)
+    val modelWithoutIntercept = trainer.fit(datasetWithoutIntercept)
 
     /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * library("glmnet")
-     * data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
-     * features <- as.matrix(data.frame(as.numeric(data$V2), as.numeric(data$V3)))
-     * label <- as.numeric(data$V1)
      * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0,
      *   intercept = FALSE))
      * > weights
@@ -113,18 +111,18 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
     /**
      * Then again with the data with no intercept:
-     * > weightsNR
+     * > weightsWithoutIntercept
      * 3 x 1 sparse Matrix of class "dgCMatrix"
      *                             s0
      * (Intercept)           .
      * as.numeric.data3.V2. 4.70011
      * as.numeric.data3.V3. 7.19943
      */
-    val weightsRNR = Array(4.70011, 7.19943)
+    val weightsWithoutInterceptR = Array(4.70011, 7.19943)
 
-    assert(modelNR.intercept ~== 0 relTol 1E-3)
-    assert(modelNR.weights(0) ~== weightsRNR(0) relTol 1E-3)
-    assert(modelNR.weights(1) ~== weightsRNR(1) relTol 1E-3)
+    assert(modelWithoutIntercept.intercept ~== 0 relTol 1E-3)
+    assert(modelWithoutIntercept.weights(0) ~== weightsWithoutInterceptR(0) relTol 1E-3)
+    assert(modelWithoutIntercept.weights(1) ~== weightsWithoutInterceptR(1) relTol 1E-3)
   }
 
 
@@ -185,7 +183,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
-
 
   test("linear regression with intercept with L2 regularization") {
     val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
@@ -272,6 +269,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
+
   test("linear regression without intercept with ElasticNet regularization") {
     val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
       .setFitIntercept(false)

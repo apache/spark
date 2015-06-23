@@ -81,7 +81,6 @@ class LinearRegression(override val uid: String)
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
-
   /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
@@ -131,7 +130,7 @@ class LinearRegression(override val uid: String)
       })
 
     val numFeatures = summarizer.mean.size
-    val yMean = if ($(fitIntercept)) statCounter.mean else 0.0
+    val yMean = statCounter.mean
     val yStd = math.sqrt(statCounter.variance)
     // look at glmnet5.m L761 maaaybe that has info
 
@@ -144,11 +143,7 @@ class LinearRegression(override val uid: String)
       return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
-    val featuresMean = if ($(fitIntercept)) {
-      summarizer.mean.toArray
-    } else {
-      new Array[Double](numFeatures)
-    }
+    val featuresMean = summarizer.mean.toArray
     val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 
     // Since we implicitly do the feature scaling when we compute the cost function
@@ -157,7 +152,7 @@ class LinearRegression(override val uid: String)
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
-    val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
+    val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
@@ -195,7 +190,7 @@ class LinearRegression(override val uid: String)
     // The intercept in R's GLMNET is computed using closed form after the coefficients are
     // converged. See the following discussion for detail.
     // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
-    val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
+    val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
@@ -320,6 +315,7 @@ private class LeastSquaresAggregator(
     weights: Vector,
     labelStd: Double,
     labelMean: Double,
+    fitIntercept: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
@@ -340,7 +336,7 @@ private class LeastSquaresAggregator(
       }
       i += 1
     }
-    (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
+    (weightsArray, if (fitIntercept) labelMean / labelStd - sum else 0.0, weightsArray.length)
   }
 
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
@@ -423,6 +419,7 @@ private class LeastSquaresCostFun(
     data: RDD[(Double, Vector)],
     labelStd: Double,
     labelMean: Double,
+    fitIntercept: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
@@ -431,7 +428,7 @@ private class LeastSquaresCostFun(
     val w = Vectors.fromBreeze(weights)
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
-      labelMean, featuresStd, featuresMean))(
+      labelMean, fitIntercept, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {
           case (aggregator, (label, features)) => aggregator.add(label, features)
         },
