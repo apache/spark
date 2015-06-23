@@ -151,6 +151,9 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
@@ -187,7 +190,8 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
         .setMaxIterations(map(maxIter))
         .setSeed(map(seed))
     val parentModel = algo.run(rdd)
-    new KMeansModel(uid, map, parentModel)
+    val model = new KMeansModel(uid, map, parentModel)
+    copyValues(model)
   }
 
   override def transformSchema(schema: StructType): StructType = {

@@ -50,6 +50,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(kmeans.getK === 2)
     assert(kmeans.getFeaturesCol === "features")
+    assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
     assert(kmeans.getRuns === 1)
     assert(kmeans.getInitializationMode === KMeans.K_MEANS_PARALLEL)
@@ -58,14 +59,16 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("fit & transform") {
-    val kmeans = new KMeans().setK(k)
+    val predictionColName = "kmeans_prediction"
+    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName)
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
     val transformed = model.transform(dataset)
-    assert(transformed.columns === Array("features", "prediction"))
-    val clusters = transformed.select("prediction")
+    assert(transformed.columns === Array("features", predictionColName))
+    val clusters = transformed.select(predictionColName)
         .map(row => row.apply(0)).distinct().collect().toSet
+    assert(clusters.size == 5)
     assert(clusters === Set(0, 1, 2, 3, 4))
   }
 }
