@@ -56,9 +56,12 @@ case class DropTable(
   override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    val databaseName = hiveContext.catalog.client.currentDatabase
+    val dbAndTableName = tableName.split("\\.")
+    val databaseName = dbAndTableName
+      .lift(dbAndTableName.size -2)
+      .getOrElse(hiveContext.catalog.client.currentDatabase)
     try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(dbAndTableName.last))
     } catch {
       // This table's metadata is not in Hive metastore (e.g. the table does not exist).
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
@@ -68,9 +71,9 @@ case class DropTable(
       // Users should be able to drop such kinds of tables regardless if there is an error.
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
-    hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$databaseName.$tableName")
-    hiveContext.catalog.unregisterTable(Seq(databaseName, tableName))
+    hiveContext.invalidateTable(dbAndTableName.last)
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$databaseName.${dbAndTableName.last}")
+    hiveContext.catalog.unregisterTable(Seq(databaseName, dbAndTableName.last))
     Seq.empty[InternalRow]
   }
 }
