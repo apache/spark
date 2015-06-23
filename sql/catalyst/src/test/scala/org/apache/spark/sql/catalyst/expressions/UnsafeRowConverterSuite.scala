@@ -23,7 +23,7 @@ import java.util.Arrays
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -83,8 +83,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
     row.setString(1, "Hello")
-    row.update(2, DateUtils.fromJavaDate(Date.valueOf("1970-01-01")))
-    row.update(3, DateUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
+    row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
+    row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
     sizeRequired should be (8 + (8 * 4) +
@@ -98,9 +98,9 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getString(1) should be ("Hello")
     // Date is represented as Int in unsafeRow
-    DateUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("1970-01-01"))
+    DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("1970-01-01"))
     // Timestamp is represented as Long in unsafeRow
-    DateUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
       (Timestamp.valueOf("2015-05-08 08:10:25"))
   }
 
