@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.4.0"
+SPARK_EC2_VERSION = "1.4.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -71,6 +71,7 @@ VALID_SPARK_VERSIONS = set([
     "1.3.0",
     "1.3.1",
     "1.4.0",
+    "1.4.1",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -84,6 +85,7 @@ SPARK_TACHYON_MAP = {
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
     "1.4.0": "0.6.4",
+    "1.4.1": "0.6.4",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
