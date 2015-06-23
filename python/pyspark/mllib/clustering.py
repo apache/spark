@@ -612,14 +612,6 @@ class LDAModel(JavaModelWrapper):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
 
-    def describeTopics(self, maxTermsPerTopic=None):
-        """Return the topics described by weighted terms.
-
-        TODO:
-        Implementing this method is a little hard. Since Scala's return value consistes of tuples.
-        """
-        raise NotImplementedError("LDAModel.describeTopics() in Python must be implemented.")
-
 
 class LDA():
 
