@@ -172,14 +172,6 @@ def shutdown_session(exception=None):
     settings.Session.remove()
 
 
-class SuperUserMixin(object):
-    def is_accessible(self):
-        return (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.is_superuser())
-        )
-
-
 def dag_link(v, c, m, p):
     url = url_for(
         'airflow.graph',
@@ -188,7 +180,7 @@ def dag_link(v, c, m, p):
         '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
 
 
-class DagModelView(SuperUserMixin, ModelView):
+class DagModelView(wwwutils.SuperUserMixin, ModelView):
     column_list = ('dag_id', 'owners')
     column_editable_list = ('is_paused',)
     form_excluded_columns = ('is_subdag', 'is_active')
@@ -1329,25 +1321,7 @@ class Airflow(BaseView):
 admin.add_view(Airflow(name='DAGs'))
 
 
-class LoginMixin(object):
-    def is_accessible(self):
-        return (
-            not AUTHENTICATE or (
-                not current_user.is_anonymous() and
-                current_user.is_authenticated()
-            )
-        )
-
-
-class DataProfilingMixin(object):
-    def is_accessible(self):
-        return (
-            not AUTHENTICATE or
-            (not current_user.is_anonymous() and current_user.data_profiling())
-        )
-
-
-class QueryView(DataProfilingMixin, BaseView):
+class QueryView(wwwutils.DataProfilingMixin, BaseView):
     @expose('/')
     @wwwutils.gzipped
     def query(self):
@@ -1413,7 +1387,7 @@ class QueryView(DataProfilingMixin, BaseView):
 admin.add_view(QueryView(name='Ad Hoc Query', category="Data Profiling"))
 
 
-class ModelViewOnly(LoginMixin, ModelView):
+class ModelViewOnly(wwwutils.LoginMixin, ModelView):
     """
     Modifying the base ModelView class for non edit, browse only operations
     """
@@ -1520,7 +1494,7 @@ mv = DagModelView(
 admin.add_view(mv)
 
 
-class ConnectionModelView(SuperUserMixin, ModelView):
+class ConnectionModelView(wwwutils.SuperUserMixin, ModelView):
     column_default_sort = ('conn_id', False)
     column_list = ('conn_id', 'conn_type', 'host', 'port')
     form_overrides = dict(password=VisiblePasswordField)
@@ -1546,13 +1520,13 @@ mv = ConnectionModelView(
 admin.add_view(mv)
 
 
-class UserModelView(SuperUserMixin, ModelView):
+class UserModelView(wwwutils.SuperUserMixin, ModelView):
     column_default_sort = 'username'
 mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
-class ConfigurationView(SuperUserMixin, BaseView):
+class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
     @expose('/')
     def conf(self):
         from airflow import configuration
@@ -1592,7 +1566,7 @@ def label_link(v, c, m, p):
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 
-class ChartModelView(DataProfilingMixin, ModelView):
+class ChartModelView(wwwutils.DataProfilingMixin, ModelView):
     form_columns = (
         'label',
         'owner',
@@ -1705,7 +1679,7 @@ admin.add_link(
         url='https://github.com/airbnb/airflow'))
 
 
-class KnowEventView(DataProfilingMixin, ModelView):
+class KnowEventView(wwwutils.DataProfilingMixin, ModelView):
     form_columns = (
         'label',
         'event_type',
@@ -1721,7 +1695,7 @@ mv = KnowEventView(
 admin.add_view(mv)
 
 
-class KnowEventTypeView(DataProfilingMixin, ModelView):
+class KnowEventTypeView(wwwutils.DataProfilingMixin, ModelView):
     pass
 
 '''
@@ -1739,7 +1713,7 @@ admin.add_view(mv)
 '''
 
 
-class VariableView(LoginMixin, ModelView):
+class VariableView(wwwutils.LoginMixin, ModelView):
     column_list = ('key',)
     column_filters = ('key', 'val')
     column_searchable_list = ('key', 'val')
@@ -1775,7 +1749,7 @@ def fqueued_slots(v, c, m, p):
     return Markup("<a href='{0}'>{1}</a>".format(url, m.queued_slots()))
 
 
-class PoolModelView(SuperUserMixin, ModelView):
+class PoolModelView(wwwutils.SuperUserMixin, ModelView):
     column_list = ('pool', 'slots', 'used_slots', 'queued_slots')
     column_formatters = dict(
         pool=pool_link, used_slots=fused_slots, queued_slots=fqueued_slots)
