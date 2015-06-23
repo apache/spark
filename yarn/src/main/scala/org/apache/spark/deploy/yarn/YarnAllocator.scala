@@ -127,6 +127,12 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // A map to store preferred locality and its required count
+  private var preferredLocalityToCounts: Map[String, Int] = Map.empty
+
+  // Locality required pending task number
+  private var numLocalityAwarePendingTasks: Int = 0
+
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, this)
@@ -157,8 +163,8 @@ private[yarn] class YarnAllocator(
       requestedTotal: Int,
       localityAwarePendingTasks: Int,
       preferredLocalities: Map[String, Int]): Boolean = synchronized {
-    containerPlacementStrategy.updatePreferredLocalities(localityAwarePendingTasks,
-      preferredLocalities)
+    this.numLocalityAwarePendingTasks = localityAwarePendingTasks
+    this.preferredLocalityToCounts = preferredLocalities
 
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
@@ -236,7 +242,8 @@ private[yarn] class YarnAllocator(
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
       val (nodeLocalities, rackLocalities) =
-        containerPlacementStrategy.localityOfRequestedContainers(missing)
+        containerPlacementStrategy.localityOfRequestedContainers(missing,
+          numLocalityAwarePendingTasks, preferredLocalityToCounts)
 
       for ((hosts, racks) <- nodeLocalities.zip(rackLocalities)) {
         val request = createContainerRequest(resource, hosts, racks)

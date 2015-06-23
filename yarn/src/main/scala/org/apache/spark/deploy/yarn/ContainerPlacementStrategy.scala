@@ -30,10 +30,12 @@ private[yarn] trait ContainerPlacementStrategy {
   /**
    * Calculate each container's node locality and rack locality
    * @param numContainer number of containers to calculate
+   *
    * @return node localities and rack localities, each locality is an array of string,
    *         the length of localities is the same as number of containers
    */
-  def localityOfRequestedContainers(numContainer: Int): (Array[Locality], Array[Locality])
+  def localityOfRequestedContainers(numContainer: Int, numLocalityAwarePendingTasks: Int,
+      preferredLocalityToCount: Map[String, Int]): (Array[Locality], Array[Locality])
 }
 
 /**
@@ -90,27 +92,27 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   // Number of CPUs per task
   private val CPUS_PER_TASK = sparkConf.getInt("spark.task.cpus", 1)
 
-  // A map to store preferred locality and its required count
-  private var preferredLocalityToCounts: Map[String, Int] = Map.empty
-
-  // Locality required pending task number
-  private var localityAwarePendingTaskNum: Int = 0
-
   // Get the required cores of locality aware task
-  private def localityAwareTaskCores: Int = localityAwarePendingTaskNum * CPUS_PER_TASK
+  private def localityAwareTaskCores(localityAwarePendingTasks: Int): Int = {
+    localityAwarePendingTasks * CPUS_PER_TASK
+  }
 
   // Get the expected number of locality aware containers
-  private def expectedLocalityAwareContainerNum: Int =
-    (localityAwareTaskCores + yarnAllocator.resource.getVirtualCores - 1) /
-      (yarnAllocator.resource.getVirtualCores)
+  private def expectedLocalityAwareContainerNum(localityAwarePendingTasks: Int): Int = {
+    (localityAwareTaskCores(localityAwarePendingTasks) +
+      yarnAllocator.resource.getVirtualCores - 1) /
+        yarnAllocator.resource.getVirtualCores
+  }
 
   // Update the expected locality distribution by considering the existing allocated container
   // host distributions.
-  private def updateExpectedLocalityToCounts: Map[String, Int] = {
+  private def updateExpectedLocalityToCounts(localityAwarePendingTasks: Int,
+      preferredLocalityToCounts: Map[String, Int]): Map[String, Int] = {
     val totalPreferredLocalities = preferredLocalityToCounts.values.sum
     preferredLocalityToCounts.map { case (host, count) =>
       val expectedCount =
-        count.toDouble * expectedLocalityAwareContainerNum / totalPreferredLocalities
+        count.toDouble * expectedLocalityAwareContainerNum(localityAwarePendingTasks) /
+          totalPreferredLocalities
       val existedCount = yarnAllocator.allocatedHostToContainersMap.get(host)
         .map(_.size)
         .getOrElse(0)
@@ -127,14 +129,10 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     }
   }
 
-  def updatePreferredLocalities(localityAwarePendingTasks: Int,
-      preferredLocalities: Map[String, Int]): Unit = {
-    this.localityAwarePendingTaskNum = localityAwarePendingTasks
-    this.preferredLocalityToCounts = preferredLocalities
-  }
-
-  def localityOfRequestedContainers(numContainer: Int): (Array[Locality], Array[Locality]) = {
-    val updatedLocalityToCounts = updateExpectedLocalityToCounts
+  def localityOfRequestedContainers(numContainer: Int, numLocalityAwarePendingTasks: Int,
+      preferredLocalityToCounts: Map[String, Int]): (Array[Locality], Array[Locality]) = {
+    val updatedLocalityToCounts =
+      updateExpectedLocalityToCounts(numLocalityAwarePendingTasks, preferredLocalityToCounts)
     val updatedLocalityAwareContainerNum = updatedLocalityToCounts.values.sum
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
@@ -200,4 +198,3 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     (preferredNodeLocalities.toArray, preferredRackLocalities.toArray)
   }
 }
-
