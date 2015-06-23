@@ -24,12 +24,9 @@ import sys
 import subprocess
 from collections import namedtuple
 
+from sparktestsupport import SPARK_HOME, USER_HOME
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 import sparktestsupport.modules as modules
-
-SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
-USER_HOME = os.environ.get("HOME")
-
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph

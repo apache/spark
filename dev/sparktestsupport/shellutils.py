@@ -41,7 +41,7 @@ def rm_r(path):
 def run_cmd(cmd):
     """
     Given a command as a list of arguments will attempt to execute the command
-    and, on failure, print an error message
+    and, on failure, print an error message and exit.
     """
 
     if not isinstance(cmd, list):

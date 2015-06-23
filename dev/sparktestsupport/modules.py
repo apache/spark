@@ -30,7 +30,7 @@ class Module(object):
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
-                 sbt_test_goals=(), should_run_python_tests=False, should_run_r_tests=False):
+                 sbt_test_goals=(), python_test_goals=(), should_run_r_tests=False):
         """
         Define a new module.
 
@@ -43,10 +43,7 @@ class Module(object):
         :param build_profile_flags: A set of profile flags that should be passed to Maven or SBT in
             order to build and test this module (e.g. '-PprofileName').
         :param sbt_test_goals: A set of SBT test goals for testing this module.
-        :param should_run_python_tests: If true, changes in this module will trigger Python tests.
-            For now, this has the effect of causing _all_ Python tests to be run, although in the
-            future this should be changed to run only a subset of the Python tests that depend
-            on this module.
+        :param python_test_goals: A set of Python test goals for testing this module.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         """
         self.name = name
@@ -54,7 +51,7 @@ class Module(object):
         self.source_file_prefixes = source_file_regexes
         self.sbt_test_goals = sbt_test_goals
         self.build_profile_flags = build_profile_flags
-        self.should_run_python_tests = should_run_python_tests
+        self.python_test_goals = python_test_goals
         self.should_run_r_tests = should_run_r_tests
 
         self.dependent_modules = set()
@@ -237,15 +234,100 @@ examples = Module(
 )
 
 
-pyspark = Module(
-    name="pyspark",
-    dependencies=[mllib, streaming, streaming_kafka, sql],
+pyspark_core = Module(
+    name="pyspark-core",
+    dependencies=[mllib, streaming, streaming_kafka],
     source_file_regexes=[
-        "python/"
+        "python/(?!pyspark/(ml|mllib|sql|streaming))"
     ],
-    should_run_python_tests=True
+    python_test_goals=[
+        "pyspark.rdd",
+        "pyspark.context",
+        "pyspark.conf",
+        "pyspark.broadcast",
+        "pyspark.accumulators",
+        "pyspark.serializers",
+        "pyspark.profiler",
+        "pyspark.shuffle",
+        "pyspark.tests",
+    ]
 )
 
+
+pyspark_sql = Module(
+    name="pyspark-sql",
+    dependencies=[pyspark_core, sql],
+    source_file_regexes=[
+        "python/sql"
+    ],
+    python_test_goals=[
+        "pyspark.sql.types",
+        "pyspark.sql.context",
+        "pyspark.sql.column",
+        "pyspark.sql.dataframe",
+        "pyspark.sql.group",
+        "pyspark.sql.functions",
+        "pyspark.sql.readwriter",
+        "pyspark.sql.window",
+        "pyspark.sql.tests",
+    ]
+)
+
+
+pyspark_streaming = Module(
+    name="pyspark-streaming",
+    dependencies=[pyspark_core, streaming, streaming_kafka],
+    source_file_regexes=[
+        "python/streaming"
+    ],
+    python_test_goals=[
+        "pyspark.streaming.util",
+        "pyspark.streaming.tests",
+    ]
+)
+
+
+pyspark_mllib = Module(
+    name="pyspark-mllib",
+    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, mllib],
+    source_file_regexes=[
+        "python/mllib"
+    ],
+    python_test_goals=[
+        "pyspark.mllib.classification",
+        "pyspark.mllib.clustering",
+        "pyspark.mllib.evaluation",
+        "pyspark.mllib.feature",
+        "pyspark.mllib.fpm",
+        "pyspark.mllib.linalg",
+        "pyspark.mllib.random",
+        "pyspark.mllib.recommendation",
+        "pyspark.mllib.regression",
+        "pyspark.mllib.stat._statistics",
+        "pyspark.mllib.stat.KernelDensity",
+        "pyspark.mllib.tree",
+        "pyspark.mllib.util",
+        "pyspark.mllib.tests",
+    ]
+)
+
+
+pyspark_ml = Module(
+    name="pyspark-sql",
+    dependencies=[pyspark_core, pyspark_mllib],
+    source_file_regexes=[
+        "python/sql"
+    ],
+    python_test_goals=[
+        "pyspark.ml.feature",
+        "pyspark.ml.classification",
+        "pyspark.ml.recommendation",
+        "pyspark.ml.regression",
+        "pyspark.ml.tuning",
+        "pyspark.ml.tests",
+        "pyspark.ml.evaluation",
+    ]
+)
 
 sparkr = Module(
     name="sparkr",
@@ -287,6 +369,6 @@ root = Module(
     sbt_test_goals=[
         "test",
     ],
-    should_run_python_tests=True,
+    python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
     should_run_r_tests=True
 )
