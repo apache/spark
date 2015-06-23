@@ -581,7 +581,7 @@ class LDAModel(JavaModelWrapper):
     """ A clustering model derived from the LDA method.
 
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
-    Terminologyu
+    Terminology
     - "word" = "term": an element of the vocabulary
     - "token": instance of a term appearing in a document
     - "topic": multinomial distribution over words representing some concept
