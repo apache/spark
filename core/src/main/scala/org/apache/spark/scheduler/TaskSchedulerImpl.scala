@@ -442,15 +442,17 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       if (activeExecutorIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
-        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
+        lazy val msg = s"Lost executor $executorId on $hostPort: $reason"
+        if (!sc.isStopped) logError(msg)
         removeExecutor(executorId)
         failedExecutor = Some(executorId)
       } else {
-         // We may get multiple executorLost() calls with different loss reasons. For example, one
-         // may be triggered by a dropped connection from the slave while another may be a report
-         // of executor termination from Mesos. We produce log messages for both so we eventually
-         // report the termination reason.
-         logError("Lost an executor " + executorId + " (already removed): " + reason)
+        // We may get multiple executorLost() calls with different loss reasons. For example, one
+        // may be triggered by a dropped connection from the slave while another may be a report
+        // of executor termination from Mesos. We produce log messages for both so we eventually
+        // report the termination reason.
+        lazy val msg = s"Lost an executor $executorId (already removed): $reason"
+        if (!sc.isStopped) logError(msg)
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
