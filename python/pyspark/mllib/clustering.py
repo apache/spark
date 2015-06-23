@@ -618,7 +618,20 @@ class LDA():
     @classmethod
     def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
               topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
-        """Train a LDA model."""
+        """Train a LDA model.
+
+        :param rdd:                 RDD of data points
+        :param k:                   Number of clusters you want
+        :param maxIterations:       Number of iterations. Default to 20
+        :param docConcentration:    Concentration parameter (commonly named "alpha")
+            for the prior placed on documents' distributions over topics ("theta").
+        :param topicConcentration:  Concentration parameter (commonly named "beta" or "eta")
+            for the prior placed on topics' distributions over terms.
+        :param seed:                Random Seed
+        :param checkpointInterval:  Period (in iterations) between checkpoints.
+        :param optimizer:           LDAOptimizer used to perform the actual calculation
+            (default = EMLDAOptimizer)
+        """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                               docConcentration, topicConcentration, seed,
                               checkpointInterval, optimizer)
