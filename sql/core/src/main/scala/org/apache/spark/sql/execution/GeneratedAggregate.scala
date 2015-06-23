@@ -270,8 +270,10 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (groupingExpressions.isEmpty) {
-        // even with the empty input, value of empty buffer should be forwarded
+      if (!iter.hasNext && (partial || groupingExpressions.nonEmpty)) {
+        // even with empty input, final-global groupby should forward value of empty buffer
+        Iterator[InternalRow]()
+      } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
@@ -284,8 +286,6 @@ case class GeneratedAggregate(
 
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
-      } else if (!iter.hasNext) {
-        Iterator[InternalRow]()
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         // unsafe aggregation buffer is not released if input is empty (see SPARK-8357)
         assert(iter.hasNext, "There should be at least one row for this path")

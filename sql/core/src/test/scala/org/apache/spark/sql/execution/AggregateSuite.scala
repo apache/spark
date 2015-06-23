@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types.DataTypes._
@@ -31,8 +30,8 @@ class AggregateSuite extends SparkPlanTest {
     val groupExpr = df.col("b").expr
     val aggrExpr = Alias(Count(Cast(groupExpr, LongType)), "Count")()
 
-    SparkEnv.get.conf.set("spark.unsafe.exceptionOnMemoryLeak", "true")
-    for (codegen <- Seq(false, true); partial <- Seq(false, true); unsafe <- Seq(false, true)) {
+    for ((codegen, unsafe) <- Seq((false, false), (true, false), (true, true));
+         partial <- Seq(false, true)) {
       TestSQLContext.conf.setConfString("spark.sql.codegen", String.valueOf(codegen))
       checkAnswer(
         df,
