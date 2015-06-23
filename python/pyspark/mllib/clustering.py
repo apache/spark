@@ -590,7 +590,6 @@ class LDAModel(JavaModelWrapper):
     Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from collections import namedtuple
     >>> from numpy.testing import assert_almost_equal
     >>> data = [
     ...     [1, Vectors.dense([0.0, 1.0])],
