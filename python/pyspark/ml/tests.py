@@ -255,7 +255,7 @@ class FeatureTests(PySparkTestCase):
     def test_ngram(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            ([["a","b","c","d","e"]])], ["input"])
+            ([["a", "b", "c", "d", "e"]])], ["input"])
         ngram0 = NGram(n=4, inputCol="input", outputCol="output")
         self.assertEqual(ngram0.getN(), 4)
         self.assertEqual(ngram0.getInputCol(), "input")
