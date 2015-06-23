@@ -107,6 +107,12 @@ class KMeansModel private[ml] (
   val paramMap: ParamMap,
   val parentModel: mllib.clustering.KMeansModel
 ) extends Model[KMeansModel] with KMeansParams {
+
+  override def copy(extra: ParamMap): KMeansModel = {
+    val copied = new KMeansModel(uid, paramMap, parentModel)
+    copyValues(copied, extra)
+  }
+
   /**
    * Transforms the input dataset.
    */
@@ -144,6 +150,8 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   setInitializationSteps(5)
   setEpsilon(1e-4)
   setSeed(Utils.random.nextLong())
+
+  override def copy(extra: ParamMap): Estimator[KMeansModel] = defaultCopy(extra)
 
   def this() = this(Identifiable.randomUID("kmeans"))
 
