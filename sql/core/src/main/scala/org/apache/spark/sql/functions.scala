@@ -1386,6 +1386,30 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
+   * Returns the value of the `e` rounded to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column): Column = Round(Seq(e.expr))
+
+  /**
+   * Returns the value of `e` rounded to the value of `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Column): Column = Round(Seq(e.expr, scale.expr))
+
+  /**
+   * Returns the value of `e` rounded to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Int): Column = round(e, lit(scale))
+
+  /**
    * Shift the the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
