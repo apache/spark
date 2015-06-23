@@ -19,6 +19,8 @@ package org.apache.spark.mllib.util
 
 import java.util.StringTokenizer
 
+import org.apache.commons.lang.StringUtils.isBlank
+
 import scala.collection.mutable.{ArrayBuilder, ListBuffer}
 
 import org.apache.spark.SparkException
@@ -98,6 +100,8 @@ private[mllib] object NumericParser {
         }
       } else if (token == ")") {
         parsing = false
+      } else if (isBlank(token)){
+          // ignore whitespaces between delim chars, e.g. ", ["
       } else {
         // expecting a number
         items.append(parseDouble(token))
