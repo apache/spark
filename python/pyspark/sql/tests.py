@@ -539,6 +539,38 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
+    def test_save_and_load_builder(self):
+        df = self.df
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df.write.json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        schema = StructType([StructField("value", StringType(), True)])
+        actual = self.sqlCtx.read.json(tmpPath, schema)
+        self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+
+        df.write.mode("overwrite").json(tmpPath)
+        actual = self.sqlCtx.read.json(tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
+                .format("json").save(path=tmpPath)
+        actual =\
+            self.sqlCtx.read.format("json")\
+                            .load(path=tmpPath, noUse="this options will not be used in load.")
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        actual = self.sqlCtx.load(path=tmpPath)
+        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+
+        shutil.rmtree(tmpPath)
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
