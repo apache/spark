@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.util.Arrays;
 import java.util.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -142,14 +141,7 @@ public final class UnsafeFixedWidthAggregationMap {
     final int groupingKeySize = groupingKeyToUnsafeRowConverter.getSizeRequirement(groupingKey);
     // Make sure that the buffer is large enough to hold the key. If it's not, grow it:
     if (groupingKeySize > groupingKeyConversionScratchSpace.length) {
-      // This new array will be initially zero, so there's no need to zero it out here
       groupingKeyConversionScratchSpace = new byte[groupingKeySize];
-    } else {
-      // Zero out the buffer that's used to hold the current row. This is necessary in order
-      // to ensure that rows hash properly, since garbage data from the previous row could
-      // otherwise end up as padding in this row. As a performance optimization, we only zero out
-      // the portion of the buffer that we'll actually write to.
-      Arrays.fill(groupingKeyConversionScratchSpace, 0, groupingKeySize, (byte) 0);
     }
     final int actualGroupingKeySize = groupingKeyToUnsafeRowConverter.writeRow(
       groupingKey,

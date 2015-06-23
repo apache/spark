@@ -179,14 +179,14 @@ streaming_twitter = Module(
 )
 
 
-streaming_mqqt = Module(
-    name="streaming-mqqt",
+streaming_mqtt = Module(
+    name="streaming-mqtt",
     dependencies=[streaming],
     source_file_regexes=[
-        "external/mqqt",
+        "external/mqtt",
     ],
     sbt_test_goals=[
-        "streaming-mqqt/test",
+        "streaming-mqtt/test",
     ]
 )
 
