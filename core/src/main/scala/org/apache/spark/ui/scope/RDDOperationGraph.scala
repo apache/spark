@@ -24,6 +24,8 @@ import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
+import scala.util.control.NonFatal
+
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
  *
@@ -164,12 +166,20 @@ private[ui] object RDDOperationGraph extends Logging {
    *
    * For the complete DOT specification, see http://www.graphviz.org/Documentation/dotguide.pdf.
    */
-  def makeDotFile(graph: RDDOperationGraph): String = {
+  def makeDotFile(graph: RDDOperationGraph, stageId: String): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
-    graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
-    dotFile.append("}")
+    try {
+      dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+      graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
+      dotFile.append("}")
+    } catch {
+      case NonFatal(e) =>
+        dotFile.clear()
+        logError(s"Failed to make dot file of $stageId", e)
+        return ""
+    }
+
     val result = dotFile.toString()
     logDebug(result)
     result

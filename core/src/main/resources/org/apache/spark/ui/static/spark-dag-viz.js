@@ -130,6 +130,23 @@ function renderDagViz(forJob) {
     return;
   }
 
+   // If some stage's dot-file is empty because Throwable, fail fast and report error
+   var dotFiles = [];
+   metadataContainer().selectAll(".stage-metadata").each(function() {
+     var metadata = d3.select(this);
+     var dot = metadata.select(".dot-file").text();
+     dotFiles.push(dot);
+   });
+   for (var i = 0; i < dotFiles.length; i++) {
+     if (dotFiles[i] == "") {
+       var message =
+       "<b>NonFatal occurs while getting metadata of the " + jobOrStage +
+       "! More information can get from server log.</b>";
+       graphContainer().append("div").attr("id", "empty-dag-viz-message").html(message);
+       return;
+     }
+   }
+
   // Render
   var svg = graphContainer().append("svg").attr("class", jobOrStage);
   if (forJob) {
