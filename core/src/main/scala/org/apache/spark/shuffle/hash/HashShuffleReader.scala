@@ -17,10 +17,10 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.storage.BlockManager
-import org.apache.spark.{InterruptibleIterator, SparkEnv, TaskContext}
+import org.apache.spark.{InterruptibleIterator, MapOutputTracker, SparkEnv, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
+import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -30,7 +30,7 @@ private[spark] class HashShuffleReader[K, C](
     endPartition: Int,
     context: TaskContext,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    blockStoreShuffleFetcher: BlockStoreShuffleFetcher = new BlockStoreShuffleFetcher)
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C]
 {
   require(endPartition == startPartition + 1,
@@ -40,8 +40,8 @@ private[spark] class HashShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blockStreams = blockStoreShuffleFetcher.fetchBlockStreams(
-      handle.shuffleId, startPartition, context)
+    val blockStreams = BlockStoreShuffleFetcher.fetchBlockStreams(
+      handle.shuffleId, startPartition, context, blockManager, mapOutputTracker)
 
     // Wrap the streams for compression based on configuration
     val wrappedStreams = blockStreams.map { case (blockId, inputStream) =>
