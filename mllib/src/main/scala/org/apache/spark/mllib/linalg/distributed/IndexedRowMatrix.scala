@@ -146,7 +146,7 @@ class IndexedRowMatrix(
       val indexedRows = indices.zip(svd.U.rows).map { case (i, v) =>
         IndexedRow(i, v)
       }
-      new IndexedRowMatrix(indexedRows, nRows, nCols)
+      new IndexedRowMatrix(indexedRows, svd.U.numRows(), svd.U.numCols())
     } else {
       null
     }
