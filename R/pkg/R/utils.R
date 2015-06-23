@@ -368,21 +368,21 @@ listToSeq <- function(l) {
 }
 
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
-# user defined function (UDF), and to examine variables in the UDF to decide 
+# user defined function (UDF), and to examine variables in the UDF to decide
 # if their values should be included in the new function environment.
 # param
 #   node The current AST node in the traversal.
 #   oldEnv The original function environment.
 #   defVars An Accumulator of variables names defined in the function's calling environment,
 #           including function argument and local variable names.
-#   checkedFunc An environment of function objects examined during cleanClosure. It can 
+#   checkedFunc An environment of function objects examined during cleanClosure. It can
 #               be considered as a "name"-to-"list of functions" mapping.
 #   newEnv A new function environment to store necessary function dependencies, an output argument.
 processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
   nodeLen <- length(node)
-  
+
   if (nodeLen > 1 && typeof(node) == "language") {
-    # Recursive case: current AST node is an internal node, check for its children. 
+    # Recursive case: current AST node is an internal node, check for its children.
     if (length(node[[1]]) > 1) {
       for (i in 1:nodeLen) {
         processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
@@ -393,7 +393,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         for (i in 2:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "<-" || nodeChar == "=" || 
+      } else if (nodeChar == "<-" || nodeChar == "=" ||
                    nodeChar == "<<-") { # Assignment Ops.
         defVar <- node[[2]]
         if (length(defVar) == 1 && typeof(defVar) == "symbol") {
@@ -422,21 +422,21 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         }
       }
     }
-  } else if (nodeLen == 1 && 
+  } else if (nodeLen == 1 &&
                (typeof(node) == "symbol" || typeof(node) == "language")) {
     # Base case: current AST node is a leaf node and a symbol or a function call.
     nodeChar <- as.character(node)
     if (!nodeChar %in% defVars$data) {  # Not a function parameter or local variable.
       func.env <- oldEnv
       topEnv <- parent.env(.GlobalEnv)
-      # Search in function environment, and function's enclosing environments 
+      # Search in function environment, and function's enclosing environments
       # up to global environment. There is no need to look into package environments
-      # above the global or namespace environment that is not SparkR below the global, 
+      # above the global or namespace environment that is not SparkR below the global,
       # as they are assumed to be loaded on workers.
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
-        if (!isNamespace(func.env) || 
-              (getNamespaceName(func.env) == "SparkR" && 
+        if (!isNamespace(func.env) ||
+              (getNamespaceName(func.env) == "SparkR" &&
               !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
@@ -444,7 +444,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                        error = function(e) { FALSE })) {
             obj <- get(nodeChar, envir = func.env, inherits = FALSE)
             if (is.function(obj)) {  # If the node is a function call.
-              funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F, 
+              funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
                 ifelse(identical(func, obj), TRUE, FALSE)
@@ -453,7 +453,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
-              assign(nodeChar, 
+              assign(nodeChar,
                      if (is.null(funcList[[1]])) {
                        list(obj)
                      } else {
@@ -466,7 +466,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
             break
           }
         }
-        
+
         # Continue to search in enclosure.
         func.env <- parent.env(func.env)
       }
@@ -474,8 +474,8 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
   }
 }
 
-# Utility function to get user defined function (UDF) dependencies (closure). 
-# More specifically, this function captures the values of free variables defined 
+# Utility function to get user defined function (UDF) dependencies (closure).
+# More specifically, this function captures the values of free variables defined
 # outside a UDF, and stores them in the function's environment.
 # param
 #   func A function whose closure needs to be captured.
@@ -488,7 +488,7 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
     newEnv <- new.env(parent = .GlobalEnv)
     func.body <- body(func)
     oldEnv <- environment(func)
-    # defVars is an Accumulator of variables names defined in the function's calling 
+    # defVars is an Accumulator of variables names defined in the function's calling
     # environment. First, function's arguments are added to defVars.
     defVars <- initAccumulator()
     argNames <- names(as.list(args(func)))
@@ -509,15 +509,15 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
 # return value
 #   A list of two result RDDs.
 appendPartitionLengths <- function(x, other) {
-  if (getSerializedMode(x) != getSerializedMode(other) || 
+  if (getSerializedMode(x) != getSerializedMode(other) ||
       getSerializedMode(x) == "byte") {
     # Append the number of elements in each partition to that partition so that we can later
     # know the boundary of elements from x and other.
     #
-    # Note that this appending also serves the purpose of reserialization, because even if 
+    # Note that this appending also serves the purpose of reserialization, because even if
     # any RDD is serialized, we need to reserialize it to make sure its partitions are encoded
     # as a single byte array. For example, partitions of an RDD generated from partitionBy()
-    # may be encoded as multiple byte arrays.          
+    # may be encoded as multiple byte arrays.
     appendLength <- function(part) {
       len <- length(part)
       part[[len + 1]] <- len + 1
@@ -544,23 +544,23 @@ mergePartitions <- function(rdd, zip) {
         lengthOfValues <- part[[len]]
         lengthOfKeys <- part[[len - lengthOfValues]]
         stopifnot(len == lengthOfKeys + lengthOfValues)
-        
+
         # For zip operation, check if corresponding partitions of both RDDs have the same number of elements.
         if (zip && lengthOfKeys != lengthOfValues) {
           stop("Can only zip RDDs with same number of elements in each pair of corresponding partitions.")
         }
-        
+
         if (lengthOfKeys > 1) {
           keys <- part[1 : (lengthOfKeys - 1)]
         } else {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[(lengthOfKeys + 1) : (len - 1)]                    
+          values <- part[(lengthOfKeys + 1) : (len - 1)]
         } else {
           values <- list()
         }
-        
+
         if (!zip) {
           return(mergeCompactLists(keys, values))
         }
@@ -578,6 +578,6 @@ mergePartitions <- function(rdd, zip) {
       part
     }
   }
-  
+
   PipelinedRDD(rdd, partitionFunc)
 }
