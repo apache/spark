@@ -210,10 +210,14 @@ setMethod("cast",
             }
           })
 
-#' Specify multiple values
+#' Match a column with given values.
 #'
 #' @rdname column
-#' @return a matched value as a result of comparing with given values.
+#' @return a matched values as a result of comparing with given values.
+#' \dontrun{
+#'   filter(df, "age in (10, 30)")
+#'   where(df, df$age %in% c(10, 30))
+#' }
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
