@@ -196,17 +196,14 @@ private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
 /**
  * Associates a timeout with a description so that a when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.
- * @param timeout timeout duration in seconds
- * @param conf the configuration parameter that controls this timeout
+ * @param duration timeout duration in seconds
+ * @param timeoutProp the configuration property that controls this timeout
  */
-private[spark] class RpcTimeout(timeout: FiniteDuration, val conf: String) {
-
-  /** Get the timeout duration */
-  def duration: FiniteDuration = timeout
+private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: String) {
 
   /** Amends the standard message of TimeoutException to include the description */
   private def createRpcTimeoutException(te: TimeoutException): RpcTimeoutException = {
-    new RpcTimeoutException(te.getMessage() + ". This timeout is controlled by " + conf, te)
+    new RpcTimeoutException(te.getMessage() + ". This timeout is controlled by " + timeoutProp, te)
   }
 
   /**
