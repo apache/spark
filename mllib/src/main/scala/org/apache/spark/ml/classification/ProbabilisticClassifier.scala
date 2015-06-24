@@ -113,9 +113,9 @@ private[spark] abstract class ProbabilisticClassificationModel[
     }
     if ($(predictionCol).nonEmpty) {
       val predUDF = if ($(rawPredictionCol).nonEmpty) {
-        callUDF(raw2prediction _, DoubleType, col($(rawPredictionCol)))
+        udf[Double, Vector](raw2prediction).apply(col($(rawPredictionCol)))
       } else if ($(probabilityCol).nonEmpty) {
-        callUDF(probability2prediction _, DoubleType, col($(probabilityCol)))
+        udf[Double, Vector](probability2prediction).apply(col($(probabilityCol)))
       } else {
         callUDF(predict _, DoubleType, col($(featuresCol)))
       }
