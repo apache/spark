@@ -339,7 +339,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_row(null))
   }
 
-  test("round test") {
+  test("round") {
     val domain = -16 to 16
     val doublePi = math.Pi
     val stringPi = "3.141592653589793"

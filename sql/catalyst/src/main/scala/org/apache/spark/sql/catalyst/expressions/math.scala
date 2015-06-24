@@ -558,8 +558,8 @@ case class Round(child: Expression, scale: Expression) extends Expression {
           return TypeCheckFailure("ROUND scale argument out of allowed range")
         }
       case Literal(_, _: IntegralType) | Literal(_, NullType) => // satisfy requirement
-      case child =>
-        if (child.find { case _: AttributeReference => true; case _ => false } != None) {
+      case _ =>
+        if (!scale.foldable) {
           return TypeCheckFailure("Only Integral Literal or Null Literal " +
             s"are allowed for ROUND scale arguments, got ${child.dataType}")
         }
@@ -592,6 +592,21 @@ case class Round(child: Expression, scale: Expression) extends Expression {
         round(evalE.asInstanceOf[UTF8String].toString, _scale)
       case BinaryType =>
         round(UTF8String.fromBytes(evalE.asInstanceOf[Array[Byte]]).toString, _scale)
+    }
+  }
+
+  private def round[T](input: T, scale: Int)(implicit bdc: BigDecimalConverter[T]): T = {
+    input match {
+      case f: Float if (f.isNaN || f.isInfinite) => return input
+      case d: Double if (d.isNaN || d.isInfinite) => return input
+      case _ =>
+    }
+    bdc.fromBigDecimal(bdc.toBigDecimal(input).setScale(scale, BigDecimal.RoundingMode.HALF_UP))
+  }
+
+  private def round(input: String, scale: Int): Any = {
+    try round(input.toDouble, scale) catch {
+      case _ : NumberFormatException => null
     }
   }
 
@@ -671,20 +686,5 @@ case class Round(child: Expression, scale: Expression) extends Expression {
         ${roundCode}
       }
       """
-  }
-
-  private def round[T](input: T, scale: Int)(implicit bdc: BigDecimalConverter[T]): T = {
-    input match {
-      case f: Float if (f.isNaN || f.isInfinite) => return input
-      case d: Double if (d.isNaN || d.isInfinite) => return input
-      case _ =>
-    }
-    bdc.fromBigDecimal(bdc.toBigDecimal(input).setScale(scale, BigDecimal.RoundingMode.HALF_UP))
-  }
-
-  private def round(input: String, scale: Int): Any = {
-    try round(input.toDouble, scale) catch {
-      case _ : NumberFormatException => null
-    }
   }
 }
