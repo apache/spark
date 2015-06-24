@@ -17,10 +17,13 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{File, FileInputStream}
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
+
+import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
+import java.security.{KeyStore, NoSuchAlgorithmException}
 
 /**
  * SSLOptions class is a common container for SSL configuration options. It offers methods to
@@ -38,7 +41,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * @param trustStore          a path to the trust-store file
  * @param trustStorePassword  a password to access the trust-store file
  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
- * @param enabledAlgorithms   a set of encryption algorithms to use
+ * @param enabledAlgorithms   a set of encryption algorithms that may be used
  */
 private[spark] case class SSLOptions(
     enabled: Boolean = false,
@@ -48,7 +51,8 @@ private[spark] case class SSLOptions(
     trustStore: Option[File] = None,
     trustStorePassword: Option[String] = None,
     protocol: Option[String] = None,
-    enabledAlgorithms: Set[String] = Set.empty) {
+    enabledAlgorithms: Set[String] = Set.empty)
+    extends Logging {
 
   /**
    * Creates a Jetty SSL context factory according to the SSL settings represented by this object.
@@ -63,7 +67,7 @@ private[spark] case class SSLOptions(
       trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       protocol.foreach(sslContextFactory.setProtocol)
-      sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      sslContextFactory.setIncludeCipherSuites(supportedAlgorithms.toSeq: _*)
 
       Some(sslContextFactory)
     } else {
@@ -94,12 +98,42 @@ private[spark] case class SSLOptions(
         .withValue("akka.remote.netty.tcp.security.protocol",
           ConfigValueFactory.fromAnyRef(protocol.getOrElse("")))
         .withValue("akka.remote.netty.tcp.security.enabled-algorithms",
-          ConfigValueFactory.fromIterable(enabledAlgorithms.toSeq))
+          ConfigValueFactory.fromIterable(supportedAlgorithms.toSeq))
         .withValue("akka.remote.netty.tcp.enable-ssl",
           ConfigValueFactory.fromAnyRef(true)))
     } else {
       None
     }
+  }
+
+  /*
+   * The supportedAlgorithms set is a subset of the enabledAlgorithms that
+   * are supported by the current Java security provider for this protocol.
+   */
+  private val supportedAlgorithms: Set[String] = {
+    var context: Option[SSLContext] = Some(SSLContext.getDefault)
+    try {
+      context = Some(SSLContext.getInstance(protocol.orNull))
+      /* The set of supported algorithms does not depend upon the keys, trust, or
+         rng, although they will influence which algorithms are eventually used. */
+      context.foreach(_.init(null, null, null))
+    } catch {
+      case npe: NullPointerException =>
+        logDebug("No SSL protocol specified")
+      case nsa: NoSuchAlgorithmException =>
+        logDebug(s"No support for requested SSL protocol ${protocol.get}")
+    }
+
+    val providerAlgorithms = context
+      .map(_.getServerSocketFactory.getSupportedCipherSuites.toSet)
+      .getOrElse(Set.empty)
+
+    // Log which algorithms we are discarding
+    (enabledAlgorithms &~ providerAlgorithms).foreach { cipher =>
+      logDebug(s"Discarding unsupported cipher $cipher")
+    }
+
+    enabledAlgorithms & providerAlgorithms
   }
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
