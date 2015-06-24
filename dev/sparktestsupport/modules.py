@@ -258,7 +258,7 @@ pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, sql],
     source_file_regexes=[
-        "python/sql"
+        "python/pyspark/sql"
     ],
     python_test_goals=[
         "pyspark.sql.types",
@@ -278,7 +278,7 @@ pyspark_streaming = Module(
     name="pyspark-streaming",
     dependencies=[pyspark_core, streaming, streaming_kafka],
     source_file_regexes=[
-        "python/streaming"
+        "python/pyspark/streaming"
     ],
     python_test_goals=[
         "pyspark.streaming.util",
@@ -291,7 +291,7 @@ pyspark_mllib = Module(
     name="pyspark-mllib",
     dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, mllib],
     source_file_regexes=[
-        "python/mllib"
+        "python/pyspark/mllib"
     ],
     python_test_goals=[
         "pyspark.mllib.classification",
@@ -313,10 +313,10 @@ pyspark_mllib = Module(
 
 
 pyspark_ml = Module(
-    name="pyspark-sql",
+    name="pyspark-ml",
     dependencies=[pyspark_core, pyspark_mllib],
     source_file_regexes=[
-        "python/sql"
+        "python/pyspark/ml/"
     ],
     python_test_goals=[
         "pyspark.ml.feature",
