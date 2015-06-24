@@ -34,7 +34,7 @@ class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
 class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
 
 /**
- * Java source for evaluating an [[Expression]] given a [[Row]] of input.
+ * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
@@ -175,21 +175,22 @@ class CodeGenContext {
    * Generate code for compare expression in Java
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
-    // Use signum() to keep any small difference bwteen float/double
-    case FloatType | DoubleType => s"(int)java.lang.Math.signum($c1 - $c2)"
-    case dt: DataType if isPrimitiveType(dt) => s"(int)($c1 - $c2)"
+    // java boolean doesn't support > or < operator
+    case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
+    // use c1 - c2 may overflow
+    case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case other => s"$c1.compare($c2)"
   }
 
   /**
-   * List of data types that have special accessors and setters in [[Row]].
+   * List of data types that have special accessors and setters in [[InternalRow]].
    */
   val nativeTypes =
     Seq(IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType)
 
   /**
-   * Returns true if the data type has a special accessor and setter in [[Row]].
+   * Returns true if the data type has a special accessor and setter in [[InternalRow]].
    */
   def isNativeType(dt: DataType): Boolean = nativeTypes.contains(dt)
 
@@ -204,6 +205,11 @@ class CodeGenContext {
   def isPrimitiveType(dt: DataType): Boolean = primitiveTypes.contains(dt)
 }
 
+
+abstract class GeneratedClass {
+  def generate(expressions: Array[Expression]): Any
+}
+
 /**
  * A base class for generators of byte code to perform expression evaluation.  Includes a set of
  * helpers for referring to Catalyst types and building trees that perform evaluation of individual
@@ -214,11 +220,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
-
-  /**
-   * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
-   */
-  var debugLogging = false
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -240,10 +241,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    *
    * It will track the time used to compile
    */
-  protected def compile(code: String): Class[_] = {
+  protected def compile(code: String): GeneratedClass = {
     val startTime = System.nanoTime()
-    val clazz = try {
-      new ClassBodyEvaluator(code).getClazz()
+    val evaluator = new ClassBodyEvaluator()
+    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setDefaultImports(Array("org.apache.spark.sql.catalyst.InternalRow"))
+    evaluator.setExtendedClass(classOf[GeneratedClass])
+    try {
+      evaluator.cook(code)
     } catch {
       case e: Exception =>
         logError(s"failed to compile:\n $code", e)
@@ -252,7 +257,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
     logDebug(s"Code (${code.size} bytes) compiled in $timeMs ms")
-    clazz
+    evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }
 
   /**
@@ -265,7 +270,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * weak keys/values and thus does not respond to memory pressure.
    */
   protected val cache = CacheBuilder.newBuilder()
-    .maximumSize(1000)
+    .maximumSize(100)
     .build(
       new CacheLoader[InType, OutType]() {
         override def load(in: InType): OutType = {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.Substring
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,7 +50,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == null) {
       null
@@ -121,7 +122,7 @@ trait CaseConversionExpression extends ExpectsInputTypes {
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) {
       null
@@ -169,7 +170,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
     if(leftEval == null) {
       null
@@ -225,6 +226,10 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends Expression with ExpectsInputTypes {
 
+  def this(str: Expression, pos: Expression) = {
+    this(str, pos, Literal(Integer.MAX_VALUE))
+  }
+
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
@@ -262,7 +267,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     (start, end)
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
     val po = pos.eval(input)
     val ln = len.eval(input)
@@ -290,12 +295,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   }
 }
 
-object Substring {
-  def apply(str: Expression, pos: Expression): Substring = {
-    apply(str, pos, Literal(Integer.MAX_VALUE))
-  }
-}
-
 /**
  * A function that return the length of the given string expression.
  */
@@ -303,7 +302,7 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   override def dataType: DataType = IntegerType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
     if (string == null) null else string.asInstanceOf[UTF8String].length
   }
@@ -314,5 +313,3 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
     defineCodeGen(ctx, ev, c => s"($c).length()")
   }
 }
-
-

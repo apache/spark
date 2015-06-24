@@ -257,6 +257,41 @@ class JavaLoader(Loader):
         return cls(java_model)
 
 
+class LinearDataGenerator(object):
+    """Utils for generating linear data"""
+
+    @staticmethod
+    def generateLinearInput(intercept, weights, xMean, xVariance,
+                            nPoints, seed, eps):
+        """
+        :param: intercept bias factor, the term c in X'w + c
+        :param: weights   feature vector, the term w in X'w + c
+        :param: xMean     Point around which the data X is centered.
+        :param: xVariance Variance of the given data
+        :param: nPoints   Number of points to be generated
+        :param: seed      Random Seed
+        :param: eps       Used to scale the noise. If eps is set high,
+                          the amount of gaussian noise added is more.
+        Returns a list of LabeledPoints of length nPoints
+        """
+        weights = [float(weight) for weight in weights]
+        xMean = [float(mean) for mean in xMean]
+        xVariance = [float(var) for var in xVariance]
+        return list(callMLlibFunc(
+            "generateLinearInputWrapper", float(intercept), weights, xMean,
+            xVariance, int(nPoints), int(seed), float(eps)))
+
+    @staticmethod
+    def generateLinearRDD(sc, nexamples, nfeatures, eps,
+                          nParts=2, intercept=0.0):
+        """
+        Generate a RDD of LabeledPoints.
+        """
+        return callMLlibFunc(
+            "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
+            float(eps), int(nParts), float(intercept))
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext

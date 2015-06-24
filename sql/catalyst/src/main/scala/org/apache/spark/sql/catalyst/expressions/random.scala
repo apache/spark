@@ -37,7 +37,11 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize it.
    */
-  @transient protected lazy val rng = new XORShiftRandom(seed + TaskContext.get().partitionId())
+  @transient protected lazy val partitionId = TaskContext.get() match {
+    case null => 0
+    case _ => TaskContext.get().partitionId()
+  }
+  @transient protected lazy val rng = new XORShiftRandom(seed + partitionId)
 
   override def deterministic: Boolean = false
 
@@ -48,13 +52,11 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 case class Rand(seed: Long) extends RDG(seed) {
-  override def eval(input: Row): Double = rng.nextDouble()
-}
+  override def eval(input: InternalRow): Double = rng.nextDouble()
 
-object Rand {
-  def apply(): Rand = apply(Utils.random.nextLong())
+  def this() = this(Utils.random.nextLong())
 
-  def apply(seed: Expression): Rand = apply(seed match {
+  def this(seed: Expression) = this(seed match {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
@@ -62,13 +64,11 @@ object Rand {
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
 case class Randn(seed: Long) extends RDG(seed) {
-  override def eval(input: Row): Double = rng.nextGaussian()
-}
+  override def eval(input: InternalRow): Double = rng.nextGaussian()
 
-object Randn {
-  def apply(): Randn = apply(Utils.random.nextLong())
+  def this() = this(Utils.random.nextLong())
 
-  def apply(seed: Expression): Randn = apply(seed match {
+  def this(seed: Expression) = this(seed match {
     case IntegerLiteral(s) => s
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })

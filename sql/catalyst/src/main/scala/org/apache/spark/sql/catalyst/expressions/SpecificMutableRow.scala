@@ -222,7 +222,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
-  override def copy(): Row = {
+  override def copy(): InternalRow = {
     val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
