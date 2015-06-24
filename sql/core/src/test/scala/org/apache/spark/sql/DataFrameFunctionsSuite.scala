@@ -179,7 +179,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("2015", "2015", "2013"))
 
     checkAnswer(
-      df.selectExpr("dateFormat(a, y)", "dateFormat(b, y)", "dateFormat(c, y)"),
+      df.selectExpr("dateFormat(a, 'y')", "dateFormat(b, 'y')", "dateFormat(c, 'y')"),
       Row("2015", "2015", "2013"))
   }
 
@@ -271,11 +271,11 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(hour("a"), hour("b"), hour("c")),
+      df.select(second("a"), second("b"), second("c")),
       Row(0, 0, 15))
 
     checkAnswer(
-      df.selectExpr("hour(a)", "hour(b)", "hour(c)"),
+      df.selectExpr("second(a)", "second(b)", "second(c)"),
       Row(0, 0, 15))
   }
 
