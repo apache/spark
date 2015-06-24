@@ -352,10 +352,12 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests():
+def run_python_tests(modules):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    run_cmd([os.path.join(SPARK_HOME, "python", "run-tests")])
+    run_cmd([
+        os.path.join(SPARK_HOME, "python", "run-tests"),
+        "--modules=%s" % ','.join(m.name for m in modules)])
 
 
 def run_sparkr_tests():
@@ -447,8 +449,9 @@ def main():
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules)
 
-    if any(m.should_run_python_tests for m in test_modules):
-        run_python_tests()
+    modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
+    if modules_with_python_tests:
+        run_python_tests(modules_with_python_tests)
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 
