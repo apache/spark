@@ -48,7 +48,7 @@ private[spark] class BlockStatusListener extends SparkListener {
 
     synchronized {
       // Drop the update info if the block manager is not registered
-      blockManagers.get(blockManagerId) foreach { blocksInBlockManager =>
+      blockManagers.get(blockManagerId).foreach { blocksInBlockManager =>
         if (storageLevel.isValid) {
           blocksInBlockManager.add(blockId)
           val location = blockManagerId.hostPort
@@ -88,7 +88,7 @@ private[spark] class BlockStatusListener extends SparkListener {
       blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
     val blockManagerId = blockManagerRemoved.blockManagerId
     synchronized {
-      blockManagers.remove(blockManagerId) foreach { blockIds =>
+      blockManagers.remove(blockManagerId).foreach { blockIds =>
         for (blockId <- blockIds) {
           removeBlockFromBlockManager(blockId, blockManagerId)
         }

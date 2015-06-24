@@ -39,8 +39,7 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
  * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
-class StorageListener(storageStatusListener: StorageStatusListener)
-  extends BlockStatusListener with SparkListener {
+class StorageListener(storageStatusListener: StorageStatusListener) extends BlockStatusListener {
 
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
 

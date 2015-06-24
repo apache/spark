@@ -32,7 +32,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val blocks = listener.allBlocks.sortBy(_.blockId.toString)
     val streamBlocks = blocks.filter(_.blockId.isInstanceOf[StreamBlockId])
-    val broadcastBlocks = blocks.filter(_.blockId.isInstanceOf[BroadcastBlockId])
     val content = rddTable ++ blockTable("Receiver Blocks", streamBlocks)
     UIUtils.headerSparkPage("Storage", content, parent)
   }
@@ -57,7 +56,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   }
 
   /** Header fields for the RDD table */
-  private def rddHeader = Seq(
+  private val rddHeader = Seq(
     "RDD Name",
     "Storage Level",
     "Cached Partitions",
@@ -86,7 +85,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:on
   }
 
-  private def blockHeader = Seq(
+  private val blockHeader = Seq(
     "Block Id",
     "Storage Level",
     "Size in Memory",
