@@ -66,7 +66,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
     } else if (child.dataType.isInstanceOf[StringType]) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"Sha1 accepts numeric types, not ${child.dataType}")
+      TypeCheckResult.TypeCheckFailure(s"Sha1 accepts string or binary, not ${child.dataType}")
     }
 
   override def eval(input: InternalRow): Any = {
