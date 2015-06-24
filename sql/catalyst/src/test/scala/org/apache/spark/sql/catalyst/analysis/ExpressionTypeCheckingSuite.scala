@@ -165,8 +165,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(
       CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
-      CreateNamedStruct(Seq(1, "a", "b", 2.0)), "Non String Literal fields")
+      CreateNamedStruct(Seq(1, "a", "b", 2.0)),
+        "Odd position only allow foldable and not-null StringType expressions")
     assertError(
-      CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)), "Non String Literal fields")
+      CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
+        "Odd position only allow foldable and not-null StringType expressions")
   }
 }

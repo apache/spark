@@ -99,7 +99,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     StructType(fields)
   }
 
-  override def foldable: Boolean = children.forall(_.foldable)
+  override def foldable: Boolean = valExprs.forall(_.foldable)
 
   override def nullable: Boolean = false
 
@@ -111,7 +111,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
         nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
       if (invalidNames.size != 0) {
         TypeCheckResult.TypeCheckFailure(
-          s"Non String Literal fields at odd position : ${invalidNames.mkString(",")}")
+          s"Odd position only allow foldable and not-null StringType expressions, got :" +
+            s" ${invalidNames.mkString(",")}")
       } else {
         TypeCheckResult.TypeCheckSuccess
       }
