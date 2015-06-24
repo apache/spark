@@ -194,6 +194,8 @@ private[sql] class ParquetRelation2(
       committerClass,
       classOf[ParquetOutputCommitter])
 
+    job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
+
     // TODO There's no need to use two kinds of WriteSupport
     // We should unify them. `SpecificMutableRow` can process both atomic (primitive) types and
     // complex types.
