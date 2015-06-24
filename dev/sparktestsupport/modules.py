@@ -364,8 +364,8 @@ root = Module(
     dependencies=[],
     source_file_regexes=[],
     # In order to run all of the tests, enable every test profile:
-    build_profile_flags=
-        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
+    build_profile_flags=list(set(
+        itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
     sbt_test_goals=[
         "test",
     ],
