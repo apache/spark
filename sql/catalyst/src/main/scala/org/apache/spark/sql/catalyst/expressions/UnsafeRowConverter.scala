@@ -244,8 +244,8 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
       offset,
       numBytes
     )
-    val flag = if (isString) 1L << 62 else 0
-    target.setLong(column, flag | (cursor.toLong << 31L) | numBytes.toLong)
+    val flag = if (isString) 1L << (UnsafeRow.OFFSET_BITS * 2) else 0
+    target.setLong(column, flag | (cursor.toLong << UnsafeRow.OFFSET_BITS) | numBytes.toLong)
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 }

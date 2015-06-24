@@ -41,6 +41,13 @@ import org.apache.spark.unsafe.types.UTF8String;
  * (they are combined into a long). For other objects, they are stored in a pool, the indexes of
  * them are hold in the the word.
  *
+ * For non-primitive types, the word of a field could be:
+ *   UNION {
+ *     [1] [offset: 31bits] [length: 31bits]  // StringType
+ *     [0] [offset: 31bits] [length: 31bits]  // BinaryType
+ *     - [index: 63bits]                      // StringType, Binary, index to object in pool
+ *   }
+ *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
 public final class UnsafeRow extends BaseMutableRow {
@@ -68,6 +75,8 @@ public final class UnsafeRow extends BaseMutableRow {
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
   }
+
+  public static final long OFFSET_BITS = 31L;
 
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
@@ -116,8 +125,10 @@ public final class UnsafeRow extends BaseMutableRow {
   public void update(int i, Object value) {
     if (value == null) {
       if (!isNullAt(i)) {
+        // remove the old value from pool
         long idx = getLong(i);
         if (idx <= 0) {
+          // this is the index of old value in pool, remove it
           pool.replace((int)-idx, null);
         } else {
           // there will be some garbage left (UTF8String or byte[])
@@ -128,35 +139,41 @@ public final class UnsafeRow extends BaseMutableRow {
     }
 
     if (isNullAt(i)) {
+      // there is not an old value, put the new value into pool
       int idx = pool.put(value);
       setLong(i, (long)-idx);
     } else {
+      // there is an old value, check the type, then replace it or update it
       long v = getLong(i);
       if (v <= 0) {
+        // it's the index in the pool, replace old value with new one
         int idx = (int)-v;
         pool.replace(idx, value);
       } else {
-        // old object are UTF8String or byte[], try to reuse the space
-        boolean is_string = (v >> 62) > 0;
-        int offset = (int)((v >> 31) & Integer.MAX_VALUE);
-        int size = (int)(v & Integer.MAX_VALUE);
-        byte[] bytes;
+        // old value is UTF8String or byte[], try to reuse the space
+        boolean is_string;
+        byte[] newBytes;
         if (value instanceof UTF8String) {
-          bytes = ((UTF8String)value).getBytes();
+          newBytes = ((UTF8String)value).getBytes();
+          is_string = true;
         } else {
-          bytes = (byte[]) value;
+          newBytes = (byte[]) value;
+          is_string = false;
         }
-        if (bytes.length <= size) {
+        int offset = (int)((v >> OFFSET_BITS) & Integer.MAX_VALUE);
+        int oldLength = (int)(v & Integer.MAX_VALUE);
+        if (newBytes.length <= oldLength) {
+          // the new value can fit in the old buffer, re-use it
           PlatformDependent.copyMemory(
-            bytes,
+            newBytes,
             PlatformDependent.BYTE_ARRAY_OFFSET,
             baseObject,
             baseOffset + offset,
-            bytes.length);
-          long flag = is_string ? 1L << 62 : 0L;
-          setLong(i, flag | (((long)offset) << 31) | (long)bytes.length);
+            newBytes.length);
+          long flag = is_string ? 1L << (OFFSET_BITS * 2) : 0L;
+          setLong(i, flag | (((long)offset) << OFFSET_BITS) | (long)newBytes.length);
         } else {
-          // Can not fit in the buffer
+          // Cannot fit in the buffer
           int idx = pool.put(value);
           setLong(i, (long)-idx);
         }
@@ -230,8 +247,8 @@ public final class UnsafeRow extends BaseMutableRow {
       int idx = (int)-v;
       return pool.get(idx);
     } else {
-      boolean is_string = (v >> 62) > 0;
-      int offset = (int)((v >> 31) & Integer.MAX_VALUE);
+      boolean is_string = (v >> (OFFSET_BITS * 2)) > 0;
+      int offset = (int)((v >> OFFSET_BITS) & Integer.MAX_VALUE);
       int size = (int)(v & Integer.MAX_VALUE);
       final byte[] bytes = new byte[size];
       PlatformDependent.copyMemory(

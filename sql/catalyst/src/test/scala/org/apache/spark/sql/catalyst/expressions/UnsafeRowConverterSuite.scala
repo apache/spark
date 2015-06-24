@@ -41,21 +41,21 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.setInt(2, 2)
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
-    sizeRequired should be (8 + (3 * 8))
+    assert(sizeRequired === 8 + (3 * 8))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
-    numBytesWritten should be (sizeRequired)
+    assert(numBytesWritten === sizeRequired)
 
     val unsafeRow = new UnsafeRow()
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
-    unsafeRow.getLong(0) should be (0)
-    unsafeRow.getLong(1) should be (1)
-    unsafeRow.getInt(2) should be (2)
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.getLong(1) === 1)
+    assert(unsafeRow.getInt(2) === 2)
 
     unsafeRow.setLong(1, 3)
-    unsafeRow.getLong(1) should be (3)
+    assert(unsafeRow.getLong(1) === 3)
     unsafeRow.setInt(2, 4)
-    unsafeRow.getInt(2) should be (4)
+    assert(unsafeRow.getInt(2) === 4)
   }
 
   test("basic conversion with primitive, string and binary types") {
@@ -68,32 +68,32 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.update(2, "World".getBytes)
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
-    sizeRequired should be (8 + (8 * 3) +
+    assert(sizeRequired === 8 + (8 * 3) +
       ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length) +
       ByteArrayMethods.roundNumberOfBytesToNearestWord("World".getBytes.length))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
-    numBytesWritten should be (sizeRequired)
+    assert(numBytesWritten === sizeRequired)
 
     val unsafeRow = new UnsafeRow()
     val pool = new ObjectPool(10)
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
-    unsafeRow.getLong(0) should be (0)
-    unsafeRow.getString(1) should be ("Hello")
-    unsafeRow.get(2) should be ("World".getBytes)
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.getString(1) === "Hello")
+    assert(unsafeRow.get(2) === "World".getBytes)
 
     unsafeRow.update(1, UTF8String.fromString("World"))
-    unsafeRow.getString(1) should be ("World")
+    assert(unsafeRow.getString(1) === "World")
     assert(pool.size === 0)
     unsafeRow.update(1, UTF8String.fromString("Hello World"))
-    unsafeRow.getString(1) should be ("Hello World")
+    assert(unsafeRow.getString(1) === "Hello World")
     assert(pool.size === 1)
 
     unsafeRow.update(2, "World".getBytes)
-    unsafeRow.get(2) should be ("World".getBytes)
+    assert(unsafeRow.get(2) === "World".getBytes)
     assert(pool.size === 1)
     unsafeRow.update(2, "Hello World".getBytes)
-    unsafeRow.get(2) should be ("Hello World".getBytes)
+    assert(unsafeRow.get(2) === "Hello World".getBytes)
     assert(pool.size === 2)
   }
 
@@ -108,22 +108,22 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
     val pool = new ObjectPool(10)
     val sizeRequired: Int = converter.getSizeRequirement(row)
-    sizeRequired should be (8 + (8 * 3))
+    assert(sizeRequired === 8 + (8 * 3))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, pool)
-    numBytesWritten should be (sizeRequired)
+    assert(numBytesWritten === sizeRequired)
     assert(pool.size === 2)
 
     val unsafeRow = new UnsafeRow()
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
-    unsafeRow.getLong(0) should be (0)
-    unsafeRow.get(1) should be (Decimal(1))
-    unsafeRow.get(2) should be (Array(2))
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.get(1) === Decimal(1))
+    assert(unsafeRow.get(2) === Array(2))
 
     unsafeRow.update(1, Decimal(2))
-    unsafeRow.get(1) should be (Decimal(2))
+    assert(unsafeRow.get(1) === Decimal(2))
     unsafeRow.update(2, Array(3, 4))
-    unsafeRow.get(2) should be (Array(3, 4))
+    assert(unsafeRow.get(2) === Array(3, 4))
     assert(pool.size === 2)
   }
 
@@ -138,24 +138,24 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
-    sizeRequired should be (8 + (8 * 4) +
+    assert(sizeRequired === 8 + (8 * 4) +
       ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
-    numBytesWritten should be (sizeRequired)
+    assert(numBytesWritten === sizeRequired)
 
     val unsafeRow = new UnsafeRow()
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
-    unsafeRow.getLong(0) should be (0)
-    unsafeRow.getString(1) should be ("Hello")
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.getString(1) === "Hello")
     // Date is represented as Int in unsafeRow
-    DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("1970-01-01"))
+    assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("1970-01-01"))
     // Timestamp is represented as Long in unsafeRow
     DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
       (Timestamp.valueOf("2015-05-08 08:10:25"))
 
     unsafeRow.setInt(2, DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-22")))
-    DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("2015-06-22"))
+    assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("2015-06-22"))
     unsafeRow.setLong(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-06-22 08:10:25")))
     DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
       (Timestamp.valueOf("2015-06-22 08:10:25"))
@@ -190,7 +190,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val createdFromNullBuffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(
       rowWithAllNullColumns, createdFromNullBuffer, PlatformDependent.LONG_ARRAY_OFFSET, null)
-    numBytesWritten should be (sizeRequired)
+    assert(numBytesWritten === sizeRequired)
 
     val createdFromNull = new UnsafeRow()
     createdFromNull.pointTo(
@@ -198,17 +198,17 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     for (i <- 0 to fieldTypes.length - 1) {
       assert(createdFromNull.isNullAt(i))
     }
-    createdFromNull.getBoolean(1) should be (false)
-    createdFromNull.getByte(2) should be (0)
-    createdFromNull.getShort(3) should be (0)
-    createdFromNull.getInt(4) should be (0)
-    createdFromNull.getLong(5) should be (0)
+    assert(createdFromNull.getBoolean(1) === false)
+    assert(createdFromNull.getByte(2) === 0)
+    assert(createdFromNull.getShort(3) === 0)
+    assert(createdFromNull.getInt(4) === 0)
+    assert(createdFromNull.getLong(5) === 0)
     assert(java.lang.Float.isNaN(createdFromNull.getFloat(6)))
     assert(java.lang.Double.isNaN(createdFromNull.getDouble(7)))
-    createdFromNull.getString(8) should be (null)
-    createdFromNull.get(9) should be (null)
-    createdFromNull.get(10) should be (null)
-    createdFromNull.get(11) should be (null)
+    assert(createdFromNull.getString(8) === null)
+    assert(createdFromNull.get(9) === null)
+    assert(createdFromNull.get(10) === null)
+    assert(createdFromNull.get(11) === null)
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
@@ -237,18 +237,18 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     setToNullAfterCreation.pointTo(
       setToNullAfterCreationBuffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, pool)
 
-    setToNullAfterCreation.isNullAt(0) should be (rowWithNoNullColumns.isNullAt(0))
-    setToNullAfterCreation.getBoolean(1) should be (rowWithNoNullColumns.getBoolean(1))
-    setToNullAfterCreation.getByte(2) should be (rowWithNoNullColumns.getByte(2))
-    setToNullAfterCreation.getShort(3) should be (rowWithNoNullColumns.getShort(3))
-    setToNullAfterCreation.getInt(4) should be (rowWithNoNullColumns.getInt(4))
-    setToNullAfterCreation.getLong(5) should be (rowWithNoNullColumns.getLong(5))
-    setToNullAfterCreation.getFloat(6) should be (rowWithNoNullColumns.getFloat(6))
-    setToNullAfterCreation.getDouble(7) should be (rowWithNoNullColumns.getDouble(7))
-    setToNullAfterCreation.getString(8) should be (rowWithNoNullColumns.getString(8))
-    setToNullAfterCreation.get(9) should be (rowWithNoNullColumns.get(9))
-    setToNullAfterCreation.get(10) should be (rowWithNoNullColumns.get(10))
-    setToNullAfterCreation.get(11) should be (rowWithNoNullColumns.get(11))
+    assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
+    assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
+    assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
+    assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
+    assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
+    assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
+    assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
+    assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
+    assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
+    assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
+    assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
+    assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
     for (i <- 0 to fieldTypes.length - 1) {
       setToNullAfterCreation.setNullAt(i)
