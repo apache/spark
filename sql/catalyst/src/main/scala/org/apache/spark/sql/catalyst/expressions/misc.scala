@@ -60,7 +60,7 @@ case class Md5(child: Expression)
  * the hash length is not one of the permitted values, the return value is NULL.
  */
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
 
