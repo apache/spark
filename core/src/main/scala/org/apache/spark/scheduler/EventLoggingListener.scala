@@ -197,6 +197,8 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
+  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = logEvent(event)
+
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
