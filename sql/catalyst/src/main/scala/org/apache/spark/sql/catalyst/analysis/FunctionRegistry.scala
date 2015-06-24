@@ -157,6 +157,7 @@ object FunctionRegistry {
     // datetime functions
     expression[DateFormatClass]("dateformat"),
     expression[Year]("year"),
+    expression[Quarter]("quarter"),
     expression[Month]("month"),
     expression[Day]("day"),
     expression[Hour]("hour"),

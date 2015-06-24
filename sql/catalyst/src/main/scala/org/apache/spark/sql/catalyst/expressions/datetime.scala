@@ -131,6 +131,34 @@ case class Year(child: Expression) extends UnaryExpression {
 
 }
 
+case class Quarter(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = IntegerType
+
+  override def foldable: Boolean = child.foldable
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    DateFormatClass(child, Literal("M")).eval(input) match {
+      case null => null
+      case x: UTF8String => (x.toString.toInt - 1) / 3 + 1
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    child.dataType match {
+      case null => TypeCheckResult.TypeCheckSuccess
+      case _: DateType => TypeCheckResult.TypeCheckSuccess
+      case _: TimestampType => TypeCheckResult.TypeCheckSuccess
+      case _: StringType => TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        TypeCheckResult.TypeCheckFailure(s"Quarter accepts date types as argument, " +
+          s" not ${child.dataType}")
+    }
+
+}
+
 case class Month(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = IntegerType

@@ -26,7 +26,7 @@ class DateTimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-  val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+  val ts = new Timestamp(sdf.parse("2013/11/08 13:10:15").getTime)
 
   test("DateFormat") {
     checkEvaluation(DateFormatClass(Literal(d), Literal("y")), "2015")
@@ -40,10 +40,16 @@ class DateTimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Year(Literal(ts)), 2013)
   }
 
+  test("Quarter") {
+    checkEvaluation(Quarter(Literal(d)), 2)
+    checkEvaluation(Quarter(Literal(d.toString)), 2)
+    checkEvaluation(Quarter(Literal(ts)), 4)
+  }
+
   test("Month") {
     checkEvaluation(Month(Literal(d)), 4)
     checkEvaluation(Month(Literal(d.toString)), 4)
-    checkEvaluation(Month(Literal(ts)), 4)
+    checkEvaluation(Month(Literal(ts)), 11)
   }
 
   test("Day") {
@@ -73,7 +79,7 @@ class DateTimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal(d)), 15)
     checkEvaluation(WeekOfYear(Literal(d.toString)), 15)
-    checkEvaluation(WeekOfYear(Literal(ts)), 15)
+    checkEvaluation(WeekOfYear(Literal(ts)), 45)
   }
 
 }

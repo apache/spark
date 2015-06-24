@@ -199,6 +199,22 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2015, 2015, 2013))
   }
 
+  test("quarter") {
+    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013/11/08 13:10:15").getTime)
+
+    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(quarter("a"), quarter("b"), quarter("c")),
+      Row(2, 2, 4))
+
+    checkAnswer(
+      df.selectExpr("quarter(a)", "quarter(b)", "quarter(c)"),
+      Row(2, 2, 4))
+  }
+
   test("month") {
     val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
     val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)

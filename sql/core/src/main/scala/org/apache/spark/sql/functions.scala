@@ -1467,6 +1467,20 @@ object functions {
   def year(columnName: String): Column = year(Column(columnName))
 
   /**
+   * Extracts the quarter as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def quarter(e: Column): Column = Quarter(e.expr)
+
+  /**
+   * Extracts the quarter as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def quarter(columnName: String): Column = quarter(Column(columnName))
+
+  /**
    * Extracts the month as an integer from a given date/timestamp/string
    * @group datetime_funcs
    * @since 1.5.0
