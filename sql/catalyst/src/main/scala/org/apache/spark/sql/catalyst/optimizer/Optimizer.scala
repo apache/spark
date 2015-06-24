@@ -38,21 +38,21 @@ object DefaultOptimizer extends Optimizer {
       EliminateSubQueries) ::
     Batch("Distinct", FixedPoint(100),
       ReplaceDistinctWithAggregate) ::
-    Batch("Operator Reordering", FixedPoint(100),
+    Batch("Operator Optimizations", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
-      PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       ColumnPruning,
       ProjectCollapsing,
-      CombineLimits) ::
-    Batch("ConstantFolding", FixedPoint(100),
+      CombineLimits,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      PushPredicateThroughJoin,
+      RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -121,6 +121,10 @@ object UnionPushdown extends Rule[LogicalPlan] {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(_, groupByExprs, _, child))
+      if (child.outputSet -- AttributeSet(groupByExprs) -- a.references).nonEmpty =>
+      a.copy(child = e.copy(child = prunedChild(child, AttributeSet(groupByExprs) ++ a.references)))
+
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
@@ -630,6 +634,15 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+  }
+}
+
+/**
+ * Removes [[UnaryPositive]] identify function
+ */
+object RemovePositive extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case UnaryPositive(child) => child
   }
 }
 

@@ -17,38 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
 /**
- * Overrides our expression evaluation tests to use code generation for evaluation.
+ * Additional tests for code generation.
  */
-class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = try {
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)()
-    } catch {
-      case e: Throwable =>
-        val ctx = GenerateProjection.newCodeGenContext()
-        val evaluated = GenerateProjection.expressionEvaluator(expression, ctx)
-        fail(
-          s"""
-            |Code generation of $expression failed:
-            |${evaluated.code}
-            |$e
-          """.stripMargin)
-    }
-
-    val actual = plan(inputRow).apply(0)
-    if (actual != expected) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
-    }
-  }
-
+class CodeGenerationSuite extends SparkFunSuite {
 
   test("multithreaded eval") {
     import scala.concurrent._

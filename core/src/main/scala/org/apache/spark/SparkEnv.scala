@@ -20,6 +20,8 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
+import akka.actor.ActorSystem
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
@@ -58,7 +60,7 @@ import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 class SparkEnv (
     val executorId: String,
     private[spark] val rpcEnv: RpcEnv,
-    val actorSystem: ActorSystem, // TODO Remove actorSystem
+    _actorSystem: ActorSystem, // TODO Remove actorSystem
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -75,6 +77,10 @@ class SparkEnv (
     val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
+
+  // TODO Remove actorSystem
+  @deprecated("Actor system is no longer supported as of 1.4")
+  val actorSystem: ActorSystem = _actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()

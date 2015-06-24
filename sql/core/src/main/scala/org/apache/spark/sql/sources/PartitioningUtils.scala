@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
+import java.lang.{Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,12 +25,11 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
-private[sql] case class Partition(values: Row, path: String)
+private[sql] case class Partition(values: InternalRow, path: String)
 
 private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
 
@@ -72,10 +71,11 @@ private[sql] object PartitioningUtils {
    */
   private[sql] def parsePartitions(
       paths: Seq[Path],
-      defaultPartitionName: String): PartitionSpec = {
+      defaultPartitionName: String,
+      typeInference: Boolean): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val pathsWithPartitionValues = paths.flatMap { path =>
-      parsePartition(path, defaultPartitionName).map(path -> _)
+      parsePartition(path, defaultPartitionName, typeInference).map(path -> _)
     }
 
     if (pathsWithPartitionValues.isEmpty) {
@@ -84,7 +84,7 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues.map(_._2))
+      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -99,7 +99,7 @@ private[sql] object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(_, literals), (path, _)) =>
-          Partition(Row.fromSeq(literals.map(_.value)), path.toString)
+          Partition(InternalRow.fromSeq(literals.map(_.value)), path.toString)
       }
 
       PartitionSpec(StructType(fields), partitions)
@@ -124,7 +124,8 @@ private[sql] object PartitioningUtils {
    */
   private[sql] def parsePartition(
       path: Path,
-      defaultPartitionName: String): Option[PartitionValues] = {
+      defaultPartitionName: String,
+      typeInference: Boolean): Option[PartitionValues] = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
@@ -137,7 +138,7 @@ private[sql] object PartitioningUtils {
         return None
       }
 
-      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName)
+      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
       maybeColumn.foreach(columns += _)
       chopped = chopped.getParent
       finished = maybeColumn.isEmpty || chopped.getParent == null
@@ -153,7 +154,8 @@ private[sql] object PartitioningUtils {
 
   private def parsePartitionColumn(
       columnSpec: String,
-      defaultPartitionName: String): Option[(String, Literal)] = {
+      defaultPartitionName: String,
+      typeInference: Boolean): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
       None
@@ -164,7 +166,7 @@ private[sql] object PartitioningUtils {
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
-      val literal = inferPartitionColumnValue(rawColumnValue, defaultPartitionName)
+      val literal = inferPartitionColumnValue(rawColumnValue, defaultPartitionName, typeInference)
       Some(columnName -> literal)
     }
   }
@@ -175,23 +177,22 @@ private[sql] object PartitioningUtils {
    * {{{
    *   NullType ->
    *   IntegerType -> LongType ->
-   *   FloatType -> DoubleType -> DecimalType.Unlimited ->
+   *   DoubleType -> DecimalType.Unlimited ->
    *   StringType
    * }}}
    */
-  private[sql] def resolvePartitions(values: Seq[PartitionValues]): Seq[PartitionValues] = {
-    // Column names of all partitions must match
-    val distinctPartitionsColNames = values.map(_.columnNames).distinct
-
-    if (distinctPartitionsColNames.isEmpty) {
+  private[sql] def resolvePartitions(
+      pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
+    if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      assert(distinctPartitionsColNames.size == 1, {
-        val list = distinctPartitionsColNames.mkString("\t", "\n\t", "")
-        s"Conflicting partition column names detected:\n$list"
-      })
+      val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct
+      assert(
+        distinctPartColNames.size == 1,
+        listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
+      val values = pathsWithPartitionValues.map(_._2)
       val columnCount = values.head.columnNames.size
       val resolvedValues = (0 until columnCount).map { i =>
         resolveTypeConflicts(values.map(_.literals(i)))
@@ -204,26 +205,65 @@ private[sql] object PartitioningUtils {
     }
   }
 
+  private[sql] def listConflictingPartitionColumns(
+      pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
+    val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
+
+    def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
+      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
+
+    val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
+      case (path, partValues) => partValues.columnNames -> path
+    })
+
+    val distinctPartColLists = distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map {
+      case (names, index) =>
+        s"Partition column name list #$index: $names"
+    }
+
+    // Lists out those non-leaf partition directories that also contain files
+    val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
+
+    s"Conflicting partition column names detected:\n" +
+      distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
+      "For partitioned table directories, data files should only live in leaf directories.\n" +
+      "And directories at the same level should have the same partition column name.\n" +
+      "Please check the following directories for unexpected files or " +
+      "inconsistent partition column names:\n" +
+      suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+  }
+
   /**
-   * Converts a string to a `Literal` with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[FloatType]], [[DoubleType]], [[DecimalType.Unlimited]], and
+   * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.Unlimited]], and
    * [[StringType]].
    */
   private[sql] def inferPartitionColumnValue(
       raw: String,
-      defaultPartitionName: String): Literal = {
-    // First tries integral types
-    Try(Literal.create(Integer.parseInt(raw), IntegerType))
-      .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
-      // Then falls back to fractional types
-      .orElse(Try(Literal.create(JFloat.parseFloat(raw), FloatType)))
-      .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
-      .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
-      // Then falls back to string
-      .getOrElse {
-        if (raw == defaultPartitionName) Literal.create(null, NullType)
-        else Literal.create(unescapePathName(raw), StringType)
+      defaultPartitionName: String,
+      typeInference: Boolean): Literal = {
+    if (typeInference) {
+      // First tries integral types
+      Try(Literal.create(Integer.parseInt(raw), IntegerType))
+        .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
+        // Then falls back to fractional types
+        .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
+        .orElse(Try(Literal.create(new JBigDecimal(raw), DecimalType.Unlimited)))
+        // Then falls back to string
+        .getOrElse {
+          if (raw == defaultPartitionName) {
+            Literal.create(null, NullType)
+          } else {
+            Literal.create(unescapePathName(raw), StringType)
+          }
+        }
+    } else {
+      if (raw == defaultPartitionName) {
+        Literal.create(null, NullType)
+      } else {
+        Literal.create(unescapePathName(raw), StringType)
       }
+    }
   }
 
   private val upCastingOrder: Seq[DataType] =

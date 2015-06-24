@@ -38,7 +38,7 @@ setClass("DataFrame",
 setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
-  
+
   .Object@sdf <- sdf
   .Object
 })
@@ -55,11 +55,11 @@ dataFrame <- function(sdf, isCached = FALSE) {
 ############################ DataFrame Methods ##############################################
 
 #' Print Schema of a DataFrame
-#' 
+#'
 #' Prints out the schema in tree format
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname printSchema
 #' @export
 #' @examples
@@ -78,11 +78,11 @@ setMethod("printSchema",
           })
 
 #' Get schema object
-#' 
+#'
 #' Returns the schema of this DataFrame as a structType object.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname schema
 #' @export
 #' @examples
@@ -100,9 +100,9 @@ setMethod("schema",
           })
 
 #' Explain
-#' 
+#'
 #' Print the logical and physical Catalyst plans to the console for debugging.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param extended Logical. If extended is False, explain() only prints the physical plan.
 #' @rdname explain
@@ -200,11 +200,11 @@ setMethod("show", "DataFrame",
           })
 
 #' DataTypes
-#' 
+#'
 #' Return all column names and their data types as a list
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname dtypes
 #' @export
 #' @examples
@@ -224,11 +224,11 @@ setMethod("dtypes",
           })
 
 #' Column names
-#' 
+#'
 #' Return all column names as a list
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname columns
 #' @export
 #' @examples
@@ -256,12 +256,12 @@ setMethod("names",
           })
 
 #' Register Temporary Table
-#' 
+#'
 #' Registers a DataFrame as a Temporary Table in the SQLContext
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param tableName A character vector containing the name of the table
-#' 
+#'
 #' @rdname registerTempTable
 #' @export
 #' @examples
@@ -306,11 +306,11 @@ setMethod("insertInto",
           })
 
 #' Cache
-#' 
+#'
 #' Persist with the default storage level (MEMORY_ONLY).
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname cache-methods
 #' @export
 #' @examples
@@ -400,7 +400,7 @@ setMethod("repartition",
           signature(x = "DataFrame", numPartitions = "numeric"),
           function(x, numPartitions) {
             sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
-            dataFrame(sdf)     
+            dataFrame(sdf)
           })
 
 # toJSON
@@ -489,7 +489,7 @@ setMethod("distinct",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
-#' collect(sample(df, FALSE, 0.5)) 
+#' collect(sample(df, FALSE, 0.5))
 #' collect(sample(df, TRUE, 0.5))
 #'}
 setMethod("sample",
@@ -513,11 +513,11 @@ setMethod("sample_frac",
           })
 
 #' Count
-#' 
+#'
 #' Returns the number of rows in a DataFrame
-#' 
+#'
 #' @param x A SparkSQL DataFrame
-#' 
+#'
 #' @rdname count
 #' @export
 #' @examples
@@ -568,13 +568,13 @@ setMethod("collect",
           })
 
 #' Limit
-#' 
+#'
 #' Limit the resulting DataFrame to the number of rows specified.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param num The number of rows to return
 #' @return A new DataFrame containing the number of rows specified.
-#' 
+#'
 #' @rdname limit
 #' @export
 #' @examples
@@ -593,7 +593,7 @@ setMethod("limit",
           })
 
 #' Take the first NUM rows of a DataFrame and return a the results as a data.frame
-#' 
+#'
 #' @rdname take
 #' @export
 #' @examples
@@ -613,8 +613,8 @@ setMethod("take",
 
 #' Head
 #'
-#' Return the first NUM rows of a DataFrame as a data.frame. If NUM is NULL, 
-#' then head() returns the first 6 rows in keeping with the current data.frame 
+#' Return the first NUM rows of a DataFrame as a data.frame. If NUM is NULL,
+#' then head() returns the first 6 rows in keeping with the current data.frame
 #' convention in R.
 #'
 #' @param x A SparkSQL DataFrame
@@ -659,11 +659,11 @@ setMethod("first",
           })
 
 # toRDD()
-# 
+#
 # Converts a Spark DataFrame to an RDD while preserving column names.
-# 
+#
 # @param x A Spark DataFrame
-# 
+#
 # @rdname DataFrame
 # @export
 # @examples
@@ -1167,7 +1167,7 @@ setMethod("where",
 #'
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
-#' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a 
+#' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
 #' Column expression. If joinExpr is omitted, join() wil perform a Cartesian join
 #' @param joinType The type of join to perform. The following join types are available:
 #' 'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'. The default joinType is "inner".
@@ -1303,7 +1303,7 @@ setMethod("except",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
-#' @rdname write.df 
+#' @rdname write.df
 #' @export
 #' @examples
 #'\dontrun{
@@ -1401,7 +1401,7 @@ setMethod("saveAsTable",
 #' @param col A string of name
 #' @param ... Additional expressions
 #' @return A DataFrame
-#' @rdname describe 
+#' @rdname describe
 #' @export
 #' @examples
 #'\dontrun{
@@ -1444,7 +1444,7 @@ setMethod("describe",
 #'                    This overwrites the how parameter.
 #' @param cols Optional list of column names to consider.
 #' @return A DataFrame
-#' 
+#'
 #' @rdname nafunctions
 #' @export
 #' @examples
@@ -1465,7 +1465,7 @@ setMethod("dropna",
             if (is.null(minNonNulls)) {
               minNonNulls <- if (how == "any") { length(cols) } else { 1 }
             }
-            
+
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- callJMethod(naFunctions, "drop",
                                as.integer(minNonNulls), listToSeq(as.list(cols)))
@@ -1488,16 +1488,16 @@ setMethod("na.omit",
 #' @param value Value to replace null values with.
 #'              Should be an integer, numeric, character or named list.
 #'              If the value is a named list, then cols is ignored and
-#'              value must be a mapping from column name (character) to 
+#'              value must be a mapping from column name (character) to
 #'              replacement value. The replacement value must be an
 #'              integer, numeric or character.
 #' @param cols optional list of column names to consider.
 #'             Columns specified in cols that do not have matching data
-#'             type are ignored. For example, if value is a character, and 
+#'             type are ignored. For example, if value is a character, and
 #'             subset contains a non-character column, then the non-character
 #'             column is simply ignored.
 #' @return A DataFrame
-#' 
+#'
 #' @rdname nafunctions
 #' @export
 #' @examples
@@ -1515,14 +1515,14 @@ setMethod("fillna",
             if (!(class(value) %in% c("integer", "numeric", "character", "list"))) {
               stop("value should be an integer, numeric, charactor or named list.")
             }
-            
+
             if (class(value) == "list") {
               # Check column names in the named list
               colNames <- names(value)
               if (length(colNames) == 0 || !all(colNames != "")) {
                 stop("value should be an a named list with each name being a column name.")
               }
-              
+
               # Convert to the named list to an environment to be passed to JVM
               valueMap <- new.env()
               for (col in colNames) {
@@ -1533,19 +1533,19 @@ setMethod("fillna",
                 }
                 valueMap[[col]] <- v
               }
-              
+
               # When value is a named list, caller is expected not to pass in cols
               if (!is.null(cols)) {
                 warning("When value is a named list, cols is ignored!")
                 cols <- NULL
               }
-              
+
               value <- valueMap
             } else if (is.integer(value)) {
               # Cast an integer to a numeric
               value <- as.numeric(value)
             }
-            
+
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- if (length(cols) == 0) {
               callJMethod(naFunctions, "fill", value)

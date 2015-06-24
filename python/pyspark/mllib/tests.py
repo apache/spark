@@ -23,8 +23,11 @@ import os
 import sys
 import tempfile
 import array as pyarray
+from time import time, sleep
+from shutil import rmtree
 
-from numpy import array, array_equal, zeros, inf
+from numpy import array, array_equal, zeros, inf, all, random
+from numpy import sum as array_sum
 from py4j.protocol import Py4JJavaError
 
 if sys.version_info[:2] <= (2, 6):
@@ -38,15 +41,18 @@ else:
 
 from pyspark import SparkContext
 from pyspark.mllib.common import _to_java_object_rdd
+from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
-    DenseMatrix, SparseMatrix, Vectors, Matrices
+    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
-from pyspark.mllib.feature import StandardScaler
+from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
+from pyspark.mllib.util import LinearDataGenerator
 from pyspark.serializers import PickleSerializer
+from pyspark.streaming import StreamingContext
 from pyspark.sql import SQLContext
 
 _have_scipy = False
@@ -64,6 +70,20 @@ sc = SparkContext('local[4]', "MLlib tests")
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = sc
+
+
+class MLLibStreamingTestCase(unittest.TestCase):
+    def setUp(self):
+        self.sc = sc
+        self.ssc = StreamingContext(self.sc, 1.0)
+
+    def tearDown(self):
+        self.ssc.stop(False)
+
+    @staticmethod
+    def _ssc_wait(start_time, end_time, sleep_time):
+        while time() - start_time < end_time:
+            sleep(0.01)
 
 
 def _squared_distance(a, b):
@@ -379,7 +399,7 @@ class ListTests(MLlibTestCase):
         self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
 
         try:
-            os.removedirs(temp_dir)
+            rmtree(temp_dir)
         except OSError:
             pass
 
@@ -443,6 +463,13 @@ class ListTests(MLlibTestCase):
         except ValueError:
             self.fail()
 
+        # Verify that maxBins is being passed through
+        GradientBoostedTrees.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32)
+        with self.assertRaises(Exception) as cm:
+            GradientBoostedTrees.trainRegressor(
+                rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1)
+
 
 class StatTests(MLlibTestCase):
     # SPARK-4023
@@ -505,6 +532,38 @@ class VectorUDTTests(MLlibTestCase):
                 self.assertEqual(v, self.dv1)
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
+
+
+class MatrixUDTTests(MLlibTestCase):
+
+    dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
+    dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
+    sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])
+    sm2 = SparseMatrix(2, 1, [0, 0, 1], [0], [5.0], isTransposed=True)
+    udt = MatrixUDT()
+
+    def test_json_schema(self):
+        self.assertEqual(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_serialization(self):
+        for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
+            self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
+
+    def test_infer_schema(self):
+        sqlCtx = SQLContext(self.sc)
+        rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
+        df = rdd.toDF()
+        schema = df.schema
+        self.assertTrue(schema.fields[1].dataType, self.udt)
+        matrices = df.map(lambda x: x._2).collect()
+        self.assertEqual(len(matrices), 2)
+        for m in matrices:
+            if isinstance(m, DenseMatrix):
+                self.assertTrue(m, self.dm1)
+            elif isinstance(m, SparseMatrix):
+                self.assertTrue(m, self.sm1)
+            else:
+                raise ValueError("Expected a matrix but got type %r" % type(m))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
@@ -816,6 +875,166 @@ class StandardScalerTests(MLlibTestCase):
         ]
         model = StandardScaler().fit(self.sc.parallelize(data))
         self.assertEqual(model.transform([1.0, 2.0, 3.0]), DenseVector([1.0, 2.0, 3.0]))
+
+
+class ElementwiseProductTests(MLlibTestCase):
+    def test_model_transform(self):
+        weight = Vectors.dense([3, 2, 1])
+
+        densevec = Vectors.dense([4, 5, 6])
+        sparsevec = Vectors.sparse(3, [0], [1])
+        eprod = ElementwiseProduct(weight)
+        self.assertEqual(eprod.transform(densevec), DenseVector([12, 10, 6]))
+        self.assertEqual(
+            eprod.transform(sparsevec), SparseVector(3, [0], [3]))
+
+
+class StreamingKMeansTest(MLLibStreamingTestCase):
+    def test_model_params(self):
+        """Test that the model params are set correctly"""
+        stkm = StreamingKMeans()
+        stkm.setK(5).setDecayFactor(0.0)
+        self.assertEquals(stkm._k, 5)
+        self.assertEquals(stkm._decayFactor, 0.0)
+
+        # Model not set yet.
+        self.assertIsNone(stkm.latestModel())
+        self.assertRaises(ValueError, stkm.trainOn, [0.0, 1.0])
+
+        stkm.setInitialCenters(
+            centers=[[0.0, 0.0], [1.0, 1.0]], weights=[1.0, 1.0])
+        self.assertEquals(
+            stkm.latestModel().centers, [[0.0, 0.0], [1.0, 1.0]])
+        self.assertEquals(stkm.latestModel().clusterWeights, [1.0, 1.0])
+
+    def test_accuracy_for_single_center(self):
+        """Test that parameters obtained are correct for a single center."""
+        centers, batches = self.streamingKMeansDataGenerator(
+            batches=5, numPoints=5, k=1, d=5, r=0.1, seed=0)
+        stkm = StreamingKMeans(1)
+        stkm.setInitialCenters([[0., 0., 0., 0., 0.]], [0.])
+        input_stream = self.ssc.queueStream(
+            [self.sc.parallelize(batch, 1) for batch in batches])
+        stkm.trainOn(input_stream)
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 10.0, 0.01)
+        self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
+        realCenters = array_sum(array(centers), axis=0)
+        for i in range(5):
+            modelCenters = stkm.latestModel().centers[0][i]
+            self.assertAlmostEqual(centers[0][i], modelCenters, 1)
+            self.assertAlmostEqual(realCenters[i], modelCenters, 1)
+
+    def streamingKMeansDataGenerator(self, batches, numPoints,
+                                     k, d, r, seed, centers=None):
+        rng = random.RandomState(seed)
+
+        # Generate centers.
+        centers = [rng.randn(d) for i in range(k)]
+
+        return centers, [[Vectors.dense(centers[j % k] + r * rng.randn(d))
+                          for j in range(numPoints)]
+                         for i in range(batches)]
+
+    def test_trainOn_model(self):
+        """Test the model on toy data with four clusters."""
+        stkm = StreamingKMeans()
+        initCenters = [[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]]
+        stkm.setInitialCenters(
+            centers=initCenters, weights=[1.0, 1.0, 1.0, 1.0])
+
+        # Create a toy dataset by setting a tiny offest for each point.
+        offsets = [[0, 0.1], [0, -0.1], [0.1, 0], [-0.1, 0]]
+        batches = []
+        for offset in offsets:
+            batches.append([[offset[0] + center[0], offset[1] + center[1]]
+                            for center in initCenters])
+
+        batches = [self.sc.parallelize(batch, 1) for batch in batches]
+        input_stream = self.ssc.queueStream(batches)
+        stkm.trainOn(input_stream)
+        t = time()
+        self.ssc.start()
+
+        # Give enough time to train the model.
+        self._ssc_wait(t, 6.0, 0.01)
+        finalModel = stkm.latestModel()
+        self.assertTrue(all(finalModel.centers == array(initCenters)))
+        self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
+
+    def test_predictOn_model(self):
+        """Test that the model predicts correctly on toy data."""
+        stkm = StreamingKMeans()
+        stkm._model = StreamingKMeansModel(
+            clusterCenters=[[1.0, 1.0], [-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0]],
+            clusterWeights=[1.0, 1.0, 1.0, 1.0])
+
+        predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
+        predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
+        predict_stream = self.ssc.queueStream(predict_data)
+        predict_val = stkm.predictOn(predict_stream)
+
+        result = []
+
+        def update(rdd):
+            rdd_collect = rdd.collect()
+            if rdd_collect:
+                result.append(rdd_collect)
+
+        predict_val.foreachRDD(update)
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 6.0, 0.01)
+        self.assertEquals(result, [[0], [1], [2], [3]])
+
+    def test_trainOn_predictOn(self):
+        """Test that prediction happens on the updated model."""
+        stkm = StreamingKMeans(decayFactor=0.0, k=2)
+        stkm.setInitialCenters([[0.0], [1.0]], [1.0, 1.0])
+
+        # Since decay factor is set to zero, once the first batch
+        # is passed the clusterCenters are updated to [-0.5, 0.7]
+        # which causes 0.2 & 0.3 to be classified as 1, even though the
+        # classification based in the initial model would have been 0
+        # proving that the model is updated.
+        batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
+        batches = [sc.parallelize(batch) for batch in batches]
+        input_stream = self.ssc.queueStream(batches)
+        predict_results = []
+
+        def collect(rdd):
+            rdd_collect = rdd.collect()
+            if rdd_collect:
+                predict_results.append(rdd_collect)
+
+        stkm.trainOn(input_stream)
+        predict_stream = stkm.predictOn(input_stream)
+        predict_stream.foreachRDD(collect)
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 6.0, 0.01)
+        self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+
+
+class LinearDataGeneratorTests(MLlibTestCase):
+    def test_dim(self):
+        linear_data = LinearDataGenerator.generateLinearInput(
+            intercept=0.0, weights=[0.0, 0.0, 0.0],
+            xMean=[0.0, 0.0, 0.0], xVariance=[0.33, 0.33, 0.33],
+            nPoints=4, seed=0, eps=0.1)
+        self.assertEqual(len(linear_data), 4)
+        for point in linear_data:
+            self.assertEqual(len(point.features), 3)
+
+        linear_data = LinearDataGenerator.generateLinearRDD(
+            sc=sc, nexamples=6, nfeatures=2, eps=0.1,
+            nParts=2, intercept=0.0).collect()
+        self.assertEqual(len(linear_data), 6)
+        for point in linear_data:
+            self.assertEqual(len(point.features), 2)
 
 
 if __name__ == "__main__":

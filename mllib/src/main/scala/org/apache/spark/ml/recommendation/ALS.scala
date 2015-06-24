@@ -216,6 +216,11 @@ class ALSModel private[ml] (
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
+
+  override def copy(extra: ParamMap): ALSModel = {
+    val copied = new ALSModel(uid, rank, userFactors, itemFactors)
+    copyValues(copied, extra)
+  }
 }
 
 
@@ -330,6 +335,8 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 }
 
 /**

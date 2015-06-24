@@ -43,7 +43,7 @@ sparkR.stop <- function() {
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
     }
-  
+
     if (exists(".backendLaunched", envir = env)) {
       callJStatic("SparkRHandler", "stopBackend")
     }
@@ -174,7 +174,7 @@ sparkR.init <- function(
   for (varname in names(sparkEnvir)) {
     sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
   }
-  
+
   sparkExecutorEnvMap <- new.env()
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <- paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
@@ -214,7 +214,7 @@ sparkR.init <- function(
 
 #' Initialize a new SQLContext.
 #'
-#' This function creates a SparkContext from an existing JavaSparkContext and 
+#' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
@@ -277,4 +277,48 @@ sparkRHive.init <- function(jsc = NULL) {
 
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
   hiveCtx
+}
+
+#' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+#' different value or cleared.
+#'
+#' @param sc existing spark context
+#' @param groupid the ID to be assigned to job groups
+#' @param description description for the the job group ID
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#'}
+
+setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
+  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
+
+#' Clear current job group ID and its description
+#'
+#' @param sc existing spark context
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' clearJobGroup(sc)
+#'}
+
+clearJobGroup <- function(sc) {
+  callJMethod(sc, "clearJobGroup")
+}
+
+#' Cancel active jobs for the specified group
+#'
+#' @param sc existing spark context
+#' @param groupId the ID of job group to be cancelled
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' cancelJobGroup(sc, "myJobGroup")
+#'}
+
+cancelJobGroup <- function(sc, groupId) {
+  callJMethod(sc, "cancelJobGroup", groupId)
 }

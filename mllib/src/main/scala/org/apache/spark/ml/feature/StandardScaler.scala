@@ -92,6 +92,8 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
+
+  override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
 /**
@@ -124,5 +126,10 @@ class StandardScalerModel private[ml] (
       s"Output column ${$(outputCol)} already exists.")
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
+  }
+
+  override def copy(extra: ParamMap): StandardScalerModel = {
+    val copied = new StandardScalerModel(uid, scaler)
+    copyValues(copied, extra)
   }
 }

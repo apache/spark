@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, EliminateSubQueries, Resolver}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -50,19 +50,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation UnresolvedRelation]]
    * should return `false`).
    */
-  lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
+  lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
   override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 
   /**
    * Returns true if all its children of this query plan have been resolved.
    */
-  def childrenResolved: Boolean = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
    * Returns true when the given logical plan will return the same results as this logical plan.
    *
-   * Since its likely undecideable to generally determine if two given plans will produce the same
+   * Since its likely undecidable to generally determine if two given plans will produce the same
    * results, it is okay for this function to return false, even if the results are actually
    * the same.  Such behavior will not affect correctness, only the application of performance
    * enhancements like caching.  However, it is not acceptable to return true if the results could
@@ -90,7 +90,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     val input = children.flatMap(_.output)
     productIterator.map {
       // Children are checked using sameResult above.
-      case tn: TreeNode[_] if children contains tn => null
+      case tn: TreeNode[_] if containsChild(tn) => null
       case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
       case s: Option[_] => s.map {
         case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
@@ -111,9 +111,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver,
-      throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(nameParts, children.flatMap(_.output), resolver, throwErrors)
+      resolver: Resolver): Option[NamedExpression] =
+    resolve(nameParts, children.flatMap(_.output), resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -122,9 +121,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolve(
       nameParts: Seq[String],
-      resolver: Resolver,
-      throwErrors: Boolean = false): Option[NamedExpression] =
-    resolve(nameParts, output, resolver, throwErrors)
+      resolver: Resolver): Option[NamedExpression] =
+    resolve(nameParts, output, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -134,7 +132,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    resolve(parseAttributeName(name), resolver, true)
+    resolve(parseAttributeName(name), output, resolver)
   }
 
   /**
@@ -219,8 +217,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   protected def resolve(
       nameParts: Seq[String],
       input: Seq[Attribute],
-      resolver: Resolver,
-      throwErrors: Boolean): Option[NamedExpression] = {
+      resolver: Resolver): Option[NamedExpression] = {
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -254,19 +251,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        try {
-          // The foldLeft adds GetFields for every remaining parts of the identifier,
-          // and aliases it with the last part of the identifier.
-          // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-          // Then this will add GetField("c", GetField("b", a)), and alias
-          // the final expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-            ExtractValue(expr, Literal(fieldName), resolver))
-          val aliasName = nestedFields.last
-          Some(Alias(fieldExprs, aliasName)())
-        } catch {
-          case a: AnalysisException if !throwErrors => None
-        }
+        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
+        // and wrap it with UnresolvedAlias which will be removed later.
+        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+        // Then this will add ExtractValue("c", ExtractValue("b", a)), and wrap it as
+        // UnresolvedAlias(ExtractValue("c", ExtractValue("b", a))).
+        val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
+          ExtractValue(expr, Literal(fieldName), resolver))
+        Some(UnresolvedAlias(fieldExprs))
 
       // No matches.
       case Seq() =>

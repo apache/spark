@@ -18,14 +18,13 @@
 package org.apache.spark.sql.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
 import org.apache.spark.sql.types.AtomicType
 
 private[sql] trait Encoder[T <: AtomicType] {
-  def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {}
+  def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {}
 
   def compressedSize: Int
 

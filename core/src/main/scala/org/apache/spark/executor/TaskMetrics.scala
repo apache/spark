@@ -94,8 +94,8 @@ class TaskMetrics extends Serializable {
    */
   private var _diskBytesSpilled: Long = _
   def diskBytesSpilled: Long = _diskBytesSpilled
-  def incDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled += value
-  def decDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled -= value
+  private[spark] def incDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled += value
+  private[spark] def decDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled -= value
 
   /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
