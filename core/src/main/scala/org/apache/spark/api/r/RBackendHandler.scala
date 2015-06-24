@@ -88,16 +88,18 @@ private[r] class RBackendHandler(server: RBackend)
     ctx.close()
   }
 
-  //get classPath for static object. This addresses SPARK-5185
+  // Looks up a class given a class name. This function first checks the
+  // current class loader and if a class is not found, it looks up the class
+  // in the context class loader. Address [SPARK-5185]
   def getStaticClass(objId: String): Class[_] = {
     try {
       val clsCurrent = Class.forName(objId)
       clsCurrent
-      } catch {
-        //use contextLoader if we can't find the JAR in the system class loader
-        case e: ClassNotFoundException =>
-          val clsContext = Class.forName(objId, true, Thread.currentThread().getContextClassLoader)
-          clsContext
+    } catch {
+      // Use contextLoader if we can't find the JAR in the system class loader
+      case e: ClassNotFoundException =>
+        val clsContext = Class.forName(objId, true, Thread.currentThread().getContextClassLoader)
+        clsContext
       }
     }
 
