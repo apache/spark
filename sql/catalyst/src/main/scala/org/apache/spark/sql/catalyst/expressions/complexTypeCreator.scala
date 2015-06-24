@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
@@ -89,7 +90,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
 
-  private lazy val names = nameExprs.map(_.asInstanceOf[Literal].value.toString)
+  private lazy val names = nameExprs.map(_.eval(EmptyRow).asInstanceOf[UTF8String].toString)
 
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
@@ -106,11 +107,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure("CreateNamedStruct expects an even number of arguments.")
     } else {
-      val invalidNames = nameExprs.filterNot { case name =>
-        name match {
-          case NonNullLiteral(str, StringType) => true
+      val invalidNames = nameExprs.filter { case name =>
+        (name.find {
+          case _: Attribute | _: BoundReference => true;
           case _ => false
-        }
+        } != None) || (name.dataType != StringType)
       }
       if (invalidNames.size != 0) {
         TypeCheckResult.TypeCheckFailure(

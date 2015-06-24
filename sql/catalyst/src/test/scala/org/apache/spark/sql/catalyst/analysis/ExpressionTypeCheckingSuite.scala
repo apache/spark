@@ -166,5 +166,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
       CreateNamedStruct(Seq(1, "a", "b", 2.0)), "Non String Literal fields")
+    assertError(
+      CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)), "Non String Literal fields")
   }
 }
