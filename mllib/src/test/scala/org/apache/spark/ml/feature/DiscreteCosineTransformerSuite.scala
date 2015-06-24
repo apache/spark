@@ -18,85 +18,67 @@
 package org.apache.spark.ml.feature
 
 import scala.beans.BeanInfo
-import scala.collection.mutable.ArrayBuffer
 
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
-case class DCTTestData[T](vec: Array[T], wantedVec: Array[Double])
+case class DCTTestData(vec: Vector, wantedVec: Vector)
 
 class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.DiscreteCosineTransformerSuite._
 
   test("forward transform of discrete cosine matches jTransforms result") {
-    val transformer = new DiscreteCosineTransformer[Double]()
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
+
+    val expectedResultBuffer = data.toArray.clone()
+    (new DoubleDCT_1D(data.size)).forward(expectedResultBuffer, true)
+    val expectedResult = Vectors.dense(expectedResultBuffer)
+
+    val dataset = sqlContext.createDataFrame(Seq(
+      DCTTestData(data, expectedResult)
+    ))
+
+    val transformer = new DiscreteCosineTransformer()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(false)
-    val data = (0 until 128).map(_ => 2D * math.random - 1D).toArray
-    val expectedResult = data.clone()
-    (new DoubleDCT_1D(data.length)).forward(expectedResult, true)
-    val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData[Double](data, expectedResult)
-    ))
+
     testDCT(transformer, dataset)
   }
 
   test("inverse transform of discrete cosine matches jTransforms result") {
-    val transformer = new DiscreteCosineTransformer[Double]()
-      .setInputCol("vec")
-      .setOutputCol("resultVec")
-      .setInverse(true)
-    val data = (0 until 128).map(_ => 2D * math.random - 1D).toArray
-    val expectedResult = data.clone()
-    (new DoubleDCT_1D(data.length)).inverse(expectedResult, true)
-    val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData[Double](data, expectedResult)
-    ))
-    testDCT(transformer, dataset)
-  }
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
 
-  test("handle float datatype") {
-    val transformer = new DiscreteCosineTransformer[Float]()
-      .setInputCol("vec")
-      .setOutputCol("resultVec")
-      .setInverse(true)
-    val data = (0 until 128).map(_ => (2D * math.random - 1D).toFloat).toArray
-    val expectedResult = data.clone().map(_.toDouble)
-    (new DoubleDCT_1D(data.length)).inverse(expectedResult, true)
-    val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData[Float](data, expectedResult)
-    ))
-    testDCT(transformer, dataset)
-  }
+    val expectedResultBuffer = data.toArray.clone()
+    (new DoubleDCT_1D(data.size)).inverse(expectedResultBuffer, true)
+    val expectedResult = Vectors.dense(expectedResultBuffer)
 
-  test("handle integer datatype") {
-    val transformer = new DiscreteCosineTransformer[Int]()
+    val dataset = sqlContext.createDataFrame(Seq(
+      DCTTestData(data, expectedResult)
+    ))
+
+    val transformer = new DiscreteCosineTransformer()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(true)
-    val data = (0 until 128).map(_ => (2D * math.random - 1D).toInt).toArray
-    val expectedResult = data.clone().map(_.toDouble)
-    (new DoubleDCT_1D(data.length)).inverse(expectedResult, true)
-    val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData[Int](data, expectedResult)
-    ))
+
     testDCT(transformer, dataset)
   }
 }
 
 object DiscreteCosineTransformerSuite extends SparkFunSuite {
 
-  def testDCT(t: DiscreteCosineTransformer[_], dataset: DataFrame): Unit = {
+  def testDCT(t: DiscreteCosineTransformer, dataset: DataFrame): Unit = {
     t.transform(dataset)
       .select("resultVec", "wantedVec")
       .collect()
-      .foreach { case Row(resultVec: ArrayBuffer[Double], wantedVec : ArrayBuffer[Double]) =>
-        assert(resultVec.zip(wantedVec).map(x => math.pow(x._1 - x._2, 2)).sum < 1e-4)
+      .foreach { case Row(resultVec: Vector, wantedVec : Vector) =>
+        assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
       }
   }
 }

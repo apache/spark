@@ -23,20 +23,21 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.types.{NumericType, ArrayType, DataType, DoubleType}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.sql.types.DataType
 
 /**
  * :: Experimental ::
- * A feature transformer that takes the 1D discrete cosine transform of a real vector.
+ * A feature transformer that takes the 1D discrete cosine transform of a real vector. No zero
+ * padding is performed on the input vector.
  * It returns a real vector of the same length representing the DCT. The return vector is scaled
- * such that the transform matrix is unitary.
+ * such that the transform matrix is unitary (aka scaled DCT-II).
  *
- * More information: https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II
+ * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
  */
 @Experimental
-// TODO: explore variance -IN (and +OUT in UnaryTransformer)
-class DiscreteCosineTransformer[IN : Numeric](override val uid: String)
-  extends UnaryTransformer[Seq[IN], Seq[Double], DiscreteCosineTransformer[IN]] {
+class DiscreteCosineTransformer(override val uid: String)
+  extends UnaryTransformer[Vector, Vector, DiscreteCosineTransformer] {
 
   def this() = this(Identifiable.randomUID("dct"))
 
@@ -54,35 +55,18 @@ class DiscreteCosineTransformer[IN : Numeric](override val uid: String)
   /** @group getParam */
   def getInverse: Boolean = $(inverse)
 
-  /**
-   * Indicates whether output type should be double (true) or single (false) floating point.
-   * Default: true
-   * @group param
-   */
-  def doublePrecision: BooleanParam = new BooleanParam(
-    this, "doublePrecision", "Set transformer to use double floating point precision")
+  setDefault(inverse -> false)
 
-  /** @group setParam */
-  def setDoublePrecision(value: Boolean): this.type = set(doublePrecision, value)
-
-  /** @group getParam */
-  def getDoublePrecision: Boolean = $(doublePrecision)
-
-  setDefault(inverse -> false, doublePrecision -> true)
-
-  override protected def createTransformFunc: Seq[IN] => Seq[Double] = { vec : Seq[IN] =>
-    val res = vec.map(implicitly[Numeric[IN]].toDouble(_)).toArray
-    val jTransformer = new DoubleDCT_1D(vec.length)
-    if ($(inverse)) jTransformer.inverse(res, true) else jTransformer.forward(res, true)
-    res
+  override protected def createTransformFunc: Vector => Vector = { vec =>
+    val result = vec.toArray
+    val jTransformer = new DoubleDCT_1D(result.length)
+    if ($(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
+    Vectors.dense(result)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType match {
-      case ArrayType(innerType, false) => innerType.isInstanceOf[NumericType]
-    },
-    s"Input type must be subtype of ArrayType(NumericType, false) but got $inputType.")
+    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
   }
 
-  override protected def outputDataType: DataType = new ArrayType(DoubleType, false)
+  override protected def outputDataType: DataType = new VectorUDT
 }
