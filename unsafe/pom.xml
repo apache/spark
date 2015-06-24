@@ -80,13 +80,9 @@
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
           <configuration>
-            <javacArgs>
+            <javacArgs combine.children="append">
               <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
               <javacArg>-XDignore.symbol.file</javacArg>
-              <javacArg>-source</javacArg>
-              <javacArg>${java.version}</javacArg>
-              <javacArg>-target</javacArg>
-              <javacArg>${java.version}</javacArg>
             </javacArgs>
           </configuration>
         </plugin>
@@ -94,8 +90,6 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
           <configuration>
-            <source>${java.version}</source>
-            <target>${java.version}</target>
             <compilerArgs>
               <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
               <arg>-XDignore.symbol.file</arg>
