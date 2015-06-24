@@ -26,7 +26,8 @@ import array as pyarray
 from time import time, sleep
 from shutil import rmtree
 
-from numpy import array, array_equal, zeros, inf, all, random
+from numpy import (
+    array, array_equal, zeros, inf, random, exp, dot, all, mean)
 from numpy import sum as array_sum
 from py4j.protocol import Py4JJavaError
 
@@ -45,6 +46,7 @@ from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.feature import Word2Vec
@@ -1035,6 +1037,137 @@ class LinearDataGeneratorTests(MLlibTestCase):
         self.assertEqual(len(linear_data), 6)
         for point in linear_data:
             self.assertEqual(len(point.features), 2)
+
+
+class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
+
+    @staticmethod
+    def generateLogisticInput(offset, scale, nPoints, seed):
+        """
+        Generate 1 / (1 + exp(-x * scale + offset))
+
+        where,
+        x is randomnly distributed and the threshold
+        and labels for each sample in x is obtained from a random uniform
+        distribution.
+        """
+        rng = random.RandomState(seed)
+        x = rng.randn(nPoints)
+        sigmoid = 1. / (1 + exp(-(dot(x, scale) + offset)))
+        y_p = rng.rand(nPoints)
+        cut_off = y_p <= sigmoid
+        y_p[cut_off] = 1.0
+        y_p[~cut_off] = 0.0
+        return [
+            LabeledPoint(y_p[i], Vectors.dense([x[i]]))
+            for i in range(nPoints)]
+
+    def test_parameter_accuracy(self):
+        """
+        Test that the final value of weights is close to the desired value.
+        """
+        input_batches = [
+            self.sc.parallelize(self.generateLogisticInput(0, 1.5, 100, 42 + i))
+            for i in range(20)]
+        input_stream = self.ssc.queueStream(input_batches)
+
+        slr = StreamingLogisticRegressionWithSGD(
+            stepSize=0.2, numIterations=25)
+        slr.setInitialWeights([0.0])
+        slr.trainOn(input_stream)
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 20.0, 0.01)
+        rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
+        self.assertAlmostEqual(rel, 0.1, 1)
+
+    def test_convergence(self):
+        """
+        Test that weights converge to the required value on toy data.
+        """
+        input_batches = [
+            self.sc.parallelize(self.generateLogisticInput(0, 1.5, 100, 42 + i))
+            for i in range(20)]
+        input_stream = self.ssc.queueStream(input_batches)
+        models = []
+
+        slr = StreamingLogisticRegressionWithSGD(
+            stepSize=0.2, numIterations=25)
+        slr.setInitialWeights([0.0])
+        slr.trainOn(input_stream)
+        input_stream.foreachRDD(
+            lambda x: models.append(slr.latestModel().weights[0]))
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 15.0, 0.01)
+        t_models = array(models)
+        diff = t_models[1:] - t_models[:-1]
+
+        # Test that weights improve with a small tolerance,
+        self.assertTrue(all(diff >= -0.1))
+        self.assertTrue(array_sum(diff > 0) > 1)
+
+    @staticmethod
+    def calculate_accuracy_error(true, predicted):
+        return sum(abs(array(true) - array(predicted))) / len(true)
+
+    def test_predictions(self):
+        """Test predicted values on a toy model."""
+        input_batches = []
+        for i in range(20):
+            batch = self.sc.parallelize(
+                self.generateLogisticInput(0, 1.5, 100, 42 + i))
+            input_batches.append(batch.map(lambda x: (x.label, x.features)))
+        input_stream = self.ssc.queueStream(input_batches)
+
+        slr = StreamingLogisticRegressionWithSGD(
+            stepSize=0.2, numIterations=25)
+        slr.setInitialWeights([1.5])
+        predict_stream = slr.predictOnValues(input_stream)
+        true_predicted = []
+        predict_stream.foreachRDD(lambda x: true_predicted.append(x.collect()))
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 5.0, 0.01)
+
+        # Test that the accuracy error is no more than 0.4 on each batch.
+        for batch in true_predicted:
+            true, predicted = zip(*batch)
+            self.assertTrue(
+                self.calculate_accuracy_error(true, predicted) < 0.4)
+
+    def test_training_and_prediction(self):
+        """Test that the model improves on toy data with no. of batches"""
+        input_batches = [
+            self.sc.parallelize(self.generateLogisticInput(0, 1.5, 100, 42 + i))
+            for i in range(20)]
+        predict_batches = [
+            b.map(lambda lp: (lp.label, lp.features)) for b in input_batches]
+
+        slr = StreamingLogisticRegressionWithSGD(
+            stepSize=0.01, numIterations=25)
+        slr.setInitialWeights([-0.1])
+        errors = []
+
+        def collect_errors(rdd):
+            true, predicted = zip(*rdd.collect())
+            errors.append(self.calculate_accuracy_error(true, predicted))
+
+        true_predicted = []
+        input_stream = self.ssc.queueStream(input_batches)
+        predict_stream = self.ssc.queueStream(predict_batches)
+        slr.trainOn(input_stream)
+        ps = slr.predictOnValues(predict_stream)
+        ps.foreachRDD(lambda x: collect_errors(x))
+
+        t = time()
+        self.ssc.start()
+        self._ssc_wait(t, 20.0, 0.01)
+
+        # Test that the improvement in error is atleast 0.3
+        self.assertTrue(errors[1] - errors[-1] > 0.3)
 
 
 if __name__ == "__main__":

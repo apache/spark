@@ -55,7 +55,7 @@ private[spark] case class PythonUDF(
 
   override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")

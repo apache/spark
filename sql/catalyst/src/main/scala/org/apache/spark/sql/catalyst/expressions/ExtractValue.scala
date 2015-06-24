@@ -96,6 +96,11 @@ object ExtractValue {
   }
 }
 
+/**
+ * A common interface of all kinds of extract value expressions.
+ * Note: concrete extract value expressions are created only by `ExtractValue.apply`,
+ * we don't need to do type check for them.
+ */
 trait ExtractValue extends UnaryExpression {
   self: Product =>
 }
@@ -179,9 +184,6 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
-  override lazy val resolved = childrenResolved &&
-    child.dataType.isInstanceOf[ArrayType] && ordinal.dataType.isInstanceOf[IntegralType]
-
   protected def evalNotNull(value: Any, ordinal: Any) = {
     // TODO: consider using Array[_] for ArrayType child to avoid
     // boxing of primitives
@@ -202,8 +204,6 @@ case class GetMapValue(child: Expression, ordinal: Expression)
   extends ExtractValueWithOrdinal {
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
-
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[MapType]
 
   protected def evalNotNull(value: Any, ordinal: Any) = {
     val baseValue = value.asInstanceOf[Map[Any, _]]

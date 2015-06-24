@@ -862,7 +862,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       experimental.extraStrategies ++ (
       DataSourceStrategy ::
       DDLStrategy ::
-      TakeOrdered ::
+      TakeOrderedAndProject ::
       HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
