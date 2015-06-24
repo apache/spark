@@ -108,7 +108,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     }
     if (getPredictionCol != "") {
       val predUDF = if (getRawPredictionCol != "") {
-        callUDF(raw2prediction _, DoubleType, col(getRawPredictionCol))
+        udf[Double, Vector](raw2prediction).apply(col(getRawPredictionCol))
       } else {
         callUDF(predict _, DoubleType, col(getFeaturesCol))
       }
