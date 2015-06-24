@@ -13,7 +13,7 @@ and Spark Streaming for stream processing.
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the [project web page](http://spark.apache.org/documentation.html)
+guide, on the [project webpage](http://spark.apache.org/documentation.html)
 and [project wiki](https://cwiki.apache.org/confluence/display/SPARK).
 This README file only contains basic setup instructions.
 
