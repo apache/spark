@@ -19,6 +19,7 @@ package org.apache.spark.sql.parquet
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
@@ -60,14 +61,28 @@ private[parquet] class CatalystSchemaConverter(
   // Only used when constructing converter for converting Spark SQL schema to Parquet schema, in
   // which case `assumeInt96IsTimestamp` and `assumeBinaryIsString` are irrelevant.
   def this() = this(
-    assumeBinaryIsString = true,
-    assumeInt96IsTimestamp = true,
-    followParquetFormatSpec = false)
+    assumeBinaryIsString = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
+    assumeInt96IsTimestamp = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
+    followParquetFormatSpec = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
     followParquetFormatSpec = conf.followParquetFormatSpec)
+
+  def this(conf: Configuration) = this(
+    assumeBinaryIsString =
+      conf.getBoolean(
+        SQLConf.PARQUET_BINARY_AS_STRING.key,
+        SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get),
+    assumeInt96IsTimestamp =
+      conf.getBoolean(
+        SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+        SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get),
+    followParquetFormatSpec =
+      conf.getBoolean(
+        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key,
+        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].

@@ -507,6 +507,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
   /**
+   * When set to true, sticks to Parquet format spec when converting Parquet schema to Spark SQL
+   * schema and vice versa.  Otherwise, falls back to compatible mode.
+   */
+  private[spark] def followParquetFormatSpec: Boolean = getConf(PARQUET_FOLLOW_PARQUET_FORMAT_SPEC)
+
+  /**
    * When set to true, partition pruning for in-memory columnar tables is enabled.
    */
   private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
