@@ -1047,7 +1047,7 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Computes hex value of the given input
+   * Computes hex value of the given column
    *
    * @group math_funcs
    * @since 1.5.0

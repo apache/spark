@@ -324,8 +324,7 @@ case class Hex(child: Expression)
   }
 
   /**
-   * Convert every character in s to two hex digits.
-   *
+   * Converts every character in s to two hex digits.
    */
   private def hex(str: UTF8String): UTF8String = {
     if (str == null) {
