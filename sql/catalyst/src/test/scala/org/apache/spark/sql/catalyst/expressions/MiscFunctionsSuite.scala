@@ -32,7 +32,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("sha") {
-    checkEvaluation(Sha(Literal("ABC")), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
     checkEvaluation(Sha(Literal("ABC".getBytes)), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
     checkEvaluation(Sha(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "5d211bad8f4ee70e16c7d343a838fc344a1ed961")
