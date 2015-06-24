@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat
 import java.util.Random
 
 import org.apache.commons.math3.distribution.{ExponentialDistribution,
-NormalDistribution, UniformRealDistribution}
+  NormalDistribution, UniformRealDistribution}
 import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -159,7 +159,6 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("kolmogorov smirnov test empirical distributions") {
-
     // Create theoretical distributions
     val stdNormalDist = new NormalDistribution(0, 1)
     val expDist = new ExponentialDistribution(0.6)

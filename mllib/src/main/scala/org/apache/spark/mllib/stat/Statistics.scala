@@ -170,6 +170,17 @@ object Statistics {
   }
 
   /**
+   * A convenience method to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
+   * distribution equality
+   * @param data an `RDD[Double]` containing the sample of data to test
+   * @param name a `String` name for a theoretical distribution
+   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
+   */
+  def ksTest(data: RDD[Double], name: String): KSTestResult = {
+    KSTest.testOneSample(data, name)
+  }
+
+  /**
    * Conduct a one-sample, two sided Kolmogorov Smirnov test for probability distribution equality,
    * which creates only 1 distribution object per partition (useful in conjunction with Apache
    * Commons Math distributions)
@@ -186,16 +197,5 @@ object Statistics {
       distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
       : KSTestResult = {
     KSTest.testOneSampleOpt(data, distCalc)
-  }
-
-  /**
-   * A convenience method to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
-   * distribution equality
-   * @param data an `RDD[Double]` containing the sample of data to test
-   * @param name a `String` name for a theoretical distribution
-   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
-   */
-  def ksTest(data: RDD[Double], name: String): KSTestResult = {
-    KSTest.testOneSample(data, name)
   }
 }

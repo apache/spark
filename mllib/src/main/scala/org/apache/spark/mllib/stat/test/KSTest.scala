@@ -20,7 +20,6 @@ package org.apache.spark.mllib.stat.test
 import org.apache.commons.math3.distribution.NormalDistribution
 import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
 
-import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.rdd.RDD
 
 
@@ -31,7 +30,7 @@ import org.apache.spark.rdd.RDD
  * the null hypothesis that the sample data comes from that theoretical distribution.
  * For more information on KS Test: https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
  */
-  private[stat] object KSTest {
+private[stat] object KSTest {
 
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
@@ -41,22 +40,21 @@ import org.apache.spark.rdd.RDD
 
   /**
    * Calculate empirical cumulative distribution values needed for KS statistic
-   * @param dat `RDD[Double]` on which to calculate empirical cumulative distribution values
+   * @param data `RDD[Double]` on which to calculate empirical cumulative distribution values
    * @return and RDD of (Double, Double, Double), where the first element in each tuple is the
    *         value, the second element is the ECDFV - 1 /n, and the third element is the ECDFV,
    *         where ECDF stands for empirical cumulative distribution function value
-   *
    */
-  def empirical(dat: RDD[Double]): RDD[(Double, Double, Double)] = {
-    val n = dat.count().toDouble
-    dat.sortBy(x => x).zipWithIndex().map { case (v, i) => (v, i / n, (i + 1) / n) }
+  def empirical(data: RDD[Double]): RDD[(Double, Double, Double)] = {
+    val n = data.count().toDouble
+    data.sortBy(x => x).zipWithIndex().map { case (v, i) => (v, i / n, (i + 1) / n) }
   }
 
   /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
    * @param dat `RDD[Double]` to evaluate
    * @param cdf `Double => Double` function to calculate the theoretical CDF
-   * @return a KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
+   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
   def testOneSample(dat: RDD[Double], cdf: Double => Double): KSTestResult = {
     val empiriRDD = empirical(dat) // empirical distribution
@@ -77,11 +75,11 @@ import org.apache.spark.rdd.RDD
    * @param dat `RDD[Double]` to evaluate
    * @param distCalc a function to calculate the distance between the empirical values and the
    *                 theoretical value
-   * @return a KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
+   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
   def testOneSampleOpt(dat: RDD[Double],
-                       distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
-  : KSTestResult = {
+      distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
+    : KSTestResult = {
     val empiriRDD = empirical(dat) // empirical distribution information
     val distances = empiriRDD.mapPartitions(distCalc, false)
     val ksStat = distances.max
@@ -91,7 +89,8 @@ import org.apache.spark.rdd.RDD
   /**
    * Returns a function to calculate the KSTest with a standard normal distribution
    * to be used with testOneSampleOpt
-   * @return Return a function that we can map over partitions to calculate the KS distance in each
+   * @return Return a function that we can map over partitions to calculate the KS distance for each
+   *         observation on a per-partition basis
    */
   def stdNormDistances(): (Iterator[(Double, Double, Double)]) => Iterator[Double] = {
     val dist = new NormalDistribution(0, 1)
@@ -107,13 +106,14 @@ import org.apache.spark.rdd.RDD
    * a named distribution
    * @param dat the sample data that we wish to evaluate
    * @param distName the name of the theoretical distribution
-   * @return The KS statistic and p-value associated with a two sided test
+   * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
   def testOneSample(dat: RDD[Double], distName: String): KSTestResult = {
     val distanceCalc =
       distName match {
         case "stdnorm" => stdNormDistances()
-        case  _ => throw new UnsupportedOperationException()
+        case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
+          s"convenience method. Current options are:[stdnorm].")
       }
 
     testOneSampleOpt(dat, distanceCalc)
