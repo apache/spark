@@ -129,6 +129,13 @@ object DateTimeUtils {
   }
 
   /**
+   * Return number of days since epoch from the number of 100ns since epoch
+   */
+  def timestampTypeToDateType(t: Long): Int = {
+    millisToDays(t / 10000L)
+  }
+
+  /**
    * Return the number of 100ns (hundred of nanoseconds) since epoch from Julian day
    * and nanoseconds in a day
    */

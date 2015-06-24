@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,9 +46,7 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
     }
   }
 
-  override def dataType: DataType = StringType
-
-  override def toString: String = s"DateAdd($startDate, $days)"
+  override def dataType: DataType = DateType
 
   override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
@@ -62,14 +60,13 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
         val offset = d.asInstanceOf[Int]
         val resultDays = startDate.dataType match {
           case StringType =>
-            DateUtils.millisToDays(DateUtils.stringToTime(
+            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(
               start.asInstanceOf[UTF8String].toString).getTime) + offset
           case TimestampType =>
-            DateUtils.millisToDays(DateUtils.toJavaTimestamp(
-              start.asInstanceOf[Long]).getTime) + offset
+            DateTimeUtils.timestampTypeToDateType(start.asInstanceOf[Long]) + offset
           case DateType => start.asInstanceOf[Int] + offset
         }
-        UTF8String.fromString(DateUtils.toString(resultDays))
+        resultDays
       }
     }
   }
@@ -77,8 +74,7 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalStart = startDate.gen(ctx)
     val evalDays = days.gen(ctx)
-    val dateUtils = "org.apache.spark.sql.catalyst.util.DateUtils"
-    val uTF8StringClass = "org.apache.spark.unsafe.types.UTF8String"
+    val dateUtils = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
     val startToDay: String = startDate.dataType match {
       case StringType =>
         s"""$dateUtils.millisToDays(
@@ -92,8 +88,7 @@ case class DateAdd(startDate: Expression, days: Expression) extends Expression {
       boolean ${ev.isNull} = ${evalStart.isNull} || ${evalDays.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.primitive} = $uTF8StringClass.fromString(
-          $dateUtils.toString($startToDay + ${evalDays.primitive}));
+        ${ev.primitive} = $startToDay + ${evalDays.primitive};
       }
     """
   }
@@ -122,9 +117,7 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
     }
   }
 
-  override def dataType: DataType = StringType
-
-  override def toString: String = s"DateSub($startDate, $days)"
+  override def dataType: DataType = DateType
 
   override def eval(input: InternalRow): Any = {
     val start = startDate.eval(input)
@@ -138,14 +131,13 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
         val offset = d.asInstanceOf[Int]
         val resultDays = startDate.dataType match {
           case StringType =>
-            DateUtils.millisToDays(DateUtils.stringToTime(
+            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(
               start.asInstanceOf[UTF8String].toString).getTime) - offset
           case TimestampType =>
-            DateUtils.millisToDays(DateUtils.toJavaTimestamp(
-              start.asInstanceOf[Long]).getTime) - offset
+            DateTimeUtils.timestampTypeToDateType(start.asInstanceOf[Long]) - offset
           case DateType => start.asInstanceOf[Int] - offset
         }
-        UTF8String.fromString(DateUtils.toString(resultDays))
+        resultDays
       }
     }
   }
@@ -153,8 +145,7 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalStart = startDate.gen(ctx)
     val evalDays = days.gen(ctx)
-    val dateUtils = "org.apache.spark.sql.catalyst.util.DateUtils"
-    val uTF8StringClass = "org.apache.spark.unsafe.types.UTF8String"
+    val dateUtils = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
     val startToDay: String = startDate.dataType match {
       case StringType =>
         s"""$dateUtils.millisToDays(
@@ -168,8 +159,7 @@ case class DateSub(startDate: Expression, days: Expression) extends Expression {
       boolean ${ev.isNull} = ${evalStart.isNull} || ${evalDays.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.primitive} = $uTF8StringClass.fromString(
-          $dateUtils.toString($startToDay - ${evalDays.primitive}));
+        ${ev.primitive} = $startToDay - ${evalDays.primitive};
       }
     """
   }

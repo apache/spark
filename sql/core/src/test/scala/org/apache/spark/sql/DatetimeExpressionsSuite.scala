@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
+import java.sql.Date
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.scalatest.BeforeAndAfterAll
 
@@ -39,29 +40,33 @@ class DatetimeExpressionsSuite extends QueryTest with BeforeAndAfterAll {
   test("function date_add") {
     checkAnswer(
       df.select(date_add("day", "num")),
-      Seq(Row("2015-06-02"), Row("2015-06-05")))
+      Seq(Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-02"))),
+        Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-05")))))
     checkAnswer(
       df.select(date_add(column("day"), lit(null))).limit(1), Row(null))
 
-    checkAnswer(ctx.sql("""SELECT DATE_ADD("2015-06-12", -1)"""), Row("2015-06-11"))
+    checkAnswer(ctx.sql("""SELECT DATE_ADD("2015-06-12", -1)"""),
+      Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-11"))))
     checkAnswer(ctx.sql("SELECT DATE_ADD(null, 1)"), Row(null))
     checkAnswer(
       ctx.sql("""SELECT DATE_ADD(day, 11) FROM dttable LIMIT 1"""),
-      Row("2015-06-12"))
+      Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-12"))))
   }
 
   test("function date_sub") {
     checkAnswer(
       df.select(date_sub("day", "num")),
-      Seq(Row("2015-05-31"), Row("2015-05-30")))
+      Seq(Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-05-31"))),
+        Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-05-30")))))
     checkAnswer(
       df.select(date_sub(lit(null), column("num"))).limit(1), Row(null))
 
-    checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12 14:00:00", 31)"""), Row("2015-05-12"))
+    checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12 14:00:00", 31)"""),
+      Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-05-12"))))
     checkAnswer(ctx.sql("""SELECT DATE_SUB("2015-06-12", null)"""), Row(null))
     checkAnswer(
       ctx.sql("""SELECT DATE_SUB(day, num) FROM dttable LIMIT 1"""),
-      Row("2015-05-31"))
+      Row(DateTimeUtils.fromJavaDate(Date.valueOf("2015-05-31"))))
   }
 
 }
