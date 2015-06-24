@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution
 import java.io._
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
-import java.sql.Timestamp
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.serializer._
 import org.apache.spark.Logging
+import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, MutableRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The serialization stream for [[SparkSqlSerializer2]]. It assumes that the object passed in
@@ -86,7 +86,6 @@ private[sql] class Serializer2SerializationStream(
 private[sql] class Serializer2DeserializationStream(
     keySchema: Array[DataType],
     valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean,
     in: InputStream)
   extends DeserializationStream with Logging  {
 
@@ -96,14 +95,9 @@ private[sql] class Serializer2DeserializationStream(
     if (schema == null) {
       () => null
     } else {
-      if (hasKeyOrdering) {
-        // We have key ordering specified in a ShuffledRDD, it is not safe to reuse a mutable row.
-        () => new GenericMutableRow(schema.length)
-      } else {
-        // It is safe to reuse the mutable row.
-        val mutableRow = new SpecificMutableRow(schema)
-        () => mutableRow
-      }
+      // It is safe to reuse the mutable row.
+      val mutableRow = new SpecificMutableRow(schema)
+      () => mutableRow
     }
   }
 
@@ -133,8 +127,7 @@ private[sql] class Serializer2DeserializationStream(
 
 private[sql] class SparkSqlSerializer2Instance(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends SerializerInstance {
 
   def serialize[T: ClassTag](t: T): ByteBuffer =
@@ -151,7 +144,7 @@ private[sql] class SparkSqlSerializer2Instance(
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new Serializer2DeserializationStream(keySchema, valueSchema, hasKeyOrdering, s)
+    new Serializer2DeserializationStream(keySchema, valueSchema, s)
   }
 }
 
@@ -164,14 +157,13 @@ private[sql] class SparkSqlSerializer2Instance(
  */
 private[sql] class SparkSqlSerializer2(
     keySchema: Array[DataType],
-    valueSchema: Array[DataType],
-    hasKeyOrdering: Boolean)
+    valueSchema: Array[DataType])
   extends Serializer
   with Logging
   with Serializable{
 
   def newInstance(): SerializerInstance =
-    new SparkSqlSerializer2Instance(keySchema, valueSchema, hasKeyOrdering)
+    new SparkSqlSerializer2Instance(keySchema, valueSchema)
 
   override def supportsRelocationOfSerializedObjects: Boolean = {
     // SparkSqlSerializer2 is stateless and writes no stream headers
@@ -304,11 +296,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val timestamp = row.getAs[java.sql.Timestamp](i)
-                val time = timestamp.getTime
-                val nanos = timestamp.getNanos
-                out.writeLong(time - (nanos / 1000000)) // Write the milliseconds value.
-                out.writeInt(nanos)                     // Write the nanoseconds part.
+                out.writeLong(row.getAs[Long](i))
               }
 
             case StringType =>
@@ -429,11 +417,7 @@ private[sql] object SparkSqlSerializer2 {
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
-                val time = in.readLong() // Read the milliseconds value.
-                val nanos = in.readInt() // Read the nanoseconds part.
-                val timestamp = new Timestamp(time)
-                timestamp.setNanos(nanos)
-                mutableRow.update(i, timestamp)
+                mutableRow.update(i, in.readLong())
               }
 
             case StringType =>
@@ -443,7 +427,7 @@ private[sql] object SparkSqlSerializer2 {
                 val length = in.readInt()
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
-                mutableRow.update(i, UTF8String(bytes))
+                mutableRow.update(i, UTF8String.fromBytes(bytes))
               }
 
             case BinaryType =>

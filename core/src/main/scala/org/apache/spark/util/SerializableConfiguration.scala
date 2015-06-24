@@ -14,23 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.util
 
-package org.apache.spark.sql.catalyst.optimizer
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.hadoop.conf.Configuration
 
-/**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
- */
-class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
+import org.apache.spark.util.Utils
+
+private[spark]
+class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    out.defaultWriteObject()
+    value.write(out)
+  }
+
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    value = new Configuration(false)
+    value.readFields(in)
   }
 }

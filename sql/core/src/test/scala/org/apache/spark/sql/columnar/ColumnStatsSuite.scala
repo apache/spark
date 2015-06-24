@@ -18,25 +18,28 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.InternalRow
 import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends SparkFunSuite {
-  testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
-  testColumnStats(classOf[ShortColumnStats], SHORT, Row(Short.MaxValue, Short.MinValue, 0))
-  testColumnStats(classOf[IntColumnStats], INT, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[LongColumnStats], LONG, Row(Long.MaxValue, Long.MinValue, 0))
-  testColumnStats(classOf[FloatColumnStats], FLOAT, Row(Float.MaxValue, Float.MinValue, 0))
-  testColumnStats(classOf[DoubleColumnStats], DOUBLE, Row(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[FixedDecimalColumnStats], FIXED_DECIMAL(15, 10), Row(null, null, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
-  testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
+  testColumnStats(classOf[ByteColumnStats], BYTE, InternalRow(Byte.MaxValue, Byte.MinValue, 0))
+  testColumnStats(classOf[ShortColumnStats], SHORT, InternalRow(Short.MaxValue, Short.MinValue, 0))
+  testColumnStats(classOf[IntColumnStats], INT, InternalRow(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[LongColumnStats], LONG, InternalRow(Long.MaxValue, Long.MinValue, 0))
+  testColumnStats(classOf[FloatColumnStats], FLOAT, InternalRow(Float.MaxValue, Float.MinValue, 0))
+  testColumnStats(classOf[DoubleColumnStats], DOUBLE,
+    InternalRow(Double.MaxValue, Double.MinValue, 0))
+  testColumnStats(classOf[FixedDecimalColumnStats],
+    FIXED_DECIMAL(15, 10), InternalRow(null, null, 0))
+  testColumnStats(classOf[StringColumnStats], STRING, InternalRow(null, null, 0))
+  testColumnStats(classOf[DateColumnStats], DATE, InternalRow(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP,
+    InternalRow(Long.MaxValue, Long.MinValue, 0))
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
-      initialStatistics: Row): Unit = {
+      initialStatistics: InternalRow): Unit = {
 
     val columnStatsName = columnStatsClass.getSimpleName
 

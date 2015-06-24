@@ -326,7 +326,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543543)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543500)
   }
 
   test("test DATE types") {
@@ -408,6 +408,17 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
+  }
+
+  test("quote column names by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+
+    val columns = Seq("abc", "key")
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
   }
 
   test("Dialect unregister") {

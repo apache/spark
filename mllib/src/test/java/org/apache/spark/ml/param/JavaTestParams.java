@@ -102,4 +102,9 @@ public class JavaTestParams extends JavaParams {
     setDefault(myDoubleArrayParam(), new double[] {1.0, 2.0});
     setDefault(myDoubleArrayParam().w(new double[] {1.0, 2.0}));
   }
+
+  @Override
+  public JavaTestParams copy(ParamMap extra) {
+    return defaultCopy(extra);
+  }
 }
