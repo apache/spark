@@ -2339,13 +2339,25 @@ private[spark] class RedirectThread(
  * in a circular buffer. The current contents of the buffer can be accessed using
  * the toString method.
  */
-private[spark] class CircularBuffer(sizeInByte: Int = 10240) extends java.io.OutputStream {
+private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
   var pos: Int = 0
-  var buffer = new Array[Int](sizeInByte / 4)
+  var buffer = new Array[Byte](sizeInBytes)
 
-  def write(i: Int): Unit = {
-    buffer(pos) = i
-    pos = (pos + 1) % buffer.size
+  /**
+   * Writes the specified byte to this output stream. The general
+   * contract for [[write]] is that one byte is written
+   * to the output stream. The byte to be written is the eight
+   * low-order bits of the argument `i`. The 24
+   * high-order bits of `i` are ignored.
+   *
+   * Subclasses of [[OutputStream]] must provide an
+   * implementation for this method.
+   *
+   * @param i the byte to be written.
+   */
+  override def write(i: Int): Unit = {
+    buffer(pos) = i.asInstanceOf[Byte]
+    pos = (pos + 1) % buffer.length
   }
 
   override def toString: String = {
