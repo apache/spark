@@ -331,7 +331,7 @@ class SchedulerJob(BaseJob):
             d[ti.pool].append(ti)
 
         for pool, tis in d.items():
-            open_slots = pools[ti.pool].open_slots(session=session)
+            open_slots = pools[pool].open_slots(session=session)
             if open_slots > 0:
                 tis = sorted(
                     tis, key=lambda ti: ti.priority_weight, reverse=True)
