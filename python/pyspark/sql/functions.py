@@ -367,22 +367,20 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
-def sha1(col, length):
+def sha1(col):
     """Returns the hex string result of SHA-1.
+
+
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.sha1(_to_java_column(col), length)
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
     return Column(jc)
 
 
 @ignore_unicode_prefix
 @since(1.5)
-def sha(col, length):
-    """Returns the hex string result of SHA-1.
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.sha(_to_java_column(col), length)
-    return Column(jc)
+def sha(col):
+    return sha1(col)
 
 
 @since(1.4)

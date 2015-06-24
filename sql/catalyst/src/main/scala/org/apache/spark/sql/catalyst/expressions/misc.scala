@@ -53,9 +53,11 @@ case class Md5(child: Expression)
  * A function that calculates a sha1 hash value and returns it as a hex string
  * For input of type [[BinaryType]] or [[StringType]]
  */
-case class Sha1(child: Expression) extends UnaryExpression {
+case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
