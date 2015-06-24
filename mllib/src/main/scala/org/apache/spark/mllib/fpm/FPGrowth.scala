@@ -62,13 +62,14 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
 @Experimental
 class FPGrowth private (
     private var minSupport: Double,
-    private var numPartitions: Int) extends Logging with Serializable {
+    private var numPartitions: Int,
+    private var mineSequences: Boolean) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
-   * as the input data}.
+   * as the input data, mineSequences: `false`}.
    */
-  def this() = this(0.3, -1)
+  def this() = this(0.3, -1, false)
 
   /**
    * Sets the minimal support level (default: `0.3`).
@@ -83,6 +84,14 @@ class FPGrowth private (
    */
   def setNumPartitions(numPartitions: Int): this.type = {
     this.numPartitions = numPartitions
+    this
+  }
+
+  /**
+   * Indicates whether to mine item-sets or item-sequences (default: false, mine item-sets).
+   */
+  def setMineSequences(value: Boolean): this.type = {
+    this.mineSequences = value
     this
   }
 
@@ -171,9 +180,12 @@ class FPGrowth private (
       itemToRank: Map[Item, Int],
       partitioner: Partitioner): mutable.Map[Int, Array[Int]] = {
     val output = mutable.Map.empty[Int, Array[Int]]
-    // Filter the basket by frequent items pattern and sort their ranks.
+    // Filter the basket by frequent items pattern
     val filtered = transaction.flatMap(itemToRank.get)
-    ju.Arrays.sort(filtered)
+    if (!this.mineSequences) { // Ignore ordering if not mining sequences
+      ju.Arrays.sort(filtered)
+    }
+    // Generate conditional transactions
     val n = filtered.length
     var i = n - 1
     while (i >= 0) {

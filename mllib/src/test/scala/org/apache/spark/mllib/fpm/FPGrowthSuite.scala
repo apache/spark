@@ -38,6 +38,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model6 = fpg
       .setMinSupport(0.9)
       .setNumPartitions(1)
+      .setMineSequences(false)
       .run(rdd)
     assert(model6.freqItemsets.count() === 0)
 
@@ -61,12 +62,14 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model2 = fpg
       .setMinSupport(0.3)
       .setNumPartitions(4)
+      .setMineSequences(false)
       .run(rdd)
     assert(model2.freqItemsets.count() === 54)
 
     val model1 = fpg
       .setMinSupport(0.1)
       .setNumPartitions(8)
+      .setMineSequences(false)
       .run(rdd)
     assert(model1.freqItemsets.count() === 625)
   }
@@ -88,12 +91,14 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model6 = fpg
       .setMinSupport(0.9)
       .setNumPartitions(1)
+      .setMineSequences(false)
       .run(rdd)
     assert(model6.freqItemsets.count() === 0)
 
     val model3 = fpg
       .setMinSupport(0.5)
       .setNumPartitions(2)
+      .setMineSequences(false)
       .run(rdd)
     assert(model3.freqItemsets.first().items.getClass === Array(1).getClass,
       "frequent itemsets should use primitive arrays")
@@ -109,12 +114,14 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model2 = fpg
       .setMinSupport(0.3)
       .setNumPartitions(4)
+      .setMineSequences(false)
       .run(rdd)
     assert(model2.freqItemsets.count() === 15)
 
     val model1 = fpg
       .setMinSupport(0.1)
       .setNumPartitions(8)
+      .setMineSequences(false)
       .run(rdd)
     assert(model1.freqItemsets.count() === 65)
   }
