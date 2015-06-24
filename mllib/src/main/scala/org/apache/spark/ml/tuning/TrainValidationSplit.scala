@@ -17,50 +17,49 @@
 
 package org.apache.spark.ml.tuning
 
-import com.github.fommil.netlib.F2jBLAS
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 
 /**
- * Params for [[CrossValidator]] and [[CrossValidatorModel]].
+ * Params for [[TrainValidationSplit]] and [[TrainValidationSplitModel]].
  */
-private[ml] trait CrossValidatorParams extends ValidationParams {
+private[ml] trait TrainValidationSplitParams extends ValidationParams {
   /**
-   * Param for number of folds for cross validation.  Must be >= 2.
-   * Default: 3
+   * Param for ratio between train and validation data. Must be between 0 and 1.
+   * Default: 0.75
    * @group param
    */
-  val numFolds: IntParam = new IntParam(this, "numFolds",
-    "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
+  val trainRatio: DoubleParam = new DoubleParam(this, "numFolds",
+    "ratio between training set and validation set (>= 0 && <= 1)", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  def getNumFolds: Int = $(numFolds)
+  def getTrainPercent: Double = $(trainRatio)
 
-  setDefault(numFolds -> 3)
+  setDefault(trainRatio -> 0.75)
 }
 
 /**
  * :: Experimental ::
- * K-fold cross validation.
+ * Validation for hyper-parameter tuning.
+ * Randomly splits the input dataset into train and validation sets.
+ * And uses evaluation metric on the validation set to select the best model.
+ * Similar to CrossValidator, but only splits the set once.
  */
 @Experimental
-class CrossValidator(uid: String)
-  extends Validation[CrossValidatorModel, CrossValidator](uid)
-  with CrossValidatorParams with Logging {
+class TrainValidationSplit(uid: String)
+  extends Validation[TrainValidationSplitModel, TrainValidationSplit](uid)
+  with TrainValidationSplitParams with Logging {
 
   def this() = this(Identifiable.randomUID("cv"))
 
-  private val f2jBLAS = new F2jBLAS
-
   /** @group setParam */
-  def setNumFolds(value: Int): this.type = set(numFolds, value)
+  def setTrainRatio(value: Double): this.type = set(trainRatio, value)
 
   override protected[ml] def validationLogic(
       dataset: DataFrame,
@@ -73,48 +72,34 @@ class CrossValidator(uid: String)
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
 
-    val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
-
-    splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
-      val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
-      val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
-      logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val newMetrics = measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
-
-      var i = 0
-      while (i < numModels) {
-        metrics(i) += newMetrics(i)
-        i += 1
-      }
-    }
-
-    f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
-    metrics
+    val splits = MLUtils.sample(dataset.rdd, $(trainRatio), 1)
+    val trainingDataset = sqlCtx.createDataFrame(splits._1, schema).cache()
+    val validationDataset = sqlCtx.createDataFrame(splits._2, schema).cache()
+    measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
   }
 
   override protected[ml] def createModel(
       uid: String,
       bestModel: Model[_],
-      metrics: Array[Double]): CrossValidatorModel = {
-    copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
+      metrics: Array[Double]): TrainValidationSplitModel = {
+    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
 }
 
 /**
  * :: Experimental ::
- * Model from k-fold cross validation.
+ * Model from train validation split.
  */
 @Experimental
-class CrossValidatorModel private[ml] (
+class TrainValidationSplitModel private[ml] (
     uid: String,
     bestModel: Model[_],
     avgMetrics: Array[Double])
-  extends ValidationModel[CrossValidatorModel](uid, bestModel, avgMetrics)
-  with CrossValidatorParams {
+  extends ValidationModel[TrainValidationSplitModel](uid, bestModel, avgMetrics)
+  with TrainValidationSplitParams {
 
-  override def copy(extra: ParamMap): CrossValidatorModel = {
-    val copied = new CrossValidatorModel(
+  override def copy(extra: ParamMap): TrainValidationSplitModel = {
+    val copied = new TrainValidationSplitModel (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
