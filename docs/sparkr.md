@@ -66,6 +66,13 @@ The general method for creating DataFrames from data sources is `read.df`. This 
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if creating context through `init`
 you can specify the packages with the `packages` argument.
 
+<div data-lang="r" markdown="1">
+{% highlight r %}
+sc <- sparkR.init(packages="com.databricks:spark-csv_2.11:1.0.3")
+sqlContext <- sparkRSQL.init(sc)
+{% endhighlight %}
+</div>
+
 We can see how to use data sources using an example JSON input file. Note that the file that is used here is _not_ a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. As a consequence, a regular multi-line JSON file will most often fail.
 
 <div data-lang="r"  markdown="1">
