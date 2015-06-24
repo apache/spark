@@ -178,6 +178,39 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
   }
 
+  override def union[VD2: ClassTag, ED2: ClassTag, VD3: ClassTag, ED3: ClassTag] (
+    other: Graph[VD2, ED2],
+    mergeSameVertexAttr: (Option[VD], Option[VD2]) => VD3,
+    mergeSameEdgeAttr: (Option[ED], Option[ED2]) => ED3): Graph[VD3, ED3] = {
+
+    val newVertexRDD: RDD[(VertexId, VD3)] = vertices.fullOuterJoin(other.vertices).map {
+      pair => (pair._1, mergeSameVertexAttr(pair._2._1, pair._2._2))
+    }.cache()
+
+    //  convert other EdgeRDD to kv pair RDD
+    val otherPair = other.edges.mapPartitions {
+      iter => iter.map { edge => (edge.srcId.toString + edge.dstId.toString, edge) }
+    }
+
+    //  full out join the kv pair RDD
+    val joinedRDD: RDD[Edge[ED3]] = RDD.rddToPairRDDFunctions {
+      edges.mapPartitions { _.map(edge => (edge.srcId.toString + edge.dstId.toString, edge)) }
+    }.fullOuterJoin(otherPair).map {
+      f => {
+        val curEdge = f._2._1
+        val otherEdge = f._2._2
+        val edge = curEdge.getOrElse(otherEdge.get)
+        val curAttr = if (curEdge.isDefined) Some(curEdge.get.attr) else None
+        val otherAttr = if (otherEdge.isDefined) Some(otherEdge.get.attr) else None
+        Edge(edge.srcId, edge.dstId, mergeSameEdgeAttr(curAttr, otherAttr))
+      }
+    }
+
+    //  convert to EdgeRDD and new Graph
+    val newEdgeRDD: EdgeRDDImpl[ED3, VD3] = EdgeRDD.fromEdges[ED3, VD3](joinedRDD).cache()
+    new GraphImpl(VertexRDD(newVertexRDD), new ReplicatedVertexView(newEdgeRDD))
+  }
+
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     val newEdges = replicatedVertexView.edges.mapEdgePartitions(
       (pid, part) => part.groupEdges(merge))

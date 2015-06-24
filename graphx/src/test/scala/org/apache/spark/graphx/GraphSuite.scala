@@ -428,4 +428,34 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("union between two graph") {
+    withSpark { sc =>
+      val rdd1 = sc.textFile(getClass.getResource("/union_1_test.data").getFile).zipWithIndex().map{
+        line =>
+          val fields = line._1.split(",")
+          Edge(fields(0).trim.toLong, fields(1).trim.toLong, line._2 + 1)
+      }
+      val rdd2 = sc.textFile(getClass.getResource("/union_2_test.data").getFile).zipWithIndex().map{
+        line =>
+          val fields = line._1.split(",")
+          Edge(fields(0).trim.toLong, fields(1).trim.toLong, line._2 + 1)
+      }
+
+      val mergeVertex = (a: Option[Int], b: Option[Int]) => a.getOrElse(0) + b.getOrElse(0)
+      val mergeEdge = (a: Option[Long], b: Option[Long]) => a.getOrElse(0L) + b.getOrElse(0L)
+
+      val graph1 = Graph.fromEdges(rdd1, 1)
+      val graph2 = Graph.fromEdges(rdd2, 2)
+      val graph3 = graph1.union(graph2, mergeVertex, mergeEdge)
+
+      assert(graph1.edges.count() + graph2.edges.count - 2 == graph3.edges.count)
+
+      val diff = (graph1.edges.collect() ++ graph2.edges.collect()).diff(graph3.edges.collect())
+      assert(diff.count(p => p.srcId == 5L || p.srcId == 6L || p.dstId == 5L || p.dstId == 6L) == 4)
+
+      val vdiff = graph3.vertices.collect().diff(graph1.vertices.collect ++ graph2.vertices.collect)
+      assert(vdiff.diff(Array((6, 3), (5, 3))).length == 0)
+    }
+  }
+
 }
