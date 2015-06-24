@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
+import org.apache.spark.sql.types.{IntegerType, DataType, DoubleType, LongType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -224,6 +224,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+  }
+
+  test("hex") {
+    checkEvaluation(Hex(Literal(28)), "1C")
+    checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
+    checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
+    checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
+    checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
+    checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
   }
 
   test("hypot") {
