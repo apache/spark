@@ -262,5 +262,5 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
 
 object VirtualColumn {
   val groupingIdName: String = "grouping__id"
-  def newGroupingId: AttributeReference = AttributeReference(groupingIdName, IntegerType, false)()
+  val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

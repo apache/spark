@@ -35,6 +35,7 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 __all__ = [
     'array',
     'approxCountDistinct',
+    'bin',
     'coalesce',
     'countDistinct',
     'explode',
@@ -231,6 +232,19 @@ def approxCountDistinct(col, rsd=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def bin(col):
+    """Returns the string representation of the binary value of the given column.
+
+    >>> df.select(bin(df.age).alias('c')).collect()
+    [Row(c=u'10'), Row(c=u'101')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.bin(_to_java_column(col))
+    return Column(jc)
+
+
 @since(1.4)
 def coalesce(*cols):
     """Returns the first column that is not null.
@@ -404,18 +418,23 @@ def when(condition, value):
     return Column(jc)
 
 
-@since(1.4)
-def log(col, base=math.e):
+@since(1.5)
+def log(arg1, arg2=None):
     """Returns the first argument-based logarithm of the second argument.
 
-    >>> df.select(log(df.age, 10.0).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    If there is only one argument, then this takes the natural logarithm of the argument.
+
+    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
     >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.log(base, _to_java_column(col))
+    if arg2 is None:
+        jc = sc._jvm.functions.log(_to_java_column(arg1))
+    else:
+        jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
 
 

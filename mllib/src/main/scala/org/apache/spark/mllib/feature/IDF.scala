@@ -159,7 +159,7 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Experimental
-class IDFModel private[mllib] (val idf: Vector) extends Serializable {
+class IDFModel private[spark] (val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.

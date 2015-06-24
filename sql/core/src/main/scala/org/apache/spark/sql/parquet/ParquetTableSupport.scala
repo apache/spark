@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.nio.{ByteOrder, ByteBuffer}
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
@@ -29,7 +30,7 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -298,7 +299,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   }
 
   // Scratch array used to write decimals as fixed-length binary
-  private val scratchBytes = new Array[Byte](8)
+  private[this] val scratchBytes = new Array[Byte](8)
 
   private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
     val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
@@ -313,10 +314,16 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
+  // array used to write Timestamp as Int96 (fixed-length binary)
+  private[this] val int96buf = new Array[Byte](12)
+
   private[parquet] def writeTimestamp(ts: Long): Unit = {
-    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(
-      DateUtils.toJavaTimestamp(ts))
-    writer.addBinary(binaryNanoTime)
+    val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(ts)
+    val buf = ByteBuffer.wrap(int96buf)
+    buf.order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    writer.addBinary(Binary.fromByteArray(int96buf))
   }
 }
 
@@ -360,7 +367,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
       case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record(index).asInstanceOf[Long])
+      case TimestampType => writeTimestamp(record.getLong(index))
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

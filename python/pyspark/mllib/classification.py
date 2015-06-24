@@ -135,8 +135,9 @@ class LogisticRegressionModel(LinearClassificationModel):
     1
     >>> sameModel.predict(SparseVector(2, {0: 1.0}))
     0
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> multi_class_data = [
@@ -387,8 +388,9 @@ class SVMModel(LinearClassificationModel):
     1
     >>> sameModel.predict(SparseVector(2, {0: -1.0}))
     0
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     """
@@ -515,8 +517,9 @@ class NaiveBayesModel(Saveable, Loader):
     >>> sameModel = NaiveBayesModel.load(sc, path)
     >>> sameModel.predict(SparseVector(2, {0: 1.0})) == model.predict(SparseVector(2, {0: 1.0}))
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """
