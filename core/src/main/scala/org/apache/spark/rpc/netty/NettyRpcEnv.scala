@@ -243,7 +243,7 @@ private[netty] object NettyRpcEnv extends Logging {
   private[netty] def currentEnv: NettyRpcEnv = _env.get
 }
 
-class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
+private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
@@ -273,7 +273,7 @@ class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
   }
 }
 
-class NettyRpcEndpointRef(@transient conf: SparkConf)
+private[netty] class NettyRpcEndpointRef(@transient conf: SparkConf)
   extends RpcEndpointRef(conf) with Serializable with Logging {
 
   @transient @volatile private var nettyEnv: NettyRpcEnv = _
@@ -361,7 +361,7 @@ private[netty] case class RpcFailure(e: Throwable)
  * Maintain the mapping relations between client addresses and [[RpcEnv]] addresses, broadcast
  * network events and forward messages to [[Dispatcher]].
  */
-class NettyRpcHandler(
+private[netty] class NettyRpcHandler(
     dispatcher: Dispatcher, nettyEnv: NettyRpcEnv) extends RpcHandler with Logging {
 
   private type ClientAddress = RpcAddress

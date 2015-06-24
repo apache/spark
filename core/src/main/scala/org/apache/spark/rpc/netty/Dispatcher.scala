@@ -138,7 +138,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     receivers.put(endpoint)
   }
 
-  class MessageLoop extends Runnable {
+  private[netty] class MessageLoop extends Runnable {
     override def run(): Unit = {
       try {
         while (!stopped) {
