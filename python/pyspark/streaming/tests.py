@@ -576,36 +576,6 @@ class CheckpointTests(unittest.TestCase):
 class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
     duration = 1
-    old_pyspark_submit_args = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.old_pyspark_submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
-        SPARK_HOME = os.environ["SPARK_HOME"]
-        kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
-        jars = glob.glob(
-            os.path.join(kafka_assembly_dir, "target/scala-*/spark-streaming-kafka-assembly-*.jar"))
-        if not jars:
-            raise Exception(
-                ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
-                "You need to build Spark with "
-                "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
-                "'build/mvn package' before running this test")
-        elif len(jars) > 1:
-            raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
-                            "remove all but one") % kafka_assembly_dir)
-        else:
-            os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars[0]
-            print(os.environ["PYSPARK_SUBMIT_ARGS"])
-            super(KafkaStreamTests, cls).setUpClass()
-
-    @classmethod
-    def tearDownClass(cls):
-        if cls.old_pyspark_submit_args is None:
-            del os.environ["PYSPARK_SUBMIT_ARGS"]
-        else:
-            os.environ["PYSPARK_SUBMIT_ARGS"] = cls.old_pyspark_submit_args
-        super(KafkaStreamTests, cls).tearDownClass()
 
     def setUp(self):
         super(KafkaStreamTests, self).setUp()
@@ -708,4 +678,19 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._validateRddResult(sendData, rdd)
 
 if __name__ == "__main__":
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
+    jars = glob.glob(
+        os.path.join(kafka_assembly_dir, "target/scala-*/spark-streaming-kafka-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
+                         "remove all but one") % kafka_assembly_dir)
+    else:
+        os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars[0]
     unittest.main()
