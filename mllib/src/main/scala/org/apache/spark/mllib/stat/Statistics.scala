@@ -23,7 +23,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
-import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult}
+import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult, KSTest, KSTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -157,5 +157,45 @@ object Statistics {
    */
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSqTestResult] = {
     ChiSqTest.chiSquaredFeatures(data)
+  }
+
+  /**
+   * Conduct a one-sample, two sided Kolmogorov Smirnov test for probability distribution equality
+   * @param data an `RDD[Double]` containing the sample of data to test
+   * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
+   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
+   */
+  def ksTest(data: RDD[Double], cdf: Double => Double): KSTestResult = {
+    KSTest.testOneSample(data, cdf)
+  }
+
+  /**
+   * Conduct a one-sample, two sided Kolmogorov Smirnov test for probability distribution equality,
+   * which creates only 1 distribution object per partition (useful in conjunction with Apache
+   * Commons Math distributions)
+   * @param data an `RDD[Double]` containing the sample of data to test
+   * @param distCalc a `Iterator[(Double, Double, Double)] => Iterator[Double]` function, to
+   *                 calculate the distance between empirical values and theoretical values of
+   *                 a distribution. The first element corresponds to the value x, the second
+   *                 element is the lower bound of the empirical CDF, while the third element is
+   *                 the upper bound. Thus if we call triple associated with an observation T, the
+   *                 KS distance at that point is max(Pr[X <= T._1] - T._2, T._3 - Pr[X <= T._1])
+   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
+   */
+  def ksTestOpt(data: RDD[Double],
+      distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
+      : KSTestResult = {
+    KSTest.testOneSampleOpt(data, distCalc)
+  }
+
+  /**
+   * A convenience method to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
+   * distribution equality
+   * @param data an `RDD[Double]` containing the sample of data to test
+   * @param name a `String` name for a theoretical distribution
+   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
+   */
+  def ksTest(data: RDD[Double], name: String): KSTestResult = {
+    KSTest.testOneSample(data, name)
   }
 }

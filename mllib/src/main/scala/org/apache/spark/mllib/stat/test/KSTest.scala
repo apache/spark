@@ -41,7 +41,7 @@ import org.apache.spark.rdd.RDD
 
   /**
    * Calculate empirical cumulative distribution values needed for KS statistic
-   * @param dat data over which we which to calculate the empirical cumulative distribution values
+   * @param dat `RDD[Double]` on which to calculate empirical cumulative distribution values
    * @return and RDD of (Double, Double, Double), where the first element in each tuple is the
    *         value, the second element is the ECDFV - 1 /n, and the third element is the ECDFV,
    *         where ECDF stands for empirical cumulative distribution function value
@@ -54,8 +54,8 @@ import org.apache.spark.rdd.RDD
 
   /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
-   * @param dat the data we wish to evaluate
-   * @param cdf a function to calculate the
+   * @param dat `RDD[Double]` to evaluate
+   * @param cdf `Double => Double` function to calculate the theoretical CDF
    * @return a KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
   def testOneSample(dat: RDD[Double], cdf: Double => Double): KSTestResult = {
@@ -74,7 +74,7 @@ import org.apache.spark.rdd.RDD
    * such that each partition runs a separate mapping operation. This can help in cases where the
    * CDF calculation involves creating an object. By using this implementation we can make sure
    * only 1 object is created per partition, versus 1 per observation.
-   * @param dat the data we wish to evaluate
+   * @param dat `RDD[Double]` to evaluate
    * @param distCalc a function to calculate the distance between the empirical values and the
    *                 theoretical value
    * @return a KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
