@@ -711,9 +711,10 @@ class RDD(object):
                     raise Exception("Pipe function `%s' exited "
                                     "with error code %d" % (command, pipe.returncode))
                 else:
-                    yield None
+                    for i in range(0):
+                        yield i
             return (x.rstrip(b'\n').decode('utf-8') for x in
-                    chain(iter(pipe.stdout.readline, b''), iter(check_return_code, None)))
+                    chain(iter(pipe.stdout.readline, b''), check_return_code()))
         return self.mapPartitions(func)
 
     def foreach(self, f):
