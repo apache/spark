@@ -37,7 +37,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *    import org.apache.spark.sql.functions._
-   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
    *      .withColumn("rand2", rand(seed=27))
    *    df.stat.cov("rand1", "rand2")
    * }}}
@@ -59,7 +59,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *    import org.apache.spark.sql.functions._
-   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
    *      .withColumn("rand2", rand(seed=27))
    *    df.stat.corr("rand1", "rand2", "pearson")
    * }}}
@@ -81,7 +81,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *    import org.apache.spark.sql.functions._
-   *    val df = sqlContext.createDataFrame(0 until 10).withColumn("rand1", rand(seed=10))
+   *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
    *      .withColumn("rand2", rand(seed=27))
    *    df.stat.corr("rand1", "rand2")
    * }}}
@@ -90,9 +90,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def corr(col1: String, col2: String): Double = {
     corr(col1, col2, "pearson")
-// scalastyle:off
   }
-// scalastyle:on
 
   /**
    * Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
@@ -110,7 +108,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF(“key”, “value”)
+   *      (3, 3))).toDF("key", "value")
    *    val ct = df.stat.crosstab("key", "value")
    *    ct.show()
    * }}}
