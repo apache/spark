@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import scala.sys.process.{ProcessLogger, Process}
+
 import org.apache.spark._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -82,12 +84,18 @@ class HiveSparkSubmitSuite
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val process = Utils.executeCommand(
+    val process = Process(
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
-      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+      "SPARK_TESTING" -> "1",
+      "SPARK_HOME" -> sparkHome
+    ).run(ProcessLogger(
+      (line: String) => { println(s"out> $line") },
+      (line: String) => { println(s"err> $line") }
+    ))
+
     try {
-      val exitCode = failAfter(120 seconds) { process.waitFor() }
+      val exitCode = failAfter(120 seconds) { process.exitValue() }
       if (exitCode != 0) {
         fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
       }
