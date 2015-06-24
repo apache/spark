@@ -298,19 +298,25 @@ class HiveServer2Hook(BaseHook):
                 authMechanism="NOSASL",
                 user='airflow',
                 database=schema) as conn:
-            with conn.cursor() as cur:
-                cur.execute(hql)
-                results = cur.fetchall()
-                if results:
-                    return {
-                        'data': results,
-                        'header': cur.getSchema(),
-                    }
-                else:
-                    return {
-                        'data': [],
-                        'header': [],
-                    }
+
+            # Hack to allow multiple statements to run in the same session,
+            # only the results from the last one is returned
+            if isinstance(hql, basestring):
+                hql = [hql]
+            results = {
+                'data': [],
+                'header': [],
+            }
+            for statement in hql:
+                with conn.cursor() as cur:
+                    cur.execute(statement)
+                    records = cur.fetchall()
+                    if records:
+                        results = {
+                            'data': records,
+                            'header': cur.getSchema(),
+                        }
+            return results
 
     def to_csv(self, hql, csv_filepath, schema='default'):
         schema = schema or 'default'
@@ -358,9 +364,12 @@ class HiveServer2Hook(BaseHook):
         '''
         import pandas as pd
         res = self.get_results(hql, schema=schema)
-        df = pd.DataFrame(res['data'])
-        df.columns = [c['columnName'] for c in res['header']]
-        return df
+        if res:
+            df = pd.DataFrame(res['data'])
+            df.columns = [c['columnName'] for c in res['header']]
+            return df
+        else:
+            return pd.DataFrame()
 
     def run(self, hql, schema=None):
         self.hive._oprot.trans.open()
