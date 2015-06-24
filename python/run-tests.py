@@ -18,6 +18,7 @@
 #
 
 from __future__ import print_function
+from optparse import OptionParser
 import os
 import re
 import subprocess
@@ -32,6 +33,9 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../de
 from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
 from sparktestsupport.shellutils import which  # noqa
 from sparktestsupport.modules import all_modules  # noqa
+
+
+python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals)
 
 
 def print_red(text):
@@ -64,23 +68,57 @@ def run_individual_python_test(test_name, pyspark_python=None):
         print("ok (%is)" % duration)
 
 
-def main():
-    print("Running PySpark tests. Output is in python/%s" % LOG_FILE)
-    if os.path.exists(LOG_FILE):
-        os.remove(LOG_FILE)
+def get_default_python_executables():
     python_execs = [x for x in ["python2.6", "python3.4", "pypy"] if which(x)]
     if "python2.6" not in python_execs:
         print("WARNING: Not testing against `python2.6` because it could not be found; falling"
               " back to `python` instead")
         python_execs.insert(0, "python")
+    return python_execs
+
+
+def parse_opts():
+    parser = OptionParser(
+        prog="run-tests"
+    )
+    parser.add_option(
+        "--python-executables", type="string", default=','.join(get_default_python_executables()),
+        help="A comma-separated list of Python executables to test against (default: %default)"
+    )
+    parser.add_option(
+        "--modules", type="string",
+        default=",".join(sorted(set(python_modules.keys()) - set(['root']))),
+        help="A comma-separated list of Python modules to test (default: %default)"
+    )
+
+    (opts, args) = parser.parse_args()
+    if args:
+        parser.error("Unsupported arguments: %s" % ' '.join(args))
+    return opts
+
+
+def main():
+    opts = parse_opts()
+    print("Running PySpark tests. Output is in python/%s" % LOG_FILE)
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    python_execs = opts.python_executables.split(',')
+    modules_to_test = []
+    for module_name in opts.modules.split(','):
+        if module_name in python_modules:
+            modules_to_test.append(python_modules[module_name])
+        else:
+            print("Error: unrecognized module %s" % module_name)
+            sys.exit(-1)
     print("Will test against the following Python executables: %s" % python_execs)
+    print("Will test the following Python modules: %s" % [x.name for x in modules_to_test])
+
     start_time = time.time()
     for python_exec in python_execs:
         print("Testing with `%s`: " % python_exec, end='')
         subprocess.call([python_exec, "--version"])
 
-        python_modules = [m for m in all_modules if m.python_test_goals]
-        for module in python_modules:
+        for module in modules_to_test:
             print("Running %s tests ..." % module.name)
             for test_goal in module.python_test_goals:
                 run_individual_python_test(test_goal)
