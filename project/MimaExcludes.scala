@@ -44,6 +44,11 @@ object MimaExcludes {
             // JavaRDDLike is not meant to be extended by user programs
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.partitioner"),
+            // New methods introduced in SPARK-8398 that expose hadoop Configuration
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.saveAsTextFile"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile"),
             // Mima false positive (was a private[spark] class)
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.util.collection.PairIterator"),
