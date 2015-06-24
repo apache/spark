@@ -587,8 +587,8 @@ class Analyzer(
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) => Some(g, names)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
       }
     }
