@@ -88,6 +88,19 @@ private[r] class RBackendHandler(server: RBackend)
     ctx.close()
   }
 
+  //get classPath for static object. This addresses SPARK-5185
+  def getStaticClass(objId: String): Class[_] = {
+    try {
+      val clsCurrent = Class.forName(objId)
+      clsCurrent
+      } catch {
+        //use contextLoader if we can't find the JAR in the system class loader
+        case e: ClassNotFoundException =>
+          val clsContext = Class.forName(objId, true, Thread.currentThread().getContextClassLoader)
+          clsContext
+      }
+    }
+
   def handleMethodCall(
       isStatic: Boolean,
       objId: String,
@@ -98,7 +111,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        getStaticClass(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
