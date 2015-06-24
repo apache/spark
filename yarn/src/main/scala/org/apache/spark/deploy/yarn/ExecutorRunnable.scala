@@ -303,8 +303,8 @@ class ExecutorRunnable(
       val address = container.getNodeHttpAddress
       val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
 
-      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=0"
-      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=0"
+      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
+      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }

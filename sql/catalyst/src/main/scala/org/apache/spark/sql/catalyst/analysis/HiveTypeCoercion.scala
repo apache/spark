@@ -68,6 +68,19 @@ object HiveTypeCoercion {
   }
 
   /**
+   * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
+   * [[findTightestCommonTypeToString]] to find the TightestCommonType.
+   */
+  private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case None => None
+      case Some(d) =>
+        findTightestCommonTypeOfTwo(d, c).orElse(findTightestCommonTypeToString(d, c))
+    })
+  }
+
+
+  /**
    * Find the tightest common type of a set of types by continuously applying
    * `findTightestCommonTypeOfTwo` on these types.
    */
@@ -264,15 +277,26 @@ trait HiveTypeCoercion {
       case a @ BinaryArithmetic(left, right @ StringType()) =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
-      // we should cast all timestamp/date/string compare into string compare
+      // For equality between string and timestamp we cast the string to a timestamp
+      // so that things like rounding of subsecond precision does not affect the comparison.
+      case p @ Equality(left @ StringType(), right @ TimestampType()) =>
+        p.makeCopy(Array(Cast(left, TimestampType), right))
+      case p @ Equality(left @ TimestampType(), right @ StringType()) =>
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
+
+      // We should cast all relative timestamp/date/string comparison into string comparisions
+      // This behaves as a user would expect because timestamp strings sort lexicographically.
+      // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
       case p @ BinaryComparison(left @ StringType(), right @ DateType()) =>
         p.makeCopy(Array(left, Cast(right, StringType)))
       case p @ BinaryComparison(left @ DateType(), right @ StringType()) =>
         p.makeCopy(Array(Cast(left, StringType), right))
       case p @ BinaryComparison(left @ StringType(), right @ TimestampType()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
+        p.makeCopy(Array(left, Cast(right, StringType)))
       case p @ BinaryComparison(left @ TimestampType(), right @ StringType()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+        p.makeCopy(Array(Cast(left, StringType), right))
+
+      // Comparisons between dates and timestamps.
       case p @ BinaryComparison(left @ TimestampType(), right @ DateType()) =>
         p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
       case p @ BinaryComparison(left @ DateType(), right @ TimestampType()) =>
@@ -294,7 +318,6 @@ trait HiveTypeCoercion {
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case Sqrt(e @ StringType()) => Sqrt(Cast(e, DoubleType))
     }
   }
 
@@ -599,7 +622,7 @@ trait HiveTypeCoercion {
       // compatible with every child column.
       case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
         val types = es.map(_.dataType)
-        findTightestCommonType(types) match {
+        findTightestCommonTypeAndPromoteToString(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None =>
             sys.error(s"Could not determine return type of Coalesce for ${types.mkString(",")}")
@@ -634,7 +657,7 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
         logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
-        val maybeCommonType = findTightestCommonType(c.valueTypes)
+        val maybeCommonType = findTightestCommonTypeAndPromoteToString(c.valueTypes)
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, value) if value.dataType != commonType =>
@@ -650,7 +673,8 @@ trait HiveTypeCoercion {
         }.getOrElse(c)
 
       case c: CaseKeyWhen if c.childrenResolved && !c.resolved =>
-        val maybeCommonType = findTightestCommonType((c.key +: c.whenList).map(_.dataType))
+        val maybeCommonType =
+          findTightestCommonTypeAndPromoteToString((c.key +: c.whenList).map(_.dataType))
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, then) if when.dataType != commonType =>

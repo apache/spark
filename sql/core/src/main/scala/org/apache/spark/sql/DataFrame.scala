@@ -32,7 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -619,7 +619,7 @@ class DataFrame private[sql](
   def as(alias: Symbol): DataFrame = as(alias.name)
 
   /**
-   * Selects a set of expressions.
+   * Selects a set of column based expressions.
    * {{{
    *   df.select($"colA", $"colB" + 1)
    * }}}
@@ -629,6 +629,10 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = {
     val namedExpressions = cols.map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
       // Leave an unaliased explode with an empty list of names since the analzyer will generate the
       // correct defaults after the nested expression's type has been resolved.
@@ -1029,10 +1033,10 @@ class DataFrame private[sql](
 
     val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
     val names = schema.toAttributes.map(_.name)
+    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
     val rowFunction =
-      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema)
-        .asInstanceOf[InternalRow]))
+      f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
@@ -1045,7 +1049,7 @@ class DataFrame private[sql](
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
    * {{{
-   *   df.explode("words", "word")(words: String => words.split(" "))
+   *   df.explode("words", "word"){words: String => words.split(" ")}
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -1059,8 +1063,8 @@ class DataFrame private[sql](
     val names = attributes.map(_.name)
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
-      f(row(0).asInstanceOf[A]).map(o =>
-        InternalRow(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 

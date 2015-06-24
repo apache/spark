@@ -76,8 +76,6 @@ object GenerateOrdering
     }.mkString("\n")
 
     val code = s"""
-      import org.apache.spark.sql.catalyst.InternalRow;
-
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
       }
@@ -100,9 +98,6 @@ object GenerateOrdering
 
     logDebug(s"Generated Ordering: $code")
 
-    val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
-    m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseOrdering]
+    compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }

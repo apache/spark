@@ -103,6 +103,7 @@ object FunctionRegistry {
     expression[Asin]("asin"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -112,6 +113,7 @@ object FunctionRegistry {
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Hypot]("hypot"),
+    expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
@@ -120,6 +122,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Pow]("pow"),
     expression[Pow]("power"),
+    expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
@@ -129,6 +132,9 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
 
     // aggregate functions
     expression[Average]("avg"),
