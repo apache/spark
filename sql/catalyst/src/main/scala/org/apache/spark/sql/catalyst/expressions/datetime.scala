@@ -79,18 +79,6 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
 
-    val calc = left.dataType match {
-      case TimestampType =>
-        s""""$utf8.fromString(sdf.format(new java.sql.Date(${eval1.primitive} / 10000)));"""
-      case DateType =>
-        s"""$utf8.fromString(
-          sdf.format($dtUtils.toJavaDate(${eval1.primitive})));"""
-      case StringType =>
-        s"""
-           $utf8.fromString(sdf.format(new java.sql.Date($dtUtils.stringToTime(${eval1.primitive}.toString()).getTime())));
-         """
-    }
-
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
@@ -99,7 +87,14 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
         ${eval2.code}
         if (!${eval2.isNull}) {
           $sdf sdf = new $sdf(${eval2.primitive}.toString());
-          ${ev.primitive} = $calc
+          Object o = ${eval1.primitive};
+          if (o instanceof ${ctx.boxedType(TimestampType)}) {
+            ${ev.primitive} = $utf8.fromString(sdf.format(new java.sql.Date(Long.parseLong(o.toString()) / 10000)));
+          } else if (o instanceof Integer) {
+            ${ev.primitive} = $utf8.fromString(sdf.format($dtUtils.toJavaDate(Integer.parseInt(o.toString()))));
+          } else {
+            ${ev.primitive} = $utf8.fromString(sdf.format(new java.sql.Date($dtUtils.stringToTime(o.toString()).getTime())));
+          }
         } else {
           ${ev.isNull} = true;
         }
@@ -108,11 +103,9 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
   }
 }
 
-case class Year(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Year(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = IntegerType
-
-  override def expectedChildTypes: Seq[DataType] = Seq(DateType, StringType, TimestampType)
 
   override def foldable: Boolean = child.foldable
 
@@ -138,11 +131,9 @@ case class Year(child: Expression) extends UnaryExpression with ExpectsInputType
 
 }
 
-case class Month(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Month(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = IntegerType
-
-  override def expectedChildTypes: Seq[DataType] = Seq(DateType, StringType, TimestampType)
 
   override def foldable: Boolean = child.foldable
 
@@ -167,11 +158,9 @@ case class Month(child: Expression) extends UnaryExpression with ExpectsInputTyp
     }
 }
 
-case class Day(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Day(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = IntegerType
-
-  override def expectedChildTypes: Seq[DataType] = Seq(DateType, StringType, TimestampType)
 
   override def foldable: Boolean = child.foldable
 

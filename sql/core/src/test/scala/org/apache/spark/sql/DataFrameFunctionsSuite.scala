@@ -172,15 +172,17 @@ class DataFrameFunctionsSuite extends QueryTest {
     val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
     val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, d.toString, ts), (ts, d, d.toString), (d.toString, ts, d)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(dateFormat("a", "y"), dateFormat("b", "y"), dateFormat("c", "y")),
-      Row("2015", "2015", "2013"))
+      Row("2015", "2015", "2013") :: Row("2013", "2015", "2015") ::
+        Row("2015", "2013", "2015") :: Nil)
 
     checkAnswer(
       df.selectExpr("dateFormat(a, 'y')", "dateFormat(b, 'y')", "dateFormat(c, 'y')"),
-      Row("2015", "2015", "2013"))
+      Row("2015", "2015", "2013") :: Row("2013", "2015", "2015") ::
+        Row("2015", "2013", "2015") :: Nil)
   }
 
   test("year") {
