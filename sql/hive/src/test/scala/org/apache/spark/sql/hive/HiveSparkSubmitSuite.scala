@@ -95,7 +95,7 @@ class HiveSparkSubmitSuite
     ))
 
     try {
-      val exitCode = failAfter(120 seconds) { process.exitValue() }
+      val exitCode = failAfter(180 seconds) { process.exitValue() }
       if (exitCode != 0) {
         fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
       }
