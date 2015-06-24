@@ -22,5 +22,3 @@ FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
 exec python -u ./python/run-tests.py
-
-exit

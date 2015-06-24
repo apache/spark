@@ -65,7 +65,6 @@ def run_individual_python_test(test_name, pyspark_python=None):
 
 
 def main():
-    # TODO: do we need to remove the metastore and warehouse created by the SQL tests? Ask Ahir.
     print("Running PySpark tests. Output is in python/%s" % LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
