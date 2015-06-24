@@ -40,6 +40,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     val convertToScala = CatalystTypeConverters.createToScalaConverter(schema)
 
     val scalaRow = Row.fromSeq(Seq.fill(simpleTypes.length)(null))
+    println(s"${scalaRow.getClass} ${convertToScala(convertToCatalyst(scalaRow)).getClass} ")
     assert(convertToScala(convertToCatalyst(scalaRow)) === scalaRow)
   }
 

@@ -26,7 +26,7 @@ import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.StructType;
 
 public abstract class BaseRow extends InternalRow {
@@ -162,7 +162,7 @@ public abstract class BaseRow extends InternalRow {
     for (int i = 0; i < n; i++) {
       arr[i] = get(i);
     }
-    return new GenericRow(arr);
+    return new GenericInternalRow(arr);
   }
 
   @Override

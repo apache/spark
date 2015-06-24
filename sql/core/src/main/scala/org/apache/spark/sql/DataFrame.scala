@@ -1499,8 +1499,8 @@ class DataFrame private[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
-    val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
-    SerDeUtil.javaToPython(jrdd)
+    val rdd = queryExecution.executedPlan.execute().map(EvaluatePython.rowToArray(_, fieldTypes))
+    SerDeUtil.javaToPython(rdd.toJavaRDD())
   }
 
   ////////////////////////////////////////////////////////////////////////////

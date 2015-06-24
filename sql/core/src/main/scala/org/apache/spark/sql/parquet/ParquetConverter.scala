@@ -318,7 +318,7 @@ private[parquet] class CatalystGroupConverter(
     // Note: this will ever only be called in the root converter when the record has been
     // fully processed. Therefore it will be difficult to use mutable rows instead, since
     // any non-root converter never would be sure when it would be safe to re-use the buffer.
-    new GenericRow(current.toArray)
+    new GenericInternalRow(current.toArray)
   }
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
@@ -342,8 +342,8 @@ private[parquet] class CatalystGroupConverter(
   override def end(): Unit = {
     if (!isRootConverter) {
       assert(current != null) // there should be no empty groups
-      buffer.append(new GenericRow(current.toArray))
-      parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
+      buffer.append(new GenericInternalRow(current.toArray))
+      parent.updateField(index, new GenericInternalRow(buffer.toArray.asInstanceOf[Array[Any]]))
     }
   }
 }
@@ -788,7 +788,7 @@ private[parquet] class CatalystStructConverter(
     // here we need to make sure to use StructScalaType
     // Note: we need to actually make a copy of the array since we
     // may be in a nested field
-    parent.updateField(index, new GenericRow(current.toArray))
+    parent.updateField(index, new GenericInternalRow(current.toArray))
   }
 }
 

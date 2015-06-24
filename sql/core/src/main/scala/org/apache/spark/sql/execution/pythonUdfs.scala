@@ -157,9 +157,9 @@ object EvaluatePython {
   }
 
   /**
-   * Convert Row into Java Array (for pickled into Python)
+   * Convert InternalRow into Java Array (for pickled into Python)
    */
-  def rowToArray(row: Row, fields: Seq[DataType]): Array[Any] = {
+  def rowToArray(row: InternalRow, fields: Seq[DataType]): Array[Any] = {
     // TODO: this is slow!
     row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
@@ -183,9 +183,9 @@ object EvaluatePython {
     }.toMap
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
-      }): Row
+      })
 
     case (c: java.util.Calendar, DateType) =>
       DateTimeUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))

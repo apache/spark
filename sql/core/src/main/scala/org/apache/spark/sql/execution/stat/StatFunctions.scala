@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object StatFunctions extends Logging {
 
@@ -123,7 +124,7 @@ private[sql] object StatFunctions extends Logging {
         countsRow.setLong(distinctCol2.get(row.get(1)).get + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
-      countsRow.setString(0, col1Item.toString)
+      countsRow.update(0, UTF8String.fromString(col1Item.toString))
       countsRow
     }.toSeq
     val headerNames = distinctCol2.map(r => StructField(r._1.toString, LongType)).toSeq

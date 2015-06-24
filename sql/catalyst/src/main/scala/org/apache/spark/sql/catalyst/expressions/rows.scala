@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -64,7 +65,7 @@ object EmptyRow extends InternalRow {
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -114,14 +115,31 @@ class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
   }
 
   override def getString(i: Int): String = {
-    values(i) match {
-      case null => null
-      case s: String => s
-      case utf8: UTF8String => utf8.toString
-    }
+    values(i).asInstanceOf[String]
   }
 
-  override def copy(): InternalRow = this
+  // This is used by test or outside
+  override def equals(o: Any): Boolean = o match {
+    case other: Row  if other.length == length =>
+      var i = 0
+      while (i < length) {
+        if (isNullAt(i) != other.isNullAt(i)) {
+          return false
+        }
+        val equal = (apply(i), other.apply(i)) match {
+          case (a: Array[Byte], b: Array[Byte]) => java.util.Arrays.equals(a, b)
+          case (a, b) => a == b
+        }
+        if (!equal) {
+          return false
+        }
+        i += 1
+      }
+      true
+    case _ => false
+  }
+
+  override def copy(): Row = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -133,7 +151,68 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
-class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
+/**
+ * A internal row implementation that uses an array of objects as the underlying storage.
+ * Note that, while the array is not copied, and thus could technically be mutated after creation,
+ * this is not allowed.
+ */
+class GenericInternalRow(protected[sql] val values: Array[Any]) extends InternalRow {
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null)
+
+  def this(size: Int) = this(new Array[Any](size))
+
+  override def toSeq: Seq[Any] = values.toSeq
+
+  override def length: Int = values.length
+
+  override def apply(i: Int): Any = values(i)
+
+  override def isNullAt(i: Int): Boolean = values(i) == null
+
+  override def getInt(i: Int): Int = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
+    values(i).asInstanceOf[Int]
+  }
+
+  override def getLong(i: Int): Long = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive long value.")
+    values(i).asInstanceOf[Long]
+  }
+
+  override def getDouble(i: Int): Double = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive double value.")
+    values(i).asInstanceOf[Double]
+  }
+
+  override def getFloat(i: Int): Float = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive float value.")
+    values(i).asInstanceOf[Float]
+  }
+
+  override def getBoolean(i: Int): Boolean = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive boolean value.")
+    values(i).asInstanceOf[Boolean]
+  }
+
+  override def getShort(i: Int): Short = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive short value.")
+    values(i).asInstanceOf[Short]
+  }
+
+  override def getByte(i: Int): Byte = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
+    values(i).asInstanceOf[Byte]
+  }
+
+  override def getString(i: Int): String = {
+    values(i).asInstanceOf[UTF8String].toString
+  }
+
+  override def copy(): InternalRow = this
+}
+
+class GenericMutableRow(v: Array[Any]) extends GenericInternalRow(v) with MutableRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
@@ -155,7 +234,7 @@ class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
 
   override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
-  override def copy(): InternalRow = new GenericRow(values.clone())
+  override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }
 
 
