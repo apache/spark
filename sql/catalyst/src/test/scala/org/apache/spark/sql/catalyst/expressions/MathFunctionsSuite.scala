@@ -260,7 +260,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Round(Literal(1.5F), Literal(0)), 2.0F)
     checkEvaluation(Round(Literal(1.toShort), Literal(0)), 1.toShort)
     checkEvaluation(Round(Literal(2.toByte), Literal(0)), 2.toByte)
-    checkEvaluation(Round(Literal(23456789L), Literal(0)), 23456789L)
+    checkEvaluation(Round(Literal(9223372036854775807L), 0), 9223372036854775807L)
     checkEvaluation(Round(Literal(123), Literal(0)), 123)
   }
 }

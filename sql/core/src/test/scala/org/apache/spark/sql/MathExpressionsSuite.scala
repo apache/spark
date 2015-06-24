@@ -308,6 +308,5 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(df.selectExpr("round(145.23, -1)"), Row(150.0)) // same as hive
     checkAnswer(df.selectExpr("round(20, 1)"), Row(20))
     checkAnswer(df.selectExpr("round(1.0/0.0, 1)"), Row(null))
-
   }
 }
