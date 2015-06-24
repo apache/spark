@@ -26,37 +26,29 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression {
+abstract class DateFormatExpression extends Expression { self: Product =>
+  
+  protected val date: Expression
+  
+  protected val format: Expression
 
-  override def dataType: DataType = StringType
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    (left.dataType, right.dataType) match {
-      case (null, _) => TypeCheckResult.TypeCheckSuccess
-      case (_, null) => TypeCheckResult.TypeCheckSuccess
-      case (_: DateType, _: StringType) => TypeCheckResult.TypeCheckSuccess
-      case (_: TimestampType, _: StringType) => TypeCheckResult.TypeCheckSuccess
-      case (_: StringType, _: StringType) => TypeCheckResult.TypeCheckSuccess
-      case _ =>
-        TypeCheckResult.TypeCheckFailure(s"DateFormat accepts date types as first argument, " +
-          s"and string types as second, not ${left.dataType} and ${right.dataType}")
-    }
-
-  override def foldable: Boolean = left.foldable && right.foldable
+  override def foldable: Boolean = date.foldable && format.foldable
 
   override def nullable: Boolean = true
 
+  override def children: Seq[Expression] = Seq(date, format)
+
   override def eval(input: InternalRow): Any = {
-    val valueLeft = left.eval(input)
+    val valueLeft = date.eval(input)
     if (valueLeft == null) {
       null
     } else {
-      val valueRight = right.eval(input)
+      val valueRight = format.eval(input)
       if (valueRight == null) {
         null
       } else {
         val sdf = new SimpleDateFormat(valueRight.asInstanceOf[UTF8String].toString)
-        left.dataType match {
+        date.dataType match {
           case TimestampType =>
             UTF8String.fromString(sdf.format(new Date(valueLeft.asInstanceOf[Long] / 10000)))
           case DateType =>
@@ -69,15 +61,31 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     }
   }
 
-  override def toString: String = s"DateFormat($left, $right)"
+  /**
+   * Called by date format expressions to generate a code block that returns the result
+   *
+   * As an example, the following parse the result to int
+   * {{{
+   *   defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+   * }}}
+   *
+   * @param f function that accepts a variable name and returns Java code to parse an
+   *          [[UTF8String]] to the expected output type
+   */
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  protected def defineCodeGen(
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: String => String): String = {
+
     val sdf = "java.text.SimpleDateFormat"
     val utf8 = "org.apache.spark.unsafe.types.UTF8String"
     val dtUtils = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
 
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
+    val eval1 = date.gen(ctx)
+    val eval2 = format.gen(ctx)
+
+    val varName = ctx.freshName("resultVar")
 
     s"""
       ${eval1.code}
@@ -88,236 +96,280 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
         if (!${eval2.isNull}) {
           $sdf sdf = new $sdf(${eval2.primitive}.toString());
           Object o = ${eval1.primitive};
+          $utf8 $varName;
           if (o instanceof ${ctx.boxedType(TimestampType)}) {
-            ${ev.primitive} = $utf8.fromString(sdf.format(new java.sql.Date(Long.parseLong(o.toString()) / 10000)));
-          } else if (o instanceof Integer) {
-            ${ev.primitive} = $utf8.fromString(sdf.format($dtUtils.toJavaDate(Integer.parseInt(o.toString()))));
+            $varName = $utf8.fromString(sdf.format(new java.sql.Date(Long.parseLong(o.toString()) / 10000)));
+          } else if (o instanceof ${ctx.boxedType(DateType)}) {
+            $varName = $utf8.fromString(sdf.format($dtUtils.toJavaDate(Integer.parseInt(o.toString()))));
           } else {
-            ${ev.primitive} = $utf8.fromString(sdf.format(new java.sql.Date($dtUtils.stringToTime(o.toString()).getTime())));
+            $varName = $utf8.fromString(sdf.format(new java.sql.Date($dtUtils.stringToTime(o.toString()).getTime())));
           }
+          ${ev.primitive} = ${f(varName)};
         } else {
           ${ev.isNull} = true;
         }
       }
     """
   }
+  
 }
 
-case class Year(child: Expression) extends UnaryExpression {
+case class DateFormatClass(date: Expression, format: Expression) extends DateFormatExpression {
+
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    (date.dataType, format.dataType) match {
+      case (null, _) => TypeCheckResult.TypeCheckSuccess
+      case (_, null) => TypeCheckResult.TypeCheckSuccess
+      case (_: DateType, _: StringType) => TypeCheckResult.TypeCheckSuccess
+      case (_: TimestampType, _: StringType) => TypeCheckResult.TypeCheckSuccess
+      case (_: StringType, _: StringType) => TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        TypeCheckResult.TypeCheckFailure(s"DateFormat accepts date types as first argument, " +
+          s"and string types as second, not ${date.dataType} and ${format.dataType}")
+    }
+
+  override def toString: String = s"DateFormat($date, $format)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"$c")
+  }
+
+}
+
+case class Year(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("y")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("y")).eval(input) match {
-      case null => null
-      case x: UTF8String => x.toString.toInt
-    }
-  }
-
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Year accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    super.eval(input) match {
+      case null => null
+      case s: UTF8String => s.toString.toInt
+    }
+  }
 }
 
-case class Quarter(child: Expression) extends UnaryExpression {
+case class Quarter(date: Expression) extends DateFormatExpression {
+  
+  override protected val format: Expression = Literal("M")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"(Integer.parseInt($c.toString()) - 1) / 3 + 1")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("M")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => (x.toString.toInt - 1) / 3 + 1
+      case s: UTF8String => (s.toString.toInt - 1) / 3 + 1
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Quarter accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 
 }
 
-case class Month(child: Expression) extends UnaryExpression {
+case class Month(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("M")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
   override def nullable: Boolean = true
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
+
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("M")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Month accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 }
 
-case class Day(child: Expression) extends UnaryExpression {
+case class Day(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("d")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("d")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Day accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 
 }
 
-case class Hour(child: Expression) extends UnaryExpression {
+case class Hour(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("H")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("H")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Hour accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 }
 
-case class Minute(child: Expression) extends UnaryExpression {
+case class Minute(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("m")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("m")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Minute accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 }
 
-case class Second(child: Expression) extends UnaryExpression {
+case class Second(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("s")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("s")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"Second accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 }
 
-case class WeekOfYear(child: Expression) extends UnaryExpression {
+case class WeekOfYear(date: Expression) extends DateFormatExpression {
+
+  override protected val format: Expression = Literal("w")
 
   override def dataType: DataType = IntegerType
 
-  override def foldable: Boolean = child.foldable
-
-  override def nullable: Boolean = true
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"Integer.parseInt($c.toString())")
+  }
 
   override def eval(input: InternalRow): Any = {
-    DateFormatClass(child, Literal("w")).eval(input) match {
+    super.eval(input) match {
       case null => null
-      case x: UTF8String => x.toString.toInt
+      case s: UTF8String => s.toString.toInt
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult =
-    child.dataType match {
+    date.dataType match {
       case null => TypeCheckResult.TypeCheckSuccess
       case _: DateType => TypeCheckResult.TypeCheckSuccess
       case _: TimestampType => TypeCheckResult.TypeCheckSuccess
       case _: StringType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"WeekOfYear accepts date types as argument, " +
-          s" not ${child.dataType}")
+          s" not ${date.dataType}")
     }
 }
