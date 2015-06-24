@@ -107,12 +107,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure("CreateNamedStruct expects an even number of arguments.")
     } else {
-      val invalidNames = nameExprs.filter { case name =>
-        (name.find {
-          case _: Attribute | _: BoundReference => true;
-          case _ => false
-        } != None) || (name.dataType != StringType)
-      }
+      val invalidNames =
+        nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
       if (invalidNames.size != 0) {
         TypeCheckResult.TypeCheckFailure(
           s"Non String Literal fields at odd position : ${invalidNames.mkString(",")}")
