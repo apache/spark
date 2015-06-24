@@ -36,7 +36,9 @@ class HiveCliHook(BaseHook):
         Run an hql statement using the hive cli
 
         >>> hh = HiveCliHook()
-        >>> hh.run_cli("USE airflow;")
+        >>> result = hh.run_cli("USE airflow;")
+        >>> ("OK" in result)
+        True
         '''
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
