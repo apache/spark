@@ -630,12 +630,8 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
         self._validate_dstream(dstream)
 
         def update(rdd):
-            # Empty RDD raises a ValueError.
-            try:
-                rdd.first()
-            except ValueError:
-                pass
-            else:
+            # LinearRegressionWithSGD.train raises an error for an empty RDD.
+            if not rdd.isEmpty():
                 self._model = LinearRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
                     self.miniBatchFraction, self._model.weights,
@@ -647,7 +643,7 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
         """
         Make predictions on a dstream of Vectors.
 
-        Returns a transformed dstream object.
+        :return: Transformed dstream object.
         """
         self._validate_dstream(dstream)
         return dstream.map(lambda x: self._model.predict(x))
@@ -655,7 +651,7 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
     def predictOnValues(self, dstream):
         """Make predictions on a keyed dstream where the values are Vectors.
 
-        Returns a transformed dstream object.
+        :return: Transformed dstream object.
         """
         self._validate_dstream(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))

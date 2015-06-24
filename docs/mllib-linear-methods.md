@@ -772,12 +772,10 @@ will get better!
 
 First, we import the necessary classes for parsing our input data and creating the model.
 
-{% highlight scala %}
-
+{% highlight python %}
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.regression import StreamingLinearRegressionWithSGD
-
 {% endhighlight %}
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
@@ -786,7 +784,6 @@ for more info. For this example, we use labeled points in training and testing s
 but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight python %}
-
 def parse(lp):
     label = float(lp[lp.find('(') + 1: lp.find(',')])
     vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
@@ -794,29 +791,24 @@ def parse(lp):
 
 trainingData = ssc.textFileStream("/training/data/dir").map(parse).cache()
 testData = ssc.textFileStream("/testing/data/dir").map(parse)
-
 {% endhighlight %}
 
 We create our model by initializing the weights to 0
 
-{% highlight scala %}
-
+{% highlight python %}
 numFeatures = 3
 model = StreamingLinearRegressionWithSGD()
 model.setInitialWeights([0.0, 0.0, 0.0])
-
 {% endhighlight %}
 
 Now we register the streams for training and testing and start the job.
 
 {% highlight scala %}
-
 model.trainOn(trainingData)
-model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features)))
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
 
 ssc.start()
 ssc.awaitTermination()
-
 {% endhighlight %}
 
 We can now save text files with data to the training or testing folders.
