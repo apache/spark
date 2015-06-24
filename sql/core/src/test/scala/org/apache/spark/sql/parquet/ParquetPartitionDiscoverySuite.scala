@@ -540,7 +540,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   }
 
   test("listConflictingPartitionColumns") {
-    def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]) = {
+    def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]): String = {
       val conflictingColNameLists = colNameLists.zipWithIndex.map { case (list, index) =>
         s"\tPartition column name list #$index: $list"
       }.mkString("\n", "\n", "\n")
