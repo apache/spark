@@ -32,6 +32,7 @@ import sparktestsupport.modules as modules
 # Functions for traversing module dependency graph
 # -------------------------------------------------------------------------------------------------
 
+
 def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
@@ -39,7 +40,7 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/test/foo"]))
-    ['pyspark', 'sql']
+    ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     """
@@ -90,8 +91,11 @@ def determine_modules_to_test(changed_modules):
     ['root']
     >>> sorted(x.name for x in determine_modules_to_test([modules.graphx]))
     ['examples', 'graphx']
-    >>> sorted(x.name for x in determine_modules_to_test([modules.sql]))
-    ['examples', 'hive-thriftserver', 'mllib', 'pyspark', 'sparkr', 'sql']
+    >>> x = sorted(x.name for x in determine_modules_to_test([modules.sql]))
+    >>> x # doctest: +NORMALIZE_WHITESPACE
+    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-core', \
+     'pyspark-mllib', 'pyspark-sql', 'pyspark-sql', 'pyspark-streaming', \
+     'sparkr', 'sql']
     """
     # If we're going to have to run all of the tests, then we can just short-circuit
     # and return 'root'. No module depends on root, so if it appears then it will be
