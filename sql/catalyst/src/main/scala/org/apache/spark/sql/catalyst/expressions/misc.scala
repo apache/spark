@@ -61,21 +61,34 @@ case class Sha(child: Expression)
 
   override def dataType: DataType = StringType
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
       null
     } else {
-      UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
+      value match {
+        case b: Array[Byte] =>
+          UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
+        case s: UTF8String =>
+          UTF8String.fromString(DigestUtils.shaHex(s.getBytes))
+      }
+
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      "org.apache.spark.unsafe.types.UTF8String.fromString(" +
-        s"org.apache.commons.codec.digest.DigestUtils.shaHex($c))")
+      child.dataType match {
+        case BinaryType =>
+          "org.apache.spark.unsafe.types.UTF8String.fromString(" +
+            s"org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+        case StringType =>
+          "org.apache.spark.unsafe.types.UTF8String.fromString(" +
+            s"org.apache.commons.codec.digest.DigestUtils.shaHex($c.getBytes()))"
+      }
+    )
   }
 
 }
