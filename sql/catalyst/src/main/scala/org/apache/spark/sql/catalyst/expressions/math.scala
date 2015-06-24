@@ -317,21 +317,21 @@ case class Logarithm(left: Expression, right: Expression)
   }
 }
 
-case class Round(left: Expression, right: Expression)
-  extends Expression with trees.BinaryNode[Expression] with Serializable {
+case class Round(valueExpr: Expression, scaleExpr: Expression)
+  extends Expression with trees.BinaryNode[Expression] {
 
   def this(left: Expression) = {
     this(left, Literal(0))
   }
 
-  override def nullable: Boolean = left.nullable || right.nullable
+  override def nullable: Boolean = valueExpr.nullable || scaleExpr.nullable
 
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if ((left.dataType.isInstanceOf[NumericType] || left.dataType.isInstanceOf[NullType])
-      && (right.dataType.isInstanceOf[IntegerType] || right.dataType.isInstanceOf[NullType])) {
+    if ((valueExpr.dataType.isInstanceOf[NumericType] || valueExpr.dataType.isInstanceOf[NullType])
+      && (scaleExpr.dataType.isInstanceOf[IntegerType] || scaleExpr.dataType.isInstanceOf[NullType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
@@ -339,13 +339,13 @@ case class Round(left: Expression, right: Expression)
     }
   }
 
-  override def toString: String = s"round($left, $right)"
+  override def toString: String = s"round($valueExpr, $scaleExpr)"
 
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = valueExpr.dataType
 
   override def eval(input: InternalRow): Any = {
-    val valueEval = left.eval(input)
-    val scaleEval = right.eval(input)
+    val valueEval = valueExpr.eval(input)
+    val scaleEval = scaleExpr.eval(input)
     if (valueEval == null || scaleEval == null) {
       null
     } else {
@@ -384,4 +384,8 @@ case class Round(left: Expression, right: Expression)
   private def round(value: Decimal, scale: Int): Decimal = {
     value.set(value.toBigDecimal, value.precision, scale.asInstanceOf[Integer])
   }
+
+  override def left: Expression = valueExpr
+
+  override def right: Expression = scaleExpr
 }
