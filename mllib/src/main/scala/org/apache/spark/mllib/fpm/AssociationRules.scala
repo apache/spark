@@ -16,6 +16,8 @@
  */
 package org.apache.spark.mllib.fpm
 
+import org.apache.spark.rdd.RDD
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -47,49 +49,29 @@ class AssociationRules private (
   }
 
   /**
-   * Computes the association rules with confidence supported above [[minConfidence]].
+   * Computes the association rules with confidence above [[minConfidence]].
    * @param freqItemsets frequent itemsets to compute association rules over.
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
-  def run[Item: ClassTag](freqItemsets: Set[FreqItemset[Item]]): List[Rule[Item]] = {
-    freqItemsets.map { itemset =>
-      (itemset.items.toSet, itemset.items.map(Set(_)).toSet)
-    }.flatMap({ case (itemset, consequents) => generateRules(freqItemsets, itemset, consequents)})
-    .toList
-  }
-
-  private def generateRules[Item: ClassTag](
-      freqItemsets: Set[FreqItemset[Item]],
-      itemset: Set[Item],
-      consequents: Set[Set[Item]]): Set[Rule[Item]] = {
-    val k = itemset.size
-    val m = consequents.head.size
-
-    val rules = mutable.Set[Rule[Item]]()
-    if (k > m+1) {
-      val nextConsequents = mutable.Set(aprioriGen[Item](consequents).toSeq: _*)
-      for (nextConsequent <- nextConsequents) {
-        val proposedRule = Rule[Item](freqItemsets, itemset -- nextConsequent, nextConsequent)
-        if (proposedRule.confidence() >= minConfidence) {
-          rules += proposedRule
-        } else {
-          nextConsequents -= nextConsequent
+  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
+    freqItemsets.flatMap { itemset =>
+      val items = itemset.items
+      items.map { item =>
+        items.partition(_ == item) match {
+          case (consequent, antecedent) => (antecedent, (consequent, itemset.freq))
         }
+      } :+ (items, (new Array[Item](0), itemset.freq))
+    }.aggregateByKey(Map[Array[Item], Long]().empty)(
+      { case (acc, (consequent, freq)) => acc + (consequent -> freq) },
+      { (acc1, acc2) => acc1 ++ acc2 }
+    ).flatMap { case (antecedent, consequentToFreq) =>
+      consequentToFreq.map { case (consequent, freqUnion) =>
+        // TODO: how to get freqAntecedent from consequentToFreq when |Antecedent| > 1 (since
+        // |consequent| = 1 and freq(x) + freq(y) != freq(x + y))?
+        val freqAntecedent = ???
+        Rule(antecedent, consequent, freqUnion / freqAntecedent)
       }
-      if (!nextConsequents.isEmpty) rules ++= generateRules[Item](freqItemsets, itemset, nextConsequents.toSet)
     }
-    rules.toSet
-  }
-
-  private def aprioriGen[Item: ClassTag](itemsets: Set[Set[Item]]): Set[Set[Item]] = {
-    val k = itemsets.head.size
-    (for {
-      p <- itemsets;
-      q <- itemsets if p.intersect(q).size == k - 1
-    } yield (p ++ q))
-      // TODO: A-priori pruning : if a k-1 subset of the proposed set is not frequent, then this
-      // propsoed set cannot possibly be frequent (downward closure)
-      //.filter(_.subsets(k-1).exists(subset => itemsets.contains(subset)))
   }
 }
 
@@ -99,35 +81,22 @@ object AssociationRules {
    * :: Experimental ::
    *
    * An association rule between sets of items.
-   * @param freqItemsets dataset used to derive this rule.
    * @param antecedent hypotheses of the rule
    * @param consequent conclusion of the rule
+   * @param confidence the confidence of the rule
    * @tparam Item item type
    */
   @Experimental
   case class Rule[Item: ClassTag](
-    freqItemsets: Set[FreqItemset[Item]],
-    antecedent: Set[Item],
-    consequent: Set[Item])
+    antecedent: Array[Item],
+    consequent: Array[Item],
+    confidence: Double)
     extends Serializable {
 
-    if (!antecedent.toSet.intersect(consequent.toSet).isEmpty) {
+    require(!antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet).isEmpty
-      throw new SparkException(s"A valid association rule must have disjoint antecedent and " +
-        s"consequent but ${sharedItems} is present in both.")
-    }
-
-    def confidence(): Double = {
-      val num = freqItemsets
-        .find(_.items.toSet == (antecedent ++ consequent))
-        .get
-        .freq
-      val denom = freqItemsets
-        .find(_.items.toSet == antecedent)
-        .get
-        .freq
-
-      num.toDouble / denom.toDouble
-    }
+      s"A valid association rule must have disjoint antecedent and " +
+        s"consequent but ${sharedItems} is present in both."
+    })
   }
 }
