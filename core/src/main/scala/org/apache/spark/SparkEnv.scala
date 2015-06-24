@@ -90,17 +90,25 @@ class SparkEnv (
   private var driverTmpDirToDelete: Option[String] = None
 
   private[spark] def stop() {
+
+    if(isStopped) return
+
     isStopped = true
-    pythonWorkers.foreach { case(key, worker) => worker.stop() }
-    Option(httpFileServer).foreach(_.stop())
-    mapOutputTracker.stop()
-    shuffleManager.stop()
-    broadcastManager.stop()
-    blockManager.stop()
-    blockManager.master.stop()
-    metricsSystem.stop()
-    outputCommitCoordinator.stop()
-    rpcEnv.shutdown()
+    try {
+      pythonWorkers.foreach { case (key, worker) => worker.stop()}
+      Option(httpFileServer).foreach(_.stop())
+      mapOutputTracker.stop()
+      shuffleManager.stop()
+      broadcastManager.stop()
+      blockManager.stop()
+      blockManager.master.stop()
+      metricsSystem.stop()
+      outputCommitCoordinator.stop()
+      rpcEnv.shutdown()
+    } catch {
+      case e: Exception =>
+        logInfo("Exception while SparkEnv stop", e)
+    }
 
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
