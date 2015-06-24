@@ -123,9 +123,9 @@ utils.pessimistic_connection_handling()
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_POOL_RECYCLE'] = 3600
+app.secret_key = conf.get('webserver', 'SECRET_KEY')
 
 login.login_manager.init_app(app)
-app.secret_key = 'airflowified'
 
 cache = Cache(
     app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
