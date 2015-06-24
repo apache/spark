@@ -178,11 +178,11 @@ private[sql] class ParquetRelation2(
 
     val committerClass =
       conf.getClass(
-        "spark.sql.parquet.output.committer.class",
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
         classOf[ParquetOutputCommitter],
         classOf[ParquetOutputCommitter])
 
-    if (conf.get("spark.sql.parquet.output.committer.class") == null) {
+    if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
       logInfo("Using default output committer for Parquet: " +
         classOf[ParquetOutputCommitter].getCanonicalName)
     } else {

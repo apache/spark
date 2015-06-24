@@ -1348,6 +1348,34 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
     support.
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.parquet.output.committer.class</code></td>
+  <td><code>org.apache.parquet.hadoop.<br />ParquetOutputCommitter</code></td>
+  <td>
+    <p>
+      The output committer class used by Parquet. The specified class needs to be a subclass of
+      <code>org.apache.hadoop.<br />mapreduce.OutputCommitter</code>.  Typically, it's also a
+      subclass of <code>org.apache.parquet.hadoop.ParquetOutputCommitter</code>.
+    </p>
+    <p>
+      <b>Note:</b>
+      <ul>
+        <li>
+          This option must be set via Hadoop <code>Configuration</code> rather than Spark
+          <code>SQLConf</code>.
+        </li>
+        <li>
+          This option overrides <code>spark.sql.sources.<br />outputCommitterClass</code>.
+        </li>
+      </ul>
+    </p>
+    <p>
+      Spark SQL comes with a builtin
+      <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
+      efficient then the default Parquet output committer when writing data to S3.
+    </p>
+  </td>
+</tr>
 </table>
 
 ## JSON Datasets
@@ -1876,7 +1904,7 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
-   <tr>
+  <tr>
     <td><code>spark.sql.planner.externalSort</code></td>
     <td>false</td>
     <td>
