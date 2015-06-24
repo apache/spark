@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
@@ -188,18 +189,28 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
-      val qualifyingOffers = filterOffersByConstraints(offers, slaveOfferConstraints)
       // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = qualifyingOffers.partition { o =>
+      val (usableOffers, unUsableOffers) = offers.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        (mem >= calculateTotalMemory(sc) &&
-          // need at least 1 for executor, 1 for task
-          cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)) ||
-          (slaveIdsWithExecutors.contains(slaveId) &&
-            cpus >= scheduler.CPUS_PER_TASK)
+        val offerAttributes = (o.getAttributesList map getAttribute).toMap
+
+        // check if all constraints are satisfield
+        //  1. Attribute constraints
+        //  2. Memory requirements
+        //  3. CPU requirements
+        val meetsConstrains = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+        val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
+        val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
+
+        // need at least 1 for executor, 1 for task
+        (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
+        (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
       }
+
+      // Decline offers we ruled out immediately
+      unUsableOffers.foreach(o => d.declineOffer(o.getId))
 
       val workerOffers = usableOffers.map { o =>
         val cpus = if (slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
@@ -254,8 +265,6 @@ private[spark] class MesosSchedulerBackend(
         d.declineOffer(o.getId)
       }
 
-      // Decline offers we ruled out immediately
-      unUsableOffers.foreach(o => d.declineOffer(o.getId))
     }
   }
 

@@ -18,8 +18,9 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.{Collections, List => JList}
+import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
@@ -172,15 +173,14 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
       val filters = Filters.newBuilder().setRefuseSeconds(5).build()
-
-      // filter out all the offers that do not meet constraints (if specified)
-      val qualifyingOffers = filterOffersByConstraints(offers, slaveOfferConstraints)
-
-      for (offer <- qualifyingOffers) {
+      for (offer <- offers) {
+        val offerAttributes = (offer.getAttributesList map getAttribute).toMap
+        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores &&
+        if (meetsConstraints &&
+            totalCoresAcquired < maxCores &&
             mem >= calculateTotalMemory(sc) &&
             cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
@@ -202,15 +202,14 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder())
+              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder)
           }
 
-          d.launchTasks(
-            Collections.singleton(offer.getId), Collections.singletonList(task.build()), filters)
+          // accept the offer and launch the task
+          d.launchTasks(List(offer.getId), List(task.build()), filters)
         } else {
-          // Filter it out
-          d.launchTasks(
-            Collections.singleton(offer.getId), Collections.emptyList[MesosTaskInfo](), filters)
+          // Decline the offer
+          d.declineOffer(offer.getId)
         }
       }
     }

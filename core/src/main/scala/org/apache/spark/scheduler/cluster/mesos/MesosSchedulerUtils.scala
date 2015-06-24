@@ -180,16 +180,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  /**
-   * For the list of offers received, find the ones that match the offer constraints (if specified)
-   * @param offers set of all offers received
-   * @return Offers that match the constraints
-   */
-  private[mesos] def filterOffersByConstraints(
-      offers: JList[Offer],
-      offerConstraints: Map[String, Set[String]]): mutable.Buffer[Offer] = offers.filter { o =>
-    matchesAttributeRequirements(offerConstraints, (o.getAttributesList map getAttribute).toMap)
-  }
 
   // These defaults copied from YARN
   private val MEMORY_OVERHEAD_FRACTION = 0.10
