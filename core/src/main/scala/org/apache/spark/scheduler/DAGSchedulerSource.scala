@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import com.codahale.metrics.{Timer, Gauge, MetricRegistry}
+import com.codahale.metrics.{Gauge, MetricRegistry, Timer}
 
 import org.apache.spark.metrics.source.Source
 
