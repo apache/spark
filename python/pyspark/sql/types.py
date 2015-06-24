@@ -374,7 +374,7 @@ class StructType(DataType):
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
 
-    def add(self, name, data_type=None, nullable=True, metadata=None):
+    def add(self, field, data_type=None, nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema. The method accepts
         either:
@@ -396,23 +396,23 @@ class StructType(DataType):
         >>> struct1 == struct2
         True
 
-        :param nameOrStructField: Either the name of the field or a StructField object
+        :param field: Either the name of the field or a StructField object
         :param data_type: If present, the DataType of the StructField to create
         :param nullable: Whether the field to add should be nullable (default True)
         :param metadata: Any additional metadata (default None)
         :return: a new updated StructType
         """
-        if isinstance(name, StructField):
-            self.fields.append(name)
+        if isinstance(field, StructField):
+            self.fields.append(field)
         else:
-            if isinstance(name, str) and data_type is None:
+            if isinstance(field, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
 
             if isinstance(data_type, str):
                 data_type_f = _parse_datatype_json_value(data_type)
             else:
                 data_type_f = data_type
-            self.fields.append(StructField(name, data_type_f, nullable, metadata))
+            self.fields.append(StructField(field, data_type_f, nullable, metadata))
         return self
 
     def simpleString(self):
