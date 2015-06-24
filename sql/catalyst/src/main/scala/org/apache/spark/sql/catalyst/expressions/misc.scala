@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{LongType, BinaryType, StringType, DataType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -58,6 +59,15 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
   override def dataType: DataType = StringType
 
   override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    if (child.dataType.isInstanceOf[BinaryType] || child.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else if (child.dataType.isInstanceOf[StringType]) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"Sha1 accepts numeric types, not ${child.dataType}")
+    }
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
