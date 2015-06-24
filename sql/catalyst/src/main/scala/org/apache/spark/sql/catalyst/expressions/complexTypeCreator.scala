@@ -90,7 +90,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
 
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).asInstanceOf[UTF8String].toString)
+  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
 
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
