@@ -133,7 +133,6 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("x", "y", null))
   }
 
-
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(

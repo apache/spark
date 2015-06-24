@@ -74,7 +74,6 @@ case class Sha(child: Expression)
         case s: UTF8String =>
           UTF8String.fromString(DigestUtils.shaHex(s.getBytes))
       }
-
     }
   }
 
