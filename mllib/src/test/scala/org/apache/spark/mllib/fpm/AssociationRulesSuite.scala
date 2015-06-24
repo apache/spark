@@ -23,7 +23,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("association rules using String type") {
-    val freqItemsets = Set(
+    val freqItemsets = sc.parallelize(Seq(
       (Set("s"), 3L), (Set("z"), 5L), (Set("x"), 4L), (Set("t"), 3L), (Set("y"), 3L),
       (Set("r"), 3L),
       (Set("x", "z"), 3L), (Set("t", "y"), 3L), (Set("t", "x"), 3L), (Set("s", "x"), 3L),
@@ -31,38 +31,42 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Set("y", "x", "z"), 3L), (Set("t", "x", "z"), 3L), (Set("t", "y", "z"), 3L),
       (Set("t", "y", "x"), 3L),
       (Set("t", "y", "x", "z"), 3L))
-      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) })
+      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) }))
 
     val ar = new AssociationRules()
 
     val results1 = ar
       .setMinConfidence(0.9)
       .run(freqItemsets)
+      .collect()
     assert(results1.size === 14)
 
     val results2 = ar
       .setMinConfidence(0.5)
       .run(freqItemsets)
+      .collect()
     assert(results2.size === 22)
   }
 
-  test("association rulies using Int type") {
-    val freqItemsets = Set(
+  test("association rules using Int type") {
+    val freqItemsets = sc.parallelize(Seq(
       (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),
       (Set(1, 2), 4L), (Set(1, 3), 5L), (Set(2, 3), 4L),
       (Set(2, 4), 4L), (Set(1, 2, 3), 4L))
-      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) })
+      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) }))
 
     val ar = new AssociationRules()
 
     val results1 = ar
       .setMinConfidence(0.9)
       .run(freqItemsets)
+      .collect()
     assert(results1.size === 0)
 
     val results2 = ar
       .setMinConfidence(0.5)
       .run(freqItemsets)
+      .collect()
     assert(results2.size === 3)
   }
 }

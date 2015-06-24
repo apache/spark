@@ -26,8 +26,8 @@ import org.apache.spark.rdd.RDD
 /**
  * :: Experimental ::
  *
- * Generates association rules from a [[FPGrowthModel]] using A Priori's rule-generation procedure
- * described in [[http://www.almaden.ibm.com/cs/quest/papers/vldb94_rj.pdf]].
+ * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
+ * association rules which have a single item as the consequent.
  */
 @Experimental
 class AssociationRules private (
@@ -54,20 +54,26 @@ class AssociationRules private (
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
     freqItemsets.flatMap { itemset =>
       val items = itemset.items
-      items.map { item =>
+      items.flatMap { item =>
+        // Key using List[Item] because cannot use Array[Item] for map-side combining
         items.partition(_ == item) match {
-          case (consequent, antecedent) => (antecedent, (consequent, itemset.freq))
+          case (consequent, antecedent) if antecedent.length > 0 =>
+            Some(antecedent.toList, (consequent.toList, itemset.freq))
+          case _ => None
         }
-      } :+ (items, (new Array[Item](0), itemset.freq))
-    }.aggregateByKey(Map[Array[Item], Long]().empty)(
+      } :+ (items.toList, (Nil, itemset.freq))
+    }.aggregateByKey(Map[List[Item], Long]().empty)(
       { case (acc, (consequent, freq)) => acc + (consequent -> freq) },
       { (acc1, acc2) => acc1 ++ acc2 }
     ).flatMap { case (antecedent, consequentToFreq) =>
-      consequentToFreq.map { case (consequent, freqUnion) =>
-        // TODO: how to get freqAntecedent from consequentToFreq when |Antecedent| > 1 (since
-        // |consequent| = 1 and freq(x) + freq(y) != freq(x + y))?
-        val freqAntecedent = ???
-        Rule(antecedent, consequent, freqUnion / freqAntecedent)
+      consequentToFreq.flatMap { case (consequent, freqUnion) =>
+        val freqAntecedent = consequentToFreq(Nil)
+        val confidence = freqUnion.toDouble / freqAntecedent.toDouble
+        if (confidence >= minConfidence) {
+          Some(Rule(antecedent.toArray, consequent.toArray, confidence))
+        } else {
+          None
+        }
       }
     }
   }
@@ -86,13 +92,13 @@ object AssociationRules {
    */
   @Experimental
   case class Rule[Item: ClassTag](
-    antecedent: Array[Item],
-    consequent: Array[Item],
-    confidence: Double)
+      antecedent: Array[Item],
+      consequent: Array[Item],
+      confidence: Double)
     extends Serializable {
 
-    require(!antecedent.toSet.intersect(consequent.toSet).isEmpty, {
-      val sharedItems = antecedent.toSet.intersect(consequent.toSet).isEmpty
+    require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
+      val sharedItems = antecedent.toSet.intersect(consequent.toSet)
       s"A valid association rule must have disjoint antecedent and " +
         s"consequent but ${sharedItems} is present in both."
     })
