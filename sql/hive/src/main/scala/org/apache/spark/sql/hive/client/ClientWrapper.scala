@@ -164,7 +164,7 @@ private[hive] class ClientWrapper(
               s"(${retryLimit - numTries} tries remaining)", e)
           Thread.sleep(retryDelayMillis)
           try {
-            client = Hive.get(conf, true)
+            client = Hive.get(state.getConf, true)
           } catch {
             case e: Exception if causedByThrift(e) =>
               logWarning("Failed to refresh hive client, will retry.", e)
