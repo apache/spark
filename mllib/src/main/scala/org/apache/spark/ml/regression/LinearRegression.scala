@@ -26,7 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasElasticNetParam, HasMaxIter, HasRegParam, HasTol}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -41,7 +41,8 @@ import org.apache.spark.util.StatCounter
  * Params for linear regression.
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
-  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
+    with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
+    with HasFitIntercept
 
 /**
  * :: Experimental ::
@@ -71,6 +72,14 @@ class LinearRegression(override val uid: String)
    */
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
+
+  /**
+   * Set if we should fit the intercept
+   * Default is true.
+   * @group setParam
+   */
+  def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
+  setDefault(fitIntercept -> true)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -123,6 +132,7 @@ class LinearRegression(override val uid: String)
     val numFeatures = summarizer.mean.size
     val yMean = statCounter.mean
     val yStd = math.sqrt(statCounter.variance)
+    // look at glmnet5.m L761 maaaybe that has info
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
@@ -142,7 +152,7 @@ class LinearRegression(override val uid: String)
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
-    val costFun = new LeastSquaresCostFun(instances, yStd, yMean,
+    val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
@@ -180,7 +190,7 @@ class LinearRegression(override val uid: String)
     // The intercept in R's GLMNET is computed using closed form after the coefficients are
     // converged. See the following discussion for detail.
     // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
-    val intercept = yMean - dot(weights, Vectors.dense(featuresMean))
+    val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
     if (handlePersistence) instances.unpersist()
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
@@ -234,12 +244,17 @@ class LinearRegressionModel private[ml] (
  * See this discussion for detail.
  * http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
  *
+ * When training with intercept enabled,
  * The objective function in the scaled space is given by
  * {{{
  * L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
  * }}}
  * where \bar{x_i} is the mean of x_i, \hat{x_i} is the standard deviation of x_i,
  * \bar{y} is the mean of label, and \hat{y} is the standard deviation of label.
+ *
+ * If we fitting the intercept disabled (that is forced through 0.0),
+ * we can use the same equation except we set \bar{y} and \bar{x_i} to 0 instead
+ * of the respective means.
  *
  * This can be rewritten as
  * {{{
@@ -254,6 +269,7 @@ class LinearRegressionModel private[ml] (
  * {{{
  * \sum_i w_i^\prime x_i - y / \hat{y} + offset
  * }}}
+ *
  *
  * Note that the effective weights and offset don't depend on training dataset,
  * so they can be precomputed.
@@ -301,6 +317,7 @@ private class LeastSquaresAggregator(
     weights: Vector,
     labelStd: Double,
     labelMean: Double,
+    fitIntercept: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
@@ -321,7 +338,7 @@ private class LeastSquaresAggregator(
       }
       i += 1
     }
-    (weightsArray, -sum + labelMean / labelStd, weightsArray.length)
+    (weightsArray, if (fitIntercept) labelMean / labelStd - sum else 0.0, weightsArray.length)
   }
 
   private val effectiveWeightsVector = Vectors.dense(effectiveWeightsArray)
@@ -404,6 +421,7 @@ private class LeastSquaresCostFun(
     data: RDD[(Double, Vector)],
     labelStd: Double,
     labelMean: Double,
+    fitIntercept: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
@@ -412,7 +430,7 @@ private class LeastSquaresCostFun(
     val w = Vectors.fromBreeze(weights)
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
-      labelMean, featuresStd, featuresMean))(
+      labelMean, fitIntercept, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {
           case (aggregator, (label, features)) => aggregator.add(label, features)
         },

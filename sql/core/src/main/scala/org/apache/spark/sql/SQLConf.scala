@@ -22,6 +22,8 @@ import java.util.Properties
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
+import org.apache.parquet.hadoop.ParquetOutputCommitter
+
 import org.apache.spark.sql.catalyst.CatalystConf
 
 private[spark] object SQLConf {
@@ -252,9 +254,9 @@ private[spark] object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.parquet.filterPushdown",
     defaultValue = Some(false),
-    doc = "Turn on Parquet filter pushdown optimization. This feature is turned off by default" +
-      " because of a known bug in Paruet 1.6.0rc3 " +
-      "(<a href=\"https://issues.apache.org/jira/browse/PARQUET-136\">PARQUET-136</a>). However, " +
+    doc = "Turn on Parquet filter pushdown optimization. This feature is turned off by default " +
+      "because of a known bug in Parquet 1.6.0rc3 " +
+      "(PARQUET-136, https://issues.apache.org/jira/browse/PARQUET-136). However, " +
       "if your table doesn't contain any nullable string or binary columns, it's still safe to " +
       "turn this feature on.")
 
@@ -262,11 +264,21 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
+    key = "spark.sql.parquet.output.committer.class",
+    defaultValue = Some(classOf[ParquetOutputCommitter].getName),
+    doc = "The output committer class used by Parquet. The specified class needs to be a " +
+      "subclass of org.apache.hadoop.mapreduce.OutputCommitter.  Typically, it's also a subclass " +
+      "of org.apache.parquet.hadoop.ParquetOutputCommitter.  NOTE: 1. Instead of SQLConf, this " +
+      "option must be set in Hadoop Configuration.  2. This option overrides " +
+      "\"spark.sql.sources.outputCommitterClass\"."
+  )
+
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "<TODO>")
 
-  val HIVE_VERIFY_PARTITIONPATH = booleanConf("spark.sql.hive.verifyPartitionPath",
+  val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
     defaultValue = Some(true),
     doc = "<TODO>")
 
@@ -325,9 +337,13 @@ private[spark] object SQLConf {
       defaultValue = Some(true),
       doc = "<TODO>")
 
-  // The output committer class used by FSBasedRelation. The specified class needs to be a
+  // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
-  // NOTE: This property should be set in Hadoop `Configuration` rather than Spark `SQLConf`
+  //
+  // NOTE:
+  //
+  //  1. Instead of SQLConf, this option *must be set in Hadoop Configuration*.
+  //  2. This option can be overriden by "spark.sql.parquet.output.committer.class".
   val OUTPUT_COMMITTER_CLASS =
     stringConf("spark.sql.sources.outputCommitterClass", isPublic = false)
 
@@ -415,7 +431,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
   /** When true uses verifyPartitionPath to prune the path which is not exists. */
-  private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITIONPATH)
+  private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
