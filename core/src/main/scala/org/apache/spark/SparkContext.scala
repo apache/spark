@@ -1897,6 +1897,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * be a HDFS path if running on a cluster.
    */
   def setCheckpointDir(directory: String) {
+
+    // If we are running on a cluster, require the path to be non-local
+    if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
+      throw new IllegalArgumentException(
+        "Checkpoint directory must be non-local if Spark is running on a cluster: " + directory)
+    }
+
     checkpointDir = Option(directory).map { dir =>
       val path = new Path(dir, UUID.randomUUID().toString)
       val fs = path.getFileSystem(hadoopConfiguration)
