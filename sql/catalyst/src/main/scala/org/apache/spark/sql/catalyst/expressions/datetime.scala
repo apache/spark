@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-case class DateFormat(left: Expression, right: Expression)
+case class DateFormatClass(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
@@ -109,7 +109,7 @@ case class Year(child: Expression) extends UnaryExpression with ExpectsInputType
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("y")).eval(input) match {
+    DateFormatClass(child, Literal("y")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -128,7 +128,7 @@ case class Month(child: Expression) extends UnaryExpression with ExpectsInputTyp
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("M")).eval(input) match {
+    DateFormatClass(child, Literal("M")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -146,7 +146,7 @@ case class Day(child: Expression) extends UnaryExpression with ExpectsInputTypes
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("d")).eval(input) match {
+    DateFormatClass(child, Literal("d")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -165,7 +165,7 @@ case class Hour(child: Expression) extends UnaryExpression with ExpectsInputType
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("H")).eval(input) match {
+    DateFormatClass(child, Literal("H")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -183,7 +183,7 @@ case class Minute(child: Expression) extends UnaryExpression with ExpectsInputTy
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("m")).eval(input) match {
+    DateFormatClass(child, Literal("m")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -201,7 +201,7 @@ case class Second(child: Expression) extends UnaryExpression with ExpectsInputTy
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("s")).eval(input) match {
+    DateFormatClass(child, Literal("s")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }
@@ -219,7 +219,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ExpectsInp
   override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    DateFormat(child, Literal("w")).eval(input) match {
+    DateFormatClass(child, Literal("w")).eval(input) match {
       case null => null
       case x: UTF8String => x.toString.toInt
     }

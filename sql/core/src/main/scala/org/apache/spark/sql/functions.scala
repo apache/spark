@@ -1442,7 +1442,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dateFormat(l: Column, r: Column): Column = DateFormat(l.expr, r.expr)
+  def dateFormat(l: Column, r: String): Column = DateFormatClass(l.expr, Literal(r))
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -1450,7 +1450,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def dateFormat(l: String, r: String): Column = dateFormat(Column(l), Column(r))
+  def dateFormat(l: String, r: String): Column = dateFormat(Column(l), r)
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string

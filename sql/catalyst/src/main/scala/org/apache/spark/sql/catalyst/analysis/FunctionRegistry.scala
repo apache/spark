@@ -155,7 +155,7 @@ object FunctionRegistry {
     expression[Upper]("upper"),
 
     // datetime functions
-    expression[DateFormat]("dateformat"),
+    expression[DateFormatClass]("dateformat"),
     expression[Year]("year"),
     expression[Month]("month"),
     expression[Day]("day"),

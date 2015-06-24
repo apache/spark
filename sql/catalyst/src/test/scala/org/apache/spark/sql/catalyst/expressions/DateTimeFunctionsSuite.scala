@@ -29,9 +29,9 @@ class DateTimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
 
   test("DateFormat") {
-    checkEvaluation(DateFormat(Literal(d), Literal("y")), "2015")
-    checkEvaluation(DateFormat(Literal(d.toString), Literal("y")), "2015")
-    checkEvaluation(DateFormat(Literal(ts), Literal("y")), "2013")
+    checkEvaluation(DateFormatClass(Literal(d), Literal("y")), "2015")
+    checkEvaluation(DateFormatClass(Literal(d.toString), Literal("y")), "2015")
+    checkEvaluation(DateFormatClass(Literal(ts), Literal("y")), "2013")
   }
 
   test("Year") {
