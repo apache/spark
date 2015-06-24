@@ -53,8 +53,23 @@ object MimaExcludes {
             // Removing a testing method from a private class
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
+            // While private MiMa is still not happy about the changes,
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
             // SQL execution is considered private.
-            excludePackage("org.apache.spark.sql.execution")
+            excludePackage("org.apache.spark.sql.execution"),
+            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
+            // not needed anymore
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
+              ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
           )
         case v if v.startsWith("1.4") =>
           Seq(
