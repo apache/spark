@@ -24,61 +24,61 @@ import org.apache.spark.SparkFunSuite
 
 class DateTimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-  val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-  val ts = new Timestamp(sdf.parse("2013/11/08 13:10:15").getTime)
+  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+  val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+  val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
   test("DateFormat") {
     checkEvaluation(DateFormatClass(Literal(d), Literal("y")), "2015")
-    checkEvaluation(DateFormatClass(Literal(d.toString), Literal("y")), "2015")
+    checkEvaluation(DateFormatClass(Literal(sdf.format(d)), Literal("y")), "2015")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("y")), "2013")
   }
 
   test("Year") {
     checkEvaluation(Year(Literal(d)), 2015)
-    checkEvaluation(Year(Literal(d.toString)), 2015)
+    checkEvaluation(Year(Literal(sdf.format(d))), 2015)
     checkEvaluation(Year(Literal(ts)), 2013)
   }
 
   test("Quarter") {
     checkEvaluation(Quarter(Literal(d)), 2)
-    checkEvaluation(Quarter(Literal(d.toString)), 2)
+    checkEvaluation(Quarter(Literal(sdf.format(d))), 2)
     checkEvaluation(Quarter(Literal(ts)), 4)
   }
 
   test("Month") {
     checkEvaluation(Month(Literal(d)), 4)
-    checkEvaluation(Month(Literal(d.toString)), 4)
+    checkEvaluation(Month(Literal(sdf.format(d))), 4)
     checkEvaluation(Month(Literal(ts)), 11)
   }
 
   test("Day") {
     checkEvaluation(Day(Literal(d)), 8)
-    checkEvaluation(Day(Literal(d.toString)), 8)
+    checkEvaluation(Day(Literal(sdf.format(d))), 8)
     checkEvaluation(Day(Literal(ts)), 8)
   }
 
   test("Hour") {
     checkEvaluation(Hour(Literal(d)), 0)
-    checkEvaluation(Hour(Literal(d.toString)), 0)
+    checkEvaluation(Hour(Literal(sdf.format(d))), 13)
     checkEvaluation(Hour(Literal(ts)), 13)
   }
 
   test("Minute") {
     checkEvaluation(Minute(Literal(d)), 0)
-    checkEvaluation(Minute(Literal(d.toString)), 0)
+    checkEvaluation(Minute(Literal(sdf.format(d))), 10)
     checkEvaluation(Minute(Literal(ts)), 10)
   }
 
   test("Seconds") {
     checkEvaluation(Second(Literal(d)), 0)
-    checkEvaluation(Second(Literal(d.toString)), 0)
+    checkEvaluation(Second(Literal(sdf.format(d))), 15)
     checkEvaluation(Second(Literal(ts)), 15)
   }
 
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal(d)), 15)
-    checkEvaluation(WeekOfYear(Literal(d.toString)), 15)
+    checkEvaluation(WeekOfYear(Literal(sdf.format(d))), 15)
     checkEvaluation(WeekOfYear(Literal(ts)), 45)
   }
 

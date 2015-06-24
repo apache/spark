@@ -168,9 +168,9 @@ class DataFrameFunctionsSuite extends QueryTest {
 
 
   test("date format") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
     val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
 
@@ -184,11 +184,11 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("year") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(year("a"), year("b"), year("c")),
@@ -200,11 +200,11 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("quarter") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/11/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-11-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(quarter("a"), quarter("b"), quarter("c")),
@@ -216,11 +216,11 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("month") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(month("a"), month("b"), month("c")),
@@ -232,11 +232,11 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("day") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(day("a"), day("b"), day("c")),
@@ -248,59 +248,59 @@ class DataFrameFunctionsSuite extends QueryTest {
   }
 
   test("hour") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(hour("a"), hour("b"), hour("c")),
-      Row(0, 0, 13))
+      Row(0, 13, 13))
 
     checkAnswer(
       df.selectExpr("hour(a)", "hour(b)", "hour(c)"),
-      Row(0, 0, 13))
+      Row(0, 13, 13))
   }
 
   test("minute") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(minute("a"), minute("b"), minute("c")),
-      Row(0, 0, 10))
+      Row(0, 10, 10))
 
     checkAnswer(
       df.selectExpr("minute(a)", "minute(b)", "minute(c)"),
-      Row(0, 0, 10))
+      Row(0, 10, 10))
   }
 
   test("second") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(second("a"), second("b"), second("c")),
-      Row(0, 0, 15))
+      Row(0, 15, 15))
 
     checkAnswer(
       df.selectExpr("second(a)", "second(b)", "second(c)"),
-      Row(0, 0, 15))
+      Row(0, 15, 15))
   }
 
   test("weekOfYear") {
-    val sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-    val d = new Date(sdf.parse("2015/04/08 13:10:15").getTime)
-    val ts = new Timestamp(sdf.parse("2013/04/08 13:10:15").getTime)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+    val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(weekOfYear("a"), weekOfYear("b"), weekOfYear("c")),

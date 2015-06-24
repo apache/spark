@@ -486,6 +486,96 @@ def ntile(n):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.ntile(int(n)))
 
+@since(1.5)
+def dateFormat(dateCol, formatCol):
+    """
+    Convert the given date into the format specified by the second argument. Return type is always string.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(dateFormat('a', 'MM/dd/yyy').alias('date')).collect()
+    [Row(date=u'04/08/2015')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.dateFormat(dateCol, formatCol))
+
+@since(1.5)
+def year(col):
+    """
+    Extract the year of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(year('a').alias('year')).collect()
+    [Row(year=2015)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.year(col))
+
+@since(1.5)
+def quarter(col):
+    """
+    Extract the quarter of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(quarter('a').alias('quarter')).collect()
+    [Row(quarter=2)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.quarter(col))
+
+@since(1.5)
+def month(col):
+    """
+    Extract the month of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(month('a').alias('month')).collect()
+   [Row(month=4)]
+   """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.month(col))
+
+@since(1.5)
+def day(col):
+    """
+    Extract the day of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(day('a').alias('day')).collect()
+    [Row(day=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.day(col))
+
+@since(1.5)
+def hour(col):
+    """
+    Extract the hours of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a']).select(hour('a').alias('hour')).collect()
+    [Row(hour=13)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.hour(col))
+
+@since(1.5)
+def minute(col):
+    """
+    Extract the minutes of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a']).select(minute('a').alias('minute')).collect()
+    [Row(minute=8)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.minute(col))
+
+@since(1.5)
+def second(col):
+    """
+    Extract the seconds of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a']).select(second('a').alias('second')).collect()
+    [Row(second=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.second(col))
+
+@since(1.5)
+def weekOfYear(col):
+    """
+    Extract the week number of a given date as integer.
+    >>> sqlContext.createDataFrame([('2015-04-08',)], ['a']).select(weekOfYear('a').alias('week')).collect()
+    [Row(week=15)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.weekOfYear(col))
+
 
 class UserDefinedFunction(object):
     """
