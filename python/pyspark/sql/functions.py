@@ -368,16 +368,8 @@ def randn(seed=None):
 @since(1.5)
 def sha1(col):
     """
-    >>> from pyspark.sql import Row
-    >>> sqlContext.createDataFrame([Row(a='ABC')]).select(sha1('a').alias('hash')).collect()
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
     [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
-
-    >>> sqlContext.createDataFrame([Row(a='ABC')]).select(sha1('a').alias('hash')).show()
-    +--------------------+
-    |                hash|
-    +--------------------+
-    |3c01bdbb26f358bab...|
-    +--------------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha1(_to_java_column(col))
