@@ -404,7 +404,11 @@ case class Atan2(left: Expression, right: Expression)
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+      """
   }
 }
 
