@@ -16,14 +16,12 @@
  */
 package org.apache.spark.mllib.fpm
 
-import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
+import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
