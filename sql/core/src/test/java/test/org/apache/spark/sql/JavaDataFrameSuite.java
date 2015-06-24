@@ -227,4 +227,13 @@ public class JavaDataFrameSuite {
     Double result = df.stat().cov("a", "b");
     Assert.assertTrue(Math.abs(result) < 1e-6);
   }
+
+  @Test
+  public void testSampleBy() {
+    DataFrame df = context.range(0, 100).select(col("id").mod(3).as("key"));
+    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Row[] expected = new Row[] {RowFactory.create(0, 4), RowFactory.create(1, 9)};
+    Assert.assertArrayEquals(expected, actual);
+  }
 }
