@@ -43,7 +43,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .setTrainRatio(0.5)
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
-    assert(cv.getTrainPercent === 0.5)
+    assert(cv.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
     assert(cvModel.avgMetrics.length === lrParamMaps.length)

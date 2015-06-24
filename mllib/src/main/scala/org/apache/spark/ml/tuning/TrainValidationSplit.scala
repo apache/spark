@@ -39,7 +39,7 @@ private[ml] trait TrainValidationSplitParams extends ValidationParams {
     "ratio between training set and validation set (>= 0 && <= 1)", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  def getTrainPercent: Double = $(trainRatio)
+  def getTrainRatio: Double = $(trainRatio)
 
   setDefault(trainRatio -> 0.75)
 }
