@@ -368,9 +368,18 @@ def randn(seed=None):
 @ignore_unicode_prefix
 @since(1.5)
 def sha1(col):
-    """Returns the hex string result of SHA-1.
+    """
+    >>> df.select(sha1('name').alias("hash")).collect()
+    [Row(hash=u'f8c38b2167c0ab6d7c720e47c2139428d77d8b6a'), Row(hash=u'ab5a000e88b5d9d0fa2575f5c6263eb93452405d'), Row(hash=u'472773a6ed75d54105448a76fbfe880c92ec99f2')]
 
-
+    >>> df.select(sha1('name').alias("hash")).show()
+    +--------------------+
+    |                hash|
+    +--------------------+
+    |f8c38b2167c0ab6d7...|
+    |ab5a000e88b5d9d0f...|
+    |472773a6ed75d5410...|
+    +--------------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha1(_to_java_column(col))
@@ -380,7 +389,22 @@ def sha1(col):
 @ignore_unicode_prefix
 @since(1.5)
 def sha(col):
-    return sha1(col)
+    """
+    >>> df.select(sha('name').alias("hash")).collect()
+    [Row(hash=u'f8c38b2167c0ab6d7c720e47c2139428d77d8b6a'), Row(hash=u'ab5a000e88b5d9d0fa2575f5c6263eb93452405d'), Row(hash=u'472773a6ed75d54105448a76fbfe880c92ec99f2')]
+
+    >>> df.select(sha('name').alias("hash")).show()
+    +--------------------+
+    |                hash|
+    +--------------------+
+    |f8c38b2167c0ab6d7...|
+    |ab5a000e88b5d9d0f...|
+    |472773a6ed75d5410...|
+    +--------------------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
+    return Column(jc)
 
 
 @since(1.4)
