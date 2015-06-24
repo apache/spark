@@ -23,8 +23,8 @@ import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
 
 import com.typesafe.config.ConfigFactory
-
 import org.apache.log4j.{Level, Logger}
+
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.rpc.RpcTimeout
 
