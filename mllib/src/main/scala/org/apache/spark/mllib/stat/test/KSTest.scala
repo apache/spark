@@ -113,7 +113,7 @@ import org.apache.spark.rdd.RDD
     val distanceCalc =
       distName match {
         case "stdnorm" => stdNormDistances()
-        case  _ =>  throw new UnsupportedOperationException()
+        case  _ => throw new UnsupportedOperationException()
       }
 
     testOneSampleOpt(dat, distanceCalc)
