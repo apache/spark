@@ -174,9 +174,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   test("check types for ROUND") {
     assertError(Round(Literal(null), 'booleanField),
-      "Only Integral Literal or Null Literal are allowed for ROUND scale argument")
+      "Only Integral or Null foldable Expression is allowed for ROUND scale argument")
     assertError(Round(Literal(null), 'complexField),
-      "Only Integral Literal or Null Literal are allowed for ROUND scale argument")
+      "Only Integral or Null foldable Expression is allowed for ROUND scale argument")
     assertSuccess(Round(Literal(null), Literal(null)))
     assertError(Round('booleanField, 'intField),
       "Only numeric, string or binary data types are allowed for ROUND function")

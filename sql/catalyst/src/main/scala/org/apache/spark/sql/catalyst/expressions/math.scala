@@ -404,11 +404,7 @@ case class Atan2(left: Expression, right: Expression)
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)") + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
-        ${ev.isNull} = true;
-      }
-      """
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
 
@@ -530,20 +526,20 @@ case class Round(child: Expression, scale: Expression) extends Expression {
     this(child, Literal(0))
   }
 
-  def children: Seq[Expression] = Seq(child, scale)
+  override def children: Seq[Expression] = Seq(child, scale)
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
-  private lazy val scaleV = scale.asInstanceOf[Literal].value
+  override def foldable: Boolean = child.foldable
+
+  private lazy val scaleV = scale.eval(EmptyRow)
   private lazy val _scale = if (scaleV != null) scaleV.asInstanceOf[Int] else 0
 
-  override lazy val dataType: DataType = {
-    child.dataType match {
+  override lazy val dataType: DataType = child.dataType match {
       case StringType | BinaryType => DoubleType
       case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
       case t => t
     }
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
@@ -557,41 +553,42 @@ case class Round(child: Expression, scale: Expression) extends Expression {
         if (value.asInstanceOf[Long] < Int.MinValue || value.asInstanceOf[Long] > Int.MaxValue) {
           return TypeCheckFailure("ROUND scale argument out of allowed range")
         }
-      case Literal(_, _: IntegralType) | Literal(_, NullType) => // satisfy requirement
       case _ =>
-        if (!scale.foldable) {
-          return TypeCheckFailure("Only Integral Literal or Null Literal " +
-            s"are allowed for ROUND scale arguments, got ${child.dataType}")
+        if ((scale.dataType.isInstanceOf[IntegralType] || scale.dataType == NullType) &&
+          scale.foldable) {
+          // TODO: foldable LongType is not checked for out of range
+          // satisfy requirement
+        } else {
+          return TypeCheckFailure("Only Integral or Null foldable Expression " +
+            s"is allowed for ROUND scale arguments, got ${child.dataType}")
         }
     }
     TypeCheckSuccess
   }
 
-  def eval(input: InternalRow): Any = {
-    val evalE = child.eval(input)
+  private lazy val rounding: (Any) => (Any) = roundGen(child.dataType)
 
-    if (evalE == null || scaleV == null) return null
-
-    child.dataType match {
+  def roundGen(dt: DataType)(x: Any): Any = {
+    dt match {
       case _: DecimalType =>
-        val decimal = evalE.asInstanceOf[Decimal]
+        val decimal = x.asInstanceOf[Decimal]
         if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
       case ByteType =>
-        round(evalE.asInstanceOf[Byte], _scale)
+        round(x.asInstanceOf[Byte], _scale)
       case ShortType =>
-        round(evalE.asInstanceOf[Short], _scale)
+        round(x.asInstanceOf[Short], _scale)
       case IntegerType =>
-        round(evalE.asInstanceOf[Int], _scale)
+        round(x.asInstanceOf[Int], _scale)
       case LongType =>
-        round(evalE.asInstanceOf[Long], _scale)
+        round(x.asInstanceOf[Long], _scale)
       case FloatType =>
-        round(evalE.asInstanceOf[Float], _scale)
+        round(x.asInstanceOf[Float], _scale)
       case DoubleType =>
-        round(evalE.asInstanceOf[Double], _scale)
+        round(x.asInstanceOf[Double], _scale)
       case StringType =>
-        round(evalE.asInstanceOf[UTF8String].toString, _scale)
+        round(x.asInstanceOf[UTF8String].toString, _scale)
       case BinaryType =>
-        round(UTF8String.fromBytes(evalE.asInstanceOf[Array[Byte]]).toString, _scale)
+        round(UTF8String.fromBytes(x.asInstanceOf[Array[Byte]]).toString, _scale)
     }
   }
 
@@ -606,35 +603,36 @@ case class Round(child: Expression, scale: Expression) extends Expression {
 
   private def round(input: String, scale: Int): Any = {
     try round(input.toDouble, scale) catch {
-      case _ : NumberFormatException => null
+      case _: NumberFormatException => null
     }
+  }
+
+  def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null || scaleV == null) return null
+    rounding(evalE)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val ce = child.gen(ctx)
 
-    def integralRound(primitive: String): String = {
+    def round(primitive: String, integral: Boolean): String = {
+      val (p1, p2) = if (integral) ("new", "") else ("", ".valueOf")
       s"""
-      ${ev.primitive} = new java.math.BigDecimal(${primitive}).
+      ${ev.primitive} = $p1 java.math.BigDecimal$p2(${primitive}).
         setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP)"""
     }
 
-    def fractionalRound(primitive: String): String = {
-      s"""
-      ${ev.primitive} = java.math.BigDecimal.valueOf(${primitive}).
-        setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP)"""
-    }
-
-    def check(primitive: String, function: String): String = {
+    def fractionalCheck(primitive: String, function: String): String = {
       s"""
       if (Double.isNaN(${primitive}) || Double.isInfinite(${primitive})){
         ${ev.primitive} = ${primitive};
       } else {
-        ${fractionalRound(primitive)}.${function};
+        ${round(primitive, false)}.${function};
       }"""
     }
 
-    def convert(primitive: String): String = {
+    def stringLikeConvert(primitive: String): String = {
       val dName = ctx.freshName("converter")
       s"""
       Double $dName = 0.0;
@@ -643,7 +641,7 @@ case class Round(child: Expression, scale: Expression) extends Expression {
       } catch (NumberFormatException e) {
         ${ev.isNull} = true;
       }
-      ${check(dName, "doubleValue()")}
+      ${fractionalCheck(dName, "doubleValue()")}
       """
     }
 
@@ -662,21 +660,21 @@ case class Round(child: Expression, scale: Expression) extends Expression {
       case _: DecimalType =>
         decimalRound()
       case ByteType =>
-        integralRound(ce.primitive) + ".byteValue();"
+        round(ce.primitive, true) + ".byteValue();"
       case ShortType =>
-        integralRound(ce.primitive) + ".shortValue();"
+        round(ce.primitive, true) + ".shortValue();"
       case IntegerType =>
-        integralRound(ce.primitive) + ".intValue();"
+        round(ce.primitive, true) + ".intValue();"
       case LongType =>
-        integralRound(ce.primitive) + ".longValue();"
+        round(ce.primitive, true) + ".longValue();"
       case FloatType =>
-        check(ce.primitive, "floatValue()")
+        fractionalCheck(ce.primitive, "floatValue()")
       case DoubleType =>
-        check(ce.primitive, "doubleValue()")
+        fractionalCheck(ce.primitive, "doubleValue()")
       case StringType =>
-        convert(ce.primitive)
+        stringLikeConvert(ce.primitive)
       case BinaryType =>
-        convert(s"${ctx.stringType}.fromBytes(${ce.primitive})")
+        stringLikeConvert(s"${ctx.stringType}.fromBytes(${ce.primitive})")
     }
 
     ce.code + s"""
