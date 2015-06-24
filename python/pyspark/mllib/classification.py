@@ -21,16 +21,15 @@ import numpy
 from numpy import array
 
 from pyspark import RDD
+from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
-from pyspark.streaming import DStream
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
-__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD',
-           'LogisticRegressionWithLBFGS', 'SVMModel', 'SVMWithSGD',
-           'NaiveBayesModel', 'NaiveBayes',
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes',
            'StreamingLogisticRegressionWithSGD']
 
 
@@ -613,7 +612,7 @@ class StreamingLinearAlgorithm(object):
         """
         Make predictions on a dstream.
 
-        Returns a transformed dstream object.
+        :return: Transformed dstream object.
         """
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
@@ -622,7 +621,7 @@ class StreamingLinearAlgorithm(object):
         """
         Make predictions on a keyed dstream.
 
-        Returns a transformed dstream object.
+        :return: Transformed dstream object.
         """
         self._validate(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))
@@ -635,14 +634,14 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
     The weights obtained at the end of training a stream are used as initial
     weights for the next stream.
+
     :param stepSize: Step size for each iteration of gradient descent.
     :param numIterations: Number of iterations run for each batch of data.
     :param miniBatchFraction: Fraction of data on which SGD is run for each
                               iteration.
     :param regParam: L2 Regularization parameter.
     """
-    def __init__(self, stepSize=0.1, numIterations=50,
-                 miniBatchFraction=1.0, regParam=0.01):
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.01):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.regParam = regParam
@@ -662,19 +661,15 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         # LogisticRegressionWithSGD does only binary classification.
         self._model = LogisticRegressionModel(
             initialWeights, 0, initialWeights.size, 2)
+        return self
 
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
 
         def update(rdd):
-            # Check for empty RDD Streams. If this try except clause is
-            # removed, then calling train raises an error.
-            try:
-                rdd.first()
-            except ValueError:
-                pass
-            else:
+            # LogisticRegressionWithSGD.train raises an error for an empty RDD.
+            if not rdd.isEmpty():
                 self._model = LogisticRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
                     self.miniBatchFraction, self._model.weights)
