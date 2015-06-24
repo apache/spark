@@ -19,6 +19,10 @@ package org.apache.spark.mllib.stat
 
 import java.util.Random
 
+import org.apache.commons.math3.distribution.{ExponentialDistribution,
+NormalDistribution, UniformRealDistribution}
+import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -152,5 +156,62 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[SparkException] {
       Statistics.chiSqTest(sc.parallelize(continuousFeature, 2))
     }
+  }
+
+  test("kolmogorov smirnov test empirical distributions") {
+
+    // Create theoretical distributions
+    val stdNormalDist = new NormalDistribution(0, 1)
+    val expDist = new ExponentialDistribution(0.6)
+    val unifDist = new UniformRealDistribution()
+
+    // Sample data from the distributions and parallelize it
+    val n = 100000
+    val sampledNorm = sc.parallelize(stdNormalDist.sample(n))
+    val sampledExp = sc.parallelize(expDist.sample(n))
+    val sampledUnif = sc.parallelize(unifDist.sample(n))
+
+    // Use a apache math commons local KS test to verify calculations
+    val ksTest = new KolmogorovSmirnovTest()
+    val pThreshold = 0.05
+
+    // Comparing a standard normal sample to a standard normal distribution
+    val result1 = Statistics.ksTest(sampledNorm, "stdnorm")
+    val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledNorm.collect())
+    val referencePVal1 = 1 - ksTest.cdf(referenceStat1, n)
+    // Verify vs apache math commons ks test
+    assert(result1.statistic === referenceStat1)
+    assert(result1.pValue === referencePVal1)
+    // Cannot reject null hypothesis
+    assert(result1.pValue > pThreshold)
+
+    // Comparing an exponential sample to a standard normal distribution
+    val result2 = Statistics.ksTest(sampledExp, "stdnorm")
+    val referenceStat2 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledExp.collect())
+    val referencePVal2 = 1 - ksTest.cdf(referenceStat2, n)
+    // verify vs apache math commons ks test
+    assert(result2.statistic === referenceStat2)
+    assert(result2.pValue === referencePVal2)
+    // reject null hypothesis
+    assert(result2.pValue < pThreshold)
+
+    // Testing the use of a user provided CDF function
+    // Distribution is not serializable, so will have to create in the lambda
+    // This is inefficient though, since you create an object per observation. In reality
+    // the user should use Statistics.ksTestOpt, which only creates 1 object per partition
+    // or create a serializable distribution, broadcast it, and then use it in the lambda
+    val expCDF = (x: Double) => new ExponentialDistribution(0.2).cumulativeProbability(x)
+
+    // Comparing an exponential sample with mean X to an exponential distribution with mean Y
+    // Where X != Y
+    val result3 = Statistics.ksTest(sampledExp, expCDF)
+    val referenceStat3 = ksTest.kolmogorovSmirnovStatistic(new ExponentialDistribution(0.2),
+      sampledExp.collect())
+    val referencePVal3 = 1 - ksTest.cdf(referenceStat3, sampledNorm.count().toInt)
+    // verify vs apache math commons ks test
+    assert(result3.statistic === referenceStat3)
+    assert(result3.pValue === referencePVal3)
+    // reject null hypothesis
+    assert(result3.pValue < pThreshold)
   }
 }
