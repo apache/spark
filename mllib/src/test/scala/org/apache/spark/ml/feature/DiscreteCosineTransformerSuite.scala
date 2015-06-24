@@ -34,44 +34,48 @@ class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkCo
 
   test("forward transform of discrete cosine matches jTransforms result") {
     val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
-
-    val expectedResultBuffer = data.toArray.clone()
-    (new DoubleDCT_1D(data.size)).forward(expectedResultBuffer, true)
-    val expectedResult = Vectors.dense(expectedResultBuffer)
+    val inverse = false
 
     val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
+      DCTTestData(data, makeExpectedResult(data, inverse))
     ))
 
     val transformer = new DiscreteCosineTransformer()
       .setInputCol("vec")
       .setOutputCol("resultVec")
-      .setInverse(false)
+      .setInverse(inverse)
 
     testDCT(transformer, dataset)
   }
 
   test("inverse transform of discrete cosine matches jTransforms result") {
     val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
-
-    val expectedResultBuffer = data.toArray.clone()
-    (new DoubleDCT_1D(data.size)).inverse(expectedResultBuffer, true)
-    val expectedResult = Vectors.dense(expectedResultBuffer)
+    val inverse = true
 
     val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
+      DCTTestData(data, makeExpectedResult(data, inverse))
     ))
 
     val transformer = new DiscreteCosineTransformer()
       .setInputCol("vec")
       .setOutputCol("resultVec")
-      .setInverse(true)
+      .setInverse(inverse)
 
     testDCT(transformer, dataset)
   }
 }
 
 object DiscreteCosineTransformerSuite extends SparkFunSuite {
+
+  def makeExpectedResult(data: Vector, inverse: Boolean): Vector = {
+    val expectedResultBuffer = data.toArray.clone()
+    if (inverse) {
+      (new DoubleDCT_1D(data.size)).inverse(expectedResultBuffer, true)
+    } else {
+      (new DoubleDCT_1D(data.size)).forward(expectedResultBuffer, true)
+    }
+    Vectors.dense(expectedResultBuffer)
+  }
 
   def testDCT(t: DiscreteCosineTransformer, dataset: DataFrame): Unit = {
     t.transform(dataset)

@@ -19,6 +19,11 @@ package org.apache.spark.ml.feature;
 
 import com.google.common.collect.Lists;
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
@@ -31,10 +36,6 @@ import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 
 public class JavaDiscreteCosineTransformerSuite {
   private transient JavaSparkContext jsc;
@@ -62,7 +63,7 @@ public class JavaDiscreteCosineTransformerSuite {
       new StructField("vec", (new VectorUDT()), false, Metadata.empty())
     }));
 
-    double[] expectedResult= input.clone();
+    double[] expectedResult = input.clone();
     (new DoubleDCT_1D(input.length)).forward(expectedResult, true);
 
     DiscreteCosineTransformer DCT = new DiscreteCosineTransformer()
