@@ -179,23 +179,4 @@ object Statistics {
   def ksTest(data: RDD[Double], name: String): KSTestResult = {
     KSTest.testOneSample(data, name)
   }
-
-  /**
-   * Conduct a one-sample, two sided Kolmogorov Smirnov test for probability distribution equality,
-   * which creates only 1 distribution object per partition (useful in conjunction with Apache
-   * Commons Math distributions)
-   * @param data an `RDD[Double]` containing the sample of data to test
-   * @param distCalc a `Iterator[(Double, Double, Double)] => Iterator[Double]` function, to
-   *                 calculate the distance between empirical values and theoretical values of
-   *                 a distribution. The first element corresponds to the value x, the second
-   *                 element is the lower bound of the empirical CDF, while the third element is
-   *                 the upper bound. Thus if we call triple associated with an observation T, the
-   *                 KS distance at that point is max(Pr[X <= T._1] - T._2, T._3 - Pr[X <= T._1])
-   * @return KSTestResult object containing test statistic, p-value, and null hypothesis.
-   */
-  def ksTestOpt(data: RDD[Double],
-      distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
-      : KSTestResult = {
-    KSTest.testOneSampleOpt(data, distCalc)
-  }
 }

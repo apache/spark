@@ -196,9 +196,6 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Testing the use of a user provided CDF function
     // Distribution is not serializable, so will have to create in the lambda
-    // This is inefficient though, since you create an object per observation. In reality
-    // the user should use Statistics.ksTestOpt, which only creates 1 object per partition
-    // or create a serializable distribution, broadcast it, and then use it in the lambda
     val expCDF = (x: Double) => new ExponentialDistribution(0.2).cumulativeProbability(x)
 
     // Comparing an exponential sample with mean X to an exponential distribution with mean Y
