@@ -69,7 +69,12 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.CatalystTimestampConverter$")
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$"),
+            // SPARK-6777 Implements backwards compatibility rules in CatalystSchemaConverter
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTypeInfo"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
           )
         case v if v.startsWith("1.4") =>
           Seq(

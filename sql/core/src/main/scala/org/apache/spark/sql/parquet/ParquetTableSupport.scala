@@ -86,8 +86,7 @@ private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logg
     // TODO: Why it can be null?
     if (schema == null)  {
       log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(
-        parquetSchema, false, true)
+      schema = ParquetTypesConverter.convertToAttributes(parquetSchema, false, true)
     }
     log.debug(s"list of attributes that will be read: $schema")
     new RowRecordMaterializer(parquetSchema, schema)
@@ -105,8 +104,7 @@ private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logg
       // If the parquet file is thrift derived, there is a good chance that
       // it will have the thrift class in metadata.
       val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
-      parquetSchema = ParquetTypesConverter
-        .convertFromAttributes(requestedAttributes, isThriftDerived)
+      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
