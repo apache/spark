@@ -197,7 +197,7 @@ private[spark] object AkkaUtils extends Logging {
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
     val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
-    val timeout = RpcUtils.lookupTimeout(conf)
+    val timeout = RpcUtils.lookupRpcTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }
@@ -211,7 +211,7 @@ private[spark] object AkkaUtils extends Logging {
     val executorActorSystemName = SparkEnv.executorActorSystemName
     Utils.checkHost(host, "Expected hostname")
     val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
-    val timeout = RpcUtils.lookupTimeout(conf)
+    val timeout = RpcUtils.lookupRpcTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
   }

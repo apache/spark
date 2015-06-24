@@ -45,7 +45,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   private val lostMasters = new HashSet[Address]
   private var activeMasterActor: ActorSelection = null
 
-  val timeout = RpcUtils.askTimeout(conf)
+  val timeout = RpcUtils.askRpcTimeout(conf)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])

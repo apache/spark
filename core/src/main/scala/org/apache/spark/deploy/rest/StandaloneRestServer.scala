@@ -71,7 +71,7 @@ private[rest] class StandaloneKillRequestServlet(masterActor: ActorRef, conf: Sp
   extends KillRequestServlet {
 
   protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
+    val askTimeout = RpcUtils.askRpcTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
       DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
     val k = new KillSubmissionResponse
@@ -90,7 +90,7 @@ private[rest] class StandaloneStatusRequestServlet(masterActor: ActorRef, conf: 
   extends StatusRequestServlet {
 
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
+    val askTimeout = RpcUtils.askRpcTimeout(conf)
     val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
       DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
@@ -175,7 +175,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = RpcUtils.askTimeout(conf)
+        val askTimeout = RpcUtils.askRpcTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
         val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)

@@ -31,7 +31,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
 
   private[this] val maxRetries = RpcUtils.numRetries(conf)
   private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
-  private[this] val defaultAskTimeout = RpcUtils.askTimeout(conf)
+  private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -118,4 +118,5 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
     throw new SparkException(
       s"Error sending message [message = $message]", lastException)
   }
+
 }

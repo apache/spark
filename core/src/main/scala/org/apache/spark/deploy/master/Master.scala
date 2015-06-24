@@ -938,7 +938,7 @@ private[deploy] object Master extends Logging {
       securityManager = securityMgr)
     val actor = actorSystem.actorOf(
       Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
-    val timeout = RpcUtils.askTimeout(conf)
+    val timeout = RpcUtils.askRpcTimeout(conf)
     val portsRequest = actor.ask(BoundPortsRequest)(timeout.duration)
     val portsResponse = timeout.awaitResult(portsRequest).asInstanceOf[BoundPortsResponse]
     (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)

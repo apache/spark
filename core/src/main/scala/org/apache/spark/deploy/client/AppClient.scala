@@ -193,7 +193,7 @@ private[spark] class AppClient(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = RpcUtils.askTimeout(conf)
+        val timeout = RpcUtils.askRpcTimeout(conf)
         val future = actor.ask(StopAppClient)(timeout.duration)
         timeout.awaitResult(future)
       } catch {

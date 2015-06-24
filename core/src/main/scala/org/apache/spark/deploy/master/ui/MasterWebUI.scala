@@ -34,7 +34,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   with UIRoot {
 
   val masterActorRef = master.self
-  val timeout = RpcUtils.askTimeout(master.conf)
+  val timeout = RpcUtils.askRpcTimeout(master.conf)
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   val masterPage = new MasterPage(this)

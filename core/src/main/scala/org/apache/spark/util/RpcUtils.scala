@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
 
 import org.apache.spark.{SparkEnv, SparkConf}
@@ -46,12 +47,22 @@ object RpcUtils {
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
-  def askTimeout(conf: SparkConf): RpcTimeout = {
+  def askRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "120s")
   }
 
+  @deprecated("use askRpcTimeout instead", "1.5.0")
+  def askTimeout(conf: SparkConf): FiniteDuration = {
+    askRpcTimeout(conf).duration
+  }
+
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
-  def lookupTimeout(conf: SparkConf): RpcTimeout = {
+  def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
+  }
+
+  @deprecated("use lookupRpcTimeout instead", "1.5.0")
+  def lookupTimeout(conf: SparkConf): FiniteDuration = {
+    lookupRpcTimeout(conf).duration
   }
 }
