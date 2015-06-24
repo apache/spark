@@ -137,6 +137,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     write(JavaConversions.asScalaIterator(records));
   }
 
+  @SuppressWarnings("Finally")
   @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
     // Keep track of success so we know if we ecountered an exception
