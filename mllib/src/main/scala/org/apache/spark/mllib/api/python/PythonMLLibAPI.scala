@@ -407,6 +407,27 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib PowerIterationClustering.run(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see the
+   * Py4J documentation.
+   */
+  def trainPowerIterationClusteringModel(
+      data: JavaRDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      initMode: String): PowerIterationClusteringModel = {
+
+    val pic = new PowerIterationClustering()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitializationMode(initMode)
+
+    val model = pic.run(data.rdd.map(v => (v(0).toLong, v(1).toLong, v(2))))
+    new PowerIterationClusteringModelWrapper(model)
+  }
+
+  /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
    * needs to be taken in the Python code to ensure it gets freed on exit; see
