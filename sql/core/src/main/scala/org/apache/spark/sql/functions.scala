@@ -38,6 +38,7 @@ import org.apache.spark.util.Utils
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
  * @groupname misc_funcs Misc functions
+ * @groupname datetime_funcs Date and time functions
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
@@ -1431,6 +1432,123 @@ object functions {
    * @since 1.5.0
    */
   def strlen(columnName: String): Column = strlen(Column(columnName))
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // DateTime functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Converts a date/timestamp/string to a value of string in the format specified by the date
+   * format given by the second argument
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dateFormat(l: Column, r: Column): Column = DateFormat(l.expr, r.expr)
+
+  /**
+   * Converts a date/timestamp/string to a value of string in the format specified by the date
+   * format given by the second argument
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def dateFormat(l: String, r: String): Column = dateFormat(Column(l), Column(r))
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def year(e: Column): Column = Year(e.expr)
+
+  /**
+   * Extracts the year as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def year(columnName: String): Column = year(Column(columnName))
+
+  /**
+   * Extracts the month as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def month(e: Column): Column = Month(e.expr)
+
+  /**
+   * Extracts the month as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def month(columnName: String): Column = month(Column(columnName))
+
+  /**
+   * Extracts the day as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def day(e: Column): Column = Day(e.expr)
+
+  /**
+   * Extracts the day as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def day(columnName: String): Column = day(Column(columnName))
+
+  /**
+   * Extracts the hours as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def hour(e: Column): Column = Hour(e.expr)
+
+  /**
+   * Extracts the hours as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def hour(columnName: String): Column = hour(Column(columnName))
+
+  /**
+   * Extracts the minutes as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def minute(e: Column): Column = Minute(e.expr)
+
+  /**
+   * Extracts the minutes as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def minute(columnName: String): Column = minute(Column(columnName))
+
+  /**
+   * Extracts the seconds as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def second(e: Column): Column = Second(e.expr)
+
+  /**
+   * Extracts the seconds as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def second(columnName: String): Column = second(Column(columnName))
+
+  /**
+   * Extracts the week number as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def weekOfYear(e: Column): Column = WeekOfYear(e.expr)
+
+  /**
+   * Extracts the week number as an integer from a given date/timestamp/string
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def weekOfYear(columnName: String): Column = weekOfYear(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
