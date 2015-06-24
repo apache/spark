@@ -52,8 +52,11 @@ object DateTimeUtils {
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
-  def millisToDays(millisLocal: Long): Int = {
-    ((millisLocal + LOCAL_TIMEZONE.get().getOffset(millisLocal)) / MILLIS_PER_DAY).toInt
+  def millisToDays(millisUtc: Long): Int = {
+    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // will correctly work as input for function toJavaDate(Int)
+    val millisLocal = millisUtc.toDouble + LOCAL_TIMEZONE.get().getOffset(millisUtc)
+    Math.floor(millisLocal / MILLIS_PER_DAY).toInt
   }
 
   def toMillisSinceEpoch(days: Int): Long = {
