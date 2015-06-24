@@ -34,8 +34,8 @@ class AttributeSetSuite extends SparkFunSuite {
   val aAndBSet = AttributeSet(aUpper :: bUpper :: Nil)
 
   test("sanity check") {
-    assert(aUpper != aLower)
-    assert(bUpper != bLower)
+    assert(aUpper == aLower)
+    assert(bUpper == bLower)
   }
 
   test("checks by id not name") {
