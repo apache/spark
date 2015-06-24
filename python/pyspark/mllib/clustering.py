@@ -99,7 +99,7 @@ class KMeansModel(Saveable, Loader):
         """Total number of clusters."""
         return len(self.centers)
 
-    def predict(self, x):
+    def predict(self, x, return_distance=False):
         """Find the cluster to which x belongs in this model."""
         best = 0
         best_distance = float("inf")
@@ -112,7 +112,11 @@ class KMeansModel(Saveable, Loader):
             if distance < best_distance:
                 best = i
                 best_distance = distance
-        return best
+
+        if return_distance:
+            return best, best_distance
+        else:
+            return best
 
     def computeCost(self, rdd):
         """
