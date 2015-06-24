@@ -269,7 +269,7 @@ class IDFModel(JavaModel):
 @ignore_unicode_prefix
 class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A feature transformer that converts the input array of stringsinto an array of n-grams. Null
+    A feature transformer that converts the input array of strings into an array of n-grams. Null
     values in the input array are ignored.
     It returns an array of n-grams where each n-gram is represented by a space-separated string of
     words.
@@ -277,21 +277,20 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     When the input array length is less than n (number of elements per n-gram), no n-grams are
     returned.
 
-    TODO: change this to NGram
-    >>> df = sqlContext.createDataFrame([("a b  c",)], ["text"])
-    >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
-    >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
-    >>> # Change a parameter.
-    >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
-    >>> # Temporarily modify a parameter.
-    >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
-    >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
+    >>> df = sqlContext.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
+    >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
+    >>> ngram.transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
+    >>> # Change n-gram length
+    >>> ngram.setParams(n=4).transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    >>> # Temporarily modify output column.
+    >>> ngram.transform(df, {ngram.outputCol: "output"}).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], output=[u'a b c d', u'b c d e'])
+    >>> ngram.transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
     >>> # Must use keyword arguments to specify params.
-    >>> reTokenizer.setParams("text")
+    >>> ngram.setParams("text")
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
