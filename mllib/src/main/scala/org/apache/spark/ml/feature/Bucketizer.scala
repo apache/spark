@@ -89,6 +89,8 @@ final class Bucketizer(override val uid: String)
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
+
+  override def copy(extra: ParamMap): Bucketizer = defaultCopy(extra)
 }
 
 private[feature] object Bucketizer {

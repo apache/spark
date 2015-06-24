@@ -135,6 +135,14 @@ pre {
   display: block;
 }
 
+.description-input-full {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: normal;
+  display: block;
+}
+
 .stacktrace-details {
   max-height: 300px;
   overflow-y: auto;

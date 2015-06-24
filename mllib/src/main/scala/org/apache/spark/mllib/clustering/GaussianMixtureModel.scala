@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
@@ -46,7 +47,7 @@ import org.apache.spark.sql.{SQLContext, Row}
 @Experimental
 class GaussianMixtureModel(
   val weights: Array[Double],
-  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable{
+  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
@@ -64,6 +65,10 @@ class GaussianMixtureModel(
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
+
+  /** Java-friendly version of [[predict()]] */
+  def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
+    predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
    * Given the input vectors, return the membership value of each vector

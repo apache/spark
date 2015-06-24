@@ -86,7 +86,8 @@ class SQLContext(object):
         >>> df.registerTempTable("allTypes")
         >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
-        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
+        [Row(_c0=2, _c1=2.0, _c2=False, _c3=2, _c4=0, \
+            time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
@@ -131,7 +132,7 @@ class SQLContext(object):
         return UDFRegistration(self)
 
     @since(1.4)
-    def range(self, start, end, step=1, numPartitions=None):
+    def range(self, start, end=None, step=1, numPartitions=None):
         """
         Create a :class:`DataFrame` with single LongType column named `id`,
         containing elements in a range from `start` to `end` (exclusive) with
@@ -145,10 +146,20 @@ class SQLContext(object):
 
         >>> sqlContext.range(1, 7, 2).collect()
         [Row(id=1), Row(id=3), Row(id=5)]
+
+        If only one argument is specified, it will be used as the end value.
+
+        >>> sqlContext.range(3).collect()
+        [Row(id=0), Row(id=1), Row(id=2)]
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
-        jdf = self._ssql_ctx.range(int(start), int(end), int(step), int(numPartitions))
+
+        if end is None:
+            jdf = self._ssql_ctx.range(0, int(start), int(step), int(numPartitions))
+        else:
+            jdf = self._ssql_ctx.range(int(start), int(end), int(step), int(numPartitions))
+
         return DataFrame(jdf, self)
 
     @ignore_unicode_prefix
@@ -166,17 +177,17 @@ class SQLContext(object):
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(c0=u'4')]
+        [Row(_c0=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(c0=4)]
+        [Row(_c0=4)]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(c0=4)]
+        [Row(_c0=4)]
         """
         func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())

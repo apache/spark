@@ -43,6 +43,8 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
+
+  override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
 /**
@@ -112,4 +114,6 @@ class RegexTokenizer(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
+
+  override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }

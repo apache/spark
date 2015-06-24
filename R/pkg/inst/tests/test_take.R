@@ -64,4 +64,3 @@ test_that("take() gives back the original elements in correct count and order", 
   expect_true(length(take(numListRDD, 0)) == 0)
   expect_true(length(take(numVectorRDD, 0)) == 0)
 })
-
