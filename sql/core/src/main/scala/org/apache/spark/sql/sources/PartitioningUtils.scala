@@ -187,32 +187,9 @@ private[sql] object PartitioningUtils {
       Seq.empty
     } else {
       val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct
-
-      def listConflictingPartitionColumns: String = {
-        def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
-          seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
-
-        val partColNamesToPaths = groupByKey(pathsWithPartitionValues.map {
-          case (path, partValues) => partValues.columnNames -> path
-        })
-
-        val distinctPartColLists = distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map {
-          case (names, index) =>
-            s"Partition column name list #$index: $names"
-        }
-
-        // Lists out those non-leaf partition directories that also contain files
-        val suspiciousPaths =
-          distinctPartColNames.sortBy(_.length).init.flatMap(partColNamesToPaths)
-
-        s"Conflicting partition column names detected:\n" +
-          distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
-          "For partitioned table directories, data files should only live in leaf directories. " +
-          "Please check the following directories for unexpected files:\n" +
-          suspiciousPaths.mkString("\n\t", "\n\t", "\n")
-      }
-
-      assert(distinctPartColNames.size == 1, listConflictingPartitionColumns)
+      assert(
+        distinctPartColNames.size == 1,
+        listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
       val values = pathsWithPartitionValues.map(_._2)
@@ -226,6 +203,34 @@ private[sql] object PartitioningUtils {
         d.copy(literals = resolvedValues.map(_(index)))
       }
     }
+  }
+
+  private[sql] def listConflictingPartitionColumns(
+      pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
+    val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
+
+    def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
+      seq.groupBy { case (key, _) => key }.mapValues(_.map { case (_, value) => value })
+
+    val partColNamesToPaths = groupByKey(pathWithPartitionValues.map {
+      case (path, partValues) => partValues.columnNames -> path
+    })
+
+    val distinctPartColLists = distinctPartColNames.map(_.mkString(", ")).zipWithIndex.map {
+      case (names, index) =>
+        s"Partition column name list #$index: $names"
+    }
+
+    // Lists out those non-leaf partition directories that also contain files
+    val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
+
+    s"Conflicting partition column names detected:\n" +
+      distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
+      "For partitioned table directories, data files should only live in leaf directories.\n" +
+      "And directories at the same level should have the same partition column name.\n" +
+      "Please check the following directories for unexpected files or " +
+      "inconsistent partition column names:\n" +
+      suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
   }
 
   /**
