@@ -58,6 +58,8 @@ object MimaExcludes {
               "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
             // NanoTime and CatalystTimestampConverter is only used inside catalyst,
