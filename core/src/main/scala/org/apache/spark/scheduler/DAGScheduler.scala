@@ -200,8 +200,8 @@ class DAGScheduler(
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
-  def taskSetFailed(taskSet: TaskSet, reason: String): Unit = {
-    eventProcessLoop.post(TaskSetFailed(taskSet, reason))
+  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable] = None): Unit = {
+    eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
   private[scheduler]
@@ -677,8 +677,9 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
-  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String) {
-    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason) }
+  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String,
+                                             exception: Option[Throwable] = None) {
+    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason, exception) }
     submitWaitingStages()
   }
 
@@ -1126,7 +1127,8 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
+      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics,
+                            exception) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
@@ -1235,7 +1237,8 @@ class DAGScheduler(
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
-  private[scheduler] def abortStage(failedStage: Stage, reason: String) {
+  private[scheduler] def abortStage(failedStage: Stage, reason: String, exception:
+  Option[Throwable] = None) {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
@@ -1244,7 +1247,7 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1252,8 +1255,9 @@ class DAGScheduler(
   }
 
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String) {
-    val error = new SparkException(failureReason)
+  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String,
+                                          exception: Option[Throwable] = None) {
+    val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 
     val shouldInterruptThread =
@@ -1462,8 +1466,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
       dagScheduler.handleTaskCompletion(completion)
 
-    case TaskSetFailed(taskSet, reason) =>
-      dagScheduler.handleTaskSetFailed(taskSet, reason)
+    case TaskSetFailed(taskSet, reason, exception) =>
+      dagScheduler.handleTaskSetFailed(taskSet, reason, exception)
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()

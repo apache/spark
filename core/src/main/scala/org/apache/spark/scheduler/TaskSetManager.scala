@@ -662,6 +662,7 @@ private[spark] class TaskSetManager(
 
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
+    var failureException: Option[Throwable] = None
     reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
@@ -706,6 +707,7 @@ private[spark] class TaskSetManager(
             s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on executor ${info.host}: " +
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
+        failureException = ef.exception
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
@@ -728,16 +730,16 @@ private[spark] class TaskSetManager(
         logError("Task %d in stage %s failed %d times; aborting job".format(
           index, taskSet.id, maxTaskFailures))
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason))
+          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
         return
       }
     }
     maybeFinishTaskSet()
   }
 
-  def abort(message: String): Unit = sched.synchronized {
+  def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
-    sched.dagScheduler.taskSetFailed(taskSet, message)
+    sched.dagScheduler.taskSetFailed(taskSet, message, exception)
     isZombie = true
     maybeFinishTaskSet()
   }

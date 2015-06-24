@@ -90,6 +90,10 @@ case class FetchFailed(
  *
  * `fullStackTrace` is a better representation of the stack trace because it contains the whole
  * stack trace including the exception and its causes
+ *
+ * `preserveCause` is used to keep the exception itself so it is available to the
+ * driver. This may be set to `false` in the event that the exception is not in fact
+ * serializable.
  */
 @DeveloperApi
 case class ExceptionFailure(
@@ -97,11 +101,17 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    metrics: Option[TaskMetrics])
+    metrics: Option[TaskMetrics],
+    exception: Option[Throwable] = None)
   extends TaskFailedReason {
 
+  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
+      if (preserveCause) Some(e) else None)
+  }
+
   private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
-    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics)
+    this(e, metrics, true)
   }
 
   override def toErrorString: String =
