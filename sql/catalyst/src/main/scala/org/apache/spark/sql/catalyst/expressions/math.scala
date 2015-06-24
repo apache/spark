@@ -18,11 +18,16 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Long => JLong}
+import java.math.RoundingMode
 
 import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
+
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.types._
 
 /**
  * A leaf expression specifically for math constants. Math constants expect no input.
@@ -311,4 +316,78 @@ case class Logarithm(left: Expression, right: Expression)
       }
     """
   }
+}
+
+case class Round(valueExpr: Expression, scaleExpr: Expression)
+  extends Expression with trees.BinaryNode[Expression] {
+
+  def this(left: Expression) = {
+    this(left, Literal(0))
+  }
+
+  override def nullable: Boolean = valueExpr.nullable || scaleExpr.nullable
+
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !DecimalType.isFixed(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if ((valueExpr.dataType.isInstanceOf[NumericType] || valueExpr.dataType.isInstanceOf[NullType])
+      &&
+      (scaleExpr.dataType.isInstanceOf[IntegerType] || scaleExpr.dataType.isInstanceOf[NullType])) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"round accepts numeric types as the value and integer type as the scale")
+    }
+  }
+
+  override def toString: String = s"round($valueExpr, $scaleExpr)"
+
+  override def dataType: DataType = valueExpr.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val valueEval = valueExpr.eval(input)
+    val scaleEval = scaleExpr.eval(input)
+    if (valueEval == null || scaleEval == null) {
+      null
+    } else {
+      dataType match {
+        case _: DecimalType =>
+          round(valueEval.asInstanceOf[Decimal], scaleEval.asInstanceOf[Integer])
+        case FloatType =>
+          round(valueEval.asInstanceOf[Float].toDouble,
+            scaleEval.asInstanceOf[Integer]).floatValue()
+        case DoubleType =>
+          round(valueEval.asInstanceOf[Double], scaleEval.asInstanceOf[Integer]).doubleValue()
+        case LongType =>
+          round(valueEval.asInstanceOf[Long], scaleEval.asInstanceOf[Integer]).longValue()
+        case IntegerType =>
+          round(valueEval.asInstanceOf[Integer].toLong, scaleEval.asInstanceOf[Integer]).intValue()
+        case ShortType =>
+          round(valueEval.asInstanceOf[Short].toLong, scaleEval.asInstanceOf[Integer]).shortValue()
+        case ByteType =>
+          round(valueEval.asInstanceOf[Byte].toLong, scaleEval.asInstanceOf[Integer]).byteValue()
+      }
+    }
+  }
+
+  private def round(value: Long, scale: Int): BigDecimal = {
+    java.math.BigDecimal.valueOf(value).setScale(scale, RoundingMode.HALF_UP)
+  }
+
+  private def round(value: Double, scale: Int): BigDecimal = {
+    if (java.lang.Double.isNaN(value) || java.lang.Double.isInfinite(value)) {
+      value
+    } else {
+      java.math.BigDecimal.valueOf(value).setScale(scale, RoundingMode.HALF_UP)
+    }
+  }
+
+  private def round(value: Decimal, scale: Int): Decimal = {
+    value.set(value.toBigDecimal, value.precision, scale.asInstanceOf[Integer])
+  }
+
+  override def left: Expression = valueExpr
+
+  override def right: Expression = scaleExpr
 }

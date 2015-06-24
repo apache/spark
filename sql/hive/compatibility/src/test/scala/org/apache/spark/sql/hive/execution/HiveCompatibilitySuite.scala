@@ -919,7 +919,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_repeat",
     "udf_rlike",
     "udf_round",
-    //  "udf_round_3",  TODO: FIX THIS failed due to cast exception
+    "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
     "udf_second",

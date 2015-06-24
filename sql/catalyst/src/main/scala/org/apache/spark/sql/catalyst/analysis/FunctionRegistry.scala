@@ -124,6 +124,7 @@ object FunctionRegistry {
     expression[Pow]("power"),
     expression[UnaryPositive]("positive"),
     expression[Rint]("rint"),
+    expression[Round]("round"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),

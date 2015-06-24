@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
+import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType}
 
 
 private object MathExpressionsTestData {
@@ -291,5 +293,20 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
     checkAnswer(df.selectExpr("positive(c)"), Row("abc"))
+  }
+
+  test("round") {
+    val df = Seq((1.53, 0.62, 12345L, 0.67.toFloat)).toDF("a", "b", "c", "d")
+    checkAnswer(df.select(round('a)), Row(2.0))
+    checkAnswer(df.select(round('b, 1)), Row(0.6))
+    checkAnswer(df.selectExpr("round(a)"), Row(2))
+    checkAnswer(df.selectExpr("round(b, 1)"), Row(0.6))
+    checkAnswer(df.selectExpr("round(c, 1)"), Row(12345L))
+    checkAnswer(df.selectExpr("round(d, 1)"), Row(0.7f))
+    checkAnswer(df.selectExpr("round(null)"), Row(null))
+    checkAnswer(df.selectExpr("round(null, 1)"), Row(null))
+    checkAnswer(df.selectExpr("round(145.23, -1)"), Row(150.0)) // same as hive
+    checkAnswer(df.selectExpr("round(20, 1)"), Row(20))
+    checkAnswer(df.selectExpr("round(1.0/0.0, 1)"), Row(null))
   }
 }

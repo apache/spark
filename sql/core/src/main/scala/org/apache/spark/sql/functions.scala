@@ -1283,6 +1283,38 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
+   * Computes rounded value of the given input.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column): Column = round(e.expr, 0)
+
+  /**
+   * Computes rounded value of the given input.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String): Column = round(Column(columnName))
+
+  /**
+   * Computes rounded value of the given input.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(e: Column, scale: Int): Column = Round(e.expr, lit(scale).expr)
+
+  /**
+   * Computes rounded value of the given input.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def round(columnName: String, scale: Int): Column = round(Column(columnName), scale)
+
+  /**
    * Computes the signum of the given value.
    *
    * @group math_funcs
