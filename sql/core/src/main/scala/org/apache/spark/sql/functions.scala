@@ -1430,22 +1430,6 @@ object functions {
    */
   def sha1(columnName: String): Column = sha1(Column(columnName))
 
-  /**
-   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
-   *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def sha(e: Column): Column = Sha1(e.expr)
-
-  /**
-   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
-   *
-   * @group misc_funcs
-   * @since 1.5.0
-   */
-  def sha(columnName: String): Column = sha1(Column(columnName))
-
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

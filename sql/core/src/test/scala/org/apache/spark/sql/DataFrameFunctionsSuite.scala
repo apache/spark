@@ -156,18 +156,6 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
   }
 
-  test("misc sha function") {
-    val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
-    checkAnswer(
-      df.select(sha($"a"), sha("b")),
-      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
-
-    val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
-    checkAnswer(
-      dfEmpty.selectExpr("sha(a)", "sha(b)"),
-      Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
-  }
-
   test("string length function") {
     checkAnswer(
       nullStrings.select(strlen($"s"), strlen("s")),
