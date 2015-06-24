@@ -123,10 +123,10 @@ private[parquet] class CatalystSchemaConverter(
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
 
     def typeNotImplemented() =
-      throw new AnalysisException(s"Not yet implemented: $typeString")
+      throw new AnalysisException(s"Parquet type not yet supported: $typeString")
 
     def illegalType() =
-      throw new AnalysisException(s"Illegal type: $typeString")
+      throw new AnalysisException(s"Illegal Parquet type: $typeString")
 
     // When maxPrecision = -1, we skip precision range check, and always respect the precision
     // specified in field.getDecimalMetadata.  This is useful when interpreting decimal types stored
@@ -172,7 +172,7 @@ private[parquet] class CatalystSchemaConverter(
         CatalystSchemaConverter.analysisRequire(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
-            s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP} to true.")
+            s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
         TimestampType
 
       case BINARY =>
@@ -358,8 +358,8 @@ private[parquet] class CatalystSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      // NOTE: !! This is not specified in Parquet format spec !!
-      // However, older versions of Spark SQL and Impala use INT96 to store timestamps with
+      // NOTE: !! This timestamp type is not specified in Parquet format spec !!
+      // However, Impala and older versions of Spark SQL use INT96 to store timestamps with
       // nanosecond precision (not TIME_MILLIS or TIMESTAMP_MILLIS described in the spec).
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
@@ -386,14 +386,15 @@ private[parquet] class CatalystSchemaConverter(
       case dec @ DecimalType() if !followParquetFormatSpec =>
         throw new AnalysisException(
           s"Data type $dec is not supported. " +
-            "Decimal precision must be less than or equal to 18 " +
-            s"when ${SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC} is set to false.")
+            s"When ${SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key} is set to false," +
+            "decimal precision and scale must be specified, " +
+            "and precision must be less than or equal to 18.")
 
       // =====================================
       // Decimals (follow Parquet format spec)
       // =====================================
 
-      // Use INT32 for 1 <= precision <= 9
+      // Uses INT32 for 1 <= precision <= 9
       case DecimalType.Fixed(precision, scale)
         if precision <= maxPrecisionForBytes(4) && followParquetFormatSpec =>
         Types
@@ -403,7 +404,7 @@ private[parquet] class CatalystSchemaConverter(
           .scale(scale)
           .named(field.name)
 
-      // Use INT64 for 1 <= precision <= 18
+      // Uses INT64 for 1 <= precision <= 18
       case DecimalType.Fixed(precision, scale)
         if precision <= maxPrecisionForBytes(8) && followParquetFormatSpec =>
         Types
@@ -413,7 +414,7 @@ private[parquet] class CatalystSchemaConverter(
           .scale(scale)
           .named(field.name)
 
-      // Use FIXED_LEN_BYTE_ARRAY for all other precisions
+      // Uses FIXED_LEN_BYTE_ARRAY for all other precisions
       case DecimalType.Fixed(precision, scale) if followParquetFormatSpec =>
         Types
           .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
@@ -423,16 +424,9 @@ private[parquet] class CatalystSchemaConverter(
           .length(minBytesForPrecision(precision))
           .named(field.name)
 
-      // For decimals with unknown precision and scale, use default precision 10 and scale 0, which
-      // can be squeezed into INT64.  This behavior is compatible with Spark versions <= 1.4.0 and
-      // Hive.
-      case DecimalType.Unlimited if followParquetFormatSpec =>
-        Types
-          .primitive(INT64, repetition)
-          .as(DECIMAL)
-          .precision(10)
-          .scale(0)
-          .named(field.name)
+      case dec @ DecimalType.Unlimited if followParquetFormatSpec =>
+        throw new AnalysisException(
+          s"Data type $dec is not supported. Decimal precision and scale must be specified.")
 
       // ===================================================
       // ArrayType and MapType (for Spark versions <= 1.4.x)
