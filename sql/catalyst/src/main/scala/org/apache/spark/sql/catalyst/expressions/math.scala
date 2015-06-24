@@ -313,7 +313,8 @@ case class Logarithm(left: Expression, right: Expression)
     logCode + s"""
       if (Double.valueOf(${ev.primitive}).isNaN()) {
         ${ev.isNull} = true;
-        """
+      }
+    """
   }
 }
 
@@ -331,7 +332,8 @@ case class Round(valueExpr: Expression, scaleExpr: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if ((valueExpr.dataType.isInstanceOf[NumericType] || valueExpr.dataType.isInstanceOf[NullType])
-      && (scaleExpr.dataType.isInstanceOf[IntegerType] || scaleExpr.dataType.isInstanceOf[NullType])) {
+      &&
+      (scaleExpr.dataType.isInstanceOf[IntegerType] || scaleExpr.dataType.isInstanceOf[NullType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
