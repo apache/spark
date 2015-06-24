@@ -24,7 +24,6 @@ import scala.language.postfixOps
 
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.pattern.ask
-
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf}

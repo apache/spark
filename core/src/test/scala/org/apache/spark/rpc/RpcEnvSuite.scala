@@ -551,7 +551,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val testDurationSeconds = 30
     val secondaryProp = "spark.ask.secondary.timeout"
 
-    conf.set(testProp, testDurationSeconds.toString + "s")
+    conf.set(testProp, s"${testDurationSeconds}s")
     conf.set(secondaryProp, "100s")
 
     // Construct RpcTimeout with a single property
@@ -570,7 +570,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert( rt3.timeoutProp.contains(defaultProp) )
 
     // Try to construct RpcTimeout with an unconfigured property
-    intercept[Throwable] {
+    intercept[NoSuchElementException] {
       RpcTimeout(conf, "spark.ask.invalid.timeout")
     }
   }
