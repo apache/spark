@@ -20,6 +20,7 @@ from numpy import array
 
 from pyspark import RDD
 from pyspark.streaming.dstream import DStream
+from pyspark.mllib.classification import StreamingLinearAlgorithm
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
@@ -572,17 +573,16 @@ class IsotonicRegression(object):
 
 
 @inherit_doc
-class StreamingLinearRegressionWithSGD(LinearRegressionModel):
+class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Run LinearRegression with SGD on a stream of data.
+    Run LinearRegression with SGD on a batch of data.
 
     The problem minimized is (1 / n_samples) * (y - weights'X)**2.
-    After training on a stream of data, the weights obtained at the end of
-    training are used as initial weights for the next stream of data.
+    After training on a batch of data, the weights obtained at the end of
+    training are used as initial weights for the next batch.
 
-    :param: stepSize          Step size for each iteration of gradient
-                              descent.
-    :param: numIterations     Total number of iterations run.
+    :param: stepSize Step size for each iteration of gradient descent.
+    :param: numIterations Total number of iterations run.
     :param: miniBatchFraction Fraction of data on which SGD is run for each
                               iteration.
     """
@@ -591,29 +591,8 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
         self.numIterations = numIterations
         self.miniBatchFraction = miniBatchFraction
         self._model = None
-
-    def _validate_dstream(self, dstream):
-        if not isinstance(dstream, DStream):
-            raise TypeError(
-                "dstream should be a DStream object, got %s" % type(dstream))
-        if not self._model:
-            raise ValueError(
-                "Model must be intialized using setInitialWeights")
-
-    @property
-    def latestModel(self):
-        """Returns a LinearRegressionModel fit on the latest stream of data.
-
-        The weights and intercepts can be got from the `weights` and
-        `intercept` attributes.
-        """
-        return self._model
-
-    def __repr__(self):
-        if self._model is None:
-            return '(weights=None, intercept=None)'
-        else:
-            return str(self._model)
+        super(StreamingLinearRegressionWithSGD, self).__init__(
+            model=self._model)
 
     def setInitialWeights(self, initialWeights):
         """
@@ -638,23 +617,6 @@ class StreamingLinearRegressionWithSGD(LinearRegressionModel):
                     self._model.intercept)
 
         dstream.foreachRDD(update)
-
-    def predictOn(self, dstream):
-        """
-        Make predictions on a dstream of Vectors.
-
-        :return: Transformed dstream object.
-        """
-        self._validate_dstream(dstream)
-        return dstream.map(lambda x: self._model.predict(x))
-
-    def predictOnValues(self, dstream):
-        """Make predictions on a keyed dstream where the values are Vectors.
-
-        :return: Transformed dstream object.
-        """
-        self._validate_dstream(dstream)
-        return dstream.mapValues(lambda x: self._model.predict(x))
 
 
 def _test():

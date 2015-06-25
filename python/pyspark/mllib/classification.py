@@ -630,10 +630,10 @@ class StreamingLinearAlgorithm(object):
 @inherit_doc
 class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Run LogisticRegression with SGD on a stream of data.
+    Run LogisticRegression with SGD on a batch of data.
 
     The weights obtained at the end of training a stream are used as initial
-    weights for the next stream.
+    weights for the next batch.
 
     :param stepSize: Step size for each iteration of gradient descent.
     :param numIterations: Number of iterations run for each batch of data.

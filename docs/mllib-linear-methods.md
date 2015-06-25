@@ -803,7 +803,7 @@ model.setInitialWeights([0.0, 0.0, 0.0])
 
 Now we register the streams for training and testing and start the job.
 
-{% highlight scala %}
+{% highlight python %}
 model.trainOn(trainingData)
 print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
 

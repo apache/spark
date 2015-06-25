@@ -1201,8 +1201,8 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         self.ssc.start()
         self._ssc_wait(t, 10, 0.01)
         self.assertArrayAlmostEqual(
-            slr.latestModel.weights.array, [10., 10.], 1)
-        self.assertAlmostEqual(slr.latestModel.intercept, 0.0, 1)
+            slr.latestModel().weights.array, [10., 10.], 1)
+        self.assertAlmostEqual(slr.latestModel().intercept, 0.0, 1)
 
     def test_parameter_convergence(self):
         """Test that the model parameters improve with streaming data."""
@@ -1219,7 +1219,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         model_weights = []
         input_stream = self.ssc.queueStream(batches)
         input_stream.foreachRDD(
-            lambda x: model_weights.append(slr.latestModel.weights[0]))
+            lambda x: model_weights.append(slr.latestModel().weights[0]))
         t = time()
         slr.trainOn(input_stream)
         self.ssc.start()
