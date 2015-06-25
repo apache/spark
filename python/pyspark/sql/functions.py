@@ -366,9 +366,10 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
-def sha2(col, length):
+def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
-       and SHA-512).
+    and SHA-512). The numBits indicates the desired bit length of the result, which must have a
+    value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
 
     >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
     >>> digests[0]
@@ -377,7 +378,7 @@ def sha2(col, length):
     Row(s=u'cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.sha2(_to_java_column(col), length)
+    jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
 
