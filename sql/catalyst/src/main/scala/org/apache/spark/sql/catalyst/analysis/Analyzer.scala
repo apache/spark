@@ -309,8 +309,8 @@ class Analyzer(
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
         }
-          // Only handle first case, others will be fixed on the next pass.
-          .headOption match {
+        // Only handle first case, others will be fixed on the next pass.
+        .headOption match {
           case None =>
             /*
              * No result implies that there is a logical plan node that produces new references
