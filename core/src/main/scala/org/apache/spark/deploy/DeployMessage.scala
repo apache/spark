@@ -165,7 +165,7 @@ private[deploy] object DeployMessages {
     assert (port > 0)
 
     def uri: String = "spark://" + host + ":" + port
-    def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
+    def restUri: Option[String] = restPort.map { p => "http://" + host + ":" + p }
   }
 
   //  WorkerWebUI to Worker
