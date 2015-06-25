@@ -19,13 +19,9 @@ package org.apache.spark.sql;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.MutableRow;
+import org.apache.spark.unsafe.types.UTF8String;
 
 public abstract class BaseMutableRow extends InternalRow implements MutableRow {
-
-  @Override
-  public void update(int ordinal, Object value) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public void setInt(int ordinal, int value) {
@@ -64,6 +60,6 @@ public abstract class BaseMutableRow extends InternalRow implements MutableRow {
 
   @Override
   public void setString(int ordinal, String value) {
-    throw new UnsupportedOperationException();
+    update(ordinal, UTF8String.fromString(value));
   }
 }

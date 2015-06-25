@@ -173,7 +173,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         $initColumns
       }
 
-      public int size() { return ${expressions.length};}
+      public int length() { return ${expressions.length};}
       protected boolean[] nullBits = new boolean[${expressions.length}];
       public void setNullAt(int i) { nullBits[i] = true; }
       public boolean isNullAt(int i) { return nullBits[i]; }
