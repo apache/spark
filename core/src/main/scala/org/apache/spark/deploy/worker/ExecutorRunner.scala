@@ -25,7 +25,7 @@ import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.util.Utils
@@ -125,8 +125,8 @@ private[deploy] class ExecutorRunner(
   private def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val builder = CommandUtils.buildProcessBuilder(appDesc.command, memory,
-        sparkHome.getAbsolutePath, substituteVariables)
+      val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
+        memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 

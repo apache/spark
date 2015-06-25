@@ -133,8 +133,10 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
-    for(i <- 1 until seq.size) {
-      if (seq(i - 1) > seq(i)) return false
+    for (i <- 1 until seq.size) {
+      if (seq(i - 1) > seq(i)) {
+        return false
+      }
     }
     true
   }

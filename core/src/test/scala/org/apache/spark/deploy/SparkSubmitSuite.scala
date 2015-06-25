@@ -23,18 +23,23 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
+import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
-class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties with Timeouts {
+class SparkSubmitSuite
+  extends SparkFunSuite
+  with Matchers
+  with ResetSystemProperties
+  with Timeouts {
+
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
@@ -57,7 +62,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     SparkSubmit.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = () => exitedCleanly = true
+    SparkSubmit.exitFn = (_) => exitedCleanly = true
 
     val thread = new Thread {
       override def run() = try {
@@ -320,7 +325,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  ignore("includes jars passed in through --jars") {
+  test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -334,18 +339,23 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  ignore("includes jars passed in through --packages") {
+  // SPARK-7287
+  test("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-    val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
-    val args = Seq(
-      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
-      "--name", "testApp",
-      "--master", "local-cluster[2,1,512]",
-      "--packages", packagesString,
-      "--conf", "spark.ui.enabled=false",
-      unusedJar.toString,
-      "com.databricks.spark.csv.DefaultSource", "com.databricks.spark.avro.DefaultSource")
-    runSparkSubmit(args)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
+      val args = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,512]",
+        "--packages", Seq(main, dep).mkString(","),
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+      runSparkSubmit(args)
+    }
   }
 
   test("resolves command line argument paths correctly") {
@@ -489,9 +499,16 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-    failAfter(60 seconds) { process.waitFor() }
-    // Ensure we still kill the process in case it timed out
-    process.destroy()
+
+    try {
+      val exitCode = failAfter(60 seconds) { process.waitFor() }
+      if (exitCode != 0) {
+        fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
+      }
+    } finally {
+      // Ensure we still kill the process in case it timed out
+      process.destroy()
+    }
   }
 
   private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {

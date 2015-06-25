@@ -230,10 +230,10 @@ object StructType {
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
 
+        val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightFields
-              .find(_.name == leftName)
+            rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
               leftField.copy(
                 dataType = merge(leftType, rightType),
@@ -243,8 +243,9 @@ object StructType {
               .foreach(newFields += _)
         }
 
+        val leftMapped = fieldsMap(leftFields)
         rightFields
-          .filterNot(f => leftFields.map(_.name).contains(f.name))
+          .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach(newFields += _)
 
         StructType(newFields)
@@ -264,4 +265,9 @@ object StructType {
       case _ =>
         throw new SparkException(s"Failed to merge incompatible data types $left and $right")
     }
+
+  private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
+    import scala.collection.breakOut
+    fields.map(s => (s.name, s))(breakOut)
+  }
 }

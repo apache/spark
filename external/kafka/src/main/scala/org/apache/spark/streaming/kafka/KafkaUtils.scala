@@ -158,15 +158,31 @@ object KafkaUtils {
 
   /** get leaders for the given offset ranges, or throw an exception */
   private def leadersForRanges(
-      kafkaParams: Map[String, String],
+      kc: KafkaCluster,
       offsetRanges: Array[OffsetRange]): Map[TopicAndPartition, (String, Int)] = {
-    val kc = new KafkaCluster(kafkaParams)
     val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
-    val leaders = kc.findLeaders(topics).fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
-    )
-    leaders
+    val leaders = kc.findLeaders(topics)
+    KafkaCluster.checkErrors(leaders)
+  }
+
+  /** Make sure offsets are available in kafka, or throw an exception */
+  private def checkOffsets(
+      kc: KafkaCluster,
+      offsetRanges: Array[OffsetRange]): Unit = {
+    val topics = offsetRanges.map(_.topicAndPartition).toSet
+    val result = for {
+      low <- kc.getEarliestLeaderOffsets(topics).right
+      high <- kc.getLatestLeaderOffsets(topics).right
+    } yield {
+      offsetRanges.filterNot { o =>
+        low(o.topicAndPartition).offset <= o.fromOffset &&
+        o.untilOffset <= high(o.topicAndPartition).offset
+      }
+    }
+    val badRanges = KafkaCluster.checkErrors(result)
+    if (!badRanges.isEmpty) {
+      throw new SparkException("Offsets not available on leader: " + badRanges.mkString(","))
+    }
   }
 
   /**
@@ -191,7 +207,9 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange]
     ): RDD[(K, V)] = sc.withScope {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
-    val leaders = leadersForRanges(kafkaParams, offsetRanges)
+    val kc = new KafkaCluster(kafkaParams)
+    val leaders = leadersForRanges(kc, offsetRanges)
+    checkOffsets(kc, offsetRanges)
     new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
@@ -225,8 +243,9 @@ object KafkaUtils {
       leaders: Map[TopicAndPartition, Broker],
       messageHandler: MessageAndMetadata[K, V] => R
     ): RDD[R] = sc.withScope {
+    val kc = new KafkaCluster(kafkaParams)
     val leaderMap = if (leaders.isEmpty) {
-      leadersForRanges(kafkaParams, offsetRanges)
+      leadersForRanges(kc, offsetRanges)
     } else {
       // This could be avoided by refactoring KafkaRDD.leaders and KafkaCluster to use Broker
       leaders.map {
@@ -234,6 +253,7 @@ object KafkaUtils {
       }.toMap
     }
     val cleanedHandler = sc.clean(messageHandler)
+    checkOffsets(kc, offsetRanges)
     new KafkaRDD[K, V, KD, VD, R](sc, kafkaParams, offsetRanges, leaderMap, cleanedHandler)
   }
 
@@ -315,7 +335,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -363,7 +383,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -399,7 +419,7 @@ object KafkaUtils {
     val kc = new KafkaCluster(kafkaParams)
     val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
 
-    (for {
+    val result = for {
       topicPartitions <- kc.getPartitions(topics).right
       leaderOffsets <- (if (reset == Some("smallest")) {
         kc.getEarliestLeaderOffsets(topicPartitions)
@@ -412,10 +432,8 @@ object KafkaUtils {
       }
       new DirectKafkaInputDStream[K, V, KD, VD, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler)
-    }).fold(
-      errs => throw new SparkException(errs.mkString("\n")),
-      ok => ok
-    )
+    }
+    KafkaCluster.checkErrors(result)
   }
 
   /**
@@ -427,7 +445,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
@@ -489,7 +507,7 @@ object KafkaUtils {
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
-   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
    *    You can access the offsets used in each batch from the generated RDDs (see
    *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).

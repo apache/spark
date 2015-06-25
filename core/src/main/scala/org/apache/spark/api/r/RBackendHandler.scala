@@ -77,7 +77,7 @@ private[r] class RBackendHandler(server: RBackend)
     val reply = bos.toByteArray
     ctx.write(reply)
   }
-  
+
   override def channelReadComplete(ctx: ChannelHandlerContext): Unit = {
     ctx.flush()
   }
@@ -124,7 +124,7 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args:_*)
+        val ret = methods.head.invoke(obj, args : _*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -135,7 +135,7 @@ private[r] class RBackendHandler(server: RBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
-        val obj = ctor.newInstance(args:_*)
+        val obj = ctor.newInstance(args : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])

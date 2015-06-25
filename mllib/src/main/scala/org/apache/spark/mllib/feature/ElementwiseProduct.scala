@@ -25,10 +25,10 @@ import org.apache.spark.mllib.linalg._
  * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
  * provided "weight" vector. In other words, it scales each column of the dataset by a scalar
  * multiplier.
- * @param scalingVector The values used to scale the reference vector's individual components.
+ * @param scalingVec The values used to scale the reference vector's individual components.
  */
 @Experimental
-class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
+class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
 
   /**
    * Does the hadamard product transformation.
@@ -37,15 +37,15 @@ class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
    * @return transformed vector.
    */
   override def transform(vector: Vector): Vector = {
-    require(vector.size == scalingVector.size,
-      s"vector sizes do not match: Expected ${scalingVector.size} but found ${vector.size}")
+    require(vector.size == scalingVec.size,
+      s"vector sizes do not match: Expected ${scalingVec.size} but found ${vector.size}")
     vector match {
       case dv: DenseVector =>
         val values: Array[Double] = dv.values.clone()
-        val dim = scalingVector.size
+        val dim = scalingVec.size
         var i = 0
         while (i < dim) {
-          values(i) *= scalingVector(i)
+          values(i) *= scalingVec(i)
           i += 1
         }
         Vectors.dense(values)
@@ -54,7 +54,7 @@ class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
         val dim = values.length
         var i = 0
         while (i < dim) {
-          values(i) *= scalingVector(indices(i))
+          values(i) *= scalingVec(indices(i))
           i += 1
         }
         Vectors.sparse(size, indices, values)

@@ -296,6 +296,9 @@ abstract class AbstractCommandBuilder {
       try {
         fd = new FileInputStream(propsFile);
         props.load(new InputStreamReader(fd, "UTF-8"));
+        for (Map.Entry<Object, Object> e : props.entrySet()) {
+          e.setValue(e.getValue().toString().trim());
+        }
       } finally {
         if (fd != null) {
           try {

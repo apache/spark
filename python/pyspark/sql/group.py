@@ -49,6 +49,8 @@ class GroupedData(object):
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
+    .. note:: Experimental
+
     .. versionadded:: 1.3
     """
 

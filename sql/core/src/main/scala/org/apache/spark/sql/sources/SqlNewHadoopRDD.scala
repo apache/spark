@@ -34,7 +34,7 @@ import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{RDD, HadoopRDD}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 import scala.reflect.ClassTag
 
@@ -65,7 +65,7 @@ private[spark] class SqlNewHadoopPartition(
  */
 private[sql] class SqlNewHadoopRDD[K, V](
     @transient sc : SparkContext,
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    broadcastedConf: Broadcast[SerializableConfiguration],
     @transient initDriverSideJobFuncOpt: Option[Job => Unit],
     initLocalJobFuncOpt: Option[Job => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -74,10 +74,6 @@ private[sql] class SqlNewHadoopRDD[K, V](
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
-
-  if (initLocalJobFuncOpt.isDefined) {
-    sc.clean(initLocalJobFuncOpt.get)
-  }
 
   protected def getJob(): Job = {
     val conf: Configuration = broadcastedConf.value.value
@@ -220,7 +216,7 @@ private[sql] class SqlNewHadoopRDD[K, V](
   override def getPreferredLocations(hsplit: SparkPartition): Seq[String] = {
     val split = hsplit.asInstanceOf[SqlNewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) => 
+      case Some(c) =>
         try {
           val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
           Some(HadoopRDD.convertSplitLocationInfo(infos))

@@ -272,7 +272,7 @@ class AutoBatchedSerializer(BatchedSerializer):
             if size < best:
                 batch *= 2
             elif size > best * 10 and batch > 1:
-                batch /= 2
+                batch //= 2
 
     def __repr__(self):
         return "AutoBatchedSerializer(%s)" % self.serializer

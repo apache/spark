@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.util.SerializableJobConf
+
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -26,10 +28,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructObjectInspector, Obj
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc }
-import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.{Logging, SparkContext, TaskContext, SerializableWritable}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.{Logging, SparkContext, TaskContext}
 
 /**
  *  A trait for subclasses that write data using arbitrary SerDes to a file system .
@@ -43,10 +46,11 @@ private[hive] trait SaveAsHiveFile extends HiveInspectors with Logging {
 
   def saveAsHiveFile(
       sparkContext: SparkContext,
-      rdd: RDD[Row],
+      rdd: RDD[InternalRow],
+      schema: StructType,
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
-      conf: SerializableWritable[JobConf],
+      conf: SerializableJobConf,
       writerContainer: SparkHiveWriterContainer): Unit = {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
@@ -87,7 +91,7 @@ private[hive] trait SaveAsHiveFile extends HiveInspectors with Logging {
         }
 
         writerContainer
-          .getLocalFileWriter(row)
+          .getLocalFileWriter(row, schema)
           .write(serializer.serialize(outputData, standardOI))
       }
 

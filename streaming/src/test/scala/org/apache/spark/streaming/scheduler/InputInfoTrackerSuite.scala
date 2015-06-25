@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 
-class InputInfoTrackerSuite extends FunSuite with BeforeAndAfter {
+class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var ssc: StreamingContext = _
 

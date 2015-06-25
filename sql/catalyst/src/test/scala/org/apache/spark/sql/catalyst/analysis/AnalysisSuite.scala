@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 
-class AnalysisSuite extends FunSuite with BeforeAndAfter {
+class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
   val caseSensitiveConf = new SimpleCatalystConf(true)
   val caseInsensitiveConf = new SimpleCatalystConf(false)
 
@@ -155,7 +156,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       caseSensitive: Boolean = true): Unit = {
     test(name) {
       val error = intercept[AnalysisException] {
-        if(caseSensitive) {
+        if (caseSensitive) {
           caseSensitiveAnalyze(plan)
         } else {
           caseInsensitiveAnalyze(plan)
@@ -165,6 +166,19 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       errorMessages.foreach(m => assert(error.getMessage.toLowerCase contains m.toLowerCase))
     }
   }
+
+  errorTest(
+    "unresolved window function",
+    testRelation2.select(
+      WindowExpression(
+        UnresolvedWindowFunction(
+          "lead",
+          UnresolvedAttribute("c") :: Nil),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as('window)),
+      "lead" :: "window functions currently requires a HiveContext" :: Nil)
 
   errorTest(
     "too many generators",
@@ -179,7 +193,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
   errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-    "invalid cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
+    "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -250,9 +264,9 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     val plan =
       Aggregate(
         Nil,
-        Alias(Sum(AttributeReference("a", StringType)(exprId = ExprId(1))), "b")() :: Nil,
+        Alias(Sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
         LocalRelation(
-          AttributeReference("a", StringType)(exprId = ExprId(2))))
+          AttributeReference("a", IntegerType)(exprId = ExprId(2))))
 
     assert(plan.resolved)
 

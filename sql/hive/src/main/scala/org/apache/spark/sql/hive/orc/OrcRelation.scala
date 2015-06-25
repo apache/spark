@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, Reco
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
@@ -39,7 +40,7 @@ import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreType
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{Logging, SerializableWritable}
+import org.apache.spark.util.SerializableConfiguration
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -48,15 +49,14 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
-      schema: Option[StructType],
+      dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    val partitionSpec = partitionColumns.map(PartitionSpec(_, Seq.empty[Partition]))
-    OrcRelation(paths, parameters, schema, partitionSpec)(sqlContext)
+    new OrcRelation(paths, dataSchema, None, partitionColumns, parameters)(sqlContext)
   }
 }
 
@@ -105,13 +105,14 @@ private[orc] class OrcOutputWriter(
     recordWriterInstantiated = true
 
     val conf = context.getConfiguration
+    val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
     val partition = context.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-r-$partition%05d-${System.currentTimeMillis}%015d.orc"
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
       conf.asInstanceOf[JobConf],
-      new Path(path, filename).toUri.getPath,
+      new Path(path, filename).toString,
       Reporter.NULL
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
@@ -136,22 +137,34 @@ private[orc] class OrcOutputWriter(
 }
 
 @DeveloperApi
-private[sql] case class OrcRelation(
+private[sql] class OrcRelation(
     override val paths: Array[String],
-    parameters: Map[String, String],
-    maybeSchema: Option[StructType] = None,
-    maybePartitionSpec: Option[PartitionSpec] = None)(
+    maybeDataSchema: Option[StructType],
+    maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec)
   with Logging {
 
-  override val dataSchema: StructType = maybeSchema.getOrElse {
+  private[sql] def this(
+      paths: Array[String],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      parameters: Map[String, String])(
+      sqlContext: SQLContext) = {
+    this(
+      paths,
+      maybeDataSchema,
+      maybePartitionSpec,
+      maybePartitionSpec.map(_.partitionColumns),
+      parameters)(sqlContext)
+  }
+
+  override val dataSchema: StructType = maybeDataSchema.getOrElse {
     OrcFileOperator.readSchema(
       paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
   }
-
-  override def userDefinedPartitionColumns: Option[StructType] =
-    maybePartitionSpec.map(_.partitionColumns)
 
   override def needConversion: Boolean = false
 
@@ -169,7 +182,7 @@ private[sql] case class OrcRelation(
       paths.toSet,
       dataSchema,
       schema,
-      maybePartitionSpec)
+      partitionColumns)
   }
 
   override def buildScan(
@@ -272,7 +285,7 @@ private[orc] case class OrcTableScan(
       classOf[Writable]
     ).asInstanceOf[HadoopRDD[NullWritable, Writable]]
 
-    val wrappedConf = new SerializableWritable(conf)
+    val wrappedConf = new SerializableConfiguration(conf)
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))

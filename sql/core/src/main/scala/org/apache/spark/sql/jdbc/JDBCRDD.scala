@@ -22,12 +22,13 @@ import java.util.Properties
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
-import org.apache.spark.sql.catalyst.util.DateUtils
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.{InternalRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -46,10 +47,15 @@ private[sql] object JDBCRDD extends Logging {
    * @param sqlType - A field of java.sql.Types
    * @return The Catalyst type corresponding to sqlType.
    */
-  private def getCatalystType(sqlType: Int, precision: Int, scale: Int): DataType = {
+  private def getCatalystType(
+      sqlType: Int,
+      precision: Int,
+      scale: Int,
+      signed: Boolean): DataType = {
     val answer = sqlType match {
+      // scalastyle:off
       case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => LongType
+      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType(20,0) }
       case java.sql.Types.BINARY        => BinaryType
       case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
       case java.sql.Types.BLOB          => BinaryType
@@ -64,7 +70,7 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.DISTINCT      => null
       case java.sql.Types.DOUBLE        => DoubleType
       case java.sql.Types.FLOAT         => FloatType
-      case java.sql.Types.INTEGER       => IntegerType
+      case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
       case java.sql.Types.JAVA_OBJECT   => null
       case java.sql.Types.LONGNVARCHAR  => StringType
       case java.sql.Types.LONGVARBINARY => BinaryType
@@ -88,7 +94,8 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
-      case _ => null
+      case _                            => null
+      // scalastyle:on
     }
 
     if (answer == null) throw new SQLException("Unsupported type " + sqlType)
@@ -123,11 +130,12 @@ private[sql] object JDBCRDD extends Logging {
           val typeName = rsmd.getColumnTypeName(i + 1)
           val fieldSize = rsmd.getPrecision(i + 1)
           val fieldScale = rsmd.getScale(i + 1)
+          val isSigned = rsmd.isSigned(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
           val columnType =
             dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-              getCatalystType(dataType, fieldSize, fieldScale))
+              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }
@@ -203,13 +211,15 @@ private[sql] object JDBCRDD extends Logging {
       fqTable: String,
       requiredColumns: Array[String],
       filters: Array[Filter],
-      parts: Array[Partition]): RDD[Row] = {
+      parts: Array[Partition]): RDD[InternalRow] = {
+    val dialect = JdbcDialects.get(url)
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
       getConnector(driver, url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
-      requiredColumns,
+      quotedColumns,
       filters,
       parts,
       properties)
@@ -230,7 +240,7 @@ private[sql] class JDBCRDD(
     filters: Array[Filter],
     partitions: Array[Partition],
     properties: Properties)
-  extends RDD[Row](sc, Nil) {
+  extends RDD[InternalRow](sc, Nil) {
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
@@ -255,7 +265,7 @@ private[sql] class JDBCRDD(
   }
 
   private def escapeSql(value: String): String =
-    if (value == null) null else  StringUtils.replace(value, "'", "''")
+    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -297,7 +307,7 @@ private[sql] class JDBCRDD(
 
   // Each JDBC-to-Catalyst conversion corresponds to a tag defined here so that
   // we don't have to potentially poke around in the Metadata once for every
-  // row.  
+  // row.
   // Is there a better way to do this?  I'd rather be using a type that
   // contains only the tags I define.
   abstract class JDBCConversion
@@ -318,19 +328,19 @@ private[sql] class JDBCRDD(
    */
   def getConversions(schema: StructType): Array[JDBCConversion] = {
     schema.fields.map(sf => sf.dataType match {
-      case BooleanType           => BooleanConversion
-      case DateType              => DateConversion
+      case BooleanType => BooleanConversion
+      case DateType => DateConversion
       case DecimalType.Unlimited => DecimalConversion(None)
-      case DecimalType.Fixed(d)  => DecimalConversion(Some(d))
-      case DoubleType            => DoubleConversion
-      case FloatType             => FloatConversion
-      case IntegerType           => IntegerConversion
-      case LongType              =>
+      case DecimalType.Fixed(d) => DecimalConversion(Some(d))
+      case DoubleType => DoubleConversion
+      case FloatType => FloatConversion
+      case IntegerType => IntegerConversion
+      case LongType =>
         if (sf.metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-      case StringType            => StringConversion
-      case TimestampType         => TimestampConversion
-      case BinaryType            => BinaryConversion
-      case _                     => throw new IllegalArgumentException(s"Unsupported field $sf")
+      case StringType => StringConversion
+      case TimestampType => TimestampConversion
+      case BinaryType => BinaryConversion
+      case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
     }).toArray
   }
 
@@ -338,12 +348,12 @@ private[sql] class JDBCRDD(
   /**
    * Runs the SQL query against the JDBC driver.
    */
-  override def compute(thePart: Partition, context: TaskContext): Iterator[Row] = new Iterator[Row]
-  {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
+    new Iterator[InternalRow] {
     var closed = false
     var finished = false
     var gotNext = false
-    var nextValue: Row = null
+    var nextValue: InternalRow = null
 
     context.addTaskCompletionListener{ context => close() }
     val part = thePart.asInstanceOf[JDBCPartition]
@@ -365,18 +375,18 @@ private[sql] class JDBCRDD(
     val conversions = getConversions(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
-    def getNext(): Row = {
+    def getNext(): InternalRow = {
       if (rs.next()) {
         var i = 0
         while (i < conversions.length) {
           val pos = i + 1
           conversions(i) match {
-            case BooleanConversion    => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            case DateConversion       =>
-              // DateUtils.fromJavaDate does not handle null value, so we need to check it.
+            case BooleanConversion => mutableRow.setBoolean(i, rs.getBoolean(pos))
+            case DateConversion =>
+              // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
               val dateVal = rs.getDate(pos)
               if (dateVal != null) {
-                mutableRow.update(i, DateUtils.fromJavaDate(dateVal))
+                mutableRow.setInt(i, DateTimeUtils.fromJavaDate(dateVal))
               } else {
                 mutableRow.update(i, null)
               }
@@ -402,14 +412,20 @@ private[sql] class JDBCRDD(
               } else {
                 mutableRow.update(i, Decimal(decimalVal))
               }
-            case DoubleConversion     => mutableRow.setDouble(i, rs.getDouble(pos))
-            case FloatConversion      => mutableRow.setFloat(i, rs.getFloat(pos))
-            case IntegerConversion    => mutableRow.setInt(i, rs.getInt(pos))
-            case LongConversion       => mutableRow.setLong(i, rs.getLong(pos))
+            case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
+            case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
+            case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
+            case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion     => mutableRow.setString(i, rs.getString(pos))
-            case TimestampConversion  => mutableRow.update(i, rs.getTimestamp(pos))
-            case BinaryConversion     => mutableRow.update(i, rs.getBytes(pos))
+            case StringConversion => mutableRow.setString(i, rs.getString(pos))
+            case TimestampConversion =>
+              val t = rs.getTimestamp(pos)
+              if (t != null) {
+                mutableRow.setLong(i, DateTimeUtils.fromJavaTimestamp(t))
+              } else {
+                mutableRow.update(i, null)
+              }
+            case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
             case BinaryLongConversion => {
               val bytes = rs.getBytes(pos)
               var ans = 0L
@@ -427,7 +443,7 @@ private[sql] class JDBCRDD(
         mutableRow
       } else {
         finished = true
-        null.asInstanceOf[Row]
+        null.asInstanceOf[InternalRow]
       }
     }
 
@@ -470,7 +486,7 @@ private[sql] class JDBCRDD(
       !finished
     }
 
-    override def next(): Row = {
+    override def next(): InternalRow = {
       if (!hasNext) {
         throw new NoSuchElementException("End of stream")
       }

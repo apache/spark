@@ -30,8 +30,10 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
-import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc, _}
-import org.apache.spark.SerializableWritable
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.hive._
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SerializableJobConf
 
 /**
  * :: DeveloperApi ::
@@ -49,9 +51,9 @@ case class WriteToDirectory(
 
   def output:Seq[Attribute] = child.output
 
-  protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val jobConf = new JobConf(hiveContext.hiveconf)
-    val jobConfSer = new SerializableWritable(jobConf)
+    val jobConfSer = new SerializableJobConf(jobConf)
     val targetPath = new Path(path)
 
     val (tmpPath, destPath) = if (isLocal) {
@@ -61,7 +63,7 @@ case class WriteToDirectory(
       if (localFileSystem.exists(localPath)) {
         localFileSystem.delete(localPath, true)
       }
-      (HiveShim.getExternalTmpPath(context, localPath.toUri), localPath)
+      (context.getExternalTmpPath(localPath.toUri), localPath)
     } else {
       val qualifiedPath = FileUtils.makeQualified(targetPath, hiveContext.hiveconf)
       val dfs = qualifiedPath.getFileSystem(jobConf)
@@ -70,7 +72,7 @@ case class WriteToDirectory(
       } else {
         dfs.mkdirs(qualifiedPath.getParent)
       }
-      (HiveShim.getExternalTmpPath(context, qualifiedPath.toUri), qualifiedPath)
+      (context.getExternalTmpPath(qualifiedPath.toUri), qualifiedPath)
     }
 
     val fileSinkConf = new FileSinkDesc(tmpPath.toString, desc, false)
@@ -89,8 +91,14 @@ case class WriteToDirectory(
 
     val writerContainer = new SparkHiveWriterContainer(jobConf, fileSinkConf)
 
-    saveAsHiveFile(hiveContext.sparkContext, child.execute(), outputClass,
-      fileSinkConf, jobConfSer, writerContainer)
+    saveAsHiveFile(
+      hiveContext.sparkContext,
+      child.execute(),
+      StructType.fromAttributes(output),
+      outputClass,
+      fileSinkConf,
+      jobConfSer,
+      writerContainer)
 
     val fs = tmpPath.getFileSystem(jobConf)
 
@@ -101,10 +109,8 @@ case class WriteToDirectory(
       throw new IOException("Unable to write data to " + destPath)
     }
 
-    Seq.empty[Row]
+    Seq.empty[InternalRow]
   }
 
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
-
-  override def doExecute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  override def doExecute(): RDD[InternalRow] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }

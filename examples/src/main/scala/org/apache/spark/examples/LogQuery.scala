@@ -22,7 +22,7 @@ import org.apache.spark.SparkContext._
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: LogQuery [logFile]
  */
 object LogQuery {

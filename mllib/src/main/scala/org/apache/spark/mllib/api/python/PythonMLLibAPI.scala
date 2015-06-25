@@ -43,13 +43,15 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.stat.{
+  KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel, RandomForestModel}
 import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
@@ -392,14 +394,14 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       wt: Vector,
       mu: Array[Object],
-      si: Array[Object]):  RDD[Vector]  = {
+      si: Array[Object]): RDD[Vector] = {
 
       val weight = wt.toArray
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
       val gaussians = Array.tabulate(weight.length){
         i => new MultivariateGaussian(mean(i), sigma(i))
-      }      
+      }
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data).map(Vectors.dense)
   }
@@ -428,7 +430,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -459,7 +461,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd)
+    val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -494,7 +496,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
     new Normalizer(p).transform(rdd)
   }
-  
+
   /**
    * Java stub for StandardScaler.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
@@ -516,6 +518,16 @@ private[python] class PythonMLLibAPI extends Serializable {
    */
   def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
     new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for PCA.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitPCA(k: Int, data: JavaRDD[Vector]): PCAModel = {
+    new PCA(k).fit(data.rdd)
   }
 
   /**
@@ -685,12 +697,14 @@ private[python] class PythonMLLibAPI extends Serializable {
       lossStr: String,
       numIterations: Int,
       learningRate: Double,
-      maxDepth: Int): GradientBoostedTreesModel = {
+      maxDepth: Int,
+      maxBins: Int): GradientBoostedTreesModel = {
     val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
     boostingStrategy.setLoss(Losses.fromString(lossStr))
     boostingStrategy.setNumIterations(numIterations)
     boostingStrategy.setLearningRate(learningRate)
     boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.setMaxBins(maxBins)
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
 
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
@@ -699,6 +713,14 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       cached.unpersist(blocking = false)
     }
+  }
+
+  def elementwiseProductVector(scalingVector: Vector, vector: Vector): Vector = {
+    new ElementwiseProduct(scalingVector).transform(vector)
+  }
+
+  def elementwiseProductVector(scalingVector: Vector, vector: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new ElementwiseProduct(scalingVector).transform(vector)
   }
 
   /**
@@ -945,7 +967,60 @@ private[python] class PythonMLLibAPI extends Serializable {
       r => (r.getSeq(0).toArray[Any], r.getSeq(1).toArray[Any])))
   }
 
+  /**
+   * Java stub for the estimate method of KernelDensity
+   */
+  def estimateKernelDensity(
+      sample: JavaRDD[Double],
+      bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
+    new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
+      points.asScala.toArray)
+  }
 
+  /**
+   * Java stub for the update method of StreamingKMeansModel.
+   */
+  def updateStreamingKMeansModel(
+      clusterCenters: JList[Vector],
+      clusterWeights: JList[Double],
+      data: JavaRDD[Vector],
+      decayFactor: Double,
+      timeUnit: String): JList[Object] = {
+    val model = new StreamingKMeansModel(
+      clusterCenters.asScala.toArray, clusterWeights.asScala.toArray)
+        .update(data, decayFactor, timeUnit)
+      List[AnyRef](model.clusterCenters, Vectors.dense(model.clusterWeights)).asJava
+  }
+
+  /**
+   * Wrapper around the generateLinearInput method of LinearDataGenerator.
+   */
+  def generateLinearInputWrapper(
+      intercept: Double,
+      weights: JList[Double],
+      xMean: JList[Double],
+      xVariance: JList[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Array[LabeledPoint] = {
+    LinearDataGenerator.generateLinearInput(
+      intercept, weights.asScala.toArray, xMean.asScala.toArray,
+      xVariance.asScala.toArray, nPoints, seed, eps).toArray
+  }
+
+  /**
+   * Wrapper around the generateLinearRDD method of LinearDataGenerator.
+   */
+  def generateLinearRDDWrapper(
+      sc: JavaSparkContext,
+      nexamples: Int,
+      nfeatures: Int,
+      eps: Double,
+      nparts: Int,
+      intercept: Double): JavaRDD[LabeledPoint] = {
+    LinearDataGenerator.generateLinearRDD(
+      sc, nexamples, nfeatures, eps, nparts, intercept)
+  }
 }
 
 /**
@@ -1242,7 +1317,7 @@ private[spark] object SerDe extends Serializable {
   }
 
   /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
-  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]]  = {
+  def fromTuple2RDD(rdd: RDD[(Any, Any)]): RDD[Array[Any]] = {
     rdd.map(x => Array(x._1, x._2))
   }
 
