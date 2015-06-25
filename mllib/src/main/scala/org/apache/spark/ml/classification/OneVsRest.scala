@@ -106,13 +106,12 @@ final class OneVsRestModel private[ml] (
 
         // add temporary column to store intermediate scores and update
         val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
-        val update: (Map[Int, Double], Vector) => Map[Int, Double] =
-          (predictions: Map[Int, Double], prediction: Vector) => {
-            predictions + ((index, prediction(1)))
-          }
-        val updateUDF = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
+        val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
+          predictions + ((index, prediction(1)))
+        }
         val transformedDataset = model.transform(df).select(columns : _*)
-        val updatedDataset = transformedDataset.withColumn(tmpColName, updateUDF)
+        val updatedDataset = transformedDataset
+          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
@@ -124,13 +123,13 @@ final class OneVsRestModel private[ml] (
     }
 
     // output the index of the classifier with highest confidence as prediction
-    val label: Map[Int, Double] => Double = (predictions: Map[Int, Double]) => {
+    val labelUDF = udf { (predictions: Map[Int, Double]) =>
       predictions.maxBy(_._2)._1.toDouble
     }
 
     // output label and label metadata as prediction
-    val labelUDF = udf(label).apply(col(accColName))
-    aggregatedDataset.withColumn($(predictionCol), labelUDF.as($(predictionCol), labelMetadata))
+    aggregatedDataset
+      .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
       .drop(accColName)
   }
 
@@ -175,34 +174,32 @@ final class OneVsRest(override val uid: String)
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
 
-    val multiClassLabeled = dataset.select($(labelCol), $(featuresCol))
+    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
-      multiClassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+      multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
     // create k columns, one for each binary classifier.
     val models = Range(0, numClasses).par.map { index =>
-
-      val label: Double => Double = (label: Double) => {
+      val labelUDF = udf { (label: Double) =>
         if (label.toInt == index) 1.0 else 0.0
       }
 
       // generate new label metadata for the binary problem.
       // TODO: use when ... otherwise after SPARK-7321 is merged
-      val labelUDF = udf(label).apply(col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelColName = "mc2b$" + index
-      val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
-      val trainingDataset = multiClassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
+      val labelUDFWithNewMeta = labelUDF(col($(labelCol))).as(labelColName, newLabelMeta)
+      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
       val classifier = getClassifier
       classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
     }.toArray[ClassificationModel[_, _]]
 
     if (handlePersistence) {
-      multiClassLabeled.unpersist()
+      multiclassLabeled.unpersist()
     }
 
     // extract label metadata from label column if present, or create a nominal attribute
