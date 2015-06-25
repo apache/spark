@@ -31,10 +31,10 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: DeveloperApi ::
- * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
+ * Common params for [[TrainValidatorSplitParams]] and [[CrossValidatorParams]].
  */
 @DeveloperApi
-private[ml] trait ValidationParams extends Params {
+private[ml] trait ValidatorParams extends Params {
 
   /**
    * param for the estimator to be validated
@@ -71,10 +71,10 @@ private[ml] trait ValidationParams extends Params {
  * Abstract class for validation approaches for hyper-parameter tuning.
  */
 @DeveloperApi
-private[ml] abstract class Validation[M <: Model[M], V <: Validation[M, _] : ClassTag]
+private[ml] abstract class Validator[M <: Model[M], V <: Validator[M, _] : ClassTag]
   (override val uid: String)
   extends Estimator[M]
-  with Logging with ValidationParams {
+  with Logging with ValidatorParams {
 
   def this() = this(Identifiable.randomUID("cv"))
 
@@ -170,7 +170,7 @@ private[ml] abstract class Validation[M <: Model[M], V <: Validation[M, _] : Cla
  * Model from validation.
  */
 @DeveloperApi
-private[ml] abstract class ValidationModel[M <: Model[M]] private[ml] (
+private[ml] abstract class ValidatorModel[M <: Model[M]] private[ml] (
     override val uid: String,
     val bestModel: Model[_],
     val avgMetrics: Array[Double])

@@ -31,7 +31,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
-private[ml] trait CrossValidatorParams extends ValidationParams {
+private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
@@ -52,7 +52,7 @@ private[ml] trait CrossValidatorParams extends ValidationParams {
  */
 @Experimental
 class CrossValidator(uid: String)
-  extends Validation[CrossValidatorModel, CrossValidator](uid)
+  extends Validator[CrossValidatorModel, CrossValidator](uid)
   with CrossValidatorParams with Logging {
 
   def this() = this(Identifiable.randomUID("cv"))
@@ -80,11 +80,11 @@ class CrossValidator(uid: String)
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val newMetrics = measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
+      val metricsPerSplit = measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
 
       var i = 0
       while (i < numModels) {
-        metrics(i) += newMetrics(i)
+        metrics(i) += metricsPerSplit(i)
         i += 1
       }
     }
@@ -110,7 +110,7 @@ class CrossValidatorModel private[ml] (
     uid: String,
     bestModel: Model[_],
     avgMetrics: Array[Double])
-  extends ValidationModel[CrossValidatorModel](uid, bestModel, avgMetrics)
+  extends ValidatorModel[CrossValidatorModel](uid, bestModel, avgMetrics)
   with CrossValidatorParams {
 
   override def copy(extra: ParamMap): CrossValidatorModel = {

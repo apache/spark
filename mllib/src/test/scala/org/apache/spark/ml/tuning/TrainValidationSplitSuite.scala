@@ -36,7 +36,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val cv = new TrainValidationSplit()
+    val cv = new TrainValidatorSplit()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
@@ -60,7 +60,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(trainer.maxIter, Array(0, 10))
       .build()
     val eval = new RegressionEvaluator()
-    val cv = new TrainValidationSplit()
+    val cv = new TrainValidatorSplit()
       .setEstimator(trainer)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
@@ -88,7 +88,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .addGrid(est.inputCol, Array("input1", "input2"))
       .build()
 
-    val cv = new TrainValidationSplit()
+    val cv = new TrainValidatorSplit()
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)

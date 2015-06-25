@@ -27,15 +27,15 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 
 /**
- * Params for [[TrainValidationSplit]] and [[TrainValidationSplitModel]].
+ * Params for [[TrainValidatorSplit]] and [[TrainValidatorSplitModel]].
  */
-private[ml] trait TrainValidationSplitParams extends ValidationParams {
+private[ml] trait TrainValidatorSplitParams extends ValidatorParams {
   /**
    * Param for ratio between train and validation data. Must be between 0 and 1.
    * Default: 0.75
    * @group param
    */
-  val trainRatio: DoubleParam = new DoubleParam(this, "numFolds",
+  val trainRatio: DoubleParam = new DoubleParam(this, "trainRatio",
     "ratio between training set and validation set (>= 0 && <= 1)", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
@@ -52,9 +52,9 @@ private[ml] trait TrainValidationSplitParams extends ValidationParams {
  * Similar to CrossValidator, but only splits the set once.
  */
 @Experimental
-class TrainValidationSplit(uid: String)
-  extends Validation[TrainValidationSplitModel, TrainValidationSplit](uid)
-  with TrainValidationSplitParams with Logging {
+class TrainValidatorSplit(uid: String)
+  extends Validator[TrainValidatorSplitModel, TrainValidatorSplit](uid)
+  with TrainValidatorSplitParams with Logging {
 
   def this() = this(Identifiable.randomUID("cv"))
 
@@ -72,17 +72,17 @@ class TrainValidationSplit(uid: String)
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
 
-    val splits = MLUtils.sample(dataset.rdd, $(trainRatio), 1)
-    val trainingDataset = sqlCtx.createDataFrame(splits._1, schema).cache()
-    val validationDataset = sqlCtx.createDataFrame(splits._2, schema).cache()
+    val (training, validation) = MLUtils.sample(dataset.rdd, $(trainRatio), 1)
+    val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
+    val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
     measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
   }
 
   override protected[ml] def createModel(
       uid: String,
       bestModel: Model[_],
-      metrics: Array[Double]): TrainValidationSplitModel = {
-    copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
+      metrics: Array[Double]): TrainValidatorSplitModel = {
+    copyValues(new TrainValidatorSplitModel(uid, bestModel, metrics).setParent(this))
   }
 }
 
@@ -91,15 +91,15 @@ class TrainValidationSplit(uid: String)
  * Model from train validation split.
  */
 @Experimental
-class TrainValidationSplitModel private[ml] (
+class TrainValidatorSplitModel private[ml] (
     uid: String,
     bestModel: Model[_],
     avgMetrics: Array[Double])
-  extends ValidationModel[TrainValidationSplitModel](uid, bestModel, avgMetrics)
-  with TrainValidationSplitParams {
+  extends ValidatorModel[TrainValidatorSplitModel](uid, bestModel, avgMetrics)
+  with TrainValidatorSplitParams {
 
-  override def copy(extra: ParamMap): TrainValidationSplitModel = {
-    val copied = new TrainValidationSplitModel (
+  override def copy(extra: ParamMap): TrainValidatorSplitModel = {
+    val copied = new TrainValidatorSplitModel (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
