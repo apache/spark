@@ -74,7 +74,7 @@ launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
     fileSeperator  <- determinefileSeperator()    
-    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName, fileSeperator)
+    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName, fsep = fileSeperator)
   } else {
     sparkSubmitBin <- sparkSubmitBinName
   }
