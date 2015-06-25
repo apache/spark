@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.hadoop.hive.conf.HiveConf
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -60,6 +61,12 @@ case class DropTable(
     val databaseName = dbAndTableName
       .lift(dbAndTableName.size -2)
       .getOrElse(hiveContext.catalog.client.currentDatabase)
+    //tempDbname is used to pass the test "drop_partitions_filter"
+    //when we set hive.exec.drop.ignorenonexistent=false and run "drop table dbname.tablename"
+    //Hive will throws out Exception (This is a bug of Hive)
+    val tempDbname =
+      if (hiveContext.hiveconf.getBoolVar(HiveConf.ConfVars.DROPIGNORESNONEXISTENT))
+      s"$databaseName."else ""
     try {
       hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(dbAndTableName.last))
     } catch {
@@ -72,7 +79,7 @@ case class DropTable(
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
     hiveContext.invalidateTable(dbAndTableName.last)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$databaseName.${dbAndTableName.last}")
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tempDbname${dbAndTableName.last}")
     hiveContext.catalog.unregisterTable(Seq(databaseName, dbAndTableName.last))
     Seq.empty[InternalRow]
   }
