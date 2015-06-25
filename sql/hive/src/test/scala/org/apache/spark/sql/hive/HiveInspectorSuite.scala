@@ -26,12 +26,13 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.LongWritable
-import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{Literal, InternalRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 
-class HiveInspectorSuite extends FunSuite with HiveInspectors {
+class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
     val udaf = new UDAFPercentile.PercentileLongEvaluator()
     udaf.init()
@@ -45,7 +46,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       classOf[UDAFPercentile.State],
       ObjectInspectorOptions.JAVA).asInstanceOf[StructObjectInspector]
 
-    val a = unwrap(state, soi).asInstanceOf[Row]
+    val a = unwrap(state, soi).asInstanceOf[InternalRow]
     val b = wrap(a, soi).asInstanceOf[UDAFPercentile.State]
 
     val sfCounts = soi.getStructFieldRef("counts")
@@ -78,10 +79,10 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     Literal(java.sql.Date.valueOf("2014-09-23")) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
-    Literal(Array[Byte](1,2,3)) ::
-    Literal.create(Seq[Int](1,2,3), ArrayType(IntegerType)) ::
-    Literal.create(Map[Int, Int](1->2, 2->1), MapType(IntegerType, IntegerType)) ::
-    Literal.create(Row(1,2.0d,3.0f),
+    Literal(Array[Byte](1, 2, 3)) ::
+    Literal.create(Seq[Int](1, 2, 3), ArrayType(IntegerType)) ::
+    Literal.create(Map[Int, Int](1 -> 2, 2 -> 1), MapType(IntegerType, IntegerType)) ::
+    Literal.create(Row(1, 2.0d, 3.0f),
       StructType(StructField("c1", IntegerType) ::
       StructField("c2", DoubleType) ::
       StructField("c3", FloatType) :: Nil)) ::
@@ -111,8 +112,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        java.util.Arrays.asList(fields.map(f => f.name) :_*),
-        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) :_*))
+        java.util.Arrays.asList(fields.map(f => f.name) : _*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) : _*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {
@@ -127,7 +128,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     }
   }
 
-  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+  def checkValues(row1: Seq[Any], row2: InternalRow): Unit = {
     row1.zip(row2.toSeq).foreach { case (r1, r2) =>
       checkValue(r1, r2)
     }
@@ -203,7 +204,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     })
 
     checkValues(row,
-      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+      unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[InternalRow])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 

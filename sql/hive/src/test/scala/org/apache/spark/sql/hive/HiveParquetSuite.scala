@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.parquet.ParquetTest
-import org.apache.spark.sql.{QueryTest, SQLConf}
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 case class Cases(lower: String, UPPER: String)
 
@@ -82,11 +81,11 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
     }
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
     run("Parquet data source enabled")
   }
 
-  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "false") {
     run("Parquet data source disabled")
   }
 }

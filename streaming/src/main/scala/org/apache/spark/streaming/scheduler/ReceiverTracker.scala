@@ -21,10 +21,12 @@ import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl,
+  StopReceiver}
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -230,7 +232,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   class ReceiverLauncher {
     @transient val env = ssc.env
     @volatile @transient private var running = false
-    @transient val thread  = new Thread() {
+    @transient val thread = new Thread() {
       override def run() {
         try {
           SparkEnv.set(env)
@@ -294,7 +296,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
 
       val checkpointDirOption = Option(ssc.checkpointDir)
-      val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
+      val serializableHadoopConf =
+        new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
       val startReceiver = (iterator: Iterator[Receiver[_]]) => {

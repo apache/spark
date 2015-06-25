@@ -150,7 +150,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   }
 
   override def isCompleted: Boolean = jobWaiter.jobFinished
-  
+
   override def isCancelled: Boolean = _cancelled
 
   override def value: Option[Try[T]] = {

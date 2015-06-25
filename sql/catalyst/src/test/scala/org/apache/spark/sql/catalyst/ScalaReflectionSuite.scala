@@ -20,9 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -75,8 +73,8 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
-class ScalaReflectionSuite extends FunSuite {
-  import ScalaReflection._
+class ScalaReflectionSuite extends SparkFunSuite {
+  import org.apache.spark.sql.catalyst.ScalaReflection._
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -253,14 +251,14 @@ class ScalaReflectionSuite extends FunSuite {
     }
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
+    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1, 2, 3))))
   }
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
@@ -268,9 +266,9 @@ class ScalaReflectionSuite extends FunSuite {
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
     val dataType = schemaFor[OptionalData].dataType
-    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      Row(1, 1, 1, 1, 1, 1, true))
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      InternalRow(1, 1, 1, 1, 1, 1, true))
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("infer schema from case class with multiple constructors") {

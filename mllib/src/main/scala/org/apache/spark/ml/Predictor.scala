@@ -58,7 +58,6 @@ private[ml] trait PredictorParams extends Params
 
 /**
  * :: DeveloperApi ::
- *
  * Abstraction for prediction problems (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -91,9 +90,7 @@ abstract class Predictor[
     copyValues(train(dataset).setParent(this))
   }
 
-  override def copy(extra: ParamMap): Learner = {
-    super.copy(extra).asInstanceOf[Learner]
-  }
+  override def copy(extra: ParamMap): Learner
 
   /**
    * Train a model using the given dataset and parameters.
@@ -113,7 +110,6 @@ abstract class Predictor[
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  @DeveloperApi
   private[ml] def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
@@ -134,7 +130,6 @@ abstract class Predictor[
 
 /**
  * :: DeveloperApi ::
- *
  * Abstraction for a model for prediction tasks (regression and classification).
  *
  * @tparam FeaturesType  Type of features.

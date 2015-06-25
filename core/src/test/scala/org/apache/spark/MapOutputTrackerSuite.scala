@@ -19,14 +19,13 @@ package org.apache.spark
 
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, isA}
-import org.scalatest.FunSuite
 
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 
-class MapOutputTrackerSuite extends FunSuite {
+class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
@@ -204,6 +203,41 @@ class MapOutputTrackerSuite extends FunSuite {
     verify(rpcCallContext).sendFailure(isA(classOf[SparkException]))
 
 //    masterTracker.stop() // this throws an exception
+    rpcEnv.shutdown()
+  }
+
+  test("getLocationsWithLargestOutputs with multiple outputs in same machine") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = new MapOutputTrackerMaster(conf)
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    // Setup 3 map tasks
+    // on hostA with output size 2
+    // on hostA with output size 2
+    // on hostB with output size 3
+    tracker.registerShuffle(10, 3)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+        Array(2L)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("a", "hostA", 1000),
+        Array(2L)))
+    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("b", "hostB", 1000),
+        Array(3L)))
+
+    // When the threshold is 50%, only host A should be returned as a preferred location
+    // as it has 4 out of 7 bytes of output.
+    val topLocs50 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.5)
+    assert(topLocs50.nonEmpty)
+    assert(topLocs50.get.size === 1)
+    assert(topLocs50.get.head === BlockManagerId("a", "hostA", 1000))
+
+    // When the threshold is 20%, both hosts should be returned as preferred locations.
+    val topLocs20 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.2)
+    assert(topLocs20.nonEmpty)
+    assert(topLocs20.get.size === 2)
+    assert(topLocs20.get.toSet ===
+           Seq(BlockManagerId("a", "hostA", 1000), BlockManagerId("b", "hostB", 1000)).toSet)
+
+    tracker.stop()
     rpcEnv.shutdown()
   }
 }

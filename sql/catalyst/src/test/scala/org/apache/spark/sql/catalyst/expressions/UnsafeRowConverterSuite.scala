@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
-class UnsafeRowConverterSuite extends FunSuite with Matchers {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
   test("basic conversion with only primitive types") {
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
@@ -49,19 +52,19 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
     unsafeRow.getInt(2) should be (2)
   }
 
-  test("basic conversion with primitive and string types") {
-    val fieldTypes: Array[DataType] = Array(LongType, StringType, StringType)
+  test("basic conversion with primitive, string and binary types") {
+    val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
     val converter = new UnsafeRowConverter(fieldTypes)
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
     row.setString(1, "Hello")
-    row.setString(2, "World")
+    row.update(2, "World".getBytes)
 
     val sizeRequired: Int = converter.getSizeRequirement(row)
     sizeRequired should be (8 + (8 * 3) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length + 8) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord("World".getBytes.length + 8))
+      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length) +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord("World".getBytes.length))
     val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
     val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
     numBytesWritten should be (sizeRequired)
@@ -70,7 +73,35 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
     unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
     unsafeRow.getLong(0) should be (0)
     unsafeRow.getString(1) should be ("Hello")
-    unsafeRow.getString(2) should be ("World")
+    unsafeRow.getBinary(2) should be ("World".getBytes)
+  }
+
+  test("basic conversion with primitive, string, date and timestamp types") {
+    val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
+    val converter = new UnsafeRowConverter(fieldTypes)
+
+    val row = new SpecificMutableRow(fieldTypes)
+    row.setLong(0, 0)
+    row.setString(1, "Hello")
+    row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
+    row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
+
+    val sizeRequired: Int = converter.getSizeRequirement(row)
+    sizeRequired should be (8 + (8 * 4) +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord("Hello".getBytes.length))
+    val buffer: Array[Long] = new Array[Long](sizeRequired / 8)
+    val numBytesWritten = converter.writeRow(row, buffer, PlatformDependent.LONG_ARRAY_OFFSET)
+    numBytesWritten should be (sizeRequired)
+
+    val unsafeRow = new UnsafeRow()
+    unsafeRow.pointTo(buffer, PlatformDependent.LONG_ARRAY_OFFSET, fieldTypes.length, null)
+    unsafeRow.getLong(0) should be (0)
+    unsafeRow.getString(1) should be ("Hello")
+    // Date is represented as Int in unsafeRow
+    DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) should be (Date.valueOf("1970-01-01"))
+    // Timestamp is represented as Long in unsafeRow
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
+      (Timestamp.valueOf("2015-05-08 08:10:25"))
   }
 
   test("null handling") {
@@ -85,7 +116,7 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
       DoubleType)
     val converter = new UnsafeRowConverter(fieldTypes)
 
-    val rowWithAllNullColumns: Row = {
+    val rowWithAllNullColumns: InternalRow = {
       val r = new SpecificMutableRow(fieldTypes)
       for (i <- 0 to fieldTypes.length - 1) {
         r.setNullAt(i)
@@ -116,7 +147,7 @@ class UnsafeRowConverterSuite extends FunSuite with Matchers {
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
     // columns, then the serialized row representation should be identical to what we would get by
     // creating an entirely null row via the converter
-    val rowWithNoNullColumns: Row = {
+    val rowWithNoNullColumns: InternalRow = {
       val r = new SpecificMutableRow(fieldTypes)
       r.setNullAt(0)
       r.setBoolean(1, false)

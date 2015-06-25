@@ -24,17 +24,17 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class UnionPushdownSuite extends PlanTest {
+class UnionPushDownSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
-        UnionPushdown) :: Nil
+        UnionPushDown) :: Nil
   }
 
-  val testRelation =  LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 =  LocalRelation('d.int, 'e.int, 'f.int)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
   val testUnion = Union(testRelation, testRelation2)
 
   test("union: filter to each side") {

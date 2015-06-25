@@ -49,7 +49,7 @@ import scala.collection.JavaConversions._
 object TestHive
   extends TestHiveContext(
     new SparkContext(
-      "local[2]",
+      System.getProperty("spark.sql.test.master", "local[32]"),
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
@@ -82,9 +82,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
+  private lazy val temporaryConfig = newTemporaryConfiguration()
+
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
@@ -110,12 +112,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
       // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
-      override def caseSensitiveAnalysis: Boolean =
-        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
     }
   }
 
@@ -187,7 +188,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }
   }
 
-  case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -251,8 +252,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
       runSqlHive(

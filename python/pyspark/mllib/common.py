@@ -27,7 +27,7 @@ from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-
+from pyspark.sql import DataFrame, SQLContext
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
@@ -98,6 +98,9 @@ def _java2py(sc, r, encoding="bytes"):
         if clsName == 'JavaRDD':
             jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
+
+        if clsName == 'DataFrame':
+            return DataFrame(r, SQLContext(sc))
 
         if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)

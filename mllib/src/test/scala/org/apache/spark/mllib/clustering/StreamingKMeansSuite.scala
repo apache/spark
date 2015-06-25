@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
 
-class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
+class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
 
   override def maxWaitTimeMillis: Int = 30000
 
@@ -131,6 +130,13 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     // 0.8 is the mean of half-normal distribution
     assert(math.abs(c0) ~== 0.8 absTol 0.6)
     assert(math.abs(c1) ~== 0.8 absTol 0.6)
+  }
+
+  test("SPARK-7946 setDecayFactor") {
+    val kMeans = new StreamingKMeans()
+    assert(kMeans.decayFactor === 1.0)
+    kMeans.setDecayFactor(2.0)
+    assert(kMeans.decayFactor === 2.0)
   }
 
   def StreamingKMeansDataGenerator(

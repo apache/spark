@@ -22,7 +22,7 @@ import java.io.PrintStream
 import scala.collection.JavaConversions._
 
 import org.apache.spark.scheduler.StatsReportListener
-import org.apache.spark.sql.hive.{HiveShim, HiveContext}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 
@@ -56,7 +56,7 @@ private[hive] object SparkSQLEnv extends Logging {
       hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
       hiveContext.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
 
-      hiveContext.setConf("spark.sql.hive.version", HiveShim.version)
+      hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
         hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
