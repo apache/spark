@@ -143,8 +143,12 @@ private[stat] object KSTest {
     val results = localData.foldLeft(initAcc) {
       case ((prevMax, prevCt), (minCand, maxCand, ct)) =>
         val adjConst = prevCt / n
-        val dist1 = Math.abs(minCand + adjConst)
-        val dist2 = Math.abs(maxCand + adjConst)
+        val pdist1 = minCand + adjConst
+        val pdist2 = maxCand + adjConst
+        // adjust by 1 / N if pre-constant the value is less than cdf and post-constant
+        // it is greater than or equal to the cdf
+        val dist1 = if (pdist1 >= 0 && minCand < 0) pdist1 + 1 / n else Math.abs(pdist1)
+        val dist2 = if (pdist2 >= 0 && maxCand < 0) pdist2 + 1 / n else Math.abs(pdist2)
         val maxVal = Array(prevMax, dist1, dist2).max
         (maxVal, prevCt + ct)
     }

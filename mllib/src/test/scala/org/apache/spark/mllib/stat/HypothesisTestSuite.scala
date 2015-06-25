@@ -185,8 +185,8 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledNorm.collect())
     val referencePVal1 = 1 - ksTest.cdf(referenceStat1, n)
     // Verify vs apache math commons ks test
-    assert(result1.statistic ~== referenceStat1 relTol 1e-3)
-    assert(result1.pValue ~== referencePVal1 relTol 1e-3)
+    assert(result1.statistic === referenceStat1)
+    assert(result1.pValue === referencePVal1)
     // Cannot reject null hypothesis
     assert(result1.pValue > pThreshold)
 
@@ -195,8 +195,8 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val referenceStat2 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledExp.collect())
     val referencePVal2 = 1 - ksTest.cdf(referenceStat2, n)
     // verify vs apache math commons ks test
-    assert(result2.statistic ~== referenceStat2 relTol 1e-3)
-    assert(result2.pValue ~== referencePVal2 relTol 1e-3)
+    assert(result2.statistic === referenceStat2)
+    assert(result2.pValue === referencePVal2)
     // reject null hypothesis
     assert(result2.pValue < pThreshold)
 
@@ -211,8 +211,8 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
       sampledExp.collect())
     val referencePVal3 = 1 - ksTest.cdf(referenceStat3, sampledNorm.count().toInt)
     // verify vs apache math commons ks test
-    assert(result3.statistic ~== referenceStat3 relTol 1e-3)
-    assert(result3.pValue ~== referencePVal3 relTol 1e-3)
+    assert(result3.statistic === referenceStat3)
+    assert(result3.pValue === referencePVal3)
     // reject null hypothesis
     assert(result3.pValue < pThreshold)
   }
