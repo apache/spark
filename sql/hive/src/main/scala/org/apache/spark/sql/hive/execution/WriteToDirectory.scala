@@ -49,7 +49,7 @@ case class WriteToDirectory(
   @transient private lazy val context = new Context(hiveContext.hiveconf)
   @transient lazy val outputClass = newSerializer(desc).getSerializedClass
 
-  def output:Seq[Attribute] = child.output
+  def output: Seq[Attribute] = child.output
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val jobConf = new JobConf(hiveContext.hiveconf)
@@ -58,7 +58,7 @@ case class WriteToDirectory(
 
     val (tmpPath, destPath) = if (isLocal) {
       val localFileSystem = FileSystem.getLocal(jobConf)
-      val localPath =  localFileSystem.makeQualified(targetPath)
+      val localPath = localFileSystem.makeQualified(targetPath)
       // remove old dir
       if (localFileSystem.exists(localPath)) {
         localFileSystem.delete(localPath, true)
@@ -112,5 +112,6 @@ case class WriteToDirectory(
     Seq.empty[InternalRow]
   }
 
-  override def doExecute(): RDD[InternalRow] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  override def doExecute(): RDD[InternalRow] =
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }

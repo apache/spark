@@ -1704,7 +1704,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       case Token("TOK_TBLSEQUENCEFILE", Nil) =>
         createTableDesc.setOutputFormat("org.apache.hadoop.mapred.SequenceFileOutputFormat")
 
-      case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil)=>
+      case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil) =>
         val serdeParams = new java.util.HashMap[String, String]()
         child match {
           case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
