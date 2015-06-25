@@ -44,11 +44,19 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val sparkConfPairs = ssc.conf.getAll
 
   def createSparkConf(): SparkConf = {
+    val reloadConfs = List(
+      "spark.master",
+      "spark.yarn.keytab",
+      "spark.yarn.principal")
+
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
-    val newMasterOption = new SparkConf(loadDefaults = true).getOption("spark.master")
-    newMasterOption.foreach { newMaster => newSparkConf.setMaster(newMaster) }
+    val newReloadConf = new SparkConf(loadDefaults = true)
+    reloadConfs.foreach { conf =>
+      newReloadConf.getOption(conf)
+        .foreach(confValue => newSparkConf.set(conf, confValue))
+    }
     newSparkConf
   }
 
