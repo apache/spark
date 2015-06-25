@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
 import itertools
 import os
 import re
@@ -77,7 +78,8 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
     else:
         diff_target = target_ref
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target])
+    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
+        universal_newlines=True)
     # Remove any empty strings
     return [f for f in raw_output.split('\n') if f]
 
@@ -149,7 +151,8 @@ def determine_java_version(java_exe):
     with accessors '.major', '.minor', '.patch', '.update'"""
 
     raw_output = subprocess.check_output([java_exe, "-version"],
-                                         stderr=subprocess.STDOUT)
+                                         stderr=subprocess.STDOUT,
+                                         universal_newlines=True)
     raw_version_str = raw_output.split('\n')[0]  # eg 'java version "1.8.0_25"'
     version_str = raw_version_str.split()[-1].strip('"')  # eg '1.8.0_25'
     version, update = version_str.split('_')  # eg ['1.8.0', '25']
@@ -172,10 +175,10 @@ def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
     line_str = '=' * 72
 
-    print
-    print line_str
-    print title
-    print line_str
+    print()
+    print(line_str)
+    print(title)
+    print(line_str)
 
 
 def run_apache_rat_checks():
@@ -202,8 +205,8 @@ def build_spark_documentation():
     jekyll_bin = which("jekyll")
 
     if not jekyll_bin:
-        print "[error] Cannot find a version of `jekyll` on the system; please",
-        print "install one and retry to build documentation."
+        print("[error] Cannot find a version of `jekyll` on the system; please"
+              " install one and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
         run_cmd([jekyll_bin, "build"])
@@ -239,7 +242,7 @@ def exec_sbt(sbt_args=()):
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, ''):
         if not sbt_output_filter.match(line):
-            print line,
+            print(line, end='')
     retcode = sbt_proc.wait()
 
     if retcode > 0:
@@ -262,8 +265,8 @@ def get_hadoop_profiles(hadoop_version):
     if hadoop_version in sbt_maven_hadoop_profiles:
         return sbt_maven_hadoop_profiles[hadoop_version]
     else:
-        print "[error] Could not find", hadoop_version, "in the list. Valid options",
-        print "are", sbt_maven_hadoop_profiles.keys()
+        print("[error] Could not find", hadoop_version, "in the list. Valid options"
+              " are", sbt_maven_hadoop_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -273,8 +276,8 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: "
+          " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
@@ -287,8 +290,8 @@ def build_spark_sbt(hadoop_version):
                  "streaming-kafka-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print "[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: "
+          " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
@@ -316,8 +319,8 @@ def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print "[info] Running Spark tests using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Running Spark tests using Maven with these arguments: "
+          " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
@@ -331,8 +334,8 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     profiles_and_goals = test_profiles + list(sbt_test_goals)
 
-    print "[info] Running Spark tests using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print("[info] Running Spark tests using SBT with these arguments: "
+          " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
@@ -367,14 +370,14 @@ def run_sparkr_tests():
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
-        print "Ignoring SparkR tests as R was not found in PATH"
+        print("Ignoring SparkR tests as R was not found in PATH")
 
 
 def main():
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
-        print "[error] Cannot determine your home directory as an absolute path;",
-        print "ensure the $HOME environment variable is set properly."
+        print("[error] Cannot determine your home directory as an absolute path;"
+             " ensure the $HOME environment variable is set properly.")
         sys.exit(1)
 
     os.chdir(SPARK_HOME)
@@ -388,14 +391,14 @@ def main():
     java_exe = determine_java_executable()
 
     if not java_exe:
-        print "[error] Cannot find a version of `java` on the system; please",
-        print "install one and retry."
+        print("[error] Cannot find a version of `java` on the system; please"
+              " install one and retry.")
         sys.exit(2)
 
     java_version = determine_java_version(java_exe)
 
     if java_version.minor < 8:
-        print "[warn] Java 8 tests will not run because JDK version is < 1.8."
+        print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
@@ -411,8 +414,8 @@ def main():
         hadoop_version = "hadoop2.3"
         test_env = "local"
 
-    print "[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
-    print "under environment", test_env
+    print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
+          "under environment", test_env)
 
     changed_modules = None
     changed_files = None
@@ -422,7 +425,8 @@ def main():
         changed_modules = determine_modules_for_files(changed_files)
     if not changed_modules:
         changed_modules = [modules.root]
-    print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
+    print("[info] Found the following changed modules:",
+          ", ".join(x.name for x in changed_modules))
 
     test_modules = determine_modules_to_test(changed_modules)
 
