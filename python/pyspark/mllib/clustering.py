@@ -101,9 +101,6 @@ class KMeansModel(Saveable, Loader):
 
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
-        if isinstance(x, RDD):
-            return x.map(lambda v: self.predict(v))
-
         best = 0
         best_distance = float("inf")
         if isinstance(x, RDD):
