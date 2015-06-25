@@ -107,29 +107,48 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
         // Parquet doesn't allow column names with spaces, have to add an alias here
         .select($"_1" cast decimal as "dec")
 
-    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
-      withTempPath { dir =>
-        val data = makeDecimalRDD(DecimalType(precision, scale))
-        data.write.parquet(dir.getCanonicalPath)
-        checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+    withSQLConf(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "false")({
+      for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
+        withTempPath { dir =>
+          val data = makeDecimalRDD(DecimalType(precision, scale))
+          data.write.parquet(dir.getCanonicalPath)
+          checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+        }
       }
-    }
 
-    // Decimals with precision above 18 are not yet supported
-    intercept[Throwable] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType(19, 10)).write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).collect()
+      // Decimals with precision above 18 are not supported in compatibility mode
+      intercept[Throwable] {
+        withTempPath { dir =>
+          makeDecimalRDD(DecimalType(19, 10)).write.parquet(dir.getCanonicalPath)
+          sqlContext.read.parquet(dir.getCanonicalPath).collect()
+        }
       }
-    }
 
-    // Unlimited-length decimals are not yet supported
-    intercept[Throwable] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).collect()
+      // Unlimited-length decimals are not yet supported
+      intercept[Throwable] {
+        withTempPath { dir =>
+          makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
+          sqlContext.read.parquet(dir.getCanonicalPath).collect()
+        }
       }
-    }
+    })
+    withSQLConf(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")({
+      for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (6, 3), (18, 17), (19, 0), (38, 37),
+        (90, 0))) {
+        withTempPath { dir =>
+          val data = makeDecimalRDD(DecimalType(precision, scale))
+          data.write.parquet(dir.getCanonicalPath)
+          checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+        }
+      }
+
+      intercept[Throwable] {
+        withTempPath { dir =>
+          makeDecimalRDD(DecimalType.Unlimited).write.parquet(dir.getCanonicalPath)
+          sqlContext.read.parquet(dir.getCanonicalPath).collect()
+        }
+      }
+    })
   }
 
   test("date type") {
@@ -302,7 +321,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
       val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
       val actualSchema = metaData.getFileMetaData.getSchema
-      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
+      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes, configuration)
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)

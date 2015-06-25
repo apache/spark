@@ -388,6 +388,8 @@ private[parquet] class CatalystSchemaConverter(
 
       // Spark 1.4.x and prior versions only support decimals with a maximum precision of 18 and
       // always store decimals in fixed-length byte arrays.
+      // Always storing FIXED_LEN_BYTE_ARRAY is thus compatible with spark <= 1.4.x, except for
+      // precisions > 18.
       case DecimalType.Fixed(precision, scale)
         if precision <= maxPrecisionForBytes(8) && !followParquetFormatSpec =>
         Types
@@ -411,7 +413,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT32 for 1 <= precision <= 9
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(4) && followParquetFormatSpec =>
+        if followParquetFormatSpec && precision <= maxPrecisionForBytes(4) =>
         Types
           .primitive(INT32, repetition)
           .as(DECIMAL)
@@ -421,7 +423,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT64 for 1 <= precision <= 18
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && followParquetFormatSpec =>
+        if followParquetFormatSpec && precision <= maxPrecisionForBytes(8) =>
         Types
           .primitive(INT64, repetition)
           .as(DECIMAL)
@@ -553,14 +555,25 @@ private[parquet] class CatalystSchemaConverter(
       .asInstanceOf[Int]
   }
 
-  // Min byte counts needed to store decimals with various precisions
-  private val minBytesForPrecision: Array[Int] = Array.tabulate(38) { precision =>
+  private def minBytesForPrecisionCompute(precision : Int) : Int = {
     var numBytes = 1
     while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
       numBytes += 1
     }
     numBytes
   }
+
+  private val minBytesForPrecisionStatic: Array[Int] = Array.tabulate(39) {
+    minBytesForPrecisionCompute
+  }
+
+  // Min byte counts needed to store decimals with various precisions
+  private def minBytesForPrecision(precision : Int) : Int =
+    if (precision < minBytesForPrecisionStatic.length) {
+      minBytesForPrecisionStatic(precision)
+    } else {
+      minBytesForPrecisionCompute(precision)
+    }
 }
 
 

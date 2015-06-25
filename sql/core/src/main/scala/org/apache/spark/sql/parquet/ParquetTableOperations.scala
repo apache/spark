@@ -206,7 +206,13 @@ private[sql] case class ParquetTableScan(
    * @return Pruned TableScan.
    */
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
-    val success = validateProjection(prunedAttributes)
+    val sc = sqlContext.sparkContext
+    val job = new Job(sc.hadoopConfiguration)
+    ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
+
+    val conf: Configuration = ContextUtil.getConfiguration(job)
+
+    val success = validateProjection(prunedAttributes, conf)
     if (success) {
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)
     } else {
@@ -221,9 +227,9 @@ private[sql] case class ParquetTableScan(
    * @param projection The candidate projection.
    * @return True if the projection is valid, false otherwise.
    */
-  private def validateProjection(projection: Seq[Attribute]): Boolean = {
+  private def validateProjection(projection: Seq[Attribute], conf : Configuration): Boolean = {
     val original: MessageType = relation.parquetSchema
-    val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection)
+    val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection, conf)
     Try(original.checkContains(candidate)).isSuccess
   }
 }
