@@ -28,7 +28,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.fpm.FPGrowth;
 import org.apache.spark.mllib.fpm.FPGrowthModel;
-import org.apache.spark.mllib.fpm.FreqItemset;
 
 /**
  * Java example for mining frequent itemsets using FP-growth.
@@ -70,7 +69,7 @@ public class JavaFPGrowthExample {
       .setNumPartitions(numPartition)
       .run(transactions);
 
-    for (FreqItemset<String> s: model.freqItemsets().toJavaRDD().collect()) {
+    for (FPGrowth.FreqItemset<String> s: model.freqItemsets().toJavaRDD().collect()) {
       System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
     }
 

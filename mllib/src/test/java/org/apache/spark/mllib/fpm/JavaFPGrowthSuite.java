@@ -61,10 +61,10 @@ public class JavaFPGrowthSuite implements Serializable {
       .setNumPartitions(2)
       .run(rdd);
 
-    List<FreqItemset<String>> freqItemsets = model.freqItemsets().toJavaRDD().collect();
+    List<FPGrowth.FreqItemset<String>> freqItemsets = model.freqItemsets().toJavaRDD().collect();
     assertEquals(18, freqItemsets.size());
 
-    for (FreqItemset<String> itemset: freqItemsets) {
+    for (FPGrowth.FreqItemset<String> itemset: freqItemsets) {
       // Test return types.
       List<String> items = itemset.javaItems();
       long freq = itemset.freq();
