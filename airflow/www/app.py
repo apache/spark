@@ -105,13 +105,14 @@ def data_profiling_required(f):
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
 
+
 def pygment_html_render(s, lexer=lexers.TextLexer):
     return highlight(
         s,
         lexer(),
         HtmlFormatter(linenos=True),
     )
-    return s
+
 
 def wrapped_markdown(s):
     return '<div class="rich_doc">' + markdown.markdown(s) + "</div>"
@@ -1118,6 +1119,7 @@ class Airflow(BaseView):
             flash("No tasks found", "error")
         session.commit()
         session.close()
+        doc_md = markdown.markdown(dag.doc_md) if hasattr(dag, 'doc_md') else ''
 
         return self.render(
             'airflow/graph.html',
@@ -1126,6 +1128,7 @@ class Airflow(BaseView):
             width=request.args.get('width', "100%"),
             height=request.args.get('height', "800"),
             execution_date=dttm.isoformat(),
+            doc_md=doc_md,
             arrange=arrange,
             operators=sorted(
                 list(set([op.__class__ for op in dag.tasks])),
