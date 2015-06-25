@@ -169,6 +169,7 @@ object SparkSubmitClassLoaderTest extends Logging {
       throw new Exception(s"table t1 should have 10 rows instead of $count rows")
     }
     logInfo("Test finishes.")
+    sc.stop()
   }
 }
 
@@ -206,5 +207,6 @@ object SparkSQLConfTest extends Logging {
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
     hiveContext.tables().collect()
+    sc.stop()
   }
 }
