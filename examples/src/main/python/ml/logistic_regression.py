@@ -54,7 +54,7 @@ if __name__ == "__main__":
     lr.setElasticNetParam(0.8)
 
     # Fit the model
-    lrModel = lr.fit(test)
+    lrModel = lr.fit(training)
 
     predictionAndLabels = lrModel.transform(test).select("prediction", "indexedLabel") \
         .map(lambda x: (x.prediction, x.indexedLabel))
