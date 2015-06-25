@@ -45,6 +45,15 @@ vis.min.css
 cloudpickle.py
 heapq3.py
 join.py
+SparkExprTyper.scala
+SparkILoop.scala
+SparkILoopInit.scala
+SparkIMain.scala
+SparkImports.scala
+SparkJLineCompletion.scala
+SparkJLineReader.scala
+SparkMemberHandlers.scala
+SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
