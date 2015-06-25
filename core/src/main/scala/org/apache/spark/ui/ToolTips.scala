@@ -36,7 +36,8 @@ private[spark] object ToolTips {
   val OUTPUT = "Bytes and records written to Hadoop."
 
   val STORAGE_MEMORY =
-    "Total memory used for caching of the total available memory for caching.This is the storage memory used on the executor."
+    """Memory used / total available memory for storage of data like RDD partitions cached in
+       memory. """
 
   val SHUFFLE_WRITE =
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
