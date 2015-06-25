@@ -210,9 +210,11 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
+    val numRuns = if (initialModel.nonEmpty) runs else 1
+
     val centers = initialModel match {
       case Some(kMeansCenters) => {
-        Array.tabulate(runs)(r => kMeansCenters.clusterCenters
+        Array.tabulate(numRuns)(r => kMeansCenters.clusterCenters
           .map(s => new VectorWithNorm(s, Vectors.norm(s, 2.0))))
       }
       case None => {
@@ -227,10 +229,10 @@ class KMeans private (
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
 
-    val active = Array.fill(runs)(true)
-    val costs = Array.fill(runs)(0.0)
+    val active = Array.fill(numRuns)(true)
+    val costs = Array.fill(numRuns)(0.0)
 
-    var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
+    var activeRuns = new ArrayBuffer[Int] ++ (0 until numRuns)
     var iteration = 0
 
     val iterationStartTime = System.nanoTime()
