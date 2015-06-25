@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkFunSuite, SparkConf, SparkContext}
 import org.mockito.Mockito._
 import org.scalatest._
 import org.scalatest.mock.MockitoSugar
 
-class MesosSchedulerUtilsSuite extends FlatSpec with Matchers with MockitoSugar {
+class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
   // scalastyle:off structural.type
   // this is the documented way of generating fixtures in scalatest
@@ -31,44 +31,74 @@ class MesosSchedulerUtilsSuite extends FlatSpec with Matchers with MockitoSugar 
     val sc = mock[SparkContext]
     when(sc.conf).thenReturn(sparkConf)
   }
+  val utils = new MesosSchedulerUtils { }
   // scalastyle:on structural.type
 
-  "MesosSchedulerUtils" should "use at-least minimum overhead" in new MesosSchedulerUtils {
+  test("use at-least minimum overhead") {
     val f = fixture
     // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(512)
-    calculateTotalMemory(f.sc) shouldBe 896
+    utils.calculateTotalMemory(f.sc) shouldBe 896
   }
 
-  it should "use overhead if it is greater than minimum value" in new MesosSchedulerUtils {
+  test("use overhead if it is greater than minimum value") {
     val f = fixture
     // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(4096)
-    calculateTotalMemory(f.sc) shouldBe 4505
+    utils.calculateTotalMemory(f.sc) shouldBe 4505
   }
 
-  it should "use spark.mesos.executor.memoryOverhead (if set)" in new MesosSchedulerUtils {
+  test("use spark.mesos.executor.memoryOverhead (if set)") {
     val f = fixture
+    val utils = new MesosSchedulerUtils { }
     // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(1024)
     f.sparkConf.set("spark.mesos.executor.memoryOverhead", "512")
-    calculateTotalMemory(f.sc) shouldBe 1536
+    utils.calculateTotalMemory(f.sc) shouldBe 1536
   }
 
-  it should "parse a non-empty constraint string correctly" in new MesosSchedulerUtils {
+  test("parse a non-empty constraint string correctly") {
     val expectedMap = Map(
       "tachyon" -> Set("true"),
       "zone" -> Set("us-east-1a", "us-east-1b")
     )
-    parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b") should be (expectedMap)
+    utils.parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b") should be (expectedMap)
   }
 
-  it should "parse an empty constraint string correctly" in new MesosSchedulerUtils {
-    parseConstraintString("") shouldBe Map()
+  test("parse an empty constraint string correctly") {
+    val utils = new MesosSchedulerUtils { }
+    utils.parseConstraintString("") shouldBe Map()
   }
 
-  it should "throw an exception when the input is malformed" in new MesosSchedulerUtils {
-    an[IllegalArgumentException] should be thrownBy parseConstraintString("tachyon;zone:us-east")
+  test("throw an exception when the input is malformed") {
+    an[IllegalArgumentException] should be thrownBy
+      utils.parseConstraintString("tachyon;zone:us-east")
+  }
+
+  test("empty values for attributes' constraints matches all values") {
+    val constraintsStr = "tachyon:"
+    val parsedConstraints = utils.parseConstraintString(constraintsStr)
+
+    parsedConstraints shouldBe Map("tachyon" -> Set())
+
+    val `offer with no tachyon` = Map("zone" -> Set("us-east-1a", "us-east-1b"))
+    val `offer with tachyon:true` = Map("tachyon" -> Set("true"))
+    val `offer with tachyon:false` = Map("tachyon" -> Set("false"))
+
+    utils.matchesAttributeRequirements(parsedConstraints, `offer with no tachyon`) shouldBe false
+    utils.matchesAttributeRequirements(parsedConstraints, `offer with tachyon:true`) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, `offer with tachyon:false`) shouldBe true
+  }
+
+  test("subset match is performed constraint attributes") {
+    val `constraint with superset` = Map(
+      "tachyon" -> Set("true"),
+      "zone" -> Set("us-east-1a", "us-east-1b", "us-east-1c"))
+
+    val zoneConstraintStr = "tachyon:;zone:us-east-1a,us-east-1c"
+    val parsedConstraints = utils.parseConstraintString(zoneConstraintStr)
+
+    utils.matchesAttributeRequirements(parsedConstraints, `constraint with superset`) shouldBe true
   }
 
 }

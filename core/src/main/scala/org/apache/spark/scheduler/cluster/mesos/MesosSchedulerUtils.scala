@@ -21,7 +21,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 
 import com.google.common.base.Splitter
 import org.apache.mesos.Protos._
@@ -98,12 +97,12 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
 
 
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */
-  private[mesos] def getAttribute(attr: Attribute): (String, Set[String]) =
+  def getAttribute(attr: Attribute): (String, Set[String]) =
     (attr.getName, attr.getText.getValue.split(',').toSet)
 
 
   /** Build a Mesos resource protobuf object */
-  private[mesos] def createResource(resourceName: String, quantity: Double): Protos.Resource = {
+  def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
       .setName(resourceName)
       .setType(Value.Type.SCALAR)
@@ -118,27 +117,24 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * else if attribute is defined and no values are given, simple attribute presence is preformed
    * else if attribute name and value is specified, subset match is performed on slave attributes
    */
-  private[mesos] def matchesAttributeRequirements(
+  def matchesAttributeRequirements(
       slaveOfferConstraints: Map[String, Set[String]],
       offerAttributes: Map[String, Set[String]]): Boolean =
-    if (slaveOfferConstraints.isEmpty) {
-      true
-    } else {
-      slaveOfferConstraints.forall {
-        // offer has the required attribute and subsumes the required values for that attribute
-        case (name, requiredValues) =>
-          // The attributes and their values are case sensitive during comparison
-          // i.e tachyon -> true != Tachyon -> true != tachyon -> True
-          offerAttributes.contains(name) && requiredValues.subsetOf(offerAttributes(name))
+    slaveOfferConstraints.forall {
+      // offer has the required attribute and subsumes the required values for that attribute
+      case (name, requiredValues) =>
+        // The attributes and their values are case sensitive during comparison
+        // i.e tachyon -> true != Tachyon -> true != tachyon -> True
+        offerAttributes.contains(name) && requiredValues.subsetOf(offerAttributes(name))
 
-      }
     }
 
   /**
    * Parses the attributes constraints provided to spark and build a matching data struct:
-   *  Map[<attribute-name>, Set[values-to-match]
+   *  Map[<attribute-name>, Set[values-to-match]]
    *  The constraints are specified as ';' separated key-value pairs where keys and values
-   *  are separated by ':'. The ':' implies equality. For example:
+   *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
+   *  multiple values (comma separated). For example:
    *  {{{
    *  parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b")
    *  // would result in
@@ -152,7 +148,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */
-  private[mesos] def parseConstraintString(constraintsVal: String): Map[String, Set[String]] = {
+  def parseConstraintString(constraintsVal: String): Map[String, Set[String]] = {
     /*
       Based on mesos docs:
       attributes : attribute ( ";" attribute )*
@@ -167,7 +163,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       try {
         Map() ++ mapAsScalaMap(splitter.split(constraintsVal)).map {
           case (k, v) =>
-            if (v == null) {
+            if (v == null || v.isEmpty) {
               (k, Set[String]())
             } else {
               (k, v.split(',').toSet)
@@ -185,7 +181,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   private val MEMORY_OVERHEAD_FRACTION = 0.10
   private val MEMORY_OVERHEAD_MINIMUM = 384
 
-  private[mesos] def calculateTotalMemory(sc: SparkContext): Int = {
+  def calculateTotalMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory

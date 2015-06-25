@@ -199,12 +199,11 @@ private[spark] class MesosSchedulerBackend(
         // check if all constraints are satisfield
         //  1. Attribute constraints
         //  2. Memory requirements
-        //  3. CPU requirements
+        //  3. CPU requirements - need at least 1 for executor, 1 for task
         val meetsConstrains = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
 
-        // need at least 1 for executor, 1 for task
         (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
         (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
       }
