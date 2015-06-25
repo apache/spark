@@ -79,7 +79,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     else:
         diff_target = target_ref
     raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
-        universal_newlines=True)
+                                         universal_newlines=True)
     # Remove any empty strings
     return [f for f in raw_output.split('\n') if f]
 
@@ -377,7 +377,7 @@ def main():
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
         print("[error] Cannot determine your home directory as an absolute path;"
-             " ensure the $HOME environment variable is set properly.")
+              " ensure the $HOME environment variable is set properly.")
         sys.exit(1)
 
     os.chdir(SPARK_HOME)
