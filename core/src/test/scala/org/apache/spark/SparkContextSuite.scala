@@ -274,8 +274,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("calling multiple sc.stop() must not throw uncaught exception(50) from sparkenv") {
-    var threwNoOrOnlyExceptedException = true
+  test("calling multiple sc.stop() must not throw any exception") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       val cnt = sc.parallelize(1 to 4).count()
@@ -284,13 +283,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       // call stop second time
       sc.stop()
     } catch {
-      case e: ServerStateException =>
-        // assert(!e.getMessage.contains("Server is already stopped"))
-        threwNoOrOnlyExceptedException = false
-      case NonFatal(e) =>
-        threwNoOrOnlyExceptedException = true
-    } finally {
-      assert(threwNoOrOnlyExceptedException == true)
+      case e: Exception =>
+        fail("calling multiple sc.stop() must not have thrown any exception");
     }
   }
 }
