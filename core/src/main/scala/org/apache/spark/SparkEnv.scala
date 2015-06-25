@@ -93,7 +93,7 @@ class SparkEnv (
 
   private[spark] def stop() {
 
-    if(!isStopped) {
+    if (!isStopped) {
       isStopped = true
       try {
         pythonWorkers.foreach { case (key, worker) => worker.stop()}

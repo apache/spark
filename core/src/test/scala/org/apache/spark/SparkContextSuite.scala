@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.util.control.NonFatal
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -270,6 +271,26 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
     } finally {
       sc.stop()
+    }
+  }
+
+  test("calling multiple sc.stop() must not throw uncaught exception(50) from sparkenv") {
+    var threwNoOrOnlyExceptedException = true
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val cnt = sc.parallelize(1 to 4).count()
+      sc.cancelAllJobs()
+      sc.stop()
+      // call stop second time
+      sc.stop()
+    } catch {
+      case e: ServerStateException =>
+        // assert(!e.getMessage.contains("Server is already stopped"))
+        threwNoOrOnlyExceptedException = false
+      case NonFatal(e) =>
+        threwNoOrOnlyExceptedException = true
+    } finally {
+      assert(threwNoOrOnlyExceptedException == true)
     }
   }
 }
