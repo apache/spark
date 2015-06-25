@@ -236,6 +236,19 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
   }
 
+  test("binary log") {
+    val df = Seq[(Integer, Integer)]((123, null)).toDF("a", "b")
+    checkAnswer(
+      df.select(org.apache.spark.sql.functions.log("a"),
+        org.apache.spark.sql.functions.log(2.0, "a"),
+        org.apache.spark.sql.functions.log("b")),
+      Row(math.log(123), math.log(123) / math.log(2), null))
+
+    checkAnswer(
+      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
+      Row(math.log(123), math.log(123) / math.log(2), null))
+  }
+
   test("abs") {
     val input =
       Seq[(java.lang.Double, java.lang.Double)]((null, null), (0.0, 0.0), (1.5, 1.5), (-2.5, 2.5))
@@ -255,6 +268,16 @@ class MathExpressionsSuite extends QueryTest {
       Row(1))
 
     checkAnswer(ctx.sql("SELECT LOG2(8), LOG2(null)"), Row(3, null))
+  }
+
+  test("sqrt") {
+    val df = Seq((1, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(sqrt("a"), sqrt("b")),
+      Row(1.0, 2.0))
+
+    checkAnswer(ctx.sql("SELECT SQRT(4.0), SQRT(null)"), Row(2.0, null))
+    checkAnswer(df.selectExpr("sqrt(a)", "sqrt(b)", "sqrt(null)"), Row(1.0, 2.0, null))
   }
 
   test("negative") {

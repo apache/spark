@@ -17,10 +17,10 @@
 
 package org.apache.spark.unsafe.types;
 
+import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-import javax.annotation.Nullable;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
-  @Nullable
+  @Nonnull
   private byte[] bytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -55,7 +55,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Updates the UTF8String with String.
    */
-  public UTF8String set(final String str) {
+  protected UTF8String set(final String str) {
     try {
       bytes = str.getBytes("utf-8");
     } catch (UnsupportedEncodingException e) {
@@ -69,7 +69,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   /**
    * Updates the UTF8String with byte[], which should be encoded in UTF-8.
    */
-  public UTF8String set(final byte[] bytes) {
+  protected UTF8String set(final byte[] bytes) {
     this.bytes = bytes;
     return this;
   }
@@ -131,24 +131,30 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
 
     for (int i = 0; i <= bytes.length - b.length; i++) {
-      // TODO: Avoid copying.
-      if (bytes[i] == b[0] && Arrays.equals(Arrays.copyOfRange(bytes, i, i + b.length), b)) {
+      if (bytes[i] == b[0] && startsWith(b, i)) {
         return true;
       }
     }
     return false;
   }
 
+  private boolean startsWith(final byte[] prefix, int offsetInBytes) {
+    if (prefix.length + offsetInBytes > bytes.length || offsetInBytes < 0) {
+      return false;
+    }
+    int i = 0;
+    while (i < prefix.length && prefix[i] == bytes[i + offsetInBytes]) {
+      i++;
+    }
+    return i == prefix.length;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
-    final byte[] b = prefix.getBytes();
-    // TODO: Avoid copying.
-    return b.length <= bytes.length && Arrays.equals(Arrays.copyOfRange(bytes, 0, b.length), b);
+    return startsWith(prefix.getBytes(), 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    final byte[] b = suffix.getBytes();
-    return b.length <= bytes.length &&
-      Arrays.equals(Arrays.copyOfRange(bytes, bytes.length - b.length, bytes.length), b);
+    return startsWith(suffix.getBytes(), bytes.length - suffix.getBytes().length);
   }
 
   public UTF8String toUpperCase() {
@@ -196,10 +202,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
       return Arrays.equals(bytes, ((UTF8String) other).getBytes());
-    } else if (other instanceof String) {
-      // Used only in unit tests.
-      String s = (String) other;
-      return bytes.length >= s.length() && length() == s.length() && toString().equals(s);
     } else {
       return false;
     }

@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{IntParam, ParamValidators, Params}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
@@ -131,6 +131,8 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
     SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
     SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
+
+  override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
 private object VectorIndexer {
@@ -398,5 +400,10 @@ class VectorIndexerModel private[ml] (
     }
     val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
     newAttributeGroup.toStructField()
+  }
+
+  override def copy(extra: ParamMap): VectorIndexerModel = {
+    val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
+    copyValues(copied, extra)
   }
 }

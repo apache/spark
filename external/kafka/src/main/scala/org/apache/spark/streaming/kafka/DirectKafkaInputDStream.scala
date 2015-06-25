@@ -120,8 +120,7 @@ class DirectKafkaInputDStream[
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
     // Report the record number of this batch interval to InputInfoTracker.
-    val numRecords = rdd.offsetRanges.map(r => r.untilOffset - r.fromOffset).sum
-    val inputInfo = InputInfo(id, numRecords)
+    val inputInfo = InputInfo(id, rdd.count)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
@@ -153,10 +152,7 @@ class DirectKafkaInputDStream[
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
       val topics = fromOffsets.keySet
-      val leaders = kc.findLeaders(topics).fold(
-        errs => throw new SparkException(errs.mkString("\n")),
-        ok => ok
-      )
+      val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
           logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")

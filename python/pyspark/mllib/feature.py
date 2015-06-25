@@ -33,12 +33,13 @@ from py4j.protocol import Py4JJavaError
 from pyspark import SparkContext
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import (
+    Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
 from pyspark.mllib.regression import LabeledPoint
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
-           'ChiSqSelector', 'ChiSqSelectorModel']
+           'ChiSqSelector', 'ChiSqSelectorModel', 'ElementwiseProduct']
 
 
 class VectorTransformer(object):
@@ -249,6 +250,41 @@ class ChiSqSelector(object):
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
         return ChiSqSelectorModel(jmodel)
+
+
+class PCAModel(JavaVectorTransformer):
+    """
+    Model fitted by [[PCA]] that can project vectors to a low-dimensional space using PCA.
+    """
+
+
+class PCA(object):
+    """
+    A feature transformer that projects vectors to a low-dimensional space using PCA.
+
+    >>> data = [Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),
+    ...     Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),
+    ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
+    >>> model = PCA(2).fit(sc.parallelize(data))
+    >>> pcArray = model.transform(Vectors.sparse(5, [(1, 1.0), (3, 7.0)])).toArray()
+    >>> pcArray[0]
+    1.648...
+    >>> pcArray[1]
+    -4.013...
+    """
+    def __init__(self, k):
+        """
+        :param k: number of principal components.
+        """
+        self.k = int(k)
+
+    def fit(self, data):
+        """
+        Computes a [[PCAModel]] that contains the principal components of the input vectors.
+        :param data: source vectors
+        """
+        jmodel = callMLlibFunc("fitPCA", self.k, data)
+        return PCAModel(jmodel)
 
 
 class HashingTF(object):
@@ -518,6 +554,38 @@ class Word2Vec(object):
                                int(self.numIterations), int(self.seed),
                                int(self.minCount))
         return Word2VecModel(jmodel)
+
+
+class ElementwiseProduct(VectorTransformer):
+    """
+    .. note:: Experimental
+
+    Scales each column of the vector, with the supplied weight vector.
+    i.e the elementwise product.
+
+    >>> weight = Vectors.dense([1.0, 2.0, 3.0])
+    >>> eprod = ElementwiseProduct(weight)
+    >>> a = Vectors.dense([2.0, 1.0, 3.0])
+    >>> eprod.transform(a)
+    DenseVector([2.0, 2.0, 9.0])
+    >>> b = Vectors.dense([9.0, 3.0, 4.0])
+    >>> rdd = sc.parallelize([a, b])
+    >>> eprod.transform(rdd).collect()
+    [DenseVector([2.0, 2.0, 9.0]), DenseVector([9.0, 6.0, 12.0])]
+    """
+    def __init__(self, scalingVector):
+        self.scalingVector = _convert_to_vector(scalingVector)
+
+    def transform(self, vector):
+        """
+        Computes the Hadamard product of the vector.
+        """
+        if isinstance(vector, RDD):
+            vector = vector.map(_convert_to_vector)
+
+        else:
+            vector = _convert_to_vector(vector)
+        return callMLlibFunc("elementwiseProductVector", self.scalingVector, vector)
 
 
 def _test():

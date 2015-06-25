@@ -49,7 +49,8 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InternalRow, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{Logging, SerializableWritable, TaskContext}
+import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * :: DeveloperApi ::
@@ -113,12 +114,12 @@ private[sql] case class ParquetTableScan(
       .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.set(
-      SQLConf.PARQUET_CACHE_METADATA,
-      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, "true"))
+    conf.setBoolean(
+      SQLConf.PARQUET_CACHE_METADATA.key,
+      sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA, true))
 
     // Use task side metadata in parquet
-    conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true);
+    conf.setBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
 
     val baseRDD =
       new org.apache.spark.rdd.NewHadoopRDD(
@@ -329,7 +330,7 @@ private[sql] case class InsertIntoParquetTable(
     job.setOutputKeyClass(keyType)
     job.setOutputValueClass(classOf[InternalRow])
     NewFileOutputFormat.setOutputPath(job, new Path(path))
-    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = sqlContext.sparkContext.newRddId()
