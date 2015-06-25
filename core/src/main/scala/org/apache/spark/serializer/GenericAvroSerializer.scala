@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.util.zip.{Inflater, Deflater}
 
 import scala.collection.mutable
@@ -33,7 +34,7 @@ import org.apache.spark.SparkConf
 import GenericAvroSerializer._
 
 object GenericAvroSerializer {
-  def avroSchemaKey(implicit fingerprint: Long): String = s"avro.schema.$fingerprint"
+  def avroSchemaKey(fingerprint: Long): String = s"avro.schema.$fingerprint"
 }
 
 /**
@@ -45,141 +46,119 @@ object GenericAvroSerializer {
  */
 class GenericAvroSerializer(conf: SparkConf) extends KSerializer[GenericRecord] {
 
-  private val serializer = serialize()
-  private val deserializer = deserialize()
+  /** Used to reduce the amount of effort to compress the schema */
+  private val compressCache = new mutable.HashMap[Schema, Array[Byte]]()
+  private val decompressCache = new mutable.HashMap[ByteBuffer, Schema]()
 
-  private def confSchema(implicit fingerprint: Long) = conf.getOption(avroSchemaKey)
+  /** Reuses the same datum reader/writer since the same schema will be used many times */
+  private val writerCache = new mutable.HashMap[Schema, DatumWriter[_]]()
+  private val readerCache = new mutable.HashMap[Schema, DatumReader[_]]()
+
+  /** Fingerprinting is very expensive to this alleviates most of the work */
+  private val fingerprintCache = new mutable.HashMap[Schema, Long]()
+  private val schemaCache = new mutable.HashMap[Long, Schema]()
+
+  private def confSchema(fingerprint: Long) = conf.getOption(avroSchemaKey(fingerprint))
 
   /**
    * Used to compress Schemas when they are being sent over the wire.
    * The compression results are memoized to reduce the compression time since the
    * same schema is compressed many times over
    */
-  def compressor(): Schema => Array[Byte] = {
-    val cache = new mutable.HashMap[Schema, Array[Byte]]()
+  def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
+    val deflater = new Deflater(Deflater.BEST_COMPRESSION)
+    val schemaBytes = schema.toString.getBytes("UTF-8")
+    deflater.setInput(schemaBytes)
+    deflater.finish()
+    val buffer = Array.ofDim[Byte](schemaBytes.length)
+    val outputStream = new ByteArrayOutputStream(schemaBytes.length)
+    while(!deflater.finished()) {
+      val count = deflater.deflate(buffer)
+      outputStream.write(buffer, 0, count)
+    }
+    outputStream.close()
+    outputStream.toByteArray
+  })
 
-    def compress(schema: Schema): Array[Byte] = cache.getOrElseUpdate(schema, {
-      val deflater = new Deflater(Deflater.BEST_COMPRESSION)
-      val schemaBytes = schema.toString.getBytes("UTF-8")
-      deflater.setInput(schemaBytes)
-      deflater.finish()
-      val buffer = Array.ofDim[Byte](schemaBytes.length)
-      val outputStream = new ByteArrayOutputStream(schemaBytes.length)
-      while(!deflater.finished()) {
-        val count = deflater.deflate(buffer)
-        outputStream.write(buffer, 0, count)
-      }
-      outputStream.close()
-      outputStream.toByteArray
-    })
-
-    compress
-  }
 
   /**
    * Decompresses the schema into the actual in-memory object. Keeps an internal cache of already
    * seen values so to limit the number of times that decompression has to be done.
    */
-  def decompressor(): Array[Byte] => Schema = {
-    val cache = new mutable.HashMap[Array[Byte], Schema]()
-
-    def decompress(schemaBytes: Array[Byte]): Schema = cache.getOrElseUpdate(schemaBytes, {
-      val inflater = new Inflater()
-      inflater.setInput(schemaBytes)
-      val outputStream = new ByteArrayOutputStream(schemaBytes.length)
-      val tmpBuffer = Array.ofDim[Byte](1024)
-      while (!inflater.finished()) {
-        val count = inflater.inflate(tmpBuffer)
-        outputStream.write(tmpBuffer, 0, count)
-      }
-      inflater.end()
-      outputStream.close()
-      new Schema.Parser().parse(new String(outputStream.toByteArray, "UTF-8"))
-    })
-
-    decompress
-  }
+  def decompress(schemaBytes: ByteBuffer): Schema = decompressCache.getOrElseUpdate(schemaBytes, {
+    val inflater = new Inflater()
+    val bytes = schemaBytes.array()
+    inflater.setInput(bytes)
+    val outputStream = new ByteArrayOutputStream(bytes.length)
+    val tmpBuffer = Array.ofDim[Byte](1024)
+    while (!inflater.finished()) {
+      val count = inflater.inflate(tmpBuffer)
+      outputStream.write(tmpBuffer, 0, count)
+    }
+    inflater.end()
+    outputStream.close()
+    new Schema.Parser().parse(new String(outputStream.toByteArray, "UTF-8"))
+  })
 
   /**
-   * Serializes generic records into byte buffers. It keeps an internal cache of already seen
-   * schema as to reduce the amount of required work.
+   * Serializes a record to the given output stream. It caches a lot of the internal data as
+   * to not redo work
    */
-  def serialize(): (GenericRecord, KryoOutput) => Unit = {
-    val writerCache = new mutable.HashMap[Schema, DatumWriter[_]]()
-    val schemaCache = new mutable.HashMap[Schema, Long]()
-    val compress = compressor()
-
-    def serialize[R <: GenericRecord](datum: R, schema: Schema, output: KryoOutput): Unit = {
-      val encoder = EncoderFactory.get.binaryEncoder(output, null)
-      writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
-                 .asInstanceOf[DatumWriter[R]]
-                 .write(datum, encoder)
-      encoder.flush()
-    }
-
-    def wrapDatum(datum: GenericRecord, output: KryoOutput): Unit = {
-      val schema = datum.getSchema
-      val fingerprint = schemaCache.getOrElseUpdate(schema, {
-        SchemaNormalization.parsingFingerprint64(schema)
-      })
-      confSchema(fingerprint) match {
-        case Some(_) => {
-          output.writeBoolean(true)
-          output.writeLong(fingerprint)
-        }
-        case None => {
-          output.writeBoolean(false)
-          val compressedSchema = compress(schema)
-          output.writeInt(compressedSchema.array.length)
-          output.writeBytes(compressedSchema.array)
-        }
+  def serializeDatum[R <: GenericRecord](datum: R, output: KryoOutput): Unit = {
+    val encoder = EncoderFactory.get.binaryEncoder(output, null)
+    val schema = datum.getSchema
+    val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
+      SchemaNormalization.parsingFingerprint64(schema)
+    })
+    confSchema(fingerprint) match {
+      case Some(_) => {
+        output.writeBoolean(true)
+        output.writeLong(fingerprint)
       }
-      serialize(datum, schema, output)
+      case None => {
+        output.writeBoolean(false)
+        val compressedSchema = compress(schema)
+        output.writeInt(compressedSchema.length)
+        output.writeBytes(compressedSchema)
+
+      }
     }
-    wrapDatum
+
+    writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
+               .asInstanceOf[DatumWriter[R]]
+               .write(datum, encoder)
+    encoder.flush()
   }
 
   /**
    * Deserializes generic records into their in-memory form. There is internal
    * state to keep a cache of already seen schemas and datum readers.
-   * @return
    */
-  def deserialize(): KryoInput => GenericRecord = {
-    val readerCache = new mutable.HashMap[Schema, DatumReader[_]]()
-    val schemaCache = new mutable.HashMap[Long, Schema]()
-    val decompress = decompressor()
-
-    def deserialize(input: KryoInput, schema: Schema): GenericRecord = {
-      val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
-      readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
-        .asInstanceOf[DatumReader[GenericRecord]]
-        .read(null.asInstanceOf[GenericRecord], decoder)
-    }
-
-    def unwrapDatum(input: KryoInput): GenericRecord = {
-      val schema = {
-        if (input.readBoolean()) {
-          val fingerprint = input.readLong()
-          schemaCache.getOrElseUpdate(fingerprint, {
-            confSchema(fingerprint) match {
-              case Some(s) => new Schema.Parser().parse(s)
-              case None => throw new RuntimeException(s"Unknown fingerprint: $fingerprint")
-            }
-          })
-        } else {
-          val length = input.readInt()
-          decompress(input.readBytes(length))
-        }
+  def deserializeDatum(input: KryoInput): GenericRecord = {
+    val schema = {
+      if (input.readBoolean()) {
+        val fingerprint = input.readLong()
+        schemaCache.getOrElseUpdate(fingerprint, {
+          confSchema(fingerprint) match {
+            case Some(s) => new Schema.Parser().parse(s)
+            case None => throw new RuntimeException(s"Unknown fingerprint: $fingerprint")
+          }
+        })
+      } else {
+        val length = input.readInt()
+        decompress(ByteBuffer.wrap(input.readBytes(length)))
       }
-      deserialize(input, schema)
     }
-    unwrapDatum
+    val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
+    readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
+               .asInstanceOf[DatumReader[GenericRecord]]
+               .read(null.asInstanceOf[GenericRecord], decoder)
   }
 
   override def write(kryo: Kryo, output: KryoOutput, datum: GenericRecord): Unit =
-    serializer(datum, output)
+    serializeDatum(datum, output)
 
   override def read(kryo: Kryo, input: KryoInput, datumClass: Class[GenericRecord]): GenericRecord =
-    deserializer(input)
+    deserializeDatum(input)
 }
 

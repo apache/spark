@@ -18,12 +18,11 @@
 package org.apache.spark
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-
-import org.apache.avro.{Schema, SchemaNormalization}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+
+import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.serializer.GenericAvroSerializer.avroSchemaKey
 import org.apache.spark.serializer.KryoSerializer
