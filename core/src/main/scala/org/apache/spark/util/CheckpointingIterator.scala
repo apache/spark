@@ -40,16 +40,16 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
   partitionId: Int,
   context: TaskContext,
   blockSize: Int = -1) extends Iterator[A] with Logging {
- 
+
   val env = SparkEnv.get
-  var fs: FileSystem = null 
+  var fs: FileSystem = null
   val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
   var serializeStream: SerializationStream = null
- 
+
   var finalOutputPath: Path = null
   var tempOutputPath: Path = null
 
-  def init(): this.type = { 
+  def init(): this.type = {
     val outputDir = new Path(path)
     fs = outputDir.getFileSystem(broadcastedConf.value.value)
 
@@ -100,7 +100,7 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
   def checkpointing(item: A): Unit = {
     serializeStream.writeObject(item)
   }
- 
+
   override def next(): A = {
     val item = sub.next()
     if (doCheckpoint) {
