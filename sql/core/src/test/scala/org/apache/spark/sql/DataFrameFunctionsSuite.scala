@@ -171,11 +171,11 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
       df.select(crc32($"a"), crc32("b")),
-      Row(2743272264l, 2180413220l))
+      Row(2743272264L, 2180413220L))
 
     checkAnswer(
       df.selectExpr("crc32(a)", "crc32(b)"),
-      Row(2743272264l, 2180413220l))
+      Row(2743272264L, 2180413220L))
   }
 
   test("misc sha2 function") {

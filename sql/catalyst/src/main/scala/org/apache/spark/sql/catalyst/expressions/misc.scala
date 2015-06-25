@@ -56,7 +56,7 @@ case class Md5(child: Expression)
  * A function that calculates an SHA-1 digest and returns it as a hex string
  * For input of type [[BinaryType]]
  */
-case class Sha(child: Expression)
+case class Sha1(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
@@ -101,6 +101,21 @@ case class Crc32(child: Expression)
       checksum.update(value.asInstanceOf[Array[Byte]], 0, value.asInstanceOf[Array[Byte]].length)
       checksum.getValue
     }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val value = child.gen(ctx)
+    val CRC32 = "java.util.zip.CRC32"
+    s"""
+      ${value.code}
+      boolean ${ev.isNull} = ${value.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${CRC32} checksum = new ${CRC32}();
+        checksum.update(${value.primitive}, 0, ${value.primitive}.length);
+        ${ev.primitive} = checksum.getValue();
+      }
+    """
   }
 
 }

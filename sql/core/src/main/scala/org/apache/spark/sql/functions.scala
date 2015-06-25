@@ -1420,7 +1420,7 @@ object functions {
    * @group misc_funcs
    * @since 1.5.0
    */
-  def sha(e: Column): Column = Sha(e.expr)
+  def sha(e: Column): Column = Sha1(e.expr)
 
   /**
    * Calculates the SHA digest and returns the value as a hex string.
@@ -1437,7 +1437,7 @@ object functions {
    * @group misc_funcs
    * @since 1.5.0
    */
-  def sha1(e: Column): Column = Sha(e.expr)
+  def sha1(e: Column): Column = Sha1(e.expr)
 
   /**
    * Calculates the SHA digest and returns the value as a hex string.
