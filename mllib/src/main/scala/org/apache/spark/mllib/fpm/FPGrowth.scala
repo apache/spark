@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
  * :: Experimental ::
  *
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
- * @param freqItemsets frequent itemset, which is an RDD of [[FreqItemset]]
+ * @param freqItemsets frequent itemsets, which is an RDD of [[FreqItemset]]
  * @tparam Item item type
  */
 @Experimental
@@ -63,11 +63,11 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
 class FPGrowth private (
     private var minSupport: Double,
     private var numPartitions: Int,
-    private var mineSequences: Boolean) extends Logging with Serializable {
+    private var ordered: Boolean) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
-   * as the input data, mineSequences: `false`}.
+   * as the input data, ordered: `false`}.
    */
   def this() = this(0.3, -1, false)
 
@@ -88,10 +88,11 @@ class FPGrowth private (
   }
 
   /**
-   * Indicates whether to mine item-sets or item-sequences (default: false, mine item-sets).
+   * Indicates whether to mine itemsets (unordered) or sequences (ordered) (default: false, mine
+   * itemsets).
    */
-  def setMineSequences(value: Boolean): this.type = {
-    this.mineSequences = value
+  def setOrdered(ordered: Boolean): this.type = {
+    this.ordered = ordered
     this
   }
 
@@ -164,7 +165,7 @@ class FPGrowth private (
     .flatMap { case (part, tree) =>
       tree.extract(minCount, x => partitioner.getPartition(x) == part)
     }.map { case (ranks, count) =>
-      new FreqItemset(ranks.map(i => freqItems(i)).toArray, count)
+      new FreqItemset(ranks.map(i => freqItems(i)).toArray, count, ordered)
     }
   }
 
@@ -182,7 +183,7 @@ class FPGrowth private (
     val output = mutable.Map.empty[Int, Array[Int]]
     // Filter the basket by frequent items pattern
     val filtered = transaction.flatMap(itemToRank.get)
-    if (!this.mineSequences) { // Ignore ordering if not mining sequences
+    if (!this.ordered) {
       ju.Arrays.sort(filtered)
     }
     // Generate conditional transactions
@@ -210,9 +211,11 @@ object FPGrowth {
    * Frequent itemset.
    * @param items items in this itemset. Java users should call [[FreqItemset#javaItems]] instead.
    * @param freq frequency
+   * @param ordered indicates if items represents an itemset (false) or sequence (true)
    * @tparam Item item type
    */
-  class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
+  class FreqItemset[Item](val items: Array[Item], val freq: Long, val ordered: Boolean)
+    extends Serializable {
 
     /**
      * Returns items in a Java List.
