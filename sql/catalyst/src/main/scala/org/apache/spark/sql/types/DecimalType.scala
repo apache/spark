@@ -20,13 +20,18 @@ package org.apache.spark.sql.types
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /** Precision parameters for a Decimal */
-case class PrecisionInfo(precision: Int, scale: Int)
-
+case class PrecisionInfo(precision: Int, scale: Int) {
+  if (scale > precision) {
+    throw new AnalysisException(
+      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+}
 
 /**
  * :: DeveloperApi ::

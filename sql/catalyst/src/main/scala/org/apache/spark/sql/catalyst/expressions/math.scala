@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Long => JLong}
 
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -60,7 +59,6 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
-  override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
@@ -224,7 +222,7 @@ case class Bin(child: Expression)
 
   def funcName: String = name.toLowerCase
 
-  override def eval(input: catalyst.InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
