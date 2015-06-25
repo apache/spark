@@ -59,10 +59,4 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
     }
     assert(numEquals === 1)
   }
-
-  test("COALESCE with different types") {
-    intercept[RuntimeException] {
-      TestHive.sql("""SELECT COALESCE(1, true, "abc") FROM src limit 1""").collect()
-    }
-  }
 }

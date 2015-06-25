@@ -121,13 +121,25 @@ trait Logging {
     if (usingLog4j12) {
       val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
       if (!log4j12Initialized) {
-        val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
-        Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
-          case Some(url) =>
-            PropertyConfigurator.configure(url)
-            System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
-          case None =>
-            System.err.println(s"Spark was unable to load $defaultLogProps")
+        if (Utils.isInInterpreter) {
+          val replDefaultLogProps = "org/apache/spark/log4j-defaults-repl.properties"
+          Option(Utils.getSparkClassLoader.getResource(replDefaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's repl log4j profile: $replDefaultLogProps")
+              System.err.println("To adjust logging level use sc.setLogLevel(\"INFO\")")
+            case None =>
+              System.err.println(s"Spark was unable to load $replDefaultLogProps")
+          }
+        } else {
+          val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
+          Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+            case Some(url) =>
+              PropertyConfigurator.configure(url)
+              System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            case None =>
+              System.err.println(s"Spark was unable to load $defaultLogProps")
+          }
         }
       }
     }

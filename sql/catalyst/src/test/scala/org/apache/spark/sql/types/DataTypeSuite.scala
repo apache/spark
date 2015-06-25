@@ -190,7 +190,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(DecimalType(10, 5), 4096)
   checkDefaultSize(DecimalType.Unlimited, 4096)
   checkDefaultSize(DateType, 4)
-  checkDefaultSize(TimestampType, 12)
+  checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 4096)
   checkDefaultSize(BinaryType, 4096)
   checkDefaultSize(ArrayType(DoubleType, true), 800)

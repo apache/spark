@@ -61,22 +61,17 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-hadoop</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>${fasterxml.jackson.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.jodd</groupId>
-      <artifactId>jodd-core</artifactId>
-      <version>${jodd.version}</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>

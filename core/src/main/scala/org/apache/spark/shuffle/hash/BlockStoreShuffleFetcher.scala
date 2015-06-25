@@ -17,29 +17,29 @@
 
 package org.apache.spark.shuffle.hash
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.util.{Failure, Success, Try}
+import java.io.InputStream
+
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.{Failure, Success}
 
 import org.apache.spark._
-import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, ShuffleBlockFetcherIterator,
+  ShuffleBlockId}
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
-  def fetch[T](
+  def fetchBlockStreams(
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
-      serializer: Serializer)
-    : Iterator[T] =
+      blockManager: BlockManager,
+      mapOutputTracker: MapOutputTracker)
+    : Iterator[(BlockId, InputStream)] =
   {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
-    val blockManager = SparkEnv.get.blockManager
 
     val startTime = System.currentTimeMillis
-    val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
+    val statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
@@ -53,12 +53,21 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
         (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
     }
 
-    def unpackBlock(blockPair: (BlockId, Try[Iterator[Any]])) : Iterator[T] = {
+    val blockFetcherItr = new ShuffleBlockFetcherIterator(
+      context,
+      blockManager.shuffleClient,
+      blockManager,
+      blocksByAddress,
+      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
+      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
+
+    // Make sure that fetch failures are wrapped inside a FetchFailedException for the scheduler
+    blockFetcherItr.map { blockPair =>
       val blockId = blockPair._1
       val blockOption = blockPair._2
       blockOption match {
-        case Success(block) => {
-          block.asInstanceOf[Iterator[T]]
+        case Success(inputStream) => {
+          (blockId, inputStream)
         }
         case Failure(e) => {
           blockId match {
@@ -70,28 +79,6 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
                 "Failed to get block " + blockId + ", which is not a shuffle block", e)
           }
         }
-      }
-    }
-
-    val blockFetcherItr = new ShuffleBlockFetcherIterator(
-      context,
-      SparkEnv.get.blockManager.shuffleClient,
-      blockManager,
-      blocksByAddress,
-      serializer,
-      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
-    val itr = blockFetcherItr.flatMap(unpackBlock)
-
-    val completionIter = CompletionIterator[T, Iterator[T]](itr, {
-      context.taskMetrics.updateShuffleReadMetrics()
-    })
-
-    new InterruptibleIterator[T](context, completionIter) {
-      val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
-      override def next(): T = {
-        readMetrics.incRecordsRead(1)
-        delegate.next()
       }
     }
   }

@@ -27,6 +27,8 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
+import spray.revolver.RevolverPlugin._
+
 object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
@@ -51,6 +53,8 @@ object BuildCommons {
   // Root project.
   val spark = ProjectRef(buildLocation, "spark")
   val sparkHome = buildLocation
+
+  val testTempDir = s"$sparkHome/target/tmp"
 }
 
 object SparkBuild extends PomBuild {
@@ -144,7 +148,9 @@ object SparkBuild extends PomBuild {
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
-    }
+    },
+
+    javacOptions in Compile ++= Seq("-encoding", "UTF-8")
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -155,14 +161,13 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
+    .foreach(enable(sharedSettings ++ ExludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove launcher from this list after 1.4.0
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, launcher, unsafe).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, unsafe).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -177,9 +182,6 @@ object SparkBuild extends PomBuild {
 
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
-
-  /* Catalyst macro settings */
-  enable(Catalyst.settings)(catalyst)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -273,14 +275,6 @@ object OldDeps {
       "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
       "spark-core").map(versionArtifact(_).get intransitive())
   )
-}
-
-object Catalyst {
-  lazy val settings = Seq(
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
-    // Quasiquotes break compiling scala doc...
-    // TODO: Investigate fixing this.
-    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
 }
 
 object SQL {
@@ -507,6 +501,7 @@ object TestSettings {
       "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
+    javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
@@ -515,10 +510,11 @@ object TestSettings {
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
+    javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+    javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
@@ -528,6 +524,13 @@ object TestSettings {
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
+    // Make sure the test temp directory exists.
+    resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
+      if (!new File(testTempDir).isDirectory()) {
+        require(new File(testTempDir).mkdirs())
+      }
+      Seq[File]()
+    },
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
