@@ -200,7 +200,7 @@ class DAGScheduler(
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
-  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable] = None): Unit = {
+  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
@@ -677,8 +677,10 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
-  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String,
-                                             exception: Option[Throwable] = None) {
+  private[scheduler] def handleTaskSetFailed(
+      taskSet: TaskSet,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
     stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason, exception) }
     submitWaitingStages()
   }
@@ -1127,8 +1129,7 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics,
-                            exception) =>
+      case exceptionFailure: ExceptionFailure =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
@@ -1237,8 +1238,10 @@ class DAGScheduler(
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
-  private[scheduler] def abortStage(failedStage: Stage, reason: String, exception:
-  Option[Throwable] = None) {
+  private[scheduler] def abortStage(
+      failedStage: Stage,
+      reason: String, exception:
+      Option[Throwable] = None): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
@@ -1255,8 +1258,10 @@ class DAGScheduler(
   }
 
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String,
-                                          exception: Option[Throwable] = None) {
+  private def failJobAndIndependentStages(
+      job: ActiveJob,
+      failureReason: String,
+      exception: Option[Throwable] = None): Unit = {
     val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 

@@ -73,7 +73,7 @@ private[scheduler] case class ExecutorAdded(execId: String, host: String) extend
 private[scheduler] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 
 private[scheduler]
-case class TaskSetFailed(taskSet: TaskSet, reason: String,
-                         exception: Option[Throwable] = None) extends DAGSchedulerEvent
+case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent

@@ -168,13 +168,16 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   test("failure cause is sent back to driver") {
     sc = new SparkContext("local", "test")
-    val data = sc.makeRDD(1 to 3).map(x => { throw new IllegalStateException("oops"); (x,
-      x) }).groupByKey(3)
+    val e = new UserException("oops", new IllegalArgumentException("x"))
+    val data = sc.makeRDD(1 to 3).map(x => { throw e; (x, x) }).groupByKey(3)
     val thrown = intercept[SparkException] {
       data.collect()
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getCause.getClass === classOf[IllegalStateException])
+    assert(thrown.getCause.getClass === classOf[UserException])
+    assert(thrown.getCause.getMessage === "oops")
+    assert(thrown.getCause.getCause.getClass === classOf[IllegalArgumentException])
+    assert(thrown.getCause.getCause.getMessage === "x")
   }
 
   test("failure cause stacktrace is sent back to driver if exception is not serializable") {
@@ -191,6 +194,9 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
   // TODO: Need to add tests with shuffle fetch failures.
 }
+
+class UserException(message: String, cause: Throwable)
+  extends RuntimeException(message, cause)
 
 class NonSerializableUserException extends RuntimeException {
   val nonSerializableInstanceVariable = new NonSerializable
