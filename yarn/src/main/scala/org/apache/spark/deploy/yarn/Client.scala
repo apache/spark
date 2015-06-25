@@ -1261,8 +1261,8 @@ object Client extends Logging {
         val hbaseConfGet = (param: String) => Option(confClass
           .getMethod("get", classOf[java.lang.String])
           .invoke(hbaseConf, param))
-        val zk_quorum = hbaseConfGet("hbase.zookeeper.quorum")
-        if (zk_quorum != None && !"localhost".equals(zk_quorum.get)) {
+        val zkQuorum = hbaseConfGet("hbase.zookeeper.quorum")
+        if (zkQuorum != None && !"localhost".equals(zkQuorum.get)) {
           val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
           credentials.addToken(token.getService, token)
           logInfo("Added HBase security token to credentials.")
