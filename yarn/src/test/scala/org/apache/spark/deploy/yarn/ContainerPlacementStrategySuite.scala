@@ -45,9 +45,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host1"),
       createContainer("host2")))
 
-    val (nodeLocalities, _) =
+    val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
         Map("host3" -> 15, "host4" -> 15, "host5" -> 10))
+          .map(_.nodes)
 
     assert(nodeLocalities === Array(
       Array("host3", "host4", "host5"),
@@ -68,9 +69,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    val (nodeLocalities, _) =
+    val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
+          .map(_.nodes)
 
     assert(nodeLocalities === Array(
       null, // requested requested container with no locality preference
@@ -91,9 +93,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    val (nodeLocalities, _) =
+    val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(1, 15,
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
+          .map(_.nodes)
 
     assert(nodeLocalities === Array(
       /** newly requested locality preferred containers */
@@ -113,9 +116,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host3")
     ))
 
-    val (nodeLocalities, _) =
+    val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
+          .map(_.nodes)
 
     assert(nodeLocalities === Array(
       /** newly requested locality preferred containers */
@@ -134,8 +138,9 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
       createContainer("host2")
     ))
 
-    val (nodeLocalities, _) =
+    val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(1, 0, Map.empty)
+        .map(_.nodes)
 
     assert(nodeLocalities === Array(null))
   }

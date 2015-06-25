@@ -241,12 +241,11 @@ private[yarn] class YarnAllocator(
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
-      val (nodeLocalities, rackLocalities) =
-        containerPlacementStrategy.localityOfRequestedContainers(missing,
-          numLocalityAwarePendingTasks, preferredLocalityToCounts)
+      val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
+        missing, numLocalityAwarePendingTasks, preferredLocalityToCounts)
 
-      for ((hosts, racks) <- nodeLocalities.zip(rackLocalities)) {
-        val request = createContainerRequest(resource, hosts, racks)
+      for (locality <- containerLocalityPreferences) {
+        val request = createContainerRequest(resource, locality.nodes, locality.racks)
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
         val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last

@@ -24,27 +24,36 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark.SparkConf
 
+private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
+
 private[yarn] trait ContainerPlacementStrategy {
-  type Locality = Array[String]
 
   /**
    * Calculate each container's node locality and rack locality
    * @param numContainer number of containers to calculate
+   * @param numLocalityAwarePendingTasks number of locality required pending tasks
+   * @param preferredLocalityToCount a map to store the preferred host name and its required count
    *
    * @return node localities and rack localities, each locality is an array of string,
    *         the length of localities is the same as number of containers
    */
-  def localityOfRequestedContainers(numContainer: Int, numLocalityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]): (Array[Locality], Array[Locality])
+  def localityOfRequestedContainers(
+      numContainer: Int,
+      numLocalityAwarePendingTasks: Int,
+      preferredLocalityToCount: Map[String, Int]
+    ): Array[ContainerLocalityPreferences]
 }
 
 /**
- * This strategy calculates the preferred localities by considering the node ratio of pending
- * tasks, number of required cores/containers and current existed containers. For example,
- * if we have 20 tasks which require (host1, host2, host3) and 10 tasks which require (host1,
- * host2, host4), besides each container has 2 cores and cpus per task is 1,
- * so the required container number is 15, and host ratio is (host1: 30, host2: 30, host3: 20,
- * host4: 10).
+ * This strategy is calculating the optimal locality preferences of YARN containers by considering
+ * the node ratio of pending tasks, number of required cores/containers and and locality of current
+ * existed containers. The target of this algorithm is to maximize the number of tasks that
+ * would run locally.
+ *
+ * The details of this algorithm is described as below, if we have 20 tasks which
+ * require (host1, host2, host3) and 10 tasks which require (host1, host2, host4),
+ * besides each container has 2 cores and cpus per task is 1, so the required container number is
+ * 15, and host ratio is (host1: 30, host2: 30, host3: 20, host4: 10).
  *
  * 1. If requested container number (18) is more than the required container number (15):
  *
@@ -129,8 +138,11 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     }
   }
 
-  def localityOfRequestedContainers(numContainer: Int, numLocalityAwarePendingTasks: Int,
-      preferredLocalityToCounts: Map[String, Int]): (Array[Locality], Array[Locality]) = {
+  def localityOfRequestedContainers(
+      numContainer: Int,
+      numLocalityAwarePendingTasks: Int,
+      preferredLocalityToCounts: Map[String, Int]
+    ): Array[ContainerLocalityPreferences] = {
     val updatedLocalityToCounts =
       updateExpectedLocalityToCounts(numLocalityAwarePendingTasks, preferredLocalityToCounts)
     val updatedLocalityAwareContainerNum = updatedLocalityToCounts.values.sum
@@ -157,10 +169,11 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       }
     }
 
-    val preferredNodeLocalities = ArrayBuffer[Locality]()
+    val containerLocalityPreferences = ArrayBuffer[ContainerLocalityPreferences]()
     if (requiredLocalityFreeContainerNum > 0) {
       for (i <- 0 until requiredLocalityFreeContainerNum) {
-        preferredNodeLocalities += null.asInstanceOf[Locality]
+        containerLocalityPreferences += ContainerLocalityPreferences(
+          null.asInstanceOf[Array[String]], null.asInstanceOf[Array[String]])
       }
     }
 
@@ -177,24 +190,17 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         // Only filter out the ratio which is larger than 0, which means the current host can
         // still be allocated with new container request.
         val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
-        preferredNodeLocalities += hosts
+        val racks = hosts.map { h =>
+          RackResolver.resolve(yarnConf, h).getNetworkLocation
+        }.toSet
+        containerLocalityPreferences += ContainerLocalityPreferences(hosts, racks.toArray)
+
         // Each time when the host is used, subtract 1. When the current ratio is 0,
         // which means all the required ratio is satisfied, this host will not be allocated again.
         preferredLocalityRatio = preferredLocalityRatio.mapValues(_ - 1)
       }
     }
 
-    val preferredRackLocalities = preferredNodeLocalities.map { hosts =>
-      if (hosts == null) {
-        null.asInstanceOf[Locality]
-      } else {
-        val racks = hosts.map { h =>
-          RackResolver.resolve(yarnConf, h).getNetworkLocation
-        }.toSet
-        racks.toArray
-      }
-    }
-
-    (preferredNodeLocalities.toArray, preferredRackLocalities.toArray)
+    containerLocalityPreferences.toArray
   }
 }
