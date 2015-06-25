@@ -162,9 +162,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
    * or returns a `TypeCheckResult` with an error message if invalid.
-   * Note: it's not valid to call this method until `childrenResolved == true`
-   * TODO: we should remove the default implementation and implement it for all
-   * expressions with proper error message.
+   * Note: it's not valid to call this method until `childrenResolved == true`.
    */
   def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 }

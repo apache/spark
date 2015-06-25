@@ -193,7 +193,7 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
   errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-    "invalid cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
+    "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -264,9 +264,9 @@ class AnalysisSuite extends SparkFunSuite with BeforeAndAfter {
     val plan =
       Aggregate(
         Nil,
-        Alias(Sum(AttributeReference("a", StringType)(exprId = ExprId(1))), "b")() :: Nil,
+        Alias(Sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
         LocalRelation(
-          AttributeReference("a", StringType)(exprId = ExprId(2))))
+          AttributeReference("a", IntegerType)(exprId = ExprId(2))))
 
     assert(plan.resolved)
 
