@@ -148,6 +148,13 @@ app.register_blueprint(ck, url_prefix='/ck')
 app.jinja_env.add_extension("chartkick.ext.charts")
 
 
+@app.context_processor
+def jinja_globals():
+    return {
+        'hostname': socket.gethostname(),
+    }
+
+
 class DateTimeForm(Form):
     # Date filter form needed for gantt and graph view
     execution_date = DateTimeField(
