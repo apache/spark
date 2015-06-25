@@ -745,9 +745,6 @@ private[spark] class BlockManager(
     // The level we actually use to put the block
     val putLevel = effectiveStorageLevel.getOrElse(level)
 
-    // block put status  
-    var putBlockStatus: BlockStatus = null
-
     // If we're storing bytes, then initiate the replication before storing them locally.
     // This is faster as data is already serialized and ready to send.
     val replicationFuture = data match {
@@ -810,7 +807,7 @@ private[spark] class BlockManager(
           result.droppedBlocks.foreach { updatedBlocks += _ }
         }
 
-        putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
+        val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         if (putBlockStatus.storageLevel != StorageLevel.NONE) {
           // Now that the block is in either the memory, externalBlockStore, or disk store,
           // let other threads read it, and tell the master about it.
@@ -838,8 +835,7 @@ private[spark] class BlockManager(
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
     // Should not replicate the block if putBlockStatus is StorageLevel.NONE
-    if (putBlockStatus != null &&
-      putBlockStatus.storageLevel != StorageLevel.NONE && putLevel.replication > 1) {
+    if (!putBlockInfo.isFailed && putLevel.replication > 1) {
       data match {
         case ByteBufferValues(bytes) =>
           if (replicationFuture != null) {
