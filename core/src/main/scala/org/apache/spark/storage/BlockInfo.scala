@@ -71,7 +71,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     }
   }
 
-  /** Check is this BlockInfo is failed */
+  /** Check whether this BockInfo is failed */
   def isFailed(): Boolean = {
     failed
   }
