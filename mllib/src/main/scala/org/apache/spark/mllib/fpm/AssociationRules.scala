@@ -52,14 +52,13 @@ class AssociationRules private (
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
+    val numItems = freqItemsets.count()
     freqItemsets.flatMap { itemset =>
       val items = itemset.items
-      items.flatMap { item =>
+      items.map { item =>
         // Key using List[Item] because cannot use Array[Item] for map-side combining
         items.partition(_ == item) match {
-          case (consequent, antecedent) if antecedent.length > 0 =>
-            Some(antecedent.toList, (consequent.toList, itemset.freq))
-          case _ => None
+          case (consequent, antecedent) => (antecedent.toList, (consequent.toList, itemset.freq))
         }
       } :+ (items.toList, (Nil, itemset.freq))
     }.aggregateByKey(Map[List[Item], Long]().empty)(
@@ -67,9 +66,9 @@ class AssociationRules private (
       { (acc1, acc2) => acc1 ++ acc2 }
     ).flatMap { case (antecedent, consequentToFreq) =>
       consequentToFreq.flatMap { case (consequent, freqUnion) =>
-        val freqAntecedent = consequentToFreq(Nil)
+        val freqAntecedent = if (antecedent == Nil) numItems else consequentToFreq(Nil)
         val confidence = freqUnion.toDouble / freqAntecedent.toDouble
-        if (confidence >= minConfidence) {
+        if (!consequent.isEmpty && confidence >= minConfidence) {
           Some(Rule(antecedent.toArray, consequent.toArray, confidence))
         } else {
           None

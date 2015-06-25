@@ -39,35 +39,22 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMinConfidence(0.9)
       .run(freqItemsets)
       .collect()
-    assert(results1.size === 14)
+
+    println(
+      results1.map(r => {
+        s"${r.antecedent.toList} => ${r.consequent.toList} : ${r.confidence}}"
+      }).mkString("\n")
+    )
+
+    assert(results1.size === 23)
+    assert(results1.forall(rule => (rule.confidence - 1.0D) < 1e-6))
 
     val results2 = ar
       .setMinConfidence(0.5)
       .run(freqItemsets)
       .collect()
-    assert(results2.size === 22)
-  }
-
-  test("association rules using Int type") {
-    val freqItemsets = sc.parallelize(Seq(
-      (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),
-      (Set(1, 2), 4L), (Set(1, 3), 5L), (Set(2, 3), 4L),
-      (Set(2, 4), 4L), (Set(1, 2, 3), 4L))
-      .map({ case (items, freq) => new FreqItemset(items.toArray, freq) }))
-
-    val ar = new AssociationRules()
-
-    val results1 = ar
-      .setMinConfidence(0.9)
-      .run(freqItemsets)
-      .collect()
-    assert(results1.size === 0)
-
-    val results2 = ar
-      .setMinConfidence(0.5)
-      .run(freqItemsets)
-      .collect()
-    assert(results2.size === 3)
+    assert(results2.size === 36)
+    assert(results2.count(_ - 0.5D < 1e-6) == 4)
   }
 }
 
