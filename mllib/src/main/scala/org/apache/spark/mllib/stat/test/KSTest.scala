@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat.test
 
-import org.apache.commons.math3.distribution.NormalDistribution
+import org.apache.commons.math3.distribution.{NormalDistribution, RealDistribution}
 import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
 
 import org.apache.spark.rdd.RDD
@@ -39,68 +39,116 @@ private[stat] object KSTest {
   }
 
   /**
-   * Calculate empirical cumulative distribution values needed for KS statistic
-   * @param data `RDD[Double]` on which to calculate empirical cumulative distribution values
-   * @param size Size of data
-   * @return RDD of (Double, Double, Double), where the first element in each tuple is the
-   *         value, the second element is the ECDFV - 1 /n, and the third element is the ECDFV,
-   *         where ECDF stands for empirical cumulative distribution function value
-   */
-    def empirical(data: RDD[Double], size: Double): RDD[(Double, Double, Double)] = {
-    data.sortBy(x => x).zipWithIndex().map { case (v, i) => (v, i / size, (i + 1) / size) }
-  }
-
-  /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
-   * @param data `RDD[Double]` to evaluate
+   * @param data `RDD[Double]` data on which to run test
    * @param cdf `Double => Double` function to calculate the theoretical CDF
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
   def testOneSample(data: RDD[Double], cdf: Double => Double): KSTestResult = {
-    val n = data.count()
-    val empiriRDD = empirical(data, n.toDouble) // empirical distribution
-    val distances = empiriRDD.map {
-        case (v, dl, dp) =>
-          val cdfVal = cdf(v)
-          Math.max(cdfVal - dl, dp - cdfVal)
-      }
-    val ksStat = distances.max()
-    evalOneSampleP(ksStat, n)
+    val n = data.count().toDouble
+    val localData = data.sortBy(x => x).mapPartitions {
+      part =>
+        val partDiffs = oneSampleDifferences(part, n, cdf) // local distances
+        searchOneSampleCandidates(partDiffs) // candidates: local extrema
+        }.collect()
+    val ksStat = searchOneSampleStatistic(localData, n) // result: global extreme
+    evalOneSampleP(ksStat, n.toInt)
   }
 
   /**
-   * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution. Optimized
-   * such that each partition runs a separate mapping operation. This can help in cases where the
-   * CDF calculation involves creating an object. By using this implementation we can make sure
-   * only 1 object is created per partition, versus 1 per observation.
-   * @param data `RDD[Double]` to evaluate
-   * @param distCalc a function to calculate the distance between the empirical values and the
-   *                 theoretical value
+   * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
+   * @param data `RDD[Double]` data on which to run test
+   * @param createDist `Unit => RealDistribution` function to create a theoretical distribution
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
-  def testOneSampleOpt(data: RDD[Double],
-      distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
-    : KSTestResult = {
-    val n = data.count()
-    val empiriRDD = empirical(data, n.toDouble) // empirical distribution information
-    val distances = empiriRDD.mapPartitions(distCalc, false)
-    val ksStat = distances.max
-    evalOneSampleP(ksStat, n)
+  def testOneSample(data: RDD[Double], createDist: () => RealDistribution): KSTestResult = {
+    val n = data.count().toDouble
+    val localData = data.sortBy(x => x).mapPartitions {
+      part =>
+        val partDiffs = oneSampleDifferences(part, n, createDist) // local distances
+        searchOneSampleCandidates(partDiffs) // candidates: local extrema
+    }.collect()
+    val ksStat = searchOneSampleStatistic(localData, n) // result: global extreme
+    evalOneSampleP(ksStat, n.toInt)
   }
 
   /**
-   * Returns a function to calculate the KSTest with a standard normal distribution
-   * to be used with testOneSampleOpt
-   * @return Return a function that we can map over partitions to calculate the KS distance for each
-   *         observation on a per-partition basis
+   * Calculate unadjusted distances between the empirical CDF and the theoretical CDF in a
+   * partition
+   * @param partData `Iterator[Double]` 1 partition of a sorted RDD
+   * @param n `Double` the total size of the RDD
+   * @param cdf `Double => Double` a function the calculates the theoretical CDF of a value
+   * @return `Iterator[Double] `Unadjusted (ie. off by a constant) differences between
+   *        ECDF (empirical cumulative distribution function) and CDF. We subtract in such a way
+   *        that when adjusted by the appropriate constant, the difference will be equivalent
+   *        to the KS statistic calculation described in
+   *        http://www.itl.nist.gov/div898/handbook/eda/section3/eda35g.htm
+   *        where the difference is not exactly symmetric
    */
-  def stdNormDistances(): (Iterator[(Double, Double, Double)]) => Iterator[Double] = {
-    val dist = new NormalDistribution(0, 1)
-    (part: Iterator[(Double, Double, Double)]) => part.map {
-      case (v, dl, dp) =>
-        val cdfVal = dist.cumulativeProbability(v)
-        Math.max(cdfVal - dl, dp - cdfVal)
+  private def oneSampleDifferences(partData: Iterator[Double], n: Double, cdf: Double => Double)
+    : Iterator[Double] = {
+    // zip data with index (within that partition)
+    // calculate local (unadjusted) ECDF and subtract CDF
+    partData.zipWithIndex.map {
+      case (v, ix) =>
+        // dp and dl are later adjusted by constant, when global info is available
+        val dp = (ix + 1) / n
+        val dl = ix / n
+        val cdfVal = cdf(v)
+        // if dp > cdfVal the adjusted dp is still above cdfVal, if dp < cdfVal
+        // we want negative distance so that constant adjusted gives correct distance
+        if (dp > cdfVal) dp - cdfVal else dl - cdfVal
     }
+  }
+
+  private def oneSampleDifferences(partData: Iterator[Double], n: Double,
+      createDist: () => RealDistribution)
+    : Iterator[Double] = {
+    val dist = createDist()
+    oneSampleDifferences(partData, n, x => dist.cumulativeProbability(x))
+  }
+
+  /**
+   * Search the unadjusted differences between ECDF and CDF in a partition and return the
+   * two extrema (furthest below and furthest above CDF), along with a count of elements in that
+   * partition
+   * @param partDiffs `Iterator[Double]` the unadjusted differences between ECDF and CDF in a
+   *                 partition
+   * @return `Iterator[(Double, Double, Double)]` the local extrema and a count of elements
+   */
+  private def searchOneSampleCandidates(partDiffs: Iterator[Double])
+    : Iterator[(Double, Double, Double)] = {
+    val initAcc = (Double.MaxValue, Double.MinValue, 0.0)
+    val partResults = partDiffs.foldLeft(initAcc) {
+      case ((pMin, pMax, pCt), currDiff) =>
+        (Math.min(pMin, currDiff), Math.max(pMax, currDiff), pCt + 1)
+    }
+    Array(partResults).iterator
+  }
+
+  /**
+   * Find the global maximum distance between ECDF and CDF (i.e. the KS Statistic) after adjusting
+   * local extrema estimates from individual partitions with the amount of elements in preceding
+   * partitions
+   * @param localData `Array[(Double, Double, Double)]` A local array containing the collected
+   *                 results of `searchOneSampleCandidates` across all partitions
+   * @param n `Double`The size of the RDD
+   * @return The one-sample Kolmogorov Smirnov Statistic
+   */
+  private def searchOneSampleStatistic(localData: Array[(Double, Double, Double)], n: Double)
+    : Double = {
+    val initAcc = (Double.MinValue, 0.0)
+    // adjust differences based on the # of elements preceding it, which should provide
+    // the correct distance between ECDF and CDF
+    val results = localData.foldLeft(initAcc) {
+      case ((prevMax, prevCt), (minCand, maxCand, ct)) =>
+        val adjConst = prevCt / n
+        val dist1 = Math.abs(minCand + adjConst)
+        val dist2 = Math.abs(maxCand + adjConst)
+        val maxVal = Array(prevMax, dist1, dist2).max
+        (maxVal, prevCt + ct)
+    }
+    results._1
   }
 
   /**
@@ -113,12 +161,12 @@ private[stat] object KSTest {
   def testOneSample(data: RDD[Double], distName: String): KSTestResult = {
     val distanceCalc =
       distName match {
-        case "stdnorm" => stdNormDistances()
+        case "stdnorm" => () => new NormalDistribution(0, 1)
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
           s"convenience method. Current options are:[stdnorm].")
       }
 
-    testOneSampleOpt(data, distanceCalc)
+    testOneSample(data, distanceCalc)
   }
 
   private def evalOneSampleP(ksStat: Double, n: Long): KSTestResult = {
@@ -126,3 +174,4 @@ private[stat] object KSTest {
     new KSTestResult(pval, ksStat, NullHypothesis.oneSampleTwoSided.toString)
   }
 }
+
