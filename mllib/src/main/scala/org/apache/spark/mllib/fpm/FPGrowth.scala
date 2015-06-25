@@ -165,7 +165,7 @@ class FPGrowth private (
     .flatMap { case (part, tree) =>
       tree.extract(minCount, x => partitioner.getPartition(x) == part)
     }.map { case (ranks, count) =>
-      new FreqItemset(ranks.map(i => freqItems(i)).toArray, count, ordered)
+      new FreqItemset(ranks.map(i => freqItems(i)).reverse.toArray, count, ordered)
     }
   }
 
