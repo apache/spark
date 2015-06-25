@@ -69,7 +69,7 @@ private[hive] trait SaveAsHiveFile extends HiveInspectors with Logging {
     writerContainer.commitJob()
 
     // Note that this function is executed on executor side
-    def writeToFile(context: TaskContext, iterator: Iterator[Row]): Unit = {
+    def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
       val serializer = newSerializer(fileSinkConf.getTableInfo)
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(

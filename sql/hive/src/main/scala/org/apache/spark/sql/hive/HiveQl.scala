@@ -84,7 +84,7 @@ case class WriteToDirectory(
     path: String,
     child: LogicalPlan,
     isLocal: Boolean,
-    desc: TableDesc) extends UnaryNode {
+    desc: TableDesc) extends UnaryNode with Command {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
