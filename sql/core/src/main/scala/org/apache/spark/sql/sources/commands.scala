@@ -154,7 +154,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.internalRowRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -220,7 +220,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.queryExecution.executedPlan.execute(), writeRows _)
+      df.sqlContext.sparkContext.runJob(df.internalRowRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
