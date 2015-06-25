@@ -39,7 +39,9 @@ import org.apache.spark.storage.StorageLevel
  * @tparam Item item type
  */
 @Experimental
-class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable
+class FPGrowthModel[Item: ClassTag](
+    val freqItemsets: RDD[FreqItemset[Item]],
+    val numTransactions: Long) extends Serializable
 
 /**
  * :: Experimental ::
@@ -100,7 +102,7 @@ class FPGrowth private (
     val partitioner = new HashPartitioner(numParts)
     val freqItems = genFreqItems(data, minCount, partitioner)
     val freqItemsets = genFreqItemsets(data, minCount, freqItems, partitioner)
-    new FPGrowthModel(freqItemsets)
+    new FPGrowthModel(freqItemsets, count)
   }
 
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {

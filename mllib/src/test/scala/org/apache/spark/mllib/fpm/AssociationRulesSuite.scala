@@ -17,12 +17,12 @@
 package org.apache.spark.mllib.fpm
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.fpm.AssociationRules.Rule
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("association rules using String type") {
+    val numTransactions = 6
     val freqItemsets = sc.parallelize(Seq(
       (Set("s"), 3L), (Set("z"), 5L), (Set("x"), 4L), (Set("t"), 3L), (Set("y"), 3L),
       (Set("r"), 3L),
@@ -37,24 +37,19 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val results1 = ar
       .setMinConfidence(0.9)
-      .run(freqItemsets)
+      .run(new FPGrowthModel[String](freqItemsets, numTransactions))
       .collect()
-
-    println(
-      results1.map(r => {
-        s"${r.antecedent.toList} => ${r.consequent.toList} : ${r.confidence}}"
-      }).mkString("\n")
-    )
 
     assert(results1.size === 23)
-    assert(results1.forall(rule => (rule.confidence - 1.0D) < 1e-6))
+    assert(results1.forall(rule => math.abs(rule.confidence - 1.0D) < 1e-6))
 
     val results2 = ar
-      .setMinConfidence(0.5)
-      .run(freqItemsets)
+      .setMinConfidence(0)
+      .run(new FPGrowthModel[String](freqItemsets, numTransactions))
       .collect()
+
     assert(results2.size === 36)
-    assert(results2.count(_ - 0.5D < 1e-6) == 4)
+    assert(results2.count(rule => math.abs(rule.confidence - 0.5D) < 1e-6) == 4)
   }
 }
 

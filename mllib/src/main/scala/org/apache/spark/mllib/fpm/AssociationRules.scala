@@ -48,11 +48,13 @@ class AssociationRules private (
 
   /**
    * Computes the association rules with confidence above [[minConfidence]].
-   * @param freqItemsets frequent itemsets to compute association rules over.
+   * @param model frequent itemset model obtained from [[FPGrowth]]
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
    */
-  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
-    val numItems = freqItemsets.count()
+  def run[Item: ClassTag](model: FPGrowthModel[Item]): RDD[Rule[Item]] = {
+    val freqItemsets = model.freqItemsets
+    val numTransactions = model.numTransactions
+
     freqItemsets.flatMap { itemset =>
       val items = itemset.items
       items.map { item =>
@@ -66,10 +68,10 @@ class AssociationRules private (
       { (acc1, acc2) => acc1 ++ acc2 }
     ).flatMap { case (antecedent, consequentToFreq) =>
       consequentToFreq.flatMap { case (consequent, freqUnion) =>
-        val freqAntecedent = if (antecedent == Nil) numItems else consequentToFreq(Nil)
+        val freqAntecedent = if (antecedent == Nil) numTransactions else consequentToFreq(Nil)
         val confidence = freqUnion.toDouble / freqAntecedent.toDouble
         if (!consequent.isEmpty && confidence >= minConfidence) {
-          Some(Rule(antecedent.toArray, consequent.toArray, confidence))
+          Some(Rule[Item](antecedent.toArray, consequent.toArray, confidence))
         } else {
           None
         }
