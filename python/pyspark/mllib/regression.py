@@ -20,7 +20,6 @@ from numpy import array
 
 from pyspark import RDD
 from pyspark.streaming.dstream import DStream
-from pyspark.mllib.classification import StreamingLinearAlgorithm
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
@@ -572,6 +571,48 @@ class IsotonicRegression(object):
         return IsotonicRegressionModel(boundaries.toArray(), predictions.toArray(), isotonic)
 
 
+class StreamingLinearAlgorithm(object):
+    """
+    Base class that has to be inherited by any StreamingLinearAlgorithm.
+
+    Prevents reimplementation of methods predictOn and predictOnValues.
+    """
+    def __init__(self, model):
+        self._model = model
+
+    def latestModel(self):
+        """
+        Returns the latest model.
+        """
+        return self._model
+
+    def _validate(self, dstream):
+        if not isinstance(dstream, DStream):
+            raise TypeError(
+                "dstream should be a DStream object, got %s" % type(dstream))
+        if not self._model:
+            raise ValueError(
+                "Model must be intialized using setInitialWeights")
+
+    def predictOn(self, dstream):
+        """
+        Make predictions on a dstream.
+
+        :return: Transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.map(lambda x: self._model.predict(x))
+
+    def predictOnValues(self, dstream):
+        """
+        Make predictions on a keyed dstream.
+
+        :return: Transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.mapValues(lambda x: self._model.predict(x))
+
+
 @inherit_doc
 class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
@@ -606,7 +647,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
 
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
-        self._validate_dstream(dstream)
+        self._validate(dstream)
 
         def update(rdd):
             # LinearRegressionWithSGD.train raises an error for an empty RDD.
