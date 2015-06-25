@@ -61,12 +61,15 @@ case class DropTable(
     val databaseName = dbAndTableName
       .lift(dbAndTableName.size -2)
       .getOrElse(hiveContext.catalog.client.currentDatabase)
-    //tempDbname is used to pass the test "drop_partitions_filter"
-    //when we set hive.exec.drop.ignorenonexistent=false and run "drop table dbname.tablename"
-    //Hive will throws out Exception (This is a bug of Hive)
+    // tempDbname is used to pass the test "drop_partitions_filter"
+    // when we set hive.exec.drop.ignorenonexistent=false and run "drop table dbname.tablename"
+    // Hive will throws out Exception (This is a bug of Hive)
     val tempDbname =
-      if (hiveContext.hiveconf.getBoolVar(HiveConf.ConfVars.DROPIGNORESNONEXISTENT))
-      s"$databaseName."else ""
+      if (hiveContext.hiveconf.getBoolVar(HiveConf.ConfVars.DROPIGNORESNONEXISTENT)) {
+        s"$databaseName."
+      } else {
+        ""
+      }
     try {
       hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(dbAndTableName.last))
     } catch {
