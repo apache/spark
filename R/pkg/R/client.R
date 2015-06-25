@@ -52,7 +52,7 @@ determinefileSeperator <- function() {
     } else {
 #      .Platform$file.sep contains "/" for windows too    
 #      http://www.inside-r.org/r-doc/base/file.path    
-         fileSeperator <- "\\"  
+       fileSeperator <- "\\"  
     }
  fileSeperator  
 }
