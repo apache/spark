@@ -963,10 +963,10 @@ class BaseOperator(object):
         succeed. The task instance for the start_date is allowed to run.
     :type depends_on_past: bool
     :param wait_for_downstream: when set to true, an instance of task
-        X will wait for the dependents of the previous instance of task X
-        to finish successfully before it runs. This is useful if the
+        X will wait for tasks immediately downstream of the previous instance
+        of task X to finish successfully before it runs. This is useful if the
         different instances of a task X alter the same asset, and this asset
-        is used by the dependencies of task X.
+        is used by tasks downstream of task X.
     :type wait_for_downstream: bool
     :param queue: which queue to target when running this job. Not
         all executors implement queue management, the CeleryExecutor
