@@ -347,38 +347,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
   }
 
-  test("BlockId") {
-    testBlockIdObject(RDDBlockId(1, 2))
-    testBlockIdObject(ShuffleBlockId(1, 2, 3))
-    testBlockIdObject(ShuffleDataBlockId(1, 2, 3))
-    testBlockIdObject(ShuffleIndexBlockId(1, 2, 3))
-    testBlockIdObject(BroadcastBlockId(Long.MaxValue, "test field"))
-    testBlockIdObject(TaskResultBlockId(Long.MaxValue))
-    testBlockIdObject(StreamBlockId(1, Long.MaxValue))
-  }
-
-  test("SparkListenerBlockUpdated") {
-    val blockUpdated = SparkListenerBlockUpdated(
-      BlockUpdatedInfo(
-        BlockManagerId("1", "localhost", 10000),
-        StreamBlockId(100, 200L),
-        StorageLevel.MEMORY_AND_DISK_SER_2,
-        100L,
-        200L,
-        300L)
-    )
-    val oldBlockUpdated = JsonProtocol.sparkEventToJson(blockUpdated)
-    assert(blockUpdated === JsonProtocol.sparkEventFromJson(oldBlockUpdated))
-  }
-
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
-
-  private def testBlockIdObject(blockId: BlockId): Unit = {
-    val oldBlockId = JsonProtocol.blockIdToJson(blockId)
-    assert(blockId === JsonProtocol.blockIdFromJson(oldBlockId))
-  }
 
   private def testEvent(event: SparkListenerEvent, jsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
