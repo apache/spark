@@ -22,6 +22,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types.{ArrayType, StructField, StructType}
 import org.apache.spark.sql.{Column, DataFrame}
 
@@ -110,13 +111,17 @@ private[sql] object FrequentItems extends Logging {
         baseCounts
       }
     )
-    val justItems = freqItems.map(m => m.baseMap.keys.toSeq)
-    val resultRow = InternalRow(justItems : _*)
+
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map { v =>
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))
     }
-    val schema = StructType(outputCols).toAttributes
-    new DataFrame(df.sqlContext, LocalRelation(schema, Seq(resultRow)))
+    val schema = StructType(outputCols)
+
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val justItems = freqItems.map(m => m.baseMap.keys.toSeq)
+    val resultRow = converter(InternalRow(justItems : _*)).asInstanceOf[InternalRow]
+
+    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, Seq(resultRow)))
   }
 }
