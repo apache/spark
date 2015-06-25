@@ -80,7 +80,8 @@ class CrossValidator(uid: String)
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val metricsPerSplit = measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
+      val metricsPerSplit =
+        measureModels(trainingDataset, validationDataset, est, eval, epm, numModels)
 
       var i = 0
       while (i < numModels) {
