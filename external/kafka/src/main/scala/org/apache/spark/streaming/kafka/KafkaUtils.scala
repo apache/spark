@@ -670,4 +670,9 @@ private class KafkaUtilsPythonHelper {
     TopicAndPartition(topic, partition)
 
   def createBroker(host: String, port: JInt): Broker = Broker(host, port)
+
+  def getParentKafkaRDDs(rdd: RDD[_]): JList[RDD[_]] = {
+    val parentRDDs = rdd.getNarrowAncestors
+    parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
+  }
 }

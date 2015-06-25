@@ -21,6 +21,7 @@ from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
+from pyspark.streaming.util import TransformFunction
 
 __all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
 
@@ -165,6 +166,34 @@ class KafkaUtils(object):
         return rdd.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
+    def offsetRanges(rdd):
+        """
+        .. note:: Experimental
+
+        Get a list of OffsetRange of a KafkaRDD
+
+        :param rdd: RDD object which is narrowly depends on KafkaRDD.
+        :return: A list of OffsetRange which manifest the current processed Kafka partition metadata
+        """
+        try:
+            helperClass = rdd.ctx._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            kafkaRdds = helper.getParentKafkaRDDs(rdd._jrdd.rdd())
+        except Py4JJavaError as e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(rdd.ctx)
+            raise e
+
+        offsets = []
+        for r in kafkaRdds:
+            for o in r.offsetRanges():
+                offsets.append(
+                    OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset()))
+
+        return offsets
+
+    @staticmethod
     def _printErrorMsg(sc):
         print("""
 ________________________________________________________________________________________________
@@ -200,14 +229,30 @@ class OffsetRange(object):
         :param fromOffset: Inclusive starting offset.
         :param untilOffset: Exclusive ending offset.
         """
-        self._topic = topic
-        self._partition = partition
-        self._fromOffset = fromOffset
-        self._untilOffset = untilOffset
+        self.topic = topic
+        self.partition = partition
+        self.fromOffset = fromOffset
+        self.untilOffset = untilOffset
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.topic == other.topic
+                and self.partition == other.partition
+                and self.fromOffset == other.fromOffset
+                and self.untilOffset == other.untilOffset)
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d]" \
+               % (self.topic, self.partition, self.fromOffset, self.untilOffset)
 
     def _jOffsetRange(self, helper):
-        return helper.createOffsetRange(self._topic, self._partition, self._fromOffset,
-                                        self._untilOffset)
+        return helper.createOffsetRange(self.topic, self.partition, self.fromOffset,
+                                        self.untilOffset)
 
 
 class TopicAndPartition(object):
@@ -244,3 +289,4 @@ class Broker(object):
 
     def _jBroker(self, helper):
         return helper.createBroker(self._host, self._port)
+
