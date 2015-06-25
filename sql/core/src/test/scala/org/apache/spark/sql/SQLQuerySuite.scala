@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -1025,16 +1025,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    val overrides = sqlContext.defaultOverrides()
+    assert(sql("SET").collect().size === overrides.size)
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)
       assert(
-        TestSQLContext.overrideConfs.contains(key),
+        overrides.contains(key),
         s"$key should exist in SQLConf.")
       assert(
-        TestSQLContext.overrideConfs(key) === value,
-        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
+        overrides(key) === value,
+        s"The value of $key should be ${overrides(key)} instead of $value.")
     }
     val overrideConfs = sql("SET").collect()
 

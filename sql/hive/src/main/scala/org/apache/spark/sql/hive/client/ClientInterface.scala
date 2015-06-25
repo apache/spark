@@ -91,6 +91,9 @@ private[hive] trait ClientInterface {
   /** Returns the Hive Version of this client. */
   def version: HiveVersion
 
+  /** clear internal session state or something if needed */
+  def closeSession(sessionID: Int): Unit
+
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
 

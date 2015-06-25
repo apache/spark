@@ -136,12 +136,12 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def run(): Unit = {
+  override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      runInternal()
+      execute()
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
@@ -168,13 +168,13 @@ private[hive] class SparkExecuteStatementOperation(
               Hive.set(sessionHive)
               SessionState.setCurrentSessionState(parentSessionState)
               try {
-                runInternal()
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
                   log.error("Error running hive query: ", e)
               }
-              return null
+              null
             }
           }
 
@@ -206,7 +206,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def runInternal(): Unit = {
+  private def execute(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

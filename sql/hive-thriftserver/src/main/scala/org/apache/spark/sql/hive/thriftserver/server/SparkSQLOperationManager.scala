@@ -52,4 +52,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
       s"runInBackground=$runInBackground")
     operation
   }
+
+  override def cancelOperation (opHandle: OperationHandle): Unit = {
+  }
 }

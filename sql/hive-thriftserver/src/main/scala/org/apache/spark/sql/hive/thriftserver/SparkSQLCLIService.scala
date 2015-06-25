@@ -70,6 +70,30 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }
+
+  private def withMetaContext[A](f: => A): A = hiveContext.executionMetaHive.withHiveState(f)
+
+  override def getCatalogs(sessionHandle: SessionHandle): OperationHandle =
+    withMetaContext(super.getCatalogs(sessionHandle))
+
+  override def getSchemas(sessionHandle: SessionHandle, catalogName: String, schemaName: String):
+    OperationHandle =
+    withMetaContext(super.getSchemas(sessionHandle, catalogName, schemaName))
+
+  override def getTables(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    tableName: String, tableTypes: java.util.List[String]): OperationHandle =
+    withMetaContext(super.getTables(sessionHandle, catalogName, schemaName, tableName, tableTypes))
+
+  override def getTableTypes(sessionHandle: SessionHandle): OperationHandle =
+    withMetaContext(super.getTableTypes(sessionHandle))
+
+  override def getColumns(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    tableName: String, columnName: String): OperationHandle =
+    withMetaContext(super.getColumns(sessionHandle, catalogName, schemaName, tableName, columnName))
+
+  override def getFunctions(sessionHandle: SessionHandle, catalogName: String, schemaName: String,
+    functionName: String): OperationHandle =
+    withMetaContext(super.getFunctions(sessionHandle, catalogName, schemaName, functionName))
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>

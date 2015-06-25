@@ -37,7 +37,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // Clear the conf.
     sqlContext.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
-    assert(sqlContext.getAllConfs === TestSQLContext.overrideConfs)
+    assert(sqlContext.getAllConfs === sqlContext.defaultOverrides().size)
 
     sqlContext.setConf(testKey, testVal)
     assert(sqlContext.getConf(testKey) === testVal)

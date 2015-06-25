@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
@@ -38,6 +38,7 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -57,10 +58,9 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param initClassLoader the classloader used when creating the `state` field of
  *                        this ClientWrapper.
  */
-private[hive] class ClientWrapper(
+private[hive] abstract class ClientWrapper(
     override val version: HiveVersion,
-    config: Map[String, String],
-    initClassLoader: ClassLoader)
+    hiveContext: HiveContext)
   extends ClientInterface
   with Logging {
 
@@ -132,10 +132,7 @@ private[hive] class ClientWrapper(
     }
   }
 
-  // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
-  private val outputBuffer = new CircularBuffer()
-
-  private val shim = version match {
+  protected[hive] val shim = version match {
     case hive.v12 => new Shim_v0_12()
     case hive.v13 => new Shim_v0_13()
     case hive.v14 => new Shim_v0_14()
@@ -144,58 +141,22 @@ private[hive] class ClientWrapper(
     case hive.v1_2 => new Shim_v1_2()
   }
 
-  // Create an internal session state for this ClientWrapper.
-  val state = {
-    val original = Thread.currentThread().getContextClassLoader
-    // Switch to the initClassLoader.
-    Thread.currentThread().setContextClassLoader(initClassLoader)
-    val ret = try {
-      val oldState = SessionState.get()
-      if (oldState == null) {
-        val initialConf = new HiveConf(classOf[SessionState])
-        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-        // the initial value will be the current thread's context class loader
-        // (i.e. initClassLoader at here).
-        // We call initialConf.setClassLoader(initClassLoader) at here to make
-        // this action explicit.
-        initialConf.setClassLoader(initClassLoader)
-        config.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
-            logDebug(s"Hive Config: $k=xxx")
-          } else {
-            logDebug(s"Hive Config: $k=$v")
-          }
-          initialConf.set(k, v)
-        }
-        val newState = new SessionState(initialConf)
-        SessionState.start(newState)
-        newState.out = new PrintStream(outputBuffer, true, "UTF-8")
-        newState.err = new PrintStream(outputBuffer, true, "UTF-8")
-        newState
-      } else {
-        oldState
-      }
-    } finally {
-      Thread.currentThread().setContextClassLoader(original)
-    }
-    ret
-  }
-
-  /** Returns the configuration for the current session. */
-  def conf: HiveConf = SessionState.get().getConf
-
-  override def getConf(key: String, defaultValue: String): String = {
+  override def getConf(key: String, defaultValue: String): String = withHiveState {
     conf.get(key, defaultValue)
   }
 
-  // TODO: should be a def?s
-  // When we create this val client, the HiveConf of it (conf) is the one associated with state.
-  @GuardedBy("this")
-  private var client = Hive.get(conf)
+  // return internal session state to be used
+  protected[hive] def state: SessionState = SessionState.get
+
+  // should be called inside of withHiveState
+  protected[hive] def client: Hive = Hive.get(conf)
+
+  // should be called inside of withHiveState
+  protected[hive] final def conf: HiveConf = SessionState.get.getConf
 
   // We use hive's conf for compatibility.
-  private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
-  private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
+  private def retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
+  private def retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
 
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
@@ -217,7 +178,7 @@ private[hive] class ClientWrapper(
               s"(${retryLimit - numTries} tries remaining)", e)
           Thread.sleep(retryDelayMillis)
           try {
-            client = Hive.get(state.getConf, true)
+            Hive.closeCurrent()
           } catch {
             case e: Exception if causedByThrift(e) =>
               logWarning("Failed to refresh hive client, will retry.", e)
@@ -245,29 +206,31 @@ private[hive] class ClientWrapper(
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  private def withHiveState[A](f: => A): A = retryLocked {
-    val original = Thread.currentThread().getContextClassLoader
-    // Set the thread local metastore client to the client associated with this ClientWrapper.
-    Hive.set(client)
-    // setCurrentSessionState will use the classLoader associated
-    // with the HiveConf in `state` to override the context class loader of the current
-    // thread.
-    shim.setCurrentSessionState(state)
-    val ret = try f finally {
-      Thread.currentThread().setContextClassLoader(original)
-    }
-    ret
+  protected[hive] def withHiveState[A](f: => A): A = {
+    withHiveState(state, f)
   }
 
-  def setOut(stream: PrintStream): Unit = withHiveState {
+  protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
+    val currentLoader = Thread.currentThread().getContextClassLoader
+    Thread.currentThread().setContextClassLoader(session.getConf.getClassLoader)
+
+    shim.setCurrentSessionState(session)
+    Hive.set(client)
+
+    try retryLocked(f) finally {
+      Thread.currentThread().setContextClassLoader(currentLoader)
+    }
+  }
+
+  override def setOut(stream: PrintStream): Unit = withHiveState {
     state.out = stream
   }
 
-  def setInfo(stream: PrintStream): Unit = withHiveState {
+  override def setInfo(stream: PrintStream): Unit = withHiveState {
     state.info = stream
   }
 
-  def setError(stream: PrintStream): Unit = withHiveState {
+  override def setError(stream: PrintStream): Unit = withHiveState {
     state.err = stream
   }
 
@@ -276,7 +239,7 @@ private[hive] class ClientWrapper(
   }
 
   override def createDatabase(database: HiveDatabase): Unit = withHiveState {
-    client.createDatabase(
+    Hive.get().createDatabase(
       new Database(
         database.name,
         "",
@@ -286,7 +249,7 @@ private[hive] class ClientWrapper(
   }
 
   override def getDatabaseOption(name: String): Option[HiveDatabase] = withHiveState {
-    Option(client.getDatabase(name)).map { d =>
+    Option(Hive.get().getDatabase(name)).map { d =>
       HiveDatabase(
         name = d.getName,
         location = d.getLocationUri)
@@ -299,7 +262,7 @@ private[hive] class ClientWrapper(
 
     logDebug(s"Looking up $dbName.$tableName")
 
-    val hiveTable = Option(client.getTable(dbName, tableName, false))
+    val hiveTable = Option(Hive.get().getTable(dbName, tableName, false))
     val converted = hiveTable.map { h =>
 
       HiveTable(
@@ -356,12 +319,12 @@ private[hive] class ClientWrapper(
 
   override def createTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
-    client.createTable(qlTable)
+    Hive.get().createTable(qlTable)
   }
 
   override def alterTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
-    client.alterTable(table.qualifiedName, qlTable)
+    Hive.get().alterTable(table.qualifiedName, qlTable)
   }
 
   private def toHivePartition(partition: metadata.Partition): HivePartition = {
@@ -381,24 +344,24 @@ private[hive] class ClientWrapper(
       partitionSpec: JMap[String, String]): Option[HivePartition] = withHiveState {
 
     val qlTable = toQlTable(table)
-    val qlPartition = client.getPartition(qlTable, partitionSpec, false)
+    val qlPartition = Hive.get().getPartition(qlTable, partitionSpec, false)
     Option(qlPartition).map(toHivePartition)
   }
 
   override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
-    shim.getAllPartitions(client, qlTable).map(toHivePartition)
+    shim.getAllPartitions(Hive.get(), qlTable).map(toHivePartition)
   }
 
   override def getPartitionsByFilter(
       hTable: HiveTable,
       predicates: Seq[Expression]): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
-    shim.getPartitionsByFilter(client, qlTable, predicates).map(toHivePartition)
+    shim.getPartitionsByFilter(Hive.get(), qlTable, predicates).map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName).asScala
+    Hive.get().getAllTables(dbName).asScala
   }
 
   /**
@@ -449,18 +412,13 @@ private[hive] class ClientWrapper(
       }
     } catch {
       case e: Exception =>
-        logError(
-          s"""
-            |======================
-            |HIVE FAILURE OUTPUT
-            |======================
-            |${outputBuffer.toString}
-            |======================
-            |END HIVE FAILURE OUTPUT
-            |======================
-          """.stripMargin)
-        throw e
+        failed(e)
     }
+  }
+
+  protected[client] def failed(e: Exception) = {
+    logError(e.toString)
+    throw e
   }
 
   def loadPartition(
@@ -515,6 +473,7 @@ private[hive] class ClientWrapper(
   }
 
   def reset(): Unit = withHiveState {
+    val client = Hive.get()
     client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
@@ -529,5 +488,109 @@ private[hive] class ClientWrapper(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+  }
+}
+
+class SharedWrapper(
+    version: HiveVersion,
+    hiveContext: HiveContext)
+  extends ClientWrapper(version, hiveContext) {
+
+  // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
+  private val outputBuffer = new CircularBuffer()
+
+  override protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
+    val out = session.out
+    val err = session.err
+    session.out = new PrintStream(outputBuffer, true, "UTF-8")
+    session.err = new PrintStream(outputBuffer, true, "UTF-8")
+    try f finally {
+      session.out = out
+      session.err = err
+    }
+  }
+
+  override protected[client] def failed(e: Exception) = {
+    logError(
+      s"""
+        |======================
+        |HIVE FAILURE OUTPUT
+        |======================
+        |${outputBuffer.toString}
+        |======================
+        |END HIVE FAILURE OUTPUT
+        |======================
+      """.stripMargin)
+    throw e
+  }
+
+  def closeSession(sessionID: Int): Unit = { /* Nothing to be done */ }
+}
+
+class IsolatedWrapper(
+    version: HiveVersion,
+    initClassLoader: ClassLoader,
+    config: Map[String, String] = Map.empty,
+    hiveContext: HiveContext)
+  extends ClientWrapper(version, hiveContext) {
+
+  private val mapping: mutable.HashMap[Int, SessionState] = mutable.HashMap.empty
+
+  private def newConf: HiveConf = {
+    val initialConf = new HiveConf(classOf[SessionState]) {
+      override def set(name: String, value: String): Unit = {
+        super.set(name, value)
+        hiveContext.setHiveConf(name, value)  // propagate to outside
+      }
+    }
+    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+    // the initial value will be the current thread's context class loader
+    // (i.e. initClassLoader at here).
+    // We call initialConf.setClassLoader(initClassLoader) at here to make
+    // this action explicit.
+    initialConf.setClassLoader(initClassLoader)
+    (hiveContext.currentSession().config ++ config).foreach { case (k, v) =>
+      if (k.toLowerCase.contains("password")) {
+        logDebug(s"Hive Config: $k=xxx")
+      } else {
+        logDebug(s"Hive Config: $k=$v")
+      }
+      initialConf.set(k, v)
+    }
+    initialConf
+  }
+
+  override def closeSession(sessionID: Int): Unit = {
+    val detaching = mapping.remove(sessionID)
+    if (detaching.isDefined) {
+      detaching.get.close()
+    }
+  }
+
+  override protected[hive] def state: SessionState = {
+    val sessionID = hiveContext.sessionID
+    mapping.getOrElse(sessionID, {
+      val state = new SessionState(newConf)
+      state.out = new PrintStream(System.out, true, "UTF-8")
+      state.err = new PrintStream(System.err, true, "UTF-8")
+      withHiveState(state, SessionState.start(state))
+      mapping.put(sessionID, state)
+      state
+    })
+  }
+
+  override protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
+    session.setCurrentDatabase(hiveContext.getCurrentDatabase)
+    try super.withHiveState(session, f) finally {
+      hiveContext.setCurrentDatabase(session.getCurrentDatabase)
+    }
+  }
+
+  override def reset(): Unit = {
+    super.reset()
+    for (session <- mapping.values) {
+      session.close()
+    }
+    mapping.clear()
   }
 }

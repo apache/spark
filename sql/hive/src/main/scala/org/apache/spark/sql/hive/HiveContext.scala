@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{PrintStream, File}
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
+import java.util.Map.Entry
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.{Properties, Collections}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -32,7 +35,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.metadata.{Hive, Table}
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
@@ -69,10 +72,13 @@ private[hive] class HiveQLDialect extends ParserDialect {
  *
  * @since 1.0.0
  */
-class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
-  self =>
+class HiveContext(sc: SparkContext, optionConf: Map[String, String] = Map.empty)
+    extends SQLContext(sc, optionConf) with Logging {
 
+  self =>
   import HiveContext._
+
+  def this(sparkContext: SparkContext) = this(sparkContext, Map.empty)
 
   logDebug("create HiveContext")
 
@@ -150,32 +156,70 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
+  @transient
+  private val execOverrides = newTemporaryConfiguration(properties.asScala.toMap)
+
+  @transient
+  protected[hive] lazy val executionMetaHive: ClientWrapper = {
+    logInfo(s"Initializing execution meta hive, version $hiveExecutionVersion")
+    // todo: with embedded derby, it will throw exception. let's pray users not to do that
+    new SharedWrapper(IsolatedClientLoader.hiveVersion(hiveExecutionVersion), this)
+  }
+
+  def execute[A](hiveConf: HiveConf, f: => A): A =
+    executionHive.withHiveState(new SessionState(hiveConf), f)
+
   /**
    * The copy of the hive client that is used for execution.  Currently this must always be
-   * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
+   * Hive 1.2.1 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
    * client is used for execution related tasks like registering temporary functions or ensuring
    * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
    * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
-  protected[hive] lazy val executionHive: ClientWrapper = {
+  protected[hive] val executionHive: ClientWrapper = {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
-    new ClientWrapper(
-      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = newTemporaryConfiguration(),
-      initClassLoader = Utils.getContextOrSparkClassLoader)
+    val dummyHive = makeDummyHive
+    val dummyConf = dummyHive.getConf
+    new SharedWrapper(IsolatedClientLoader.hiveVersion(hiveExecutionVersion), this) {
+      override protected[hive] def client = dummyHive
+      override protected[hive] def withHiveState[A](session: SessionState, f: => A): A = {
+        // Hive.getHive() compares metavars in Hive.getConf and SessionState.getConf
+        val execConf = session.getConf
+        val copyConf = execOverrides.map {
+          case (key, value) => (key, Option(execConf.get(key)).getOrElse(""))}
+        copyConf.foreach {
+          case (key, value) => execConf.set(key, Option(dummyConf.get(key)).getOrElse(""))}
+        try super.withHiveState(session, f) finally {
+          copyConf.foreach {case (key, value) => execConf.set(key, value)}
+        }
+      }
+    }
   }
-  SessionState.setCurrentSessionState(executionHive.state)
+
+  private def makeDummyHive: Hive = {
+    val current = SessionState.get()
+    val dummyState = createState(defaultOverrides ++ execOverrides)
+    dummyState.setIsHiveServerQuery(true)
+    try {
+      SessionState.start(dummyState)
+      Hive.get()
+    } finally {
+      SessionState.get().close()
+      if (current != null) {
+        SessionState.setCurrentSessionState(current)
+      }
+    }
+  }
 
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
-  private[sql] def defaultOverrides() = {
-    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+  protected[sql] override def defaultOverrides(): Map[String, String] = {
+    super.defaultOverrides ++
+      Seq(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname -> "false").toMap
   }
-
-  defaultOverrides()
 
   /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
@@ -193,8 +237,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
     logInfo("default warehouse location is " + defaultWarehouseLocation)
 
-    // `configure` goes second to override other settings.
-    val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
+    val allConfig = defaultOverrides()
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
@@ -230,16 +273,17 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         config = allConfig,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
+        sharedPrefixes = hiveMetastoreSharedPrefixes,
+        hiveContext = self)
     } else if (hiveMetastoreJars == "maven") {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(
-        version = hiveMetastoreVersion,
+      IsolatedClientLoader.forVersion(version = hiveMetastoreVersion,
         config = allConfig,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
+        sharedPrefixes = hiveMetastoreSharedPrefixes,
+        hiveContext = self)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -267,16 +311,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         config = allConfig,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
+        sharedPrefixes = hiveMetastoreSharedPrefixes,
+        hiveContext = self)
     }
     isolatedLoader.client
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    var state = SessionState.get()
-    if (state == null) {
-      SessionState.setCurrentSessionState(tlSession.get().asInstanceOf[SQLSession].sessionState)
-    }
     super.parseSql(substitutor.substitute(hiveconf, sql))
   }
 
@@ -385,18 +426,43 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     }
   }
 
-  protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
+  /**
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. reuse existing started SessionState if any
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   * SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   * set in the SQLConf *as well as* in the HiveConf.
+   */
+  private def session: SessionState = {
+    Option(SessionState.get()).getOrElse({
+      val newState = createState(defaultOverrides())
+      executionHive.withHiveState(newState, SessionState.start(newState))
+    })
+  }
+
+  private def createState(overrides: Map[String, String]): SessionState = {
+    val execConf = new HiveConf(classOf[SessionState])
+    overrides.foreach { case (key, value) => execConf.set(key, value) }
+    new SessionState(execConf)
+  }
+
+  protected[hive] def sessionID = currentSession().sessionID
+
+  protected[hive] def hiveconf = session.getConf
+
+  protected[hive] def getCurrentDatabase = session.getCurrentDatabase
+
+  protected[hive] def setCurrentDatabase(database: String) = session.setCurrentDatabase(database)
+
+  protected[hive] def setHiveConf(key: String, value: String): Unit = {
+    hiveconf.set(key, value)
+  }
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
-    // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
-    // this setConf will be called in the constructor of the SQLContext.
-    // Also, calling hiveconf will create a default session containing a HiveConf, which
-    // will interfer with the creation of executionHive (which is a lazy val). So,
-    // we put hiveconf.set at the end of this method.
-    hiveconf.set(key, value)
+    executionHive.runSqlHive(s"SET $key=$value")
   }
 
   override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
@@ -431,12 +497,30 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       )
     }
 
+  val sequencer: AtomicInteger = new AtomicInteger()
+
   override protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
+    val config = configure(hiveconf)
+    val current: SQLSession = newSession(sequencer.incrementAndGet(), config)
+    return current
+  }
+
+  def newSession(sessionID: Int, config: Map[String, String]): SQLSession = {
+    new this.SQLSession(sessionID, config)
+  }
+
+  override protected[sql] def currentSession(): SQLSession = {
+    super.currentSession().asInstanceOf[this.SQLSession]
+  }
+
+  override protected[sql] def detachSession(): Unit = {
+    metadataHive.closeSession(sessionID)
+    executionHive.closeSession(sessionID)
+    super.detachSession()
   }
 
   /** Overridden by child classes that need to set configuration before the client init. */
-  protected def configure(): Map[String, String] = {
+  protected def configure(hiveConf: HiveConf): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -485,36 +569,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
-      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
+      confVar.varname -> hiveConf.getTimeVar(confVar, unit).toString
     }.toMap
   }
 
-  protected[hive] class SQLSession extends super.SQLSession {
-    protected[sql] override lazy val conf: SQLConf = new SQLConf {
+  protected[hive] class SQLSession(val sessionID: Int, val config: Map[String, String])
+      extends super.SQLSession {
+    protected[sql] override lazy val conf: SQLConf = new SQLConf(defaultOverrides()) {
       override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-    }
-
-    /**
-     * SQLConf and HiveConf contracts:
-     *
-     * 1. reuse existing started SessionState if any
-     * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-     *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-     *    set in the SQLConf *as well as* in the HiveConf.
-     */
-    protected[hive] lazy val sessionState: SessionState = {
-      var state = SessionState.get()
-      if (state == null) {
-        state = new SessionState(new HiveConf(classOf[SessionState]))
-        SessionState.start(state)
+      config.foreach {
+        case (key, value) => setConfString(key, value)
       }
-      state
-    }
-
-    protected[hive] lazy val hiveconf: HiveConf = {
-      setConf(sessionState.getConf.getAllProperties)
-      sessionState.getConf
     }
   }
 
@@ -549,9 +615,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   }
 
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
-    if (sql.toLowerCase.contains("create temporary function")) {
+    val command: String = sql.trim.toLowerCase
+    if (command.contains("create temporary function")) {
       executionHive.runSqlHive(sql)
-    } else if (sql.trim.toLowerCase.startsWith("set")) {
+    } else if (command.startsWith("add") || command.startsWith("remove")) {
       metadataHive.runSqlHive(sql)
       executionHive.runSqlHive(sql)
     } else {
@@ -657,10 +724,13 @@ private[hive] object HiveContext {
     doc = "TODO")
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
-  def newTemporaryConfiguration(): Map[String, String] = {
+  def newTemporaryConfiguration(config: Map[String, String] = Map.empty): Map[String, String] = {
     val tempDir = Utils.createTempDir()
     val localMetastore = new File(tempDir, "metastore")
     val propMap: HashMap[String, String] = HashMap()
+    config.foreach {
+      case (key, value) => propMap.put(key, value)
+    }
     // We have to mask all properties in hive-site.xml that relates to metastore data source
     // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar =>

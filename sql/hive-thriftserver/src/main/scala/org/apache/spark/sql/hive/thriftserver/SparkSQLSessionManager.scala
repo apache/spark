@@ -49,6 +49,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     addService(sparkSqlOperationManager)
 
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
     initCompositeService(hiveConf)
   }
 
@@ -60,10 +63,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       sessionConf: java.util.Map[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
-    hiveContext.openSession()
-    val sessionHandle =
+    val sessionHandle = hiveContext.execute(getHiveConf,
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
-          delegationToken)
+          delegationToken))
+    hiveContext.openSession()
+
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
