@@ -41,30 +41,31 @@ private[stat] object KSTest {
   /**
    * Calculate empirical cumulative distribution values needed for KS statistic
    * @param data `RDD[Double]` on which to calculate empirical cumulative distribution values
-   * @return and RDD of (Double, Double, Double), where the first element in each tuple is the
+   * @param size Size of data
+   * @return RDD of (Double, Double, Double), where the first element in each tuple is the
    *         value, the second element is the ECDFV - 1 /n, and the third element is the ECDFV,
    *         where ECDF stands for empirical cumulative distribution function value
    */
-  def empirical(data: RDD[Double]): RDD[(Double, Double, Double)] = {
-    val n = data.count().toDouble
-    data.sortBy(x => x).zipWithIndex().map { case (v, i) => (v, i / n, (i + 1) / n) }
+    def empirical(data: RDD[Double], size: Double): RDD[(Double, Double, Double)] = {
+    data.sortBy(x => x).zipWithIndex().map { case (v, i) => (v, i / size, (i + 1) / size) }
   }
 
   /**
    * Runs a KS test for 1 set of sample data, comparing it to a theoretical distribution
-   * @param dat `RDD[Double]` to evaluate
+   * @param data `RDD[Double]` to evaluate
    * @param cdf `Double => Double` function to calculate the theoretical CDF
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
-  def testOneSample(dat: RDD[Double], cdf: Double => Double): KSTestResult = {
-    val empiriRDD = empirical(dat) // empirical distribution
+  def testOneSample(data: RDD[Double], cdf: Double => Double): KSTestResult = {
+    val n = data.count()
+    val empiriRDD = empirical(data, n.toDouble) // empirical distribution
     val distances = empiriRDD.map {
         case (v, dl, dp) =>
           val cdfVal = cdf(v)
           Math.max(cdfVal - dl, dp - cdfVal)
       }
     val ksStat = distances.max()
-    evalOneSampleP(ksStat, distances.count())
+    evalOneSampleP(ksStat, n)
   }
 
   /**
@@ -72,18 +73,19 @@ private[stat] object KSTest {
    * such that each partition runs a separate mapping operation. This can help in cases where the
    * CDF calculation involves creating an object. By using this implementation we can make sure
    * only 1 object is created per partition, versus 1 per observation.
-   * @param dat `RDD[Double]` to evaluate
+   * @param data `RDD[Double]` to evaluate
    * @param distCalc a function to calculate the distance between the empirical values and the
    *                 theoretical value
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
-  def testOneSampleOpt(dat: RDD[Double],
+  def testOneSampleOpt(data: RDD[Double],
       distCalc: Iterator[(Double, Double, Double)] => Iterator[Double])
     : KSTestResult = {
-    val empiriRDD = empirical(dat) // empirical distribution information
+    val n = data.count()
+    val empiriRDD = empirical(data, n.toDouble) // empirical distribution information
     val distances = empiriRDD.mapPartitions(distCalc, false)
     val ksStat = distances.max
-    evalOneSampleP(ksStat, distances.count())
+    evalOneSampleP(ksStat, n)
   }
 
   /**
@@ -104,11 +106,11 @@ private[stat] object KSTest {
   /**
    * A convenience function that allows running the KS test for 1 set of sample data against
    * a named distribution
-   * @param dat the sample data that we wish to evaluate
+   * @param data the sample data that we wish to evaluate
    * @param distName the name of the theoretical distribution
    * @return KSTestResult summarizing the test results (pval, statistic, and null hypothesis)
    */
-  def testOneSample(dat: RDD[Double], distName: String): KSTestResult = {
+  def testOneSample(data: RDD[Double], distName: String): KSTestResult = {
     val distanceCalc =
       distName match {
         case "stdnorm" => stdNormDistances()
@@ -116,7 +118,7 @@ private[stat] object KSTest {
           s"convenience method. Current options are:[stdnorm].")
       }
 
-    testOneSampleOpt(dat, distanceCalc)
+    testOneSampleOpt(data, distanceCalc)
   }
 
   private def evalOneSampleP(ksStat: Double, n: Long): KSTestResult = {
