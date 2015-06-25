@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.plans.logical._
+
 import scala.language.implicitConversions
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
 import scala.util.parsing.input.CharArrayReader.EofCh
-
-import org.apache.spark.sql.catalyst.plans.logical._
 
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
@@ -82,8 +82,10 @@ class SqlLexical extends StdLexical {
 
   /* This is a work around to support the lazy setting */
   def initialize(keywords: Seq[String]): Unit = {
-    reserved.clear()
-    reserved ++= keywords
+    synchronized {
+      reserved.clear()
+      reserved ++= keywords
+    }
   }
 
   /* Normal the keyword string */
