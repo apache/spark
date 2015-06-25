@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tuning
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.evaluation.Evaluator
@@ -26,7 +28,6 @@ import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
-import scala.reflect.ClassTag
 
 /**
  * :: DeveloperApi ::
