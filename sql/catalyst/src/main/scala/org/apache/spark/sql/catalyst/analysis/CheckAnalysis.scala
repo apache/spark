@@ -113,13 +113,6 @@ trait CheckAnalysis {
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
 
-          case o if o.schema.fieldNames.length != o.schema.fieldNames.distinct.length =>
-            val duplicateFields = o.schema.fieldNames.groupBy(identity).collect{
-                                    case (x, ys) if ys.length > 1 => x
-                                  }.mkString(",")
-
-            failAnalysis( s"""Duplicate Column(s) : "$duplicateFields" present""" )
-
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
               s"""Only a single table generating function is allowed in a SELECT clause, found:
