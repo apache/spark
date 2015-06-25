@@ -205,10 +205,6 @@ class GenericInternalRow(protected[sql] val values: Array[Any]) extends Internal
     values(i).asInstanceOf[Byte]
   }
 
-  override def getString(i: Int): String = {
-    values(i).asInstanceOf[UTF8String].toString
-  }
-
   override def copy(): InternalRow = this
 }
 

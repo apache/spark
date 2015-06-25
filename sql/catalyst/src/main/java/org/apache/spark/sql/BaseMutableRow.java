@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.MutableRow;
 
-public abstract class BaseMutableRow extends BaseRow implements MutableRow {
+public abstract class BaseMutableRow extends InternalRow implements MutableRow {
 
   @Override
   public void update(int ordinal, Object value) {

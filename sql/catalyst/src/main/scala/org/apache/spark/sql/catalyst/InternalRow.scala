@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
@@ -26,10 +27,37 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 abstract class InternalRow extends Row {
 
-  override def getString(i: Int): String = {throw new UnsupportedOperationException}
+  // This is only use for test
+  override def getString(i: Int): String = getAs[UTF8String](i).toString
+
+  // These expensive API should not be used internally.
+  override def getDecimal(i: Int): java.math.BigDecimal = throw new UnsupportedOperationException
+  override def getDate(i: Int): java.sql.Date = throw new UnsupportedOperationException
+  override def getTimestamp(i: Int): java.sql.Timestamp = throw new UnsupportedOperationException
+  override def getSeq[T](i: Int): Seq[T] = throw new UnsupportedOperationException
+  override def getList[T](i: Int): java.util.List[T] = throw new UnsupportedOperationException
+  override def getMap[K, V](i: Int): scala.collection.Map[K, V] =
+    throw new UnsupportedOperationException
+  override def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+    throw new UnsupportedOperationException
+  override def getStruct(i: Int): InternalRow = throw new UnsupportedOperationException
+  override def getAs[T](fieldName: String): T = throw new UnsupportedOperationException
+  override def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] =
+    throw new UnsupportedOperationException
 
   // A default implementation to change the return type
   override def copy(): InternalRow = this
+  override def apply(i: Int): Any = get(i)
+  def toSeq(): Seq[Any] = {
+    val n = length
+    val values = new Array[Any](n)
+    var i = 0
+    while (i < n) {
+      values.update(i, get(i))
+      i += 1
+    }
+    values.toSeq
+  }
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[Row]) {

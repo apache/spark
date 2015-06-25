@@ -63,6 +63,8 @@ public final class UnsafeRow extends BaseMutableRow {
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
 
+  public int length() { return numFields; }
+
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
   /**
