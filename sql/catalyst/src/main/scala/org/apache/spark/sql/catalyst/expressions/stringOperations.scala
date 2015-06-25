@@ -117,8 +117,6 @@ trait CaseConversionExpression extends ExpectsInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 

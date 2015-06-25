@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.util.hashing.MurmurHash3
-
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -363,36 +361,6 @@ trait Row extends Serializable {
       i += 1
     }
     false
-  }
-
-  override def equals(that: Any): Boolean = that match {
-    case null => false
-    case that: Row =>
-      if (this.length != that.length) {
-        return false
-      }
-      var i = 0
-      val len = this.length
-      while (i < len) {
-        if (apply(i) != that.apply(i)) {
-          return false
-        }
-        i += 1
-      }
-      true
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    // Using Scala's Seq hash code implementation.
-    var n = 0
-    var h = MurmurHash3.seqSeed
-    val len = length
-    while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
-      n += 1
-    }
-    MurmurHash3.finalizeHash(h, n)
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

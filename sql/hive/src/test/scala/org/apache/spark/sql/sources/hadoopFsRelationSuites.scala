@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.sources
 
+import scala.collection.JavaConversions._
+
 import java.io.File
 
 import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -476,7 +482,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
   // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
   // later.
-  test("SPARK-8406: Avoids name collision while writing Parquet files") {
+  test("SPARK-8406: Avoids name collision while writing files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       sqlContext
@@ -496,6 +502,81 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
           .count()
       }
     }
+  }
+
+  test("SPARK-8578 specified custom output committer will not be used to append data") {
+    val clonedConf = new Configuration(configuration)
+    try {
+      val df = sqlContext.range(1, 10).toDF("i")
+      withTempPath { dir =>
+        df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+        configuration.set(
+          SQLConf.OUTPUT_COMMITTER_CLASS.key,
+          classOf[AlwaysFailOutputCommitter].getName)
+        // Since Parquet has its own output committer setting, also set it
+        // to AlwaysFailParquetOutputCommitter at here.
+        configuration.set("spark.sql.parquet.output.committer.class",
+          classOf[AlwaysFailParquetOutputCommitter].getName)
+        // Because there data already exists,
+        // this append should succeed because we will use the output committer associated
+        // with file format and AlwaysFailOutputCommitter will not be used.
+        df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+        checkAnswer(
+          sqlContext.read
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .load(dir.getCanonicalPath),
+          df.unionAll(df))
+
+        // This will fail because AlwaysFailOutputCommitter is used when we do append.
+        intercept[Exception] {
+          df.write.mode("overwrite").format(dataSourceName).save(dir.getCanonicalPath)
+        }
+      }
+      withTempPath { dir =>
+        configuration.set(
+          SQLConf.OUTPUT_COMMITTER_CLASS.key,
+          classOf[AlwaysFailOutputCommitter].getName)
+        // Since Parquet has its own output committer setting, also set it
+        // to AlwaysFailParquetOutputCommitter at here.
+        configuration.set("spark.sql.parquet.output.committer.class",
+          classOf[AlwaysFailParquetOutputCommitter].getName)
+        // Because there is no existing data,
+        // this append will fail because AlwaysFailOutputCommitter is used when we do append
+        // and there is no existing data.
+        intercept[Exception] {
+          df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+        }
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      configuration.clear()
+      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+    }
+  }
+}
+
+// This class is used to test SPARK-8578. We should not use any custom output committer when
+// we actually append data to an existing dir.
+class AlwaysFailOutputCommitter(
+    outputPath: Path,
+    context: TaskAttemptContext)
+  extends FileOutputCommitter(outputPath, context) {
+
+  override def commitJob(context: JobContext): Unit = {
+    sys.error("Intentional job commitment failure for testing purpose.")
+  }
+}
+
+// This class is used to test SPARK-8578. We should not use any custom output committer when
+// we actually append data to an existing dir.
+class AlwaysFailParquetOutputCommitter(
+    outputPath: Path,
+    context: TaskAttemptContext)
+  extends ParquetOutputCommitter(outputPath, context) {
+
+  override def commitJob(context: JobContext): Unit = {
+    sys.error("Intentional job commitment failure for testing purpose.")
   }
 }
 

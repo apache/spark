@@ -306,6 +306,13 @@ def parse_args():
         "--private-ips", action="store_true", default=False,
         help="Use private IPs for instances rather than public if VPC/subnet " +
              "requires that.")
+    parser.add_option(
+        "--instance-initiated-shutdown-behavior", default="stop",
+        choices=["stop", "terminate"],
+        help="Whether instances should terminate when shut down or just stop")
+    parser.add_option(
+        "--instance-profile-name", default=None,
+        help="IAM profile name to launch instances under")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -602,7 +609,8 @@ def launch_cluster(conn, opts, cluster_name):
                 block_device_map=block_map,
                 subnet_id=opts.subnet_id,
                 placement_group=opts.placement_group,
-                user_data=user_data_content)
+                user_data=user_data_content,
+                instance_profile_name=opts.instance_profile_name)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -647,16 +655,19 @@ def launch_cluster(conn, opts, cluster_name):
         for zone in zones:
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
-                slave_res = image.run(key_name=opts.key_pair,
-                                      security_group_ids=[slave_group.id] + additional_group_ids,
-                                      instance_type=opts.instance_type,
-                                      placement=zone,
-                                      min_count=num_slaves_this_zone,
-                                      max_count=num_slaves_this_zone,
-                                      block_device_map=block_map,
-                                      subnet_id=opts.subnet_id,
-                                      placement_group=opts.placement_group,
-                                      user_data=user_data_content)
+                slave_res = image.run(
+                    key_name=opts.key_pair,
+                    security_group_ids=[slave_group.id] + additional_group_ids,
+                    instance_type=opts.instance_type,
+                    placement=zone,
+                    min_count=num_slaves_this_zone,
+                    max_count=num_slaves_this_zone,
+                    block_device_map=block_map,
+                    subnet_id=opts.subnet_id,
+                    placement_group=opts.placement_group,
+                    user_data=user_data_content,
+                    instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+                    instance_profile_name=opts.instance_profile_name)
                 slave_nodes += slave_res.instances
                 print("Launched {s} slave{plural_s} in {z}, regid = {r}".format(
                       s=num_slaves_this_zone,
@@ -678,16 +689,19 @@ def launch_cluster(conn, opts, cluster_name):
             master_type = opts.instance_type
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
-        master_res = image.run(key_name=opts.key_pair,
-                               security_group_ids=[master_group.id] + additional_group_ids,
-                               instance_type=master_type,
-                               placement=opts.zone,
-                               min_count=1,
-                               max_count=1,
-                               block_device_map=block_map,
-                               subnet_id=opts.subnet_id,
-                               placement_group=opts.placement_group,
-                               user_data=user_data_content)
+        master_res = image.run(
+            key_name=opts.key_pair,
+            security_group_ids=[master_group.id] + additional_group_ids,
+            instance_type=master_type,
+            placement=opts.zone,
+            min_count=1,
+            max_count=1,
+            block_device_map=block_map,
+            subnet_id=opts.subnet_id,
+            placement_group=opts.placement_group,
+            user_data=user_data_content,
+            instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+            instance_profile_name=opts.instance_profile_name)
 
         master_nodes = master_res.instances
         print("Launched master in %s, regid = %s" % (zone, master_res.id))

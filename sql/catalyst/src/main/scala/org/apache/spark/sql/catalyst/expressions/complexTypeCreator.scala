@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
@@ -27,15 +28,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  lazy val childTypes = children.map(_.dataType).distinct
-
-  override lazy val resolved =
-    childrenResolved && childTypes.size <= 1
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
 
   override def dataType: DataType = {
-    assert(resolved, s"Invalid dataType of mixed ArrayType ${childTypes.mkString(",")}")
     ArrayType(
-      childTypes.headOption.getOrElse(NullType),
+      children.headOption.map(_.dataType).getOrElse(NullType),
       containsNull = children.exists(_.nullable))
   }
 
@@ -56,19 +54,15 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override lazy val resolved: Boolean = childrenResolved
-
   override lazy val dataType: StructType = {
-    assert(resolved,
-      s"CreateStruct contains unresolvable children: ${children.filterNot(_.resolved)}.")
-      val fields = children.zipWithIndex.map { case (child, idx) =>
-        child match {
-          case ne: NamedExpression =>
-            StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-          case _ =>
-            StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-        }
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      child match {
+        case ne: NamedExpression =>
+          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
+        case _ =>
+          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
       }
+    }
     StructType(fields)
   }
 
