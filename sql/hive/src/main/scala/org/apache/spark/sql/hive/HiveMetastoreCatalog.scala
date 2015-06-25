@@ -143,7 +143,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(client.currentDatabase, tableName)
+    val dbAndTableName = tableName.split("\\.")
+    val (dbName, tblName) = processDatabaseAndTableName(
+      dbAndTableName
+        .lift(dbAndTableName.size -2)
+        .getOrElse(client.currentDatabase), dbAndTableName.last)
     val tableProperties = new scala.collection.mutable.HashMap[String, String]
     tableProperties.put("spark.sql.sources.provider", provider)
 
@@ -203,9 +207,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
   def hiveDefaultTableFilePath(tableName: String): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
+    val dbAndTableName = tableName.split("\\.")
     new Path(
-      new Path(client.getDatabase(client.currentDatabase).location),
-      tableName.toLowerCase).toString
+      new Path(client.getDatabase(dbAndTableName.lift(dbAndTableName.size -2)
+        .getOrElse(client.currentDatabase)).location),
+      dbAndTableName.last.toLowerCase).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
