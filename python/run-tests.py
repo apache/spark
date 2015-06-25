@@ -45,10 +45,8 @@ def print_red(text):
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 
 
-def run_individual_python_test(test_name, pyspark_python=None):
-    env = {'SPARK_TESTING': '1'}
-    if pyspark_python:
-        env["PYSPARK_PYTHON"] = pyspark_python
+def run_individual_python_test(test_name, pyspark_python):
+    env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': pyspark_python}
     print("    Running test: %s ..." % test_name, end='')
     start_time = time.time()
     with open(LOG_FILE, 'a') as log_file:
@@ -121,7 +119,7 @@ def main():
         for module in modules_to_test:
             print("Running %s tests ..." % module.name)
             for test_goal in module.python_test_goals:
-                run_individual_python_test(test_goal)
+                run_individual_python_test(test_goal, python_exec)
     total_duration = time.time() - start_time
     print("Tests passed in %i seconds" % total_duration)
 
