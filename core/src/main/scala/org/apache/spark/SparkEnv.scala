@@ -107,9 +107,8 @@ class SparkEnv (
         outputCommitCoordinator.stop()
         rpcEnv.shutdown()
       } catch {
-        case e: ServerStateException =>
-          logInfo("Exception while SparkEnv stop", e)
         case NonFatal(e) =>
+          logInfo("Exception while SparkEnv stop", e)
           throw e;
       }
 
