@@ -56,7 +56,7 @@ LOGGER = logging.getLogger()
 
 def run_individual_python_test(test_name, pyspark_python):
     env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python)}
-    LOGGER.info("Starting test(%s): %s" % (pyspark_python, test_name))
+    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     per_test_output = tempfile.TemporaryFile()
     retcode = subprocess.Popen(
@@ -79,7 +79,7 @@ def run_individual_python_test(test_name, pyspark_python):
         # this code is invoked from a thread other than the main thread.
         os._exit(-1)
     else:
-        LOGGER.info("Finished test(%s): %s (%is)" % (pyspark_python, test_name, duration))
+        LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
 def get_default_python_executables():
@@ -118,7 +118,7 @@ def parse_opts():
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(message)s")
     opts = parse_opts()
-    LOGGER.info("Running PySpark tests. Output is in python/%s" % LOG_FILE)
+    LOGGER.info("Running PySpark tests. Output is in python/%s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(',')
@@ -129,8 +129,8 @@ def main():
         else:
             print("Error: unrecognized module %s" % module_name)
             sys.exit(-1)
-    LOGGER.info("Will test against the following Python executables: %s" % python_execs)
-    LOGGER.info("Will test the following Python modules: %s" % [x.name for x in modules_to_test])
+    LOGGER.info("Will test against the following Python executables: %s", python_execs)
+    LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
 
     task_queue = Queue.Queue()
     for python_exec in python_execs:
@@ -163,7 +163,7 @@ def main():
         print_red("Exiting due to interrupt")
         sys.exit(-1)
     total_duration = time.time() - start_time
-    LOGGER.info("Tests passed in %i seconds" % total_duration)
+    LOGGER.info("Tests passed in %i seconds", total_duration)
 
 
 if __name__ == "__main__":
