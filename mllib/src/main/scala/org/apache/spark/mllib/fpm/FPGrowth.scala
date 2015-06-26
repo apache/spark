@@ -218,6 +218,13 @@ object FPGrowth {
     extends Serializable {
 
     /**
+     * Auxillary constructor, assumes unordered by default.
+     */
+    def this(items: Array[Item], freq: Long) {
+      this(items, freq, false)
+    }
+
+    /**
      * Returns items in a Java List.
      */
     def javaItems: java.util.List[Item] = {
