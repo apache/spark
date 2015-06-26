@@ -19,14 +19,15 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{ExceptionFailure, SparkContext}
+import org.apache.spark.{Logging, ExceptionFailure, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{WebUIPage, SparkUI, SparkUITab}
 import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
-private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
+private[spark] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors")
+  with Logging {
   val listener = parent.executorsListener
   val sc = parent.sc
   val conf = parent.conf
@@ -36,7 +37,17 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
     sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
 
   attachPage(new ExecutorsPage(this, threadDumpEnabled))
-  attachPage(new LogPage(this))
+  try {
+    val clazz = Class.forName("org.apache.spark.deploy.yarn.LogPage")
+    val cons = clazz.getConstructor(classOf[ExecutorsTab])
+    val logPage = cons.newInstance(this).asInstanceOf[WebUIPage]
+    attachPage(logPage)
+    logDebug("Attach yarn log page in ExecutorTab successfully.")
+  } catch {
+    case e: Exception => {
+      logDebug("There is no yarn log page to attach in ExecutorTab.")
+    }
+  }
   if (threadDumpEnabled) {
     attachPage(new ExecutorThreadDumpPage(this))
   }

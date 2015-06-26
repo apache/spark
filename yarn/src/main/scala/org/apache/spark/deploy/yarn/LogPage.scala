@@ -15,23 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.exec
+package org.apache.spark.deploy.yarn
 
-import java.io.DataInputStream
+import java.io.{FileNotFoundException, DataInputStream}
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.hadoop.fs.{FileContext, Path}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat.LogKey
 import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat
+import org.apache.hadoop.yarn.logaggregation.AggregatedLogFormat.LogKey
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 import scala.xml.Node
 
-private[ui] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") with Logging {
+private[spark] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") with Logging {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val defaultBytes = 100 * 1024
@@ -205,6 +206,7 @@ private[ui] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") wit
         return thisFile.getPath
       }
     }
-    null
+    throw new FileNotFoundException(
+      s"Log file for node $nodeAddress does not exist under ${qualifiedLogDir.toString}.")
   }
 }
