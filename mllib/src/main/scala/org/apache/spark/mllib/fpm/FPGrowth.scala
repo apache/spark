@@ -42,7 +42,12 @@ import org.apache.spark.storage.StorageLevel
 @Experimental
 class FPGrowthModel[Item: ClassTag](
     val freqItemsets: RDD[FreqItemset[Item]],
-    val numTransactions: Long) extends Serializable
+    val numTransactions: Long) extends Serializable {
+
+  def this(javaFreqItemsets: JavaRDD[FreqItemset[Item]], javaNumTransactions: Long) {
+    this(javaFreqItemsets.rdd, javaNumTransactions)
+  }
+}
 
 /**
  * :: Experimental ::

@@ -16,6 +16,13 @@
  */
 package org.apache.spark.mllib.fpm
 
+import java.lang.{Iterable => JavaIterable}
+
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -77,6 +84,11 @@ class AssociationRules private (
         }
       }
     }
+  }
+
+  def runJava[Item](model: FPGrowthModel[Item]): JavaRDD[Rule[Item]] = {
+    implicit val tag = fakeClassTag[Item]
+    run(model)
   }
 }
 
