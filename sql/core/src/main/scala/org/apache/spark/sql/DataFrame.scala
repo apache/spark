@@ -1418,11 +1418,13 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().mapPartitions { rows =>
+    internalRowRdd.mapPartitions { rows =>
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
       rows.map(converter(_).asInstanceOf[Row])
     }
   }
+
+  private[sql] def internalRowRdd = queryExecution.executedPlan.execute()
 
   /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
