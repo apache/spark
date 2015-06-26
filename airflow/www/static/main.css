@@ -41,19 +41,22 @@ div.squares{
 div.task_row{
 }
 span.success{
-    background-color:green;
+    background-color: green;
 }
 span.up_for_retry{
-    background-color:yellow;
+    background-color: yellow;
 }
 span.started{
-    background-color:lime;
+    background-color: lime;
 }
 span.error{
-    background-color:red;
+    background-color: red;
 }
 span.queued{
-    background-color:gray;
+    background-color: gray;
+}
+span.upstream_failed{
+    background-color: #FFB400;
 }
 .tooltip-inner {
     text-align:left !important;

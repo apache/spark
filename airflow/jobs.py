@@ -299,7 +299,7 @@ class SchedulerJob(BaseJob):
                         execution_date=next_schedule,
                     )
                     ti.refresh_from_db()
-                    if ti.is_queueable():
+                    if ti.is_queueable(flag_upstream_failed=True):
                         logging.debug('Queuing next run: ' + str(ti))
                         executor.queue_task_instance(ti)
         # Releasing the lock
