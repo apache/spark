@@ -107,8 +107,10 @@ class SparkEnv (
         outputCommitCoordinator.stop()
         rpcEnv.shutdown()
       } catch {
-        case NonFatal(e) =>
+        case e: ServerStateException =>
           logInfo("Exception while SparkEnv stop", e)
+        case NonFatal(e) =>
+          throw e;
       }
 
       // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
