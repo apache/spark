@@ -153,6 +153,29 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("linear regression with intercept with L1 regularization with standardization turned off") {
+    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+      .setStandardization(false)
+    val model = trainer.fit(dataset)
+
+    /**
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57, standardize=FALSE))
+     * > weights
+     *  3 x 1 sparse Matrix of class "dgCMatrix"
+     *                           s0
+     * (Intercept)         6.416948
+     * as.numeric.data.V2. 3.893869
+     * as.numeric.data.V3. 6.724286
+     */
+    val interceptR = 6.416948
+    val weightsR = Array(3.893869, 6.724286)
+
+    assert(model.intercept ~== interceptR relTol 1E-3)
+    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+  }
+
+
   test("linear regression without intercept with L1 regularization") {
     val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
       .setFitIntercept(false)

@@ -82,6 +82,15 @@ class LinearRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /**
+   * Set to enable scaling (standardization).
+   * Default is true.
+   * @group setParam
+   */
+  def setStandardization(value: Boolean): this.type = set(standardization, value)
+  setDefault(standardization -> true)
+
+
+  /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
@@ -153,7 +162,7 @@ class LinearRegression(override val uid: String)
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      featuresStd, featuresMean, effectiveL2RegParam)
+      $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -318,6 +327,7 @@ private class LeastSquaresAggregator(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
@@ -364,7 +374,11 @@ private class LeastSquaresAggregator(
       val localGradientSumArray = gradientSumArray
       data.foreachActive { (index, value) =>
         if (featuresStd(index) != 0.0 && value != 0.0) {
-          localGradientSumArray(index) += diff * value / featuresStd(index)
+          if (standardization) {
+            localGradientSumArray(index) += diff * value / featuresStd(index)
+          } else {
+            localGradientSumArray(index) += diff * value
+          }
         }
       }
       lossSum += diff * diff / 2.0
@@ -422,6 +436,7 @@ private class LeastSquaresCostFun(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
@@ -430,7 +445,7 @@ private class LeastSquaresCostFun(
     val w = Vectors.fromBreeze(weights)
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
-      labelMean, fitIntercept, featuresStd, featuresMean))(
+      labelMean, fitIntercept, standardization, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {
           case (aggregator, (label, features)) => aggregator.add(label, features)
         },
