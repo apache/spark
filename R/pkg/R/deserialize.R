@@ -18,7 +18,7 @@
 # Utility functions to deserialize objects from Java.
 
 # Type mapping from Java to R
-# 
+#
 # void -> NULL
 # Int -> integer
 # String -> character

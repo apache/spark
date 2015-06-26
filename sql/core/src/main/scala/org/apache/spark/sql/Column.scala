@@ -21,7 +21,6 @@ import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis._
@@ -621,7 +620,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def in(list: Column*): Column = In(expr, list.map(_.expr))
+  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.
