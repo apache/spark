@@ -16,20 +16,22 @@
 #
 context("include an external JAR in SparkContext")
 
-filePath <- file.path(Sys.getenv("SPARK_HOME"),
-              "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar")
-sparkR.stop()
-sc <- sparkR.init(master = "local", sparkJars = filePath)
+runScript <- function() {
+  sparkHome <- Sys.getenv("SPARK_HOME")
+  jarPath <- paste("--jars",
+                   shQuote(file.path(sparkHome, "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar")))
+  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
+  submitPath <- file.path(sparkHome, "bin/spark-submit")
+  res <- system2(command = submitPath,
+                 args = c(jarPath, scriptPath),
+                 stdout = TRUE)
+  tail(res, 2)
+}
 
 test_that("sparkJars tag in SparkContext", {
-  helloTest <- SparkR:::callJStatic("sparkR.test.hello",
-                                    "helloWorld",
-                                    "Dave")
+  testOutput <- runScript()
+  helloTest <- testOutput[1]
   expect_true(helloTest == "Hello, Dave")
-
-  basicFunction <- SparkR:::callJStatic("sparkR.test.basicFunction",
-                                        "addStuff",
-                                        2L,
-                                        2L)
+  basicFunction <- testOutput[2]
   expect_true(basicFunction == 4L)
 })
