@@ -246,7 +246,7 @@ case class GeneratedAggregate(
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
-      val newAggregationBuffer = newProjection(initialValues, child.output)
+      val newAggregationBuffer = newProjection(initialValues, child.output, mutableRow = true)
       log.info(s"Initial values: ${initialValues.mkString(",")}")
 
       // A projection that computes the group given an input tuple.
@@ -270,7 +270,10 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (groupingExpressions.isEmpty) {
+      if (!iter.hasNext && (partial || groupingExpressions.nonEmpty)) {
+        // even with empty input, final-global groupby should forward value of empty buffer
+        Iterator[InternalRow]()
+      } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: InternalRow = null
@@ -284,6 +287,8 @@ case class GeneratedAggregate(
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
+        // unsafe aggregation buffer is not released if input is empty (see SPARK-8357)
+        assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
