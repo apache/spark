@@ -647,6 +647,8 @@ class TaskInstance(Base):
                 .query(
                     func.sum(
                         case([(TI.state==State.SUCCESS, 1)], else_=0)),
+                    func.sum(
+                        case([(TI.state==State.SKIPPED, 1)], else_=0)),
                     func.count(TI.task_id),
                 )
                 .filter(
@@ -654,15 +656,23 @@ class TaskInstance(Base):
                     TI.task_id.in_(upstream_task_ids),
                     TI.execution_date == self.execution_date,
                     TI.state.in_([
-                        State.SUCCESS, State.FAILED, State.UPSTREAM_FAILED]),
+                        State.SUCCESS, State.FAILED,
+                        State.UPSTREAM_FAILED, State.SKIPPED]),
                 )
             )
-            successes, done  = qry[0]
-            if successes < done >= len(task._upstream_list):
-                self.state = State.UPSTREAM_FAILED
-                self.start_date = datetime.now()
-                self.end_date = datetime.now()
-                session.merge(self)
+            successes, skipped, done = qry[0]
+            if flag_upstream_failed:
+                if skipped:
+                    self.state = State.SKIPPED
+                    self.start_date = datetime.now()
+                    self.end_date = datetime.now()
+                    session.merge(self)
+
+                elif successes < done >= len(task._upstream_list):
+                    self.state = State.UPSTREAM_FAILED
+                    self.start_date = datetime.now()
+                    self.end_date = datetime.now()
+                    session.merge(self)
 
             if successes < len(task._upstream_list):
                 return False
