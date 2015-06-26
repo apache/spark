@@ -90,9 +90,11 @@ class Profiler(object):
     >>> sc = SparkContext('local', 'test', conf=conf, profiler_cls=MyCustomProfiler)
     >>> sc.parallelize(range(1000)).map(lambda x: 2 * x).take(10)
     [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+    >>> sc.parallelize(range(1000)).count()
+    1000
     >>> sc.show_profiles()
     My custom profiles for RDD:1
-    My custom profiles for RDD:2
+    My custom profiles for RDD:3
     >>> sc.stop()
     """
 
