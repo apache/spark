@@ -230,7 +230,7 @@ object LocalLDAModel extends Loader[LocalLDAModel]{
       sc.parallelize(termDistributions, 1).toDF().write.parquet(Loader.dataPath(path))
     }
 
-    def load(sc: SparkContext, path: String): Matrix = {
+    def load(sc: SparkContext, path: String): LocalLDAModel = {
 
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
@@ -245,7 +245,7 @@ object LocalLDAModel extends Loader[LocalLDAModel]{
       termDistributions.zipWithIndex.foreach { case (Row(vec: Vector), ind: Int) =>
         brzTopics(::, ind) := vec.toBreeze
       }
-      Matrices.fromBreeze(brzTopics)
+      new LocalLDAModel(Matrices.fromBreeze(brzTopics))
     }
   }
 
@@ -259,7 +259,7 @@ object LocalLDAModel extends Loader[LocalLDAModel]{
 
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, formatVersionV1_0) => {
-        val topicsMatrix = SaveLoadV1_0.load(sc, path)
+        val topicsMatrix = SaveLoadV1_0.load(sc, path).topicsMatrix
         require(expectedK == topicsMatrix.numCols,
           s"LocalLDAModel requires $expectedK topics, got $topicsMatrix.numCols topics")
         require(expectedVocabSize == topicsMatrix.numRows,
@@ -512,7 +512,11 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
 
     def load(
         sc: SparkContext,
-        path: String): (Graph[LDA.TopicCounts, LDA.TokenCount], LDA.TopicCounts) = {
+        path: String,
+        vocabSize: Int,
+        docConcentration: Double,
+        topicConcentration: Double,
+        iterationTimes: Array[Double]): DistributedLDAModel = {
 
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toString
@@ -533,10 +537,11 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
       val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.map {
         case Row(srcId: Long, dstId: Long, prop: Double) => Edge(srcId, dstId, prop)
       }
-
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)
 
-      (graph, globalTopicTotals)
+      new DistributedLDAModel(
+        graph, globalTopicTotals, globalTopicTotals.length, vocabSize,
+        docConcentration, topicConcentration, iterationTimes)
     }
 
   }
@@ -554,12 +559,10 @@ object DistributedLDAModel extends Loader[DistributedLDAModel]{
 
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, formatVersionV1_0) => {
-        val (graph, globalTopicTotals) = DistributedLDAModel.SaveLoadV1_0.load(sc, path)
-        val model = new DistributedLDAModel(
-          graph, globalTopicTotals, expectedK, vocabSize, docConcentration, topicConcentration,
-          iterationTimes.toArray)
-        require(expectedK == globalTopicTotals.length,
-          s"LocalLDAModel requires $expectedK topics, got $globalTopicTotals.length topics")
+        val model = DistributedLDAModel.SaveLoadV1_0.load(
+          sc, path, vocabSize, docConcentration, topicConcentration, iterationTimes.toArray)
+        require(expectedK == model.k,
+          s"LocalLDAModel requires $expectedK topics, got $model.k topics")
         model
       }
 
