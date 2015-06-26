@@ -30,12 +30,14 @@ private[sql] abstract class AbstractSparkSQLParser
 
   def parse(input: String): LogicalPlan = {
     // Initialize the Keywords.
-    lexical.initialize(reservedWords)
+    initLexical
     phrase(start)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
+  /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
+  protected lazy val initLexical: Unit = lexical.initialize(reservedWords)
 
   protected case class Keyword(str: String) {
     def normalize: String = lexical.normalizeKeyword(str)
@@ -82,10 +84,8 @@ class SqlLexical extends StdLexical {
 
   /* This is a work around to support the lazy setting */
   def initialize(keywords: Seq[String]): Unit = {
-    synchronized {
       reserved.clear()
       reserved ++= keywords
-    }
   }
 
   /* Normal the keyword string */
