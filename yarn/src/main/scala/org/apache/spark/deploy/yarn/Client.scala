@@ -56,20 +56,19 @@ import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
     val args: ClientArguments,
     val hadoopConf: Configuration,
     val sparkConf: SparkConf)
-  extends Logging {
+  extends LauncherBackend with Logging {
 
   import Client._
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
-
-  def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
 
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
@@ -83,8 +82,17 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
+  private var appId: ApplicationId = null
 
   def stop(): Unit = yarnClient.stop()
+
+  override def launcherRequestedStop(): Unit = {
+    if (appId != null) {
+      yarnClient.killApplication(appId)
+    } else {
+      stop()
+    }
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -845,6 +853,20 @@ private[spark] class Client(
         }
       }
 
+      if (lastState != state) {
+        state match {
+          case YarnApplicationState.RUNNING =>
+            updateLauncherState(SparkAppHandle.State.RUNNING)
+          case YarnApplicationState.FINISHED =>
+            updateLauncherState(SparkAppHandle.State.FINISHED)
+          case YarnApplicationState.FAILED =>
+            updateLauncherState(SparkAppHandle.State.FAILED)
+          case YarnApplicationState.KILLED =>
+            updateLauncherState(SparkAppHandle.State.KILLED)
+          case _ =>
+        }
+      }
+
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
@@ -892,28 +914,36 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val appId = submitApplication()
-    if (fireAndForget) {
-      val report = getApplicationReport(appId)
-      val state = report.getYarnApplicationState
-      logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report))
-      if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
-        throw new SparkException(s"Application $appId finished with status: $state")
+    connectToLauncher()
+    try {
+      this.appId = submitApplication()
+      updateLauncherState(SparkAppHandle.State.SUBMITTED)
+      updateLauncherAppId(appId.toString())
+
+      if (fireAndForget) {
+        val report = getApplicationReport(appId)
+        val state = report.getYarnApplicationState
+        logInfo(s"Application report for $appId (state: $state)")
+        logInfo(formatReportDetails(report))
+        if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+          throw new SparkException(s"Application $appId finished with status: $state")
+        }
+      } else {
+        val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
+        if (yarnApplicationState == YarnApplicationState.FAILED ||
+          finalApplicationStatus == FinalApplicationStatus.FAILED) {
+          throw new SparkException(s"Application $appId finished with failed status")
+        }
+        if (yarnApplicationState == YarnApplicationState.KILLED ||
+          finalApplicationStatus == FinalApplicationStatus.KILLED) {
+          throw new SparkException(s"Application $appId is killed")
+        }
+        if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+          throw new SparkException(s"The final status of application $appId is undefined")
+        }
       }
-    } else {
-      val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
-      if (yarnApplicationState == YarnApplicationState.FAILED ||
-        finalApplicationStatus == FinalApplicationStatus.FAILED) {
-        throw new SparkException(s"Application $appId finished with failed status")
-      }
-      if (yarnApplicationState == YarnApplicationState.KILLED ||
-        finalApplicationStatus == FinalApplicationStatus.KILLED) {
-        throw new SparkException(s"Application $appId is killed")
-      }
-      if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
-        throw new SparkException(s"The final status of application $appId is undefined")
-      }
+    } finally {
+      closeLauncherConnection()
     }
   }
 
@@ -935,6 +965,7 @@ private[spark] class Client(
 }
 
 object Client extends Logging {
+
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a " +
