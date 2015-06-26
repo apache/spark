@@ -327,19 +327,11 @@ case class Hex(child: Expression)
    * Converts every character in s to two hex digits.
    */
   private def hex(str: UTF8String): UTF8String = {
-    if (str == null) {
-      null
-    } else {
-      doHex(str.toString.getBytes, str.length())
-    }
+    doHex(str.toString.getBytes, str.length())
   }
 
   private def hex(bytes: Array[Byte]): UTF8String = {
-    if (bytes == null) {
-      null
-    } else {
-      doHex(bytes, bytes.length)
-    }
+    doHex(bytes, bytes.length)
   }
 
   private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
