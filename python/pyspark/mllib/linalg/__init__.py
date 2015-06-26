@@ -1185,17 +1185,33 @@ class RowMatrix(DistributedMatrix, JavaModelWrapper):
     .. note:: Experimental
     """
     def numRows(self):
-        """Get or compute the number of rows."""
+        """Get or compute the number of rows.
+
+        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rm = DistributedMatrices.rowMatrix(rows)
+        >>> rm.numRows()
+        4L
+        """
         return self.call("numRows")
 
     def numCols(self):
-        """Get or compute the number of cols."""
+        """Get or compute the number of cols.
+        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rm = DistributedMatrices.rowMatrix(rows)
+        >>> rm.numCols()
+        3L
+        """
         return self.call("numCols")
 
 
 def _test():
     import doctest
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
+    from pyspark import SparkContext
+    import pyspark.mllib.linalg
+    globs = pyspark.mllib.linalg.__dict__.copy()
+    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
     if failure_count:
         exit(-1)
 
