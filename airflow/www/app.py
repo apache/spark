@@ -553,7 +553,8 @@ class Airflow(BaseView):
             if chart.y_log_scale:
                 hc['yAxis']['type'] = 'logarithmic'
                 hc['yAxis']['minorTickInterval'] = 0.1
-                del hc['yAxis']['min']
+                if 'min' in hc['yAxis']:
+                    del hc['yAxis']['min']
 
             payload['state'] = 'SUCCESS'
             payload['hc'] = hc
