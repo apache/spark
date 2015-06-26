@@ -142,8 +142,8 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(svd.U.numRows() === m)
     assert(svd.U.numCols() === k)
     assert(svd.s.size === k)
-    assert(svd.V.numRows() === n)
-    assert(svd.V.numCols() === k)
+    assert(svd.V.numRows === n)
+    assert(svd.V.numCols === k)
   }
 
   test("validate k in svd") {
