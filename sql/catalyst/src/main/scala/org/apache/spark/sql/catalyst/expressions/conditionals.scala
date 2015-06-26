@@ -296,9 +296,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 
   private def equalNullSafe(l: Any, r: Any) = {
-    if (l == null && r == null) {
-      true
-    } else if (l == null || r == null) {
+    if (l == null || r == null) {
       false
     } else {
       l == r
