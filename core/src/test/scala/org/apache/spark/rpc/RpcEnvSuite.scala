@@ -611,7 +611,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(reply2.contains(shortTimeout.timeoutProp))
 
     // Ask with delayed response and allow the Future to timeout before Await.result
-    val fut3 = rpcEndpointRef.ask[String](SleepyReply("goodbye"),shortTimeout)
+    val fut3 = rpcEndpointRef.ask[String](SleepyReply("goodbye"), shortTimeout)
 
     // Allow future to complete with failure using plain Await.result, this will return
     // once the future is complete to verify addMessageIfTimeout was invoked
