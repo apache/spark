@@ -136,6 +136,8 @@ def main():
     for python_exec in python_execs:
         python_implementation = subprocess.check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"]).strip()
+        LOGGER.debug("`%s` version is: %s", python_exec, subprocess.check_output(
+            [python_exec, "--version"], stderr=subprocess.STDOUT).strip())
         for module in modules_to_test:
             if python_implementation not in module.blacklisted_python_implementations:
                 for test_goal in module.python_test_goals:
