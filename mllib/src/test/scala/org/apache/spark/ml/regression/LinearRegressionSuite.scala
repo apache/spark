@@ -159,7 +159,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = trainer.fit(dataset)
 
     /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57, standardize=FALSE))
+     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+     *   standardize=FALSE))
      * > weights
      *  3 x 1 sparse Matrix of class "dgCMatrix"
      *                           s0
