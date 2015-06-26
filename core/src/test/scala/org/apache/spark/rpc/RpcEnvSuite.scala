@@ -575,6 +575,66 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("ask a message timeout on Future using RpcTimeout") {
+    case class SleepyReply(msg: String)
+
+    val rpcEndpointRef = env.setupEndpoint("ask-future", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case msg: String => {
+          context.reply(msg)
+        }
+        case sr: SleepyReply => {
+          Thread.sleep(50)
+          context.reply(sr.msg)
+        }
+      }
+    })
+
+    val longTimeout = new RpcTimeout(1 second, "spark.rpc.long.timeout")
+    val shortTimeout = new RpcTimeout(10 millis, "spark.rpc.short.timeout")
+
+    // Ask with immediate response, should complete successfully
+    val fut1 = rpcEndpointRef.ask[String]("hello", longTimeout)
+    val reply1 = longTimeout.awaitResult(fut1)
+    assert("hello" === reply1)
+
+    // Ask with a delayed response and wait for response immediately that should timeout
+    val fut2 = rpcEndpointRef.ask[String](SleepyReply("doh"), shortTimeout)
+    val reply2 =
+      intercept[RpcTimeoutException] {
+        shortTimeout.awaitResult(fut2)
+      }.getMessage
+
+    // RpcTimeout.awaitResult should have added the property to the TimeoutException message
+    assert(reply2.contains(shortTimeout.timeoutProp))
+
+    // Ask with delayed response and allow the Future to timeout before Await.result
+    val fut3 = rpcEndpointRef.ask[String](SleepyReply("goodbye"),shortTimeout)
+
+    // Allow future to complete with failure using plain Await.result, this will return
+    // once the future is complete to verify addMessageIfTimeout was invoked
+    val reply3 =
+      intercept[RpcTimeoutException] {
+        Await.result(fut3, 200 millis)
+      }.getMessage
+
+    // When the future timed out, the recover callback should have used
+    // RpcTimeout.addMessageIfTimeout to add the property to the TimeoutException message
+    assert(reply3.contains(shortTimeout.timeoutProp))
+
+    // Use RpcTimeout.awaitResult to process Future, since it has already failed with
+    // RpcTimeoutException, the same RpcTimeoutException should be thrown
+    val reply4 =
+      intercept[RpcTimeoutException] {
+        shortTimeout.awaitResult(fut3)
+      }.getMessage
+
+    // Ensure description is not in message twice after addMessageIfTimeout and awaitResult
+    assert(shortTimeout.timeoutProp.r.findAllIn(reply4).length === 1)
+  }
+
 }
 
 class UnserializableClass
