@@ -52,9 +52,13 @@ test_that("infer types", {
                list(type = 'array', elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(1L, 2L)),
                list(type = 'array', elementType = "integer", containsNull = TRUE))
-  expect_equal(infer_type(list(a = 1L, b = "2")),
-               structType(structField(x = "a", type = "integer", nullable = TRUE),
-                          structField(x = "b", type = "string", nullable = TRUE)))
+  testStruct <- infer_type(list(a = 1L, b = "2"))
+  expect_true(class(testStruct) == "structType")
+  expect_true(length(testStruct$fields()) == 2)
+  testSF <- testStruct$fields()[[1]]
+  expect_true(class(testSF) == "structField")
+  expect_true(testSF$name() == "a")
+  expect_true(testSF$dataType.toString() == "IntegerType")
   e <- new.env()
   assign("a", 1L, envir = e)
   expect_equal(infer_type(e),
