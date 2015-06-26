@@ -239,10 +239,10 @@ private[ml] trait HasFitIntercept extends Params {
 private[ml] trait HasStandardization extends Params {
 
   /**
-   * Param for If the model should perform standardization.
+   * Param for whether to standardize the training features prior to fitting the model sequence. Note that the coefficients of models are always returned on the original scale..
    * @group param
    */
-  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "If the model should perform standardization")
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features prior to fitting the model sequence. Note that the coefficients of models are always returned on the original scale.")
 
   setDefault(standardization, true)
 
