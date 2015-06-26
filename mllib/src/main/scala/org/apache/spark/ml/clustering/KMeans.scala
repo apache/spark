@@ -22,8 +22,7 @@ import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasMaxIter, HasPredicti
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.mllib
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -105,7 +104,7 @@ private[clustering] trait KMeansParams
 class KMeansModel private[ml] (
   override val uid: String,
   val paramMap: ParamMap,
-  val parentModel: mllib.clustering.KMeansModel
+  val parentModel: MLlibKMeansModel
 ) extends Model[KMeansModel] with KMeansParams {
 
   override def copy(extra: ParamMap): KMeansModel = {
@@ -146,7 +145,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   setK(2)
   setMaxIter(20)
   setRuns(1)
-  setInitializationMode(KMeans.K_MEANS_PARALLEL)
+  setInitializationMode(MLlibKMeans.K_MEANS_PARALLEL)
   setInitializationSteps(5)
   setEpsilon(1e-4)
   setSeed(Utils.random.nextLong())
@@ -166,7 +165,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
 
   /** @group setParam */
   def setInitializationMode(value: String): this.type = {
-    mllib.clustering.KMeans.validateInitializationMode(value)
+    MLlibKMeans.validateInitializationMode(value)
     set(initializationMode, value)
   }
 
@@ -193,7 +192,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
     val map = this.extractParamMap()
     val rdd = dataset.select(col(map(featuresCol))).map { case Row(point: Vector) => point}
 
-    val algo = new mllib.clustering.KMeans()
+    val algo = new MLlibKMeans()
         .setK(map(k))
         .setMaxIterations(map(maxIter))
         .setSeed(map(seed))
