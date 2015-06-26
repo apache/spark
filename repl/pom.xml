@@ -157,6 +157,20 @@
   </build>
   <profiles>
     <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <property><name>!scala-2.11</name></property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>${jline.groupid}</groupId>
+          <artifactId>jline</artifactId>
+          <version>${jline.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
       <id>scala-2.11</id>
       <activation>
         <property><name>scala-2.11</name></property>
