@@ -81,24 +81,24 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
     parsedConstraints shouldBe Map("tachyon" -> Set())
 
-    val `offer with no tachyon` = Map("zone" -> Set("us-east-1a", "us-east-1b"))
-    val `offer with tachyon:true` = Map("tachyon" -> Set("true"))
-    val `offer with tachyon:false` = Map("tachyon" -> Set("false"))
+    val noTachyonOffer = Map("zone" -> Set("us-east-1a", "us-east-1b"))
+    val tachyonTrueOffer = Map("tachyon" -> Set("true"))
+    val tachyonFalseOffer = Map("tachyon" -> Set("false"))
 
-    utils.matchesAttributeRequirements(parsedConstraints, `offer with no tachyon`) shouldBe false
-    utils.matchesAttributeRequirements(parsedConstraints, `offer with tachyon:true`) shouldBe true
-    utils.matchesAttributeRequirements(parsedConstraints, `offer with tachyon:false`) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, noTachyonOffer) shouldBe false
+    utils.matchesAttributeRequirements(parsedConstraints, tachyonTrueOffer) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, tachyonFalseOffer) shouldBe true
   }
 
   test("subset match is performed constraint attributes") {
-    val `constraint with superset` = Map(
+    val supersetConstraint = Map(
       "tachyon" -> Set("true"),
       "zone" -> Set("us-east-1a", "us-east-1b", "us-east-1c"))
 
     val zoneConstraintStr = "tachyon:;zone:us-east-1a,us-east-1c"
     val parsedConstraints = utils.parseConstraintString(zoneConstraintStr)
 
-    utils.matchesAttributeRequirements(parsedConstraints, `constraint with superset`) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, supersetConstraint) shouldBe true
   }
 
 }

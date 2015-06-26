@@ -23,6 +23,7 @@ import java.util.{List => JList}
 import scala.collection.JavaConversions._
 
 import com.google.common.base.Splitter
+
 import org.apache.mesos.Protos._
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
 import org.apache.spark.util.Utils
@@ -144,6 +145,9 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *    "zone":   -> Set("us-east-1a", "us-east-1b")
    *  )
    *  }}}
+   *
+   *  Mesos documentation: http://mesos.apache.org/documentation/attributes-resources/
+   *
    * @param constraintsVal constaints string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.

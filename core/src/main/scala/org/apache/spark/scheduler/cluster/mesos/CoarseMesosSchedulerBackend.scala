@@ -67,7 +67,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
   // Offer constraints
-  val slaveOfferConstraints = parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
+  private val slaveOfferConstraints =
+    parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   var nextMesosTaskId = 0
 
