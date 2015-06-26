@@ -44,8 +44,8 @@ which contains two batches of two objects:
 
 >>> rdd.glom().collect()
 [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> rdd._jrdd.count()
-8L
+>>> int(rdd._jrdd.count())
+8
 >>> sc.stop()
 """
 
