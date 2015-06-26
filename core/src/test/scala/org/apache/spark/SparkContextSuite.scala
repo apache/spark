@@ -275,13 +275,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("calling multiple sc.stop() must not throw any exception") {
-    noException should be thrownBy {
+    try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       val cnt = sc.parallelize(1 to 4).count()
       sc.cancelAllJobs()
       sc.stop()
       // call stop second time
       sc.stop()
+    } catch {
+      case e: Exception =>
+        fail("calling multiple sc.stop() must not have thrown any exception", e);
     }
   }
 }
