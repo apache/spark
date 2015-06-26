@@ -74,6 +74,9 @@ class KryoSerializer(conf: SparkConf)
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
     .split(',')
     .filter(!_.isEmpty)
+  conf.getExecutorEnv
+
+  private val avroSchemas = conf.getAvroSchema
 
   def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
@@ -101,8 +104,8 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(conf))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(conf))
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
+    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
 
     try {
       // Use the default classloader when calling the user registrator.

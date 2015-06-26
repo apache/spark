@@ -24,7 +24,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.serializer.GenericAvroSerializer.avroSchemaKey
+import org.apache.spark.serializer.GenericAvroSerializer.{avroSchemaNamespace, avroSchemaKey}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -162,7 +162,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.serializer", classOf[KryoSerializer].getName)
     this
   }
-
   /**
    * Use Kryo serialization and register the given set of Avro schemas so that the generic
    * record serializer can decrease network IO
@@ -171,6 +170,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     schemas.foldLeft(this) { (conf, schema) =>
       conf.set(avroSchemaKey(SchemaNormalization.parsingFingerprint64(schema)), schema.toString)
     }
+
+  /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */
+  def getAvroSchema: Map[Long, String] = {
+    getAll.filter { case (k, v) => k.startsWith(avroSchemaNamespace) }
+          .map { case (k, v) => (k.substring(avroSchemaNamespace.length).toLong, v) }
+          .toMap
+  }
 
   /** Remove a parameter from the configuration */
   def remove(key: String): SparkConf = {

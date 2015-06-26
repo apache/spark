@@ -29,12 +29,9 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.SparkConf
-
-import GenericAvroSerializer._
-
 object GenericAvroSerializer {
-  def avroSchemaKey(fingerprint: Long): String = s"avro.schema.$fingerprint"
+  val avroSchemaNamespace = "avro.schema."
+  def avroSchemaKey(fingerprint: Long): String = avroSchemaNamespace + fingerprint
 }
 
 /**
@@ -44,7 +41,7 @@ object GenericAvroSerializer {
  * Actions like parsing or compressing schemas are computationally expensive so the serializer
  * caches all previously seen values as to reduce the amount of work needed to do.
  */
-class GenericAvroSerializer(conf: SparkConf) extends KSerializer[GenericRecord] {
+class GenericAvroSerializer(schemas: Map[Long, String]) extends KSerializer[GenericRecord] {
 
   /** Used to reduce the amount of effort to compress the schema */
   private val compressCache = new mutable.HashMap[Schema, Array[Byte]]()
@@ -58,7 +55,7 @@ class GenericAvroSerializer(conf: SparkConf) extends KSerializer[GenericRecord] 
   private val fingerprintCache = new mutable.HashMap[Schema, Long]()
   private val schemaCache = new mutable.HashMap[Long, Schema]()
 
-  private def confSchema(fingerprint: Long) = conf.getOption(avroSchemaKey(fingerprint))
+  private def getSchema(fingerprint: Long): Option[String] = schemas.get(fingerprint)
 
   /**
    * Used to compress Schemas when they are being sent over the wire.
@@ -110,7 +107,7 @@ class GenericAvroSerializer(conf: SparkConf) extends KSerializer[GenericRecord] 
     val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
       SchemaNormalization.parsingFingerprint64(schema)
     })
-    confSchema(fingerprint) match {
+    getSchema(fingerprint) match {
       case Some(_) => {
         output.writeBoolean(true)
         output.writeLong(fingerprint)
@@ -139,7 +136,7 @@ class GenericAvroSerializer(conf: SparkConf) extends KSerializer[GenericRecord] 
       if (input.readBoolean()) {
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
-          confSchema(fingerprint) match {
+          getSchema(fingerprint) match {
             case Some(s) => new Schema.Parser().parse(s)
             case None => throw new RuntimeException(s"Unknown fingerprint: $fingerprint")
           }
