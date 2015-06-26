@@ -24,9 +24,13 @@ package org.apache.spark.sql.catalyst.expressions
  */
 class InterpretedProjection(expressions: Seq[Expression], mutableRow: Boolean = false)
   extends Projection {
-  def this(expressions: Seq[Expression],
-           inputSchema: Seq[Attribute], mutableRow: Boolean = false) =
+
+  def this(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      mutableRow: Boolean = false) = {
     this(expressions.map(BindReferences.bindReference(_, inputSchema)), mutableRow)
+  }
 
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
