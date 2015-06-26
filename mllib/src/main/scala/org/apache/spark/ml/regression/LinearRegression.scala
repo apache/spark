@@ -453,14 +453,35 @@ private class LeastSquaresCostFun(
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
         })
 
-    // regVal is the sum of weight squares for L2 regularization
-    val norm = brzNorm(weights, 2.0)
-    val regVal = 0.5 * effectiveL2regParam * norm * norm
+    // If we are not doing standardization go back to unscaled weights
+    if (standardization) {
+      // regVal is the sum of weight squares for L2 regularization
+      val norm = brzNorm(weights, 2.0)
+      val regVal = 0.5 * effectiveL2regParam * norm * norm
 
-    val loss = leastSquaresAggregator.loss + regVal
-    val gradient = leastSquaresAggregator.gradient
-    axpy(effectiveL2regParam, w, gradient)
+      val loss = leastSquaresAggregator.loss + regVal
+      val gradient = leastSquaresAggregator.gradient
+      axpy(effectiveL2regParam, w, gradient)
 
-    (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    } else {
+      val unscaledWeights = weights.copy
+      val len = unscaledWeights.length
+      var i = 0
+      while (i < len) {
+        unscaledWeights(i) /= featuresStd(i)
+        i += 1
+      }
+      val norm = brzNorm(unscaledWeights, 2.0)
+
+      val regVal = 0.5 * effectiveL2regParam * norm * norm
+
+      val loss = leastSquaresAggregator.loss + regVal
+      val gradient = leastSquaresAggregator.gradient
+      val mw = Vectors.dense(unscaledWeights.toArray)
+      axpy(effectiveL2regParam, mw, gradient)
+
+      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    }
   }
 }
