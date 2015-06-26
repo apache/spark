@@ -38,9 +38,11 @@ private[hive] object SparkSQLEnv extends Logging {
       val sparkConf = new SparkConf(loadDefaults = true)
       val maybeSerializer = sparkConf.getOption("spark.serializer")
       val maybeKryoReferenceTracking = sparkConf.getOption("spark.kryo.referenceTracking")
+      val maybeAppName = sparkConf.getOption("spark.app.name")
+        .filter(!_.equals("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"))
 
       sparkConf
-        .setAppName(s"SparkSQL::${Utils.localHostName()}")
+        .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
         .set(
           "spark.serializer",
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
