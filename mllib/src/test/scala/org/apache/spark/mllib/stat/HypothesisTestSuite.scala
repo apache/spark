@@ -158,7 +158,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("kolmogorov smirnov test empirical distributions") {
+  test("1 sample kolmogorov smirnov test") {
     // Create theoretical distributions
     val stdNormalDist = new NormalDistribution(0, 1)
     val expDist = new ExponentialDistribution(0.6)
