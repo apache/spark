@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -51,11 +52,15 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   val rddId: Int = rdd.id
 
   // The path the checkpoint data will write to.
-  val checkpointDir = rdd.context.checkpointDir.get
-  @transient val checkpointPath = new Path(checkpointDir, "rdd-" + rddId)
-  @transient val fs = checkpointPath.getFileSystem(rdd.context.hadoopConfiguration)
-  if (!fs.mkdirs(checkpointPath)) {
-    throw new SparkException("Failed to create checkpoint path " + checkpointPath)
+  val checkpointDir = rdd.context.checkpointDir
+  @transient var checkpointPath: Path = null
+  @transient var fs: FileSystem = null
+  if (checkpointDir.isDefined) {
+    checkpointPath = new Path(checkpointDir.get, "rdd-" + rddId)
+    fs = checkpointPath.getFileSystem(rdd.context.hadoopConfiguration)
+    if (!fs.mkdirs(checkpointPath)) {
+      throw new SparkException("Failed to create checkpoint path " + checkpointPath)
+    }
   }
 
   val broadcastedConf = rdd.context.broadcast(
@@ -95,7 +100,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     RDDCheckpointData.synchronized {
       if (cpState == MarkedForCheckpoint) {
         // Create the output path for the checkpoint
-        val path = new Path(checkpointDir, "rdd-" + rddId)
+        val path = new Path(checkpointDir.get, "rdd-" + rddId)
         CheckpointingIterator[T, Iterator[T]](
           rddIterator,
           path.toString,

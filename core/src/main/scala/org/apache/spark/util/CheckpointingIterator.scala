@@ -106,6 +106,8 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
     if (doCheckpoint) {
       checkpointing(item)
     }
+    // If this the latest item, call hasNext will write to final output early.
+    hasNext
     item
   }
 
