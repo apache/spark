@@ -77,7 +77,7 @@ private[deploy] object JsonProtocol {
 
   def writeMasterState(obj: MasterStateResponse): JObject = {
     ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.filter(_.isAlive()).toList.map(writeWorkerInfo)) ~
+    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
     ("cores" -> obj.workers.filter(_.isAlive()).map(_.cores).sum) ~
     ("coresused" -> obj.workers.filter(_.isAlive()).map(_.coresUsed).sum) ~
     ("memory" -> obj.workers.filter(_.isAlive()).map(_.memory).sum) ~
