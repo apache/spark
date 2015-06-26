@@ -78,4 +78,12 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
           Row("hiveindblisttablessuitetable", false))
     }
   }
+
+  test("SPARK-7179:show tables with pattern") {
+    checkAnswer(
+      sql("SHOW TABLES IN listTablesSuitedb 'hive*'"),
+      Row("hiveindblisttablessuitetable", false))
+    // not match the pattern
+    assert(sql("SHOW TABLES IN listTablesSuitedb 'aa*'").count() === 0)
+  }
 }

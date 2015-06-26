@@ -94,8 +94,7 @@ private[hive] trait ClientInterface {
   def setError(stream: PrintStream): Unit
 
   /** Returns the names of all tables in the given database. */
-  def listTables(dbName: String): Seq[String]
-
+  def listTables(dbName: String, pattern: Option[String] = None): Seq[String]
   /** Returns the name of the active database. */
   def currentDatabase: String
 

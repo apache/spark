@@ -336,8 +336,12 @@ private[hive] class ClientWrapper(
     shim.getAllPartitions(client, qlTable).map(toHivePartition)
   }
 
-  override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName)
+  override def listTables(dbName: String, pattern: Option[String]): Seq[String] = withHiveState {
+    if (pattern.isDefined) {
+      client.getTablesByPattern(dbName, pattern.get)
+    } else {
+      client.getAllTables(dbName)
+    }
   }
 
   /**
