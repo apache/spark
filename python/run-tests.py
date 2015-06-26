@@ -46,7 +46,7 @@ LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 
 
 def run_individual_python_test(test_name, pyspark_python):
-    env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': pyspark_python}
+    env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python) }
     print("    Running test: %s ..." % test_name, end='')
     start_time = time.time()
     with open(LOG_FILE, 'a') as log_file:
