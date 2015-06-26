@@ -134,9 +134,12 @@ def main():
 
     task_queue = Queue.Queue()
     for python_exec in python_execs:
+        python_implementation = subprocess.check_output(
+            [python_exec, "-c", "import platform; print platform.python_implementation()"]).strip()
         for module in modules_to_test:
-            for test_goal in module.python_test_goals:
-                task_queue.put((python_exec, test_goal))
+            if python_implementation not in module.blacklisted_python_implementations:
+                for test_goal in module.python_test_goals:
+                    task_queue.put((python_exec, test_goal))
 
     def process_queue(task_queue):
         while True:
