@@ -43,6 +43,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val v2: Short = 3
     checkEvaluation(Hash(Literal(v1)), 3)
     checkEvaluation(Hash(Literal(v2)), 3)
+    checkEvaluation(Hash(Literal(v1), Literal(v2)), 6)
     checkEvaluation(Hash(Literal("ABC")), 94369)
     checkEvaluation(Hash(Literal(true)), 1231)
     checkEvaluation(Hash(Literal.create(3.7, DecimalType.Unlimited)), -644612093)

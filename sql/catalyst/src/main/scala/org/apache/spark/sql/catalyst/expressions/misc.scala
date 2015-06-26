@@ -50,15 +50,15 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
 /**
  * A function that returns a hash value of the argument
  */
-case class Hash(child: Expression) extends UnaryExpression {
+case class Hash(children: Expression*) extends Expression {
 
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = children(0).nullable
   override def dataType: DataType = IntegerType
 
-  override def children: Seq[Expression] = child :: Nil
-
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    hashCode(value)
+    val arglist = children.map(_.eval(input).asInstanceOf[AnyRef])
+    hashCode(arglist)
   }
 
   def hashCode(v: Any): Int = v match {
