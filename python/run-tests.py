@@ -35,7 +35,7 @@ from sparktestsupport.shellutils import which  # noqa
 from sparktestsupport.modules import all_modules  # noqa
 
 
-python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals)
+python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != 'root')
 
 
 def print_red(text):
@@ -85,7 +85,7 @@ def parse_opts():
     )
     parser.add_option(
         "--modules", type="string",
-        default=",".join(sorted(set(python_modules.keys()) - set(['root']))),
+        default=",".join(sorted(python_modules.keys())),
         help="A comma-separated list of Python modules to test (default: %default)"
     )
 
