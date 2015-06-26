@@ -51,8 +51,8 @@ private[spark] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") 
 
     val (logText, startByte, endByte, logLength) = getLog(
       appId, containerId, nodeAddress, appOwner, logType, offset, byteLength)
-    val params = s"containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$appOwner" +
-      s"&logType=$logType"
+    val params =
+      s"containerId=$containerId&nodeAddress=$nodeAddress&appOwner=$appOwner&logType=$logType"
 
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
