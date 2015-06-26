@@ -17,9 +17,6 @@
 
 package org.apache.spark.launcher;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,9 +28,10 @@ import static org.junit.Assert.*;
 /**
  * These tests require the Spark assembly to be built before they can be run.
  */
-public class SparkLauncherSuite {
+public class SparkLauncherSuite extends BaseSuite {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
+  private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
   @Test
   public void testChildProcLauncher() throws Exception {
@@ -45,13 +43,14 @@ public class SparkLauncherSuite {
       .setMaster("local")
       .setAppResource("spark-internal")
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
+        "-Dfoo=bar -Dtest.appender=childproc")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
     final Process app = launcher.launch();
-    new Redirector("stdout", app.getInputStream()).start();
-    new Redirector("stderr", app.getErrorStream()).start();
+
+    new OutputRedirector(app.getInputStream(), TF);
+    new OutputRedirector(app.getErrorStream(), TF);
     assertEquals(0, app.waitFor());
   }
 
@@ -62,31 +61,6 @@ public class SparkLauncherSuite {
       assertEquals("proc", args[0]);
       assertEquals("bar", System.getProperty("foo"));
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
-    }
-
-  }
-
-  private static class Redirector extends Thread {
-
-    private final InputStream in;
-
-    Redirector(String name, InputStream in) {
-      this.in = in;
-      setName(name);
-      setDaemon(true);
-    }
-
-    @Override
-    public void run() {
-      try {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        String line;
-        while ((line = reader.readLine()) != null) {
-          LOG.warn(line);
-        }
-      } catch (Exception e) {
-        LOG.error("Error reading process output.", e);
-      }
     }
 
   }

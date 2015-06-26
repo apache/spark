@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +56,23 @@ public class SparkLauncher {
   public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryPath";
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConectionTimeout";
+
+  static final Map<String, String> launcherConfig = new HashMap<String, String>();
+
+  /**
+   * Set a configuration value for the launcher library. These config values do not affect the
+   * launched application, but rather the behavior of the launcher library itself when managing
+   * applications.
+   */
+  public static void setConfig(String name, String value) {
+    launcherConfig.put(name, value);
+  }
 
   private final SparkSubmitCommandBuilder builder;
 
@@ -253,6 +271,39 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
+    return createBuilder().start();
+  }
+
+  /**
+   * Starts a Spark application.
+   * <p/>
+   * This method returns a handle that provides information about the running application and can
+   * be used to do basic interaction with it.
+   *
+   * @param listeners Listeners to add to the handle before the app is launched.
+   * @return A handle for the launched application.
+   */
+  public SparkAppHandle start(SparkAppHandle.Listener... listeners) throws IOException {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
+    ProcessBuilder pb = createBuilder().redirectErrorStream(true);
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
+      String.valueOf(LauncherServer.getServerInstance().getPort()));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
+    try {
+      handle.setChildProc(pb.start());
+    } catch (IOException ioe) {
+      handle.kill();
+      throw ioe;
+    }
+
+    return handle;
+  }
+
+  private ProcessBuilder createBuilder() {
     List<String> cmd = new ArrayList<String>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
@@ -273,7 +324,7 @@ public class SparkLauncher {
     for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
       pb.environment().put(e.getKey(), e.getValue());
     }
-    return pb.start();
+    return pb;
   }
 
 }
