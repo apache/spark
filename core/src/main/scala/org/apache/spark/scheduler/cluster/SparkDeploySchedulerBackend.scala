@@ -23,6 +23,7 @@ import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
 
@@ -32,6 +33,7 @@ private[spark] class SparkDeploySchedulerBackend(
     masters: Array[String])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
+  with LauncherBackend
   with Logging {
 
   private var client: AppClient = null
@@ -47,6 +49,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def start() {
     super.start()
+    connectToLauncher()
 
     // The endpoint for executors to talk to us
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
@@ -87,24 +90,20 @@ private[spark] class SparkDeploySchedulerBackend(
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
+    updateLauncherState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
+    updateLauncherState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop() {
-    stopping = true
-    super.stop()
-    client.stop()
-
-    val callback = shutdownCallback
-    if (callback != null) {
-      callback(this)
-    }
+  override def stop(): Unit = synchronized {
+    stop(SparkAppHandle.State.FINISHED)
   }
 
   override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
     notifyContext()
+    updateLauncherAppId(appId)
   }
 
   override def disconnected() {
@@ -117,6 +116,7 @@ private[spark] class SparkDeploySchedulerBackend(
   override def dead(reason: String) {
     notifyContext()
     if (!stopping) {
+      updateLauncherState(SparkAppHandle.State.KILLED)
       logError("Application has been killed. Reason: " + reason)
       try {
         scheduler.error(reason)
@@ -158,6 +158,24 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private def notifyContext() = {
     registrationBarrier.release()
+  }
+
+  override protected def launcherRequestedStop(): Unit = {
+    stop(SparkAppHandle.State.KILLED)
+  }
+
+  private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
+    stopping = true
+    super.stop()
+    client.stop()
+
+    val callback = shutdownCallback
+    if (callback != null) {
+      callback(this)
+    }
+
+    updateLauncherState(finalState)
+    closeLauncherConnection()
   }
 
 }

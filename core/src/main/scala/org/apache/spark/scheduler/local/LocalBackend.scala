@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
 
@@ -93,18 +94,22 @@ private[spark] class LocalBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend with Logging {
+  extends SchedulerBackend with ExecutorBackend with LauncherBackend with Logging {
 
   private val appId = "local-" + System.currentTimeMillis
   var localEndpoint: RpcEndpointRef = null
 
+  connectToLauncher()
+
   override def start() {
     localEndpoint = SparkEnv.get.rpcEnv.setupEndpoint(
       "LocalBackendEndpoint", new LocalEndpoint(SparkEnv.get.rpcEnv, scheduler, this, totalCores))
+    updateLauncherAppId(appId)
+    updateLauncherState(SparkAppHandle.State.RUNNING)
   }
 
   override def stop() {
-    localEndpoint.ask(StopExecutor)
+    stop(SparkAppHandle.State.FINISHED)
   }
 
   override def reviveOffers() {
@@ -123,5 +128,16 @@ private[spark] class LocalBackend(
   }
 
   override def applicationId(): String = appId
+
+  override def launcherRequestedStop(): Unit = stop(SparkAppHandle.State.KILLED)
+
+  private def stop(finalState: SparkAppHandle.State): Unit = {
+    localEndpoint.ask(StopExecutor)
+    try {
+      updateLauncherState(finalState)
+    } finally {
+      closeLauncherConnection()
+    }
+  }
 
 }
