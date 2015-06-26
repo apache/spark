@@ -42,6 +42,7 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha2',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -360,6 +361,24 @@ def randn(seed=None):
         jc = sc._jvm.functions.randn(seed)
     else:
         jc = sc._jvm.functions.randn()
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha2(col, numBits):
+    """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
+    and SHA-512). The numBits indicates the desired bit length of the result, which must have a
+    value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
+
+    >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
+    >>> digests[0]
+    Row(s=u'3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
+    >>> digests[1]
+    Row(s=u'cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
 
