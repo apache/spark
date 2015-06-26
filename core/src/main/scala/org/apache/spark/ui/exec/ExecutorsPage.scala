@@ -90,8 +90,12 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
-          {if ((!isHistoryUI && nonAggregatedLogsExist) || (isHistoryUI && logsExist))
-            <th class="sorttable_nosort">Logs</th> else Seq.empty
+          {
+            if ((!isHistoryUI && nonAggregatedLogsExist) || (isHistoryUI && logsExist)) {
+              <th class="sorttable_nosort">Logs</th>
+            } else {
+              Seq.empty
+            }
           }
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>

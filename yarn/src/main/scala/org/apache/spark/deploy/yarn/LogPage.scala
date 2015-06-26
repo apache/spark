@@ -158,7 +158,8 @@ private[spark] class LogPage(parent: ExecutorsTab) extends WebUIPage("logPage") 
     } catch {
       case e: Exception =>
         logError("Error getting log ", e)
-        ("The log does not exist. Please make sure log aggregation is enabled and finished", 0, 0, 0)
+        ("The log does not exist. Please make sure log aggregation is enabled and finished",
+          0, 0, 0)
     } finally {
       if (reader != null) {
         reader.close()
