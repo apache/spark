@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.rdd.RDD
 
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
@@ -32,4 +34,20 @@ trait DistributedMatrix extends Serializable {
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */
   private[mllib] def toBreeze(): BDM[Double]
+}
+
+/**
+ * Factory methods for [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]].
+ */
+object DistributedMatrices {
+
+  /**
+   * Creates a Row Matrix
+   *
+   * @param rows An RDD of Vectors
+   */
+  def rowMatrix(rows: RDD[Vector]): RowMatrix = {
+    new RowMatrix(rows)
+  }
+
 }

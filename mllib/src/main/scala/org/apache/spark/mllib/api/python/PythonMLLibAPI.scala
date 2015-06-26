@@ -21,6 +21,8 @@ import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
+import org.apache.spark.mllib.linalg.distributed.{DistributedMatrices, RowMatrix}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -1096,6 +1098,12 @@ private[python] class PythonMLLibAPI extends Serializable {
     Statistics.kolmogorovSmirnovTest(data, distName, paramsSeq: _*)
   }
 
+  /**
+   * Wrapper around DistributedMatrices.rowMatrix factory method
+   */
+  def createRowMatrix(rows: JavaRDD[Vector]): RowMatrix = {
+    DistributedMatrices.rowMatrix(rows.rdd)
+  }
 }
 
 /**

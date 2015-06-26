@@ -37,12 +37,14 @@ else:
 
 import numpy as np
 
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices'
+           'DistributedMatrix', 'DistributedMatrices', 'RowMatrix']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -1150,6 +1152,45 @@ class Matrices(object):
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
+
+
+class DistributedMatrix(object):
+    """Represents a distributively stored matrix backed by one or more RDDs."""
+    def numRows(self):
+        """Get or compute the number of rows."""
+        raise NotImplementedError
+
+    def numCols(self):
+        """Get or compute the number of cols."""
+        raise NotImplementedError
+
+
+class DistributedMatrices(object):
+    """Factory methods for distributed matrices."""
+    @staticmethod
+    def rowMatrix(rows):
+        """
+        Create a RowMatrix
+
+        :param rows: an RDD of Vectors
+        """
+        rowMatrix = callMLlibFunc("createRowMatrix", rows)
+        return RowMatrix(rowMatrix)
+
+
+class RowMatrix(DistributedMatrix, JavaModelWrapper):
+    """
+    Represents a row-oriented distributed Matrix with no meaningful row indices.
+
+    .. note:: Experimental
+    """
+    def numRows(self):
+        """Get or compute the number of rows."""
+        return self.call("numRows")
+
+    def numCols(self):
+        """Get or compute the number of cols."""
+        return self.call("numCols")
 
 
 def _test():
