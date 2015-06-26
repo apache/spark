@@ -77,11 +77,11 @@ private[deploy] object JsonProtocol {
 
   def writeMasterState(obj: MasterStateResponse): JObject = {
     ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("cores" -> obj.workers.map(_.cores).sum) ~
-    ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
-    ("memory" -> obj.workers.map(_.memory).sum) ~
-    ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
+    ("workers" -> obj.workers.filter(_.isAlive()).toList.map(writeWorkerInfo)) ~
+    ("cores" -> obj.workers.filter(_.isAlive()).map(_.cores).sum) ~
+    ("coresused" -> obj.workers.filter(_.isAlive()).map(_.coresUsed).sum) ~
+    ("memory" -> obj.workers.filter(_.isAlive()).map(_.memory).sum) ~
+    ("memoryused" -> obj.workers.filter(_.isAlive()).map(_.memoryUsed).sum) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
     ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
