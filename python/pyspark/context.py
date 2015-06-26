@@ -300,8 +300,8 @@ class SparkContext(object):
             in case of local spark app something like u'local-1433865536131'
             in case of YARN something like u'application_1433865536131_34483'
         )
-        >>> sc.applicationId  # doctest: +ELLIPSIS
-        u'local-...'
+        >>> sc.applicationId is not None
+        True
         """
         return self._jsc.sc().applicationId()
 
