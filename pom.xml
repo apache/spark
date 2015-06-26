@@ -1677,6 +1677,67 @@
       </build>
     </profile>
 
+    <!-- Use google error prone to detect Java mistakes -->
+    <profile>
+      <id>ep-tests</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.3</version>
+            <configuration>
+              <compilerId>javac-with-errorprone</compilerId>
+              <forceJavacCompilerUse>true</forceJavacCompilerUse>
+
+              <compilerArgs>
+                <!-- Suppress warnings from sun.misc.Unsafe usage -->
+                <arg>-XDignore.symbol.file</arg>
+
+                <!-- Change all the default on warning checks to error checks -->
+                <arg>-Xep:ElementsCountedInLoop:ERROR</arg>
+                <arg>-Xep:Finally:ERROR</arg>
+                <arg>-Xep:IncompatibleModifiers:ERROR</arg>
+                <arg>-Xep:NonAtomicVolatileUpdate:ERROR</arg>
+                <arg>-Xep:ProtoFieldPreconditionsCheckNotNull:ERROR</arg>
+                <arg>-Xep:RequiredModifiers:ERROR</arg>
+                <arg>-Xep:StaticAccessedFromInstance:ERROR</arg>
+                <arg>-Xep:StringEquality:ERROR</arg>
+                <arg>-Xep:SynchronizeOnNonFinalField:ERROR</arg>
+                <arg>-Xep:TypeParameterUnusedInFormals:ERROR</arg>
+                <arg>-Xep:WaitNotInLoop:ERROR</arg>
+                <arg>-Xep:CannotMockFinalClass:ERROR</arg>
+                <arg>-Xep:EqualsHashCode:WARN</arg>
+                <arg>-Xep:NonCanonicalStaticImport:ERROR</arg>
+                <arg>-Xep:NonOverridingEquals:ERROR</arg>
+                <arg>-Xep:PreconditionsInvalidPlaceholder:ERROR</arg>
+                <arg>-Xep:UnnecessaryStaticImport:WARN</arg>
+                <!--
+                These commented-out checkers doesn't exist or mature in error prone 2.0.1,
+                which is the underline version of plexus-compiler-javac-errorprone 2.5,
+                we should enable these checkers if possible when we update this dependency
+                -->
+              </compilerArgs>
+            </configuration>
+            <dependencies>
+              <dependency>
+                <groupId>org.codehaus.plexus</groupId>
+                <artifactId>plexus-compiler-javac-errorprone</artifactId>
+                <version>2.5</version>
+              </dependency>
+              <!-- override plexus-compiler-javac-errorprone's dependency on
+                   Error Prone with the latest version -->
+              <dependency>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_core</artifactId>
+                <version>2.0.3</version>
+              </dependency>
+            </dependencies>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
 
     <!-- Hadoop-a.b.c dependencies can be found at

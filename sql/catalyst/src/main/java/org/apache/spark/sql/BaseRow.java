@@ -140,12 +140,12 @@ public abstract class BaseRow extends InternalRow {
     throw new UnsupportedOperationException();
   }
 
-  @Override
+  @Override  @SuppressWarnings("TypeParameterUnusedInFormals")
   public <T> T getAs(int i) {
     throw new UnsupportedOperationException();
   }
 
-  @Override
+  @Override  @SuppressWarnings("TypeParameterUnusedInFormals")
   public <T> T getAs(String fieldName) {
     throw new UnsupportedOperationException();
   }

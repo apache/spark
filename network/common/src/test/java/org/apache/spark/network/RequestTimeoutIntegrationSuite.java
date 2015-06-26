@@ -111,7 +111,9 @@ public class RequestTimeoutIntegrationSuite {
     TestCallback callback0 = new TestCallback();
     synchronized (callback0) {
       client.sendRpc(new byte[0], callback0);
-      callback0.wait(FOREVER);
+      while (callback0.success == null && callback0.failure == null) {
+        callback0.wait(FOREVER);
+      }
       assert (callback0.success.length == response.length);
     }
 
@@ -119,7 +121,9 @@ public class RequestTimeoutIntegrationSuite {
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
       client.sendRpc(new byte[0], callback1);
-      callback1.wait(4 * 1000);
+      while (callback1.success == null && callback1.failure == null) {
+        callback1.wait(4 * 1000);
+      }
       assert (callback1.failure != null);
       assert (callback1.failure instanceof IOException);
     }
@@ -159,7 +163,9 @@ public class RequestTimeoutIntegrationSuite {
     TestCallback callback0 = new TestCallback();
     synchronized (callback0) {
       client0.sendRpc(new byte[0], callback0);
-      callback0.wait(FOREVER);
+      while (callback0.success == null && callback0.failure == null) {
+        callback0.wait(FOREVER);
+      }
       assert (callback0.failure instanceof IOException);
       assert (!client0.isActive());
     }
@@ -171,7 +177,9 @@ public class RequestTimeoutIntegrationSuite {
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
       client1.sendRpc(new byte[0], callback1);
-      callback1.wait(FOREVER);
+      while (callback1.success == null && callback1.failure == null) {
+        callback1.wait(FOREVER);
+      }
       assert (callback1.success.length == response.length);
       assert (callback1.failure == null);
     }
@@ -219,7 +227,9 @@ public class RequestTimeoutIntegrationSuite {
     synchronized (callback0) {
       // not complete yet, but should complete soon
       assert (callback0.success == null && callback0.failure == null);
-      callback0.wait(2 * 1000);
+      while (callback0.success == null && callback0.failure == null) {
+        callback0.wait(2 * 1000);
+      }
       assert (callback0.failure instanceof IOException);
     }
 

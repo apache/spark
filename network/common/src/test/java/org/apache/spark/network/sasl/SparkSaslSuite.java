@@ -230,6 +230,7 @@ public class SparkSaslSuite {
     }
   }
 
+  @SuppressWarnings("WaitNotInLoop")
   @Test
   public void testFileRegionEncryption() throws Exception {
     final String blockSizeConf = "spark.network.sasl.maxEncryptedBlockSize";

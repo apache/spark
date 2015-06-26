@@ -520,6 +520,11 @@ def run_scala_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
 
 
+def run_error_prone_checks():
+    set_title_and_block("Running Error prone checks", "BLOCK_JAVA_ERROR_PRONE")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
+
+
 def run_python_style_checks():
     set_title_and_block("Running Python style checks", "BLOCK_PYTHON_STYLE")
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
@@ -762,6 +767,8 @@ def main():
     # style checks
     if not changed_files or any(f.endswith(".scala") for f in changed_files):
         run_scala_style_checks()
+    if not changed_files or any(f.endswith(".java") for f in changed_files):
+        run_error_prone_checks()
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
 
