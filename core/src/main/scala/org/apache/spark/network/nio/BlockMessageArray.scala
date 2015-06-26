@@ -114,8 +114,8 @@ private[nio] object BlockMessageArray {
     val blockMessages =
       (0 until 10).map { i =>
         if (i % 2 == 0) {
-          val buffer =  ByteBuffer.allocate(100)
-          buffer.clear
+          val buffer = ByteBuffer.allocate(100)
+          buffer.clear()
           BlockMessage.fromPutBlock(PutBlock(TestBlockId(i.toString), buffer,
             StorageLevel.MEMORY_ONLY_SER))
         } else {

@@ -18,50 +18,52 @@
 require 'fileutils'
 include FileUtils
 
-if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
-  # Build Scaladoc for Java/Scala
+if not (ENV['SKIP_API'] == '1')
+  if not (ENV['SKIP_SCALADOC'] == '1')
+    # Build Scaladoc for Java/Scala
 
-  puts "Moving to project root and building API docs."
-  curr_dir = pwd
-  cd("..")
+    puts "Moving to project root and building API docs."
+    curr_dir = pwd
+    cd("..")
 
-  puts "Running 'build/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
-  puts `build/sbt -Pkinesis-asl compile unidoc`
+    puts "Running 'build/sbt -Pkinesis-asl compile unidoc' from " + pwd + "; this may take a few minutes..."
+    puts `build/sbt -Pkinesis-asl compile unidoc`
 
-  puts "Moving back into docs dir."
-  cd("docs")
+    puts "Moving back into docs dir."
+    cd("docs")
 
-  # Copy over the unified ScalaDoc for all projects to api/scala.
-  # This directory will be copied over to _site when `jekyll` command is run.
-  source = "../target/scala-2.10/unidoc"
-  dest = "api/scala"
+    # Copy over the unified ScalaDoc for all projects to api/scala.
+    # This directory will be copied over to _site when `jekyll` command is run.
+    source = "../target/scala-2.10/unidoc"
+    dest = "api/scala"
 
-  puts "Making directory " + dest
-  mkdir_p dest
+    puts "Making directory " + dest
+    mkdir_p dest
 
-  # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
-  puts "cp -r " + source + "/. " + dest
-  cp_r(source + "/.", dest)
+    # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
+    puts "cp -r " + source + "/. " + dest
+    cp_r(source + "/.", dest)
 
-  # Append custom JavaScript
-  js = File.readlines("./js/api-docs.js")
-  js_file = dest + "/lib/template.js"
-  File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
+    # Append custom JavaScript
+    js = File.readlines("./js/api-docs.js")
+    js_file = dest + "/lib/template.js"
+    File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
 
-  # Append custom CSS
-  css = File.readlines("./css/api-docs.css")
-  css_file = dest + "/lib/template.css"
-  File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
+    # Append custom CSS
+    css = File.readlines("./css/api-docs.css")
+    css_file = dest + "/lib/template.css"
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 
-  # Copy over the unified JavaDoc for all projects to api/java.
-  source = "../target/javaunidoc"
-  dest = "api/java"
+    # Copy over the unified JavaDoc for all projects to api/java.
+    source = "../target/javaunidoc"
+    dest = "api/java"
 
-  puts "Making directory " + dest
-  mkdir_p dest
+    puts "Making directory " + dest
+    mkdir_p dest
 
-  puts "cp -r " + source + "/. " + dest
-  cp_r(source + "/.", dest)
+    puts "cp -r " + source + "/. " + dest
+    cp_r(source + "/.", dest)
+  end
 
   # Build Sphinx docs for Python
 

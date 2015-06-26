@@ -19,23 +19,31 @@ package org.apache.spark.sql
 
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 
 class ColumnExpressionSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  import ctx.implicits._
+
+  test("alias") {
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
+    assert(df.select(df("a").as("b")).columns.head === "b")
+    assert(df.select(df("a").alias("b")).columns.head === "b")
+  }
+
   test("single explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
       df.select(explode('intList)),
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("explode and other columns") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select($"a", explode('intList)),
@@ -45,13 +53,13 @@ class ColumnExpressionSuite extends QueryTest {
 
     checkAnswer(
       df.select($"*", explode('intList)),
-      Row(1, Seq(1,2,3), 1) ::
-      Row(1, Seq(1,2,3), 2) ::
-      Row(1, Seq(1,2,3), 3) :: Nil)
+      Row(1, Seq(1, 2, 3), 1) ::
+      Row(1, Seq(1, 2, 3), 2) ::
+      Row(1, Seq(1, 2, 3), 3) :: Nil)
   }
 
   test("aliased explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
     checkAnswer(
       df.select(explode('intList).as('int)).select('int),
@@ -79,7 +87,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("self join explode") {
-    val df = Seq((1, Seq(1,2,3))).toDF("a", "intList")
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     val exploded = df.select(explode('intList).as('i))
 
     checkAnswer(
@@ -177,12 +185,20 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
+
+    checkAnswer(
+      ctx.sql("select isnull(null), isnull(1)"),
+      Row(true, false))
   }
 
   test("isNotNull") {
     checkAnswer(
       nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
+
+    checkAnswer(
+      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      Row(false, true))
   }
 
   test("===") {
@@ -206,7 +222,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+    val nullData = ctx.createDataFrame(ctx.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -267,7 +283,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("between") {
-    val testData = TestSQLContext.sparkContext.parallelize(
+    val testData = ctx.sparkContext.parallelize(
       (0, 1, 2) ::
       (1, 2, 3) ::
       (2, 1, 0) ::
@@ -280,7 +296,23 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
   }
 
-  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
+  test("in") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    checkAnswer(df.filter($"a".in(1, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 2)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".in(3, 1)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"b".in("y", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "x")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
+    checkAnswer(df.filter($"b".in("z", "y")),
+      df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+  }
+
+  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -353,23 +385,6 @@ class ColumnExpressionSuite extends QueryTest {
     )
   }
 
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key.asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key.desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(lit(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
@@ -385,6 +400,10 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      Row("AB", "CDE"))
   }
 
   test("lower") {
@@ -402,11 +421,15 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+
+    checkAnswer(
+      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      Row("ab", "cde"))
   }
 
   test("monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = TestSQLContext.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+    val df = ctx.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -416,7 +439,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("sparkPartitionId") {
-    val df = TestSQLContext.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    val df = ctx.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
     checkAnswer(
       df.select(sparkPartitionId()),
       Row(0)
@@ -446,12 +469,50 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("rand") {
-    val randCol = testData.select('key, rand(5L).as("rand"))
+    val randCol = testData.select($"key", rand(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>
       assert(row.getDouble(1) <= 1.0)
       assert(row.getDouble(1) >= 0.0)
+    }
+
+    def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
+      val projects = df.queryExecution.executedPlan.collect {
+        case project: Project => project
+      }
+      assert(projects.size === expectedNumProjects)
+    }
+
+    // We first create a plan with two Projects.
+    // Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    //   Project [key, (Rand 5 + 1) AS rand]
+    //     LogicalRDD [key, value]
+    // Because Rand function is not deterministic, the column rand is not deterministic.
+    // So, in the optimizer, we will not collapse Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    // and Project [key, Rand 5 AS rand]. The final plan still has two Projects.
+    val dfWithTwoProjects =
+      testData
+        .select($"key", (rand(5L) + 1).as("rand"))
+        .select(($"rand" + 1).as("rand1"), ($"rand" - 1).as("rand2"))
+    checkNumProjects(dfWithTwoProjects, 2)
+
+    // Now, we add one more project rand1 - rand2 on top of the query plan.
+    // Since rand1 and rand2 are deterministic (they basically apply +/- to the generated
+    // rand value), we can collapse rand1 - rand2 to the Project generating rand1 and rand2.
+    // So, the plan will be optimized from ...
+    // Project [(rand1 - rand2) AS (rand1 - rand2)]
+    //   Project [rand + 1 AS rand1, rand - 1 AS rand2]
+    //     Project [key, (Rand 5 + 1) AS rand]
+    //       LogicalRDD [key, value]
+    // to ...
+    // Project [((rand + 1 AS rand1) - (rand - 1 AS rand2)) AS (rand1 - rand2)]
+    //   Project [key, Rand 5 AS rand]
+    //     LogicalRDD [key, value]
+    val dfWithThreeProjects = dfWithTwoProjects.select($"rand1" - $"rand2")
+    checkNumProjects(dfWithThreeProjects, 2)
+    dfWithThreeProjects.collect().foreach { row =>
+      assert(row.getDouble(0) === 2.0 +- 0.0001)
     }
   }
 

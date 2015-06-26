@@ -329,7 +329,7 @@ setMethod("reduceByKey",
               convertEnvsToList(keys, vals)
             }
             locallyReduced <- lapplyPartition(x, reduceVals)
-            shuffled <- partitionBy(locallyReduced, numPartitions)
+            shuffled <- partitionBy(locallyReduced, numToInt(numPartitions))
             lapplyPartition(shuffled, reduceVals)
           })
 
@@ -436,7 +436,7 @@ setMethod("combineByKey",
               convertEnvsToList(keys, combiners)
             }
             locallyCombined <- lapplyPartition(x, combineLocally)
-            shuffled <- partitionBy(locallyCombined, numPartitions)
+            shuffled <- partitionBy(locallyCombined, numToInt(numPartitions))
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()
               keys <- new.env()
@@ -784,7 +784,7 @@ setMethod("sortByKey",
             newRDD <- partitionBy(x, numPartitions, rangePartitionFunc)
             lapplyPartition(newRDD, partitionFunc)
           })
-          
+
 # Subtract a pair RDD with another pair RDD.
 #
 # Return an RDD with the pairs from x whose keys are not in other.
@@ -820,7 +820,7 @@ setMethod("subtractByKey",
           })
 
 # Return a subset of this RDD sampled by key.
-# 
+#
 # @description
 # \code{sampleByKey} Create a sample of this RDD using variable sampling rates
 # for different keys as specified by fractions, a key to sampling rate map.

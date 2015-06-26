@@ -813,12 +813,20 @@ class RDD(object):
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
-        the partitions, using a given associative function and a neutral "zero
-        value."
+        the partitions, using a given associative and commutative function and
+        a neutral "zero value."
 
         The function C{op(t1, t2)} is allowed to modify C{t1} and return it
         as its result value to avoid object allocation; however, it should not
         modify C{t2}.
+
+        This behaves somewhat differently from fold operations implemented
+        for non-distributed collections in functional languages like Scala.
+        This fold operation may be applied to partitions individually, and then
+        fold those results into the final result, rather than apply the fold
+        to each element sequentially in some defined ordering. For functions
+        that are not commutative, the result may differ from that of a fold
+        applied to a non-distributed collection.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).fold(0, add)
@@ -952,7 +960,7 @@ class RDD(object):
         >>> sc.parallelize([1.0, 2.0, 3.0]).sum()
         6.0
         """
-        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self.mapPartitions(lambda x: [sum(x)]).fold(0, operator.add)
 
     def count(self):
         """
@@ -2190,7 +2198,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000))
-        >>> (rdd.sumApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.sumApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.mapPartitions(lambda it: [float(sum(it))])._to_java_object_rdd()
@@ -2207,7 +2215,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000)) / 1000.0
-        >>> (rdd.meanApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.meanApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.map(float)._to_java_object_rdd()

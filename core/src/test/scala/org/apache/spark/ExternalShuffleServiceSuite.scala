@@ -55,6 +55,14 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
 
+    // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
+    // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
+    // all shuffle blocks will be in this executor, ShuffleBlockFetcherIterator will directly fetch
+    // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
+    // In this case, we won't receive FetchFailed. And it will make this test fail.
+    // Therefore, we should wait until all slaves are up
+    sc.jobProgressListener.waitUntilExecutorsUp(2, 10000)
+
     val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
 
     rdd.count()
