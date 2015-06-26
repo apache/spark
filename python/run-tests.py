@@ -46,7 +46,7 @@ LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 
 
 def run_individual_python_test(test_name, pyspark_python):
-    env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python) }
+    env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python)}
     print("    Running test: %s ..." % test_name, end='')
     start_time = time.time()
     with open(LOG_FILE, 'a') as log_file:
@@ -113,13 +113,16 @@ def main():
 
     start_time = time.time()
     for python_exec in python_execs:
+        python_implementation = subprocess.check_output(
+            [python_exec, "-c", "import platform; print platform.python_implementation()"]).strip()
         print("Testing with `%s`: " % python_exec, end='')
         subprocess.call([python_exec, "--version"])
 
         for module in modules_to_test:
-            print("Running %s tests ..." % module.name)
-            for test_goal in module.python_test_goals:
-                run_individual_python_test(test_goal, python_exec)
+            if python_implementation not in module.blacklisted_python_implementations:
+                print("Running %s tests ..." % module.name)
+                for test_goal in module.python_test_goals:
+                    run_individual_python_test(test_goal, python_exec)
     total_duration = time.time() - start_time
     print("Tests passed in %i seconds" % total_duration)
 

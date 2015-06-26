@@ -30,7 +30,8 @@ class Module(object):
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
-                 sbt_test_goals=(), python_test_goals=(), should_run_r_tests=False):
+                 sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
+                 should_run_r_tests=False):
         """
         Define a new module.
 
@@ -44,6 +45,9 @@ class Module(object):
             order to build and test this module (e.g. '-PprofileName').
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
+        :param blacklisted_python_implementations: A set of Python implementations that are not
+            supported by this module's Python components. The values in this set should match
+            strings returned by Python's `platform.python_implementation()`.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         """
         self.name = name
@@ -52,6 +56,7 @@ class Module(object):
         self.sbt_test_goals = sbt_test_goals
         self.build_profile_flags = build_profile_flags
         self.python_test_goals = python_test_goals
+        self.blacklisted_python_implementations = blacklisted_python_implementations
         self.should_run_r_tests = should_run_r_tests
 
         self.dependent_modules = set()
@@ -308,6 +313,9 @@ pyspark_mllib = Module(
         "pyspark.mllib.tree",
         "pyspark.mllib.util",
         "pyspark.mllib.tests",
+    ],
+    blacklisted_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )
 
@@ -326,6 +334,9 @@ pyspark_ml = Module(
         "pyspark.ml.tuning",
         "pyspark.ml.tests",
         "pyspark.ml.evaluation",
+    ],
+    blacklisted_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )
 
