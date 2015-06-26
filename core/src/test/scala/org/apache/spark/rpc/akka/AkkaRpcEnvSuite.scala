@@ -17,8 +17,6 @@
 
 package org.apache.spark.rpc.akka
 
-import scala.language.postfixOps
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.rpc._
 
