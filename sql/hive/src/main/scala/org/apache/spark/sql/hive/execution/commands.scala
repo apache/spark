@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.hadoop.hive.conf.HiveConf
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -56,8 +57,21 @@ case class DropTable(
   override def run(sqlContext: SQLContext): Seq[InternalRow] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    val dbAndTableName = tableName.split("\\.")
+    val databaseName = dbAndTableName
+      .lift(dbAndTableName.size -2)
+      .getOrElse(hiveContext.catalog.client.currentDatabase)
+    // tempDbname is used to pass the test "drop_partitions_filter"
+    // when we set hive.exec.drop.ignorenonexistent=false and run "drop table dbname.tablename"
+    // Hive will throws out Exception (This is a bug of Hive)
+    val tempDbname =
+      if (hiveContext.hiveconf.getBoolVar(HiveConf.ConfVars.DROPIGNORESNONEXISTENT)) {
+        s"$databaseName."
+      } else {
+        ""
+      }
     try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(dbAndTableName.last))
     } catch {
       // This table's metadata is not in Hive metastore (e.g. the table does not exist).
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
@@ -67,9 +81,9 @@ case class DropTable(
       // Users should be able to drop such kinds of tables regardless if there is an error.
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
-    hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(Seq(tableName))
+    hiveContext.invalidateTable(dbAndTableName.last)
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tempDbname${dbAndTableName.last}")
+    hiveContext.catalog.unregisterTable(Seq(databaseName, dbAndTableName.last))
     Seq.empty[InternalRow]
   }
 }

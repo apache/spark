@@ -850,4 +850,22 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
     sqlContext.sql("""use default""")
     sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
   }
+
+  test("SPARK-8561:drop table under specific database ") {
+
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+    sqlContext.sql("""create database if not exists testdb8561""")
+    sqlContext.sql("""use testdb8561""")
+    df.write
+      .format("parquet")
+      .mode(SaveMode.Overwrite)
+      .saveAsTable("testdb8561_tbl1")
+
+    assert(sqlContext.sql("show TABLES in testdb8561").collect().size === 1)
+    sqlContext.sql("drop TABLE testdb8561_tbl1")
+    assert(sqlContext.sql("show TABLES in testdb8561").collect().size === 0)
+
+    sqlContext.sql("""use default""")
+    sqlContext.sql("""drop database if exists testdb8561 CASCADE""")
+  }
 }
