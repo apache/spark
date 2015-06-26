@@ -60,11 +60,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val MINIMUM_SHARES_PROPERTY = "minShare"
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"
   val WEIGHT_PROPERTY = "weight"
+  val MAXIMUM_RUNNING_PROPERTY = "maxRunning"
   val POOL_NAME_PROPERTY = "@name"
   val POOLS_PROPERTY = "pool"
   val DEFAULT_SCHEDULING_MODE = SchedulingMode.FIFO
   val DEFAULT_MINIMUM_SHARE = 0
   val DEFAULT_WEIGHT = 1
+  val DEFAULT_MAXIMUM_RUNNING = 0
 
   override def buildPools() {
     var is: Option[InputStream] = None
@@ -89,10 +91,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   private def buildDefaultPool() {
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
-        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT, DEFAULT_MAXIMUM_RUNNING)
       rootPool.addSchedulable(pool)
-      logInfo("Created default pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+      logInfo("Created default pool %s, schedulingMode: %s, minShare: %d, weight: %d, maxRunning: %d".format(
+        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT, DEFAULT_MAXIMUM_RUNNING))
     }
   }
 
@@ -104,6 +106,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       var schedulingMode = DEFAULT_SCHEDULING_MODE
       var minShare = DEFAULT_MINIMUM_SHARE
       var weight = DEFAULT_WEIGHT
+      var maxRunning = DEFAULT_MAXIMUM_RUNNING
 
       val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text
       if (xmlSchedulingMode != "") {
@@ -125,7 +128,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         weight = xmlWeight.toInt
       }
 
-      val pool = new Pool(poolName, schedulingMode, minShare, weight)
+      val xmlMaxRunning = (poolNode \ MAXIMUM_RUNNING_PROPERTY).text
+      if (xmlMaxRunning != "") {
+        maxRunning = xmlMaxRunning.toInt
+      }
+
+      val pool = new Pool(poolName, schedulingMode, minShare, weight, maxRunning)
       rootPool.addSchedulable(pool)
       logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
         poolName, schedulingMode, minShare, weight))
@@ -142,7 +150,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         // we will create a new pool that user has configured in app
         // instead of being defined in xml file
         parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
-          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT, DEFAULT_MAXIMUM_RUNNING)
         rootPool.addSchedulable(parentPool)
         logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
           poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
