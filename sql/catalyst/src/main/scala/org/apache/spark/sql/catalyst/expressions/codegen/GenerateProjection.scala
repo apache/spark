@@ -72,54 +72,56 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
     }.mkString("\n        ")
 
-    val specificAccessorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificAccessorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
-        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
-          List(s"case $i: return c$i;")
-        case _ => Nil
+        case (e, i) if ctx.javaType(e.dataType) == jt =>
+          Some(s"case $i: return c$i;")
+        case _ => None
       }.mkString("\n        ")
       if (cases.length > 0) {
+        val getter = "get" + ctx.primitiveTypeName(jt)
         s"""
       @Override
-      public ${ctx.javaType(dataType)} ${ctx.accessorForType(dataType)}(int i) {
+      public $jt $getter(int i) {
         if (isNullAt(i)) {
-          return ${ctx.defaultValue(dataType)};
+          return ${ctx.defaultValue(jt)};
         }
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i
-          + " in ${ctx.accessorForType(dataType)}");
+          + " in $getter");
       }"""
       } else {
         ""
       }
-    }.mkString("\n")
+    }.filter(_.length > 0).mkString("\n")
 
-    val specificMutatorFunctions = ctx.nativeTypes.map { dataType =>
+    val specificMutatorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
-        case (e, i) if ctx.javaType(e.dataType) == ctx.javaType(dataType) =>
-          List(s"case $i: { c$i = value; return; }")
-        case _ => Nil
+        case (e, i) if ctx.javaType(e.dataType) == jt =>
+          Some(s"case $i: { c$i = value; return; }")
+        case _ => None
       }.mkString("\n        ")
       if (cases.length > 0) {
+        val setter = "set" + ctx.primitiveTypeName(jt)
         s"""
       @Override
-      public void ${ctx.mutatorForType(dataType)}(int i, ${ctx.javaType(dataType)} value) {
+      public void $setter(int i, $jt value) {
         nullBits[i] = false;
         switch (i) {
         $cases
         }
         throw new IllegalArgumentException("Invalid index: " + i +
-          " in ${ctx.mutatorForType(dataType)}");
+          " in $setter}");
       }"""
       } else {
         ""
       }
-    }.mkString("\n")
+    }.filter(_.length > 0).mkString("\n")
 
     val hashValues = expressions.zipWithIndex.map { case (e, i) =>
-      val col = newTermName(s"c$i")
+      val col = s"c$i"
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"

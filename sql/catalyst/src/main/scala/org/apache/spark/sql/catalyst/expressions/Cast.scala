@@ -467,11 +467,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         defineCodeGen(ctx, ev, c => s"!$c.isZero()")
       case (dt: NumericType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c != 0")
-
-      case (_: DecimalType, IntegerType) =>
-        defineCodeGen(ctx, ev, c => s"($c).toInt()")
       case (_: DecimalType, dt: NumericType) =>
-        defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.primitiveTypeName(dt)}()")
       case (_: NumericType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
 
