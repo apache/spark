@@ -170,7 +170,7 @@ object Statistics {
   }
 
   /**
-   * A convenience method to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
+   * Convenience function to conduct a one-sample, two sided Kolmogorov Smirnov test for probability
    * distribution equality. Currently supports standard normal distribution only.
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param name a `String` name for a theoretical distribution

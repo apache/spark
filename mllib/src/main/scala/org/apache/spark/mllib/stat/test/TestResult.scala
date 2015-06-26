@@ -97,8 +97,8 @@ class ChiSqTestResult private[stat] (override val pValue: Double,
  */
 @Experimental
 class KSTestResult private[stat] (override val pValue: Double,
-                                  override val statistic: Double,
-                                  override val nullHypothesis: String) extends TestResult[Int] {
+    override val statistic: Double,
+    override val nullHypothesis: String) extends TestResult[Int] {
 
   override val degreesOfFreedom = 0
   override def toString: String = {
