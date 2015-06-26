@@ -438,6 +438,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
+  test("SPARK-7119: ScriptTransform doesn't consider the output data type") {
+    val s = sql("""
+                  |SELECT tKey + 1 FROM (SELECT TRANSFORM (key) USING 'cat'
+                  |AS (tKey INT) FROM src) t
+                """.stripMargin).collect()
+    val t = sql("SELECT key + 1 FROM src").collect()
+    assert(s === t)
+  }
+
   createQueryTest("schema-less transform",
     """
       |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
@@ -471,28 +480,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
     """.stripMargin.replaceAll("\n", " "))
-
-  test("transform with SerDe2") {
-
-    sql("CREATE TABLE small_src(key INT, value STRING)")
-    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
-
-    val expected = sql("SELECT key FROM small_src").collect().head
-    val res = sql(
-      """
-        |SELECT TRANSFORM (key) ROW FORMAT SERDE
-        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
-        |"testing.hive.avro.serde","name": "src","type": "record","fields":
-        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
-        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
-        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
-        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
-        |FROM small_src
-      """.stripMargin.replaceAll("\n", " ")).collect().head
-
-    assert(expected(0) === res(0))
-  }
 
   createQueryTest("transform with SerDe3",
     """

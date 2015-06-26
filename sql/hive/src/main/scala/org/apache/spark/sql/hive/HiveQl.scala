@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema, HiveRowFormat}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -860,6 +860,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token("TOK_RECORDREADER", readerClause) ::
                    outputClause) :: Nil) =>
 
+            val recordWriter = writerClause match {
+              case Token(writer, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(writer)
+              case Nil => ""
+            }
+
+            val recordReader = readerClause match {
+              case Token(reader, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(reader)
+              case Nil => ""
+            }
+
             val (output, schemaLess) = outputClause match {
               case Token("TOK_ALIASLIST", aliases) :: Nil =>
                 (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
@@ -873,24 +883,29 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }
 
             def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String)], String, Seq[(String, String)]) = clause match {
+              : (Seq[HiveRowFormat], String, Seq[(String, String)]) = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
-                  case Token(name, Token(value, Nil) :: Nil) => (name, value)
+                  case Token(name, Token(value, Nil) :: Nil) =>
+                    HiveRowFormat(name, BaseSemanticAnalyzer.unescapeSQLString(value), null)
+                  case Token(name, Token(value1, Nil) :: Token(value2, Nil) :: Nil) =>
+                    HiveRowFormat(name, BaseSemanticAnalyzer.unescapeSQLString(value1),
+                      BaseSemanticAnalyzer.unescapeSQLString(value2))
                 }
                 (rowFormat, "", Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
-                (Nil, serdeClass, Nil)
+                (Nil, BaseSemanticAnalyzer.unescapeSQLString(serdeClass), Nil)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
                 Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
                 val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
-                    (name, value)
+                    (BaseSemanticAnalyzer.unescapeSQLString(name),
+                      BaseSemanticAnalyzer.unescapeSQLString(value))
                 }
-                (Nil, serdeClass, serdeProps)
+                (Nil, BaseSemanticAnalyzer.unescapeSQLString(serdeClass), serdeProps)
 
               case Nil => (Nil, "", Nil)
             }
@@ -903,7 +918,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             val schema = HiveScriptIOSchema(
               inRowFormat, outRowFormat,
               inSerdeClass, outSerdeClass,
-              inSerdeProps, outSerdeProps, schemaLess)
+              inSerdeProps, outSerdeProps,
+              recordReader, recordWriter, schemaLess)
 
             Some(
               logical.ScriptTransformation(
