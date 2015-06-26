@@ -30,7 +30,6 @@ import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.util.control.NonFatal
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -284,7 +283,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc.stop()
     } catch {
       case e: Exception =>
-        fail("calling multiple sc.stop() must not have thrown any exception");
+        fail("calling multiple sc.stop() must not throw any exception", e);
     }
   }
 }
