@@ -8,7 +8,9 @@ import os
 import socket
 import sys
 
-from flask import Flask, url_for, Markup, Blueprint, redirect, flash, Response
+from flask import (
+    Flask, url_for, Markup, Blueprint, redirect,
+    flash, Response, render_template)
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
@@ -644,11 +646,9 @@ class Airflow(BaseView):
             'airflow/dag_code.html', html_code=html_code, dag=dag, title=title,
             demo_mode=conf.getboolean('webserver', 'demo_mode'))
 
-    @expose('/circles')
-    @login_required
+    @app.errorhandler(404)
     def circles(self):
-        return self.render(
-            'airflow/circles.html')
+        return render_template('airflow/circles.html'), 404
 
     @expose('/sandbox')
     @login_required
