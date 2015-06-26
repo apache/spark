@@ -123,10 +123,10 @@ private[sql] object StatFunctions extends Logging {
         countsRow.setLong(distinctCol2.get(row.get(1)).get + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
-      countsRow.setString(0, col1Item.toString)
+      countsRow.setString(0, "\"" + col1Item.toString + "\"")
       countsRow
     }.toSeq
-    val headerNames = distinctCol2.map(r => StructField(r._1.toString, LongType)).toSeq
+    val headerNames = distinctCol2.map(r => StructField("\"" + r._1.toString + "\"", LongType)).toSeq
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
     new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
