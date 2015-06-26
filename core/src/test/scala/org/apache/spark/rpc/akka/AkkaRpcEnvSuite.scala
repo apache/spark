@@ -17,14 +17,7 @@
 
 package org.apache.spark.rpc.akka
 
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.language.postfixOps
-
-import akka.actor.{Actor, ActorSystem, Props}
-import akka.pattern.ask
-import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.rpc._
