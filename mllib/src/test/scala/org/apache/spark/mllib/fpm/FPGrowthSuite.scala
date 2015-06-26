@@ -94,15 +94,25 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOrdered(true)
       .run(rdd)
 
+    /*
+      Use the following R code to verify association rules using arulesSequences package.
+
+      data = read_baskets("path", info = c("sequenceID","eventID","SIZE"))
+      freqItemSeq = cspade(data, parameter = list(support = 0.5))
+      resSeq = as(freqItemSeq, "data.frame")
+      resSeq$support = resSeq$support * length(transactions)
+      names(resSeq)[names(resSeq) == "support"] = "freq"
+      resSeq
+     */
     val expected = Set(
-      (List("r"), 3L), (List("s"), 3L), (List("t"), 3L), (List("x"), 4L), (List("y"), 3L),
-      (List("z"), 5L), (List("z", "y"), 3L), (List("x", "t"), 3L), (List("y", "t"), 3L),
-      (List("z", "t"), 3L), (List("z", "y", "t"), 3L)
+      (Seq("r"), 3L), (Seq("s"), 3L), (Seq("t"), 3L), (Seq("x"), 4L), (Seq("y"), 3L),
+      (Seq("z"), 5L), (Seq("z", "y"), 3L), (Seq("x", "t"), 3L), (Seq("y", "t"), 3L),
+      (Seq("z", "t"), 3L), (Seq("z", "y", "t"), 3L)
     )
     val freqItemseqs1 = model1.freqItemsets.collect().map { itemset =>
-      (itemset.items.toList, itemset.freq)
+      (itemset.items.toSeq, itemset.freq)
     }.toSet
-    assert(freqItemseqs1 === expected)
+    assert(freqItemseqs1 == expected)
   }
 
   test("FP-Growth frequent itemsets using Int type") {
