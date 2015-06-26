@@ -1240,8 +1240,8 @@ class DAGScheduler(
    */
   private[scheduler] def abortStage(
       failedStage: Stage,
-      reason: String, exception:
-      Option[Throwable] = None): Unit = {
+      reason: String,
+      exception: Option[Throwable] = None): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return

@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{NotSerializableException, File}
+import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
