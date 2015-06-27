@@ -78,7 +78,7 @@ trait ArrayBackedRow {
   override def apply(i: Int): Any = values(i)
 
   def setNullAt(i: Int): Unit = { values(i) = null}
-  
+
   def update(i: Int, value: Any): Unit = { values(i) = value }
 }
 
