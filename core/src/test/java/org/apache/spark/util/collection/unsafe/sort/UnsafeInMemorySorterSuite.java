@@ -56,11 +56,8 @@ public class UnsafeInMemorySorterSuite {
     assert(!iter.hasNext());
   }
 
-  /**
-   * Tests the type of sorting that's used in the non-combiner path of sort-based shuffle.
-   */
   @Test
-  public void testSortingOnlyByPartitionId() throws Exception {
+  public void testSortingOnlyByIntegerPrefix() throws Exception {
     final String[] dataToSort = new String[] {
       "Boba",
       "Pearls",
