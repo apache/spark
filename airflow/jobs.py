@@ -480,19 +480,6 @@ class BackfillJob(BaseJob):
 
         # Triggering what is ready to get triggered
         while tasks_to_run:
-            msg = (
-                "Yet to run: {0} | "
-                "Succeeded: {1} | "
-                "Started: {2} | "
-                "Failed: {3} | "
-                "Won't run: {4} ").format(
-                len(tasks_to_run),
-                len(succeeded),
-                len(started),
-                len(failed),
-                len(wont_run))
-
-            logging.info(msg)
             for key, ti in tasks_to_run.items():
                 ti.refresh_from_db()
                 if ti.state == State.SUCCESS and key in tasks_to_run:
@@ -532,11 +519,27 @@ class BackfillJob(BaseJob):
                 elif ti.state == State.SUCCESS:
                     succeeded.append(key)
                     del tasks_to_run[key]
+
+            msg = (
+                "[backfill progress] "
+                "waiting: {0} | "
+                "succeeded: {1} | "
+                "kicked_off: {2} | "
+                "failed: {3} | "
+                "skipped: {4} ").format(
+                    len(tasks_to_run),
+                    len(succeeded),
+                    len(started),
+                    len(failed),
+                    len(wont_run))
+            logging.info(msg)
+
         executor.end()
         session.close()
         if failed:
             raise AirflowException(
                 "Some tasks instances failed, here's the list:\n"+str(failed))
+        logging.info("All done. Exiting.")
 
 
 class LocalTaskJob(BaseJob):
