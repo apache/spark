@@ -7,6 +7,51 @@ Support for running on [YARN (Hadoop
 NextGen)](http://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html)
 was added to Spark in version 0.6.0, and improved in subsequent releases.
 
+# Launching Spark on YARN
+
+Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
+These configs are used to write to HDFS and connect to the YARN ResourceManager. The
+configuration contained in this directory will be distributed to the YARN cluster so that all
+containers used by the application use the same configuration. If the configuration references
+Java system properties or environment variables not managed by YARN, they should also be set in the
+Spark application's configuration (driver, executors, and the AM when running in client mode).
+
+There are two deploy modes that can be used to launch Spark applications on YARN. In `yarn-cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `yarn-client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
+
+Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn-client` or `yarn-cluster`. 
+To launch a Spark application in `yarn-cluster` mode:
+
+   `$ ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]`
+    
+For example:
+
+    $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
+        --master yarn-cluster \
+        --num-executors 3 \
+        --driver-memory 4g \
+        --executor-memory 2g \
+        --executor-cores 1 \
+        --queue thequeue \
+        lib/spark-examples*.jar \
+        10
+
+The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
+
+To launch a Spark application in `yarn-client` mode, do the same, but replace `yarn-cluster` with `yarn-client`.  To run spark-shell:
+
+    $ ./bin/spark-shell --master yarn-client
+
+## Adding Other JARs
+
+In `yarn-cluster` mode, the driver runs on a different machine than the client, so `SparkContext.addJar` won't work out of the box with files that are local to the client. To make files on the client available to `SparkContext.addJar`, include them with the `--jars` option in the launch command. 
+
+    $ ./bin/spark-submit --class my.main.Class \
+        --master yarn-cluster \
+        --jars my-other-jar.jar,my-other-other-jar.jar
+        my-main-jar.jar
+        app_arg1 app_arg2
+
+
 # Preparations
 
 Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
@@ -16,6 +61,38 @@ To build Spark yourself, refer to [Building Spark](building-spark.html).
 # Configuration
 
 Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.html) for more information on those.  These are configs that are specific to Spark on YARN.
+
+# Debugging your Application
+
+In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the `yarn.log-aggregation-enable` config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
+
+    yarn logs -applicationId <app ID>
+    
+will print out the contents of all log files from all containers from the given application. You can also view the container log files directly in HDFS using the HDFS shell or API. The directory where they are located can be found by looking at your YARN configs (`yarn.nodemanager.remote-app-log-dir` and `yarn.nodemanager.remote-app-log-dir-suffix`).
+
+When log aggregation isn't turned on, logs are retained locally on each machine under `YARN_APP_LOGS_DIR`, which is usually configured to `/tmp/logs` or `$HADOOP_HOME/logs/userlogs` depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
+
+To review per-container launch environment, increase `yarn.nodemanager.delete.debug-delay-sec` to a
+large value (e.g. 36000), and then access the application cache through `yarn.nodemanager.local-dirs`
+on the nodes on which containers are launched. This directory contains the launch script, JARs, and
+all environment variables used for launching each container. This process is useful for debugging
+classpath problems in particular. (Note that enabling this requires admin privileges on cluster
+settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
+
+To use a custom log4j configuration for the application master or executors, there are two options:
+
+- upload a custom `log4j.properties` using `spark-submit`, by adding it to the `--files` list of files
+  to be uploaded with the application.
+- add `-Dlog4j.configuration=<location of configuration file>` to `spark.driver.extraJavaOptions`
+  (for the driver) or `spark.executor.extraJavaOptions` (for executors). Note that if using a file,
+  the `file:` protocol should be explicitly provided, and the file needs to exist locally on all
+  the nodes.
+
+Note that for the first option, both executors and the application master will share the same
+log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
+to the same log file).
+
+If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your log4j.properties. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming application, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log file, and logs can be accessed using YARN's log utility.
 
 #### Spark Properties
 
@@ -50,8 +127,8 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.waitTime</code></td>
   <td>100s</td>
   <td>
-    In yarn-cluster mode, time for the application master to wait for the
-    SparkContext to be initialized. In yarn-client mode, time for the application master to wait
+    In `yarn-cluster` mode, time for the application master to wait for the
+    SparkContext to be initialized. In `yarn-client` mode, time for the application master to wait
     for the driver to connect to it.
   </td>
 </tr>
@@ -176,8 +253,8 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>
      Add the environment variable specified by <code>EnvironmentVariableName</code> to the 
      Application Master process launched on YARN. The user can specify multiple of 
-     these and to set multiple environment variables. In yarn-cluster mode this controls 
-     the environment of the SPARK driver and in yarn-client mode it only controls 
+     these and to set multiple environment variables. In `yarn-cluster` mode this controls 
+     the environment of the SPARK driver and in `yarn-client` mode it only controls 
      the environment of the executor launcher. 
   </td>
 </tr>
@@ -193,7 +270,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
-  In cluster mode, use spark.driver.extraJavaOptions instead.
+  In cluster mode, use `spark.driver.extraJavaOptions` instead.
   </td>
 </tr>
 <tr>
@@ -221,83 +298,6 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 </table>
-
-# Launching Spark on YARN
-
-Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
-These configs are used to write to the dfs and connect to the YARN ResourceManager. The
-configuration contained in this directory will be distributed to the YARN cluster so that all
-containers used by the application use the same configuration. If the configuration references
-Java system properties or environment variables not managed by YARN, they should also be set in the
-Spark application's configuration (driver, executors, and the AM when running in client mode).
-
-There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
-
-Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.  Thus, the master parameter is simply "yarn-client" or "yarn-cluster".
-
-To launch a Spark application in yarn-cluster mode:
-
-    ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]
-    
-For example:
-
-    $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
-        --master yarn-cluster \
-        --num-executors 3 \
-        --driver-memory 4g \
-        --executor-memory 2g \
-        --executor-cores 1 \
-        --queue thequeue \
-        lib/spark-examples*.jar \
-        10
-
-The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
-
-To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".  To run spark-shell:
-
-    $ ./bin/spark-shell --master yarn-client
-
-## Adding Other JARs
-
-In yarn-cluster mode, the driver runs on a different machine than the client, so `SparkContext.addJar` won't work out of the box with files that are local to the client. To make files on the client available to `SparkContext.addJar`, include them with the `--jars` option in the launch command. 
-
-    $ ./bin/spark-submit --class my.main.Class \
-        --master yarn-cluster \
-        --jars my-other-jar.jar,my-other-other-jar.jar
-        my-main-jar.jar
-        app_arg1 app_arg2
-
-# Debugging your Application
-
-In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the `yarn.log-aggregation-enable` config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
-
-    yarn logs -applicationId <app ID>
-    
-will print out the contents of all log files from all containers from the given application. You can also view the container log files directly in HDFS using the HDFS shell or API. The directory where they are located can be found by looking at your YARN configs (`yarn.nodemanager.remote-app-log-dir` and `yarn.nodemanager.remote-app-log-dir-suffix`).
-
-When log aggregation isn't turned on, logs are retained locally on each machine under `YARN_APP_LOGS_DIR`, which is usually configured to `/tmp/logs` or `$HADOOP_HOME/logs/userlogs` depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
-
-To review per-container launch environment, increase `yarn.nodemanager.delete.debug-delay-sec` to a
-large value (e.g. 36000), and then access the application cache through `yarn.nodemanager.local-dirs`
-on the nodes on which containers are launched. This directory contains the launch script, JARs, and
-all environment variables used for launching each container. This process is useful for debugging
-classpath problems in particular. (Note that enabling this requires admin privileges on cluster
-settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
-
-To use a custom log4j configuration for the application master or executors, there are two options:
-
-- upload a custom `log4j.properties` using `spark-submit`, by adding it to the `--files` list of files
-  to be uploaded with the application.
-- add `-Dlog4j.configuration=<location of configuration file>` to `spark.driver.extraJavaOptions`
-  (for the driver) or `spark.executor.extraJavaOptions` (for executors). Note that if using a file,
-  the `file:` protocol should be explicitly provided, and the file needs to exist locally on all
-  the nodes.
-
-Note that for the first option, both executors and the application master will share the same
-log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
-to the same log file).
-
-If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your log4j.properties. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming application, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log file, and logs can be accessed using YARN's log utility.
 
 # Important notes
 
