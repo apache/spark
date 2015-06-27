@@ -23,8 +23,7 @@ package org.apache.spark.graphx
  */
 trait PartitionStrategy extends Serializable {
   /** Returns the partition number for a given edge. */
-  def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = getPartitionFunction(numParts)(src,dst)
-  def getPartitionFunction(numParts: Int): (VertexId, VertexId) => PartitionID = getPartition(_, _, numParts)
+  def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID
 }
 
 /**
@@ -33,7 +32,7 @@ trait PartitionStrategy extends Serializable {
 object PartitionStrategy {
   /**
    * Assigns edges to partitions using a 2D partitioning of the sparse edge adjacency matrix,
-   * guaranteeing a `2 * ceil(sqrt(numParts))` bound on vertex replication.
+   * guaranteeing a `2 * sqrt(numParts) - 1` bound on vertex replication.
    *
    * Suppose we have a graph with 12 vertices that we want to partition
    * over 9 machines.  We can use the following sparse matrix representation:
@@ -62,37 +61,35 @@ object PartitionStrategy {
    * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3,
    * P6)` or the last
    * row of blocks `(P6, P7, P8)`.  As a consequence we can guarantee that `v11` will need to be
-   * replicated to at most `2 * ceil(sqrt(numParts))` machines.
+   * replicated to at most `2 * sqrt(numParts) - 1` machines.
    *
    * Notice that `P0` has many edges and as a consequence this partitioning would lead to poor work
    * balance.  To improve balance we first multiply each vertex id by a large prime to shuffle the
    * vertex locations.
    *
-   * In a prior implementation of this approach there was a limitation that the number of partitions
-   * must be a perfect square or partitions were imbalanced. In the current implementation we extend
-   * this method to work for all number of partitions and give a balanced partitioning. If numParts
-   * is a perfect square the partitioning is unchanged.
+   * When the number of partitions requested is not a perfect square we use a slightly different
+   * method where the last column can have a different number of rows than the others while still
+   * maintaining the same size per block.
    */
   case object EdgePartition2D extends PartitionStrategy {
-    override def getPartitionFunction(numParts: Int): (VertexId, VertexId) => PartitionID = {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
       val mixingPrime: VertexId = 1125899906842597L
       if (numParts == ceilSqrtNumParts * ceilSqrtNumParts) {
         // Use old method for perfect squared to ensure we get same results
-        (src: VertexId, dst: VertexId) => {
-          val col: PartitionID = (math.abs(src * mixingPrime) % ceilSqrtNumParts).toInt
-          val row: PartitionID = (math.abs(dst * mixingPrime) % ceilSqrtNumParts).toInt
-          (col * ceilSqrtNumParts + row) % numParts
-        }
-      } else { // Otherwise use new method
-        (src: VertexId, dst: VertexId) => {
-          val cols = ceilSqrtNumParts
-          val rows = (numParts + cols - 1) / cols // == ceil(numParts.toDouble / cols)
-          val lastColRows = numParts - rows * (cols - 1) // = numParts % rows (mod rows)
-          val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
-          val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
-          col * rows + row
-        }
+        val col: PartitionID = (math.abs(src * mixingPrime) % ceilSqrtNumParts).toInt
+        val row: PartitionID = (math.abs(dst * mixingPrime) % ceilSqrtNumParts).toInt
+        (col * ceilSqrtNumParts + row) % numParts
+
+      } else {
+        // Otherwise use new method
+        val cols = ceilSqrtNumParts
+        val rows = (numParts + cols - 1) / cols // == ceil(numParts.toDouble / cols)
+        val lastColRows = numParts - rows * (cols - 1) // = numParts % rows (mod rows)
+        val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
+        val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
+        col * rows + row
+
       }
     }
   }
