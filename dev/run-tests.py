@@ -180,7 +180,7 @@ def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
     line_str = '=' * 72
 
-    print()
+    print('')
     print(line_str)
     print(title)
     print(line_str)
