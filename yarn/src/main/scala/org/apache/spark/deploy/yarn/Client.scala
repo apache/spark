@@ -338,7 +338,8 @@ private[spark] class Client(
     createConfArchive().foreach { file =>
       require(addDistributedUri(file.toURI()))
       val destPath = copyFileToRemote(dst, new Path(file.toURI()), replication)
-      distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
+      val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
+      distCacheMgr.addResource(destFs, hadoopConf, destPath, localResources, LocalResourceType.ARCHIVE,
         LOCALIZED_HADOOP_CONF_DIR, statCache, appMasterOnly = true)
     }
 
