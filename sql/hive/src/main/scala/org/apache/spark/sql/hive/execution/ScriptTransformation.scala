@@ -167,7 +167,8 @@ case class ScriptTransformation(
 
               outputStream.write(data)
             } else {
-              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+              val writable = inputSerde.serialize(
+                row.asInstanceOf[GenericInternalRow].values, inputSoi)
               prepareWritable(writable).write(dataOutputStream)
             }
           }
