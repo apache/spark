@@ -251,28 +251,28 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
+  def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+  def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
+  def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = apply(i).asInstanceOf[Seq[T]]
+  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as [[java.util.List]].
@@ -288,7 +288,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getMap[K, V](i: Int): scala.collection.Map[K, V] = apply(i).asInstanceOf[Map[K, V]]
+  def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a [[java.util.Map]].

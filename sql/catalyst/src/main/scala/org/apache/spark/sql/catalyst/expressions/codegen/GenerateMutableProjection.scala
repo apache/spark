@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 
 // MutableProjection is not accessible in Java
-abstract class BaseMutableProjection extends MutableProjection {}
+abstract class BaseMutableProjection extends MutableProjection
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
@@ -46,12 +46,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             mutableRow.${ctx.setColumn(e.dataType, i, evaluationCode.primitive)};
         """
     }.mkString("\n")
+
+    val mutableProjectionClass = classOf[BaseMutableProjection].getName
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
       }
 
-      class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
+      class SpecificProjection extends $mutableProjectionClass {
 
         private $exprType[] expressions = null;
         private $mutableRowType mutableRow = null;
@@ -61,14 +63,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           mutableRow = new $genericMutableRowType(${expressions.size});
         }
 
-        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
+        public $mutableProjectionClass target($mutableRowType row) {
           mutableRow = row;
           return this;
         }
 
         /* Provide immutable access to the last projected row. */
         public InternalRow currentValue() {
-          return (InternalRow) mutableRow;
+          return mutableRow;
         }
 
         public Object apply(Object _i) {

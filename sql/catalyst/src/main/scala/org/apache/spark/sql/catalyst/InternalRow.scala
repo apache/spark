@@ -25,8 +25,30 @@ import org.apache.spark.sql.catalyst.expressions._
  * internal types.
  */
 abstract class InternalRow extends Row {
+
+  // default implementation for codegen (for a Row which does not have those types)
+  override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
+  override def getByte(i: Int): Byte = throw new UnsupportedOperationException
+  override def getShort(i: Int): Short = throw new UnsupportedOperationException
+  override def getInt(i: Int): Int = throw new UnsupportedOperationException
+  override def getLong(i: Int): Long = throw new UnsupportedOperationException
+  override def getFloat(i: Int): Float = throw new UnsupportedOperationException
+  override def getDouble(i: Int): Double = throw new UnsupportedOperationException
+  override def getString(i: Int): String = throw new UnsupportedOperationException
+
   // A default implementation to change the return type
   override def copy(): InternalRow = this
+
+  def toSeq(): Seq[Any] = {
+    val n = length
+    val values = new Array[Any](n)
+    var i = 0
+    while (i < n) {
+      values(i) = apply(i)
+      i += 1
+    }
+    values
+  }
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[Row]) {

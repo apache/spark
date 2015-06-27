@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -33,7 +32,6 @@ abstract class BaseProject extends Projection {}
  * primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -154,7 +152,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${typeOf[BaseProject]} {
+    class SpecificProjection extends ${classOf[BaseProject].getName} {
       private $exprType[] expressions = null;
 
       public SpecificProjection($exprType[] expr) {
@@ -167,7 +165,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
+    final class SpecificRow extends $mutableRowType {
 
       $columns
 
@@ -175,12 +173,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         $initColumns
       }
 
-      public int size() { return ${expressions.length};}
+      public int length() { return ${expressions.length};}
       protected boolean[] nullBits = new boolean[${expressions.length}];
       public void setNullAt(int i) { nullBits[i] = true; }
       public boolean isNullAt(int i) { return nullBits[i]; }
 
-      public Object get(int i) {
+      public Object apply(int i) {
         if (isNullAt(i)) return null;
         switch (i) {
         $getCases
