@@ -551,7 +551,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(!stateStream.generatedRDDs.contains(Time(4000)))
   }
 
-  test("rdd cleanup - input blocks and persisted RDDs") {
+  slowTest("rdd cleanup - input blocks and persisted RDDs") {
     // Actually receive data over through receiver to create BlockRDDs
 
     withTestServer(new TestServer()) { testServer =>

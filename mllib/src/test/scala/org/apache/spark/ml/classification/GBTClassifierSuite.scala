@@ -62,7 +62,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(model)
   }
 
-  test("Binary classification with continuous features: Log Loss") {
+  slowTest("Binary classification with continuous features: Log Loss") {
     val categoricalFeatures = Map.empty[Int, Int]
     testCombinations.foreach {
       case (maxIter, learningRate, subsamplingRate) =>

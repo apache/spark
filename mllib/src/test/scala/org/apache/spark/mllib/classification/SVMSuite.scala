@@ -71,7 +71,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(numOffPredictions < input.length / 5)
   }
 
-  test("SVM with threshold") {
+  slowTest("SVM with threshold") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -108,7 +108,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(predictions.count(_ == 1.0) == predictions.length)
   }
 
-  test("SVM using local random SGD") {
+  slowTest("SVM using local random SGD") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -136,7 +136,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
-  test("SVM local random SGD with initial weights") {
+  slowTest("SVM local random SGD with initial weights") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -168,7 +168,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
-  test("SVM with invalid labels") {
+  slowTest("SVM with invalid labels") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -230,7 +230,7 @@ class SVMSuite extends SparkFunSuite with MLlibTestSparkContext {
 
 class SVMClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small in both training and prediction") {
+  slowTest("task size should be small in both training and prediction") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>

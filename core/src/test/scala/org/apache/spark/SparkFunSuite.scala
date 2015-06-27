@@ -18,11 +18,18 @@
 package org.apache.spark
 
 // scalastyle:off
-import org.scalatest.{FunSuite, Outcome}
+import org.scalatest.{FunSuite, Outcome, Tag}
+// scalastyle:on
+
+/**
+ * Tag for slow tests that should not be run on every single pull request.
+ */
+private object SlowTest extends Tag("SlowTest")
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
+// scalastyle:off
 private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
 // scalastyle:on
 
@@ -42,6 +49,19 @@ private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
       test()
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+    }
+  }
+
+  /**
+   * Register the specified test as a slow test.
+   *
+   * In general, it is preferable to speed up slow tests by rewriting them to test
+   * smaller individual components. Only in cases where they cannot be easily
+   * rewritten without sacrificing some test coverage should we use this method.
+   */
+  protected def slowTest(testName: String)(testFunc: => Unit): Unit = {
+    test(testName, SlowTest) {
+      testFunc
     }
   }
 

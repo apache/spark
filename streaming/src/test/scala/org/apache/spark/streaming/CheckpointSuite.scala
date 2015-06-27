@@ -56,7 +56,7 @@ class CheckpointSuite extends TestSuiteBase {
     Utils.deleteRecursively(new File(checkpointDir))
   }
 
-  test("basic rdd checkpoints + dstream graph checkpoint recovery") {
+  slowTest("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
 
@@ -195,7 +195,7 @@ class CheckpointSuite extends TestSuiteBase {
   // This tests whether the systm can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
   // source - TestInputDStream.
-  test("recovery with map and reduceByKey operations") {
+  slowTest("recovery with map and reduceByKey operations") {
     testCheckpointedOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq() ),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
@@ -213,7 +213,7 @@ class CheckpointSuite extends TestSuiteBase {
   // This tests whether the ReduceWindowedDStream's RDD checkpoints works correctly such
   // that the system can recover from a master failure. This assumes as reliable,
   // replayable input source - TestInputDStream.
-  test("recovery with invertible reduceByKeyAndWindow operation") {
+  slowTest("recovery with invertible reduceByKeyAndWindow operation") {
     val n = 10
     val w = 4
     val input = (1 to n).map(_ => Seq("a")).toSeq
@@ -227,7 +227,7 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
-  test("recovery with saveAsHadoopFiles operation") {
+  slowTest("recovery with saveAsHadoopFiles operation") {
     val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
@@ -256,7 +256,7 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
-  test("recovery with saveAsNewAPIHadoopFiles operation") {
+  slowTest("recovery with saveAsNewAPIHadoopFiles operation") {
     val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
@@ -285,7 +285,7 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
-  test("recovery with saveAsHadoopFile inside transform operation") {
+  slowTest("recovery with saveAsHadoopFile inside transform operation") {
     // Regression test for SPARK-4835.
     //
     // In that issue, the problem was that `saveAsHadoopFile(s)` would fail when the last batch
@@ -333,7 +333,7 @@ class CheckpointSuite extends TestSuiteBase {
   // This tests whether the StateDStream's RDD checkpoints works correctly such
   // that the system can recover from a master failure. This assumes as reliable,
   // replayable input source - TestInputDStream.
-  test("recovery with updateStateByKey operation") {
+  slowTest("recovery with updateStateByKey operation") {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val output = (1 to 10).map(x => Seq(("a", x))).toSeq
     val operation = (st: DStream[String]) => {
@@ -352,7 +352,7 @@ class CheckpointSuite extends TestSuiteBase {
   // the master failure and uses them again to process a large window operation.
   // It also tests whether batches, whose processing was incomplete due to the
   // failure, are re-processed or not.
-  test("recovery with file input stream") {
+  slowTest("recovery with file input stream") {
     // Set up the streaming context and input streams
     val batchDuration = Seconds(2)  // Due to 1-second resolution of setLastModified() on some OS's.
     val testDir = Utils.createTempDir()

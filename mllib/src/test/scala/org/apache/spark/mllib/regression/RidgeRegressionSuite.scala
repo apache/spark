@@ -41,7 +41,7 @@ class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }.reduceLeft(_ + _) / predictions.size
   }
 
-  test("ridge regression can help avoid overfitting") {
+  slowTest("ridge regression can help avoid overfitting") {
 
     // For small number of examples and large variance of error distribution,
     // ridge regression should give smaller generalization error that linear regression.
@@ -103,7 +103,7 @@ class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
 class RidgeRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small in both training and prediction") {
+  slowTest("task size should be small in both training and prediction") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>

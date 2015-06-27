@@ -64,7 +64,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to 10).map(x => (x, 10)).toSet)
   }
 
-  test("Accessing HttpBroadcast variables in a local cluster") {
+  slowTest("Accessing HttpBroadcast variables in a local cluster") {
     val numSlaves = 4
     val conf = httpConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -92,7 +92,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to 10).map(x => (x, 10)).toSet)
   }
 
-  test("Accessing TorrentBroadcast variables in a local cluster") {
+  slowTest("Accessing TorrentBroadcast variables in a local cluster") {
     val numSlaves = 4
     val conf = torrentConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -122,7 +122,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Test Lazy Broadcast variables with TorrentBroadcast") {
+  slowTest("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
     val conf = torrentConf.clone
     sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
@@ -141,11 +141,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     testUnpersistHttpBroadcast(distributed = false, removeFromDriver = true)
   }
 
-  test("Unpersisting HttpBroadcast on executors only in distributed mode") {
+  slowTest("Unpersisting HttpBroadcast on executors only in distributed mode") {
     testUnpersistHttpBroadcast(distributed = true, removeFromDriver = false)
   }
 
-  test("Unpersisting HttpBroadcast on executors and driver in distributed mode") {
+  slowTest("Unpersisting HttpBroadcast on executors and driver in distributed mode") {
     testUnpersistHttpBroadcast(distributed = true, removeFromDriver = true)
   }
 
@@ -157,11 +157,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     testUnpersistTorrentBroadcast(distributed = false, removeFromDriver = true)
   }
 
-  test("Unpersisting TorrentBroadcast on executors only in distributed mode") {
+  slowTest("Unpersisting TorrentBroadcast on executors only in distributed mode") {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = false)
   }
 
-  test("Unpersisting TorrentBroadcast on executors and driver in distributed mode") {
+  slowTest("Unpersisting TorrentBroadcast on executors and driver in distributed mode") {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = true)
   }
 

@@ -212,11 +212,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling") {
+  slowTest("spilling") {
     testSimpleSpilling()
   }
 
-  test("spilling with compression") {
+  slowTest("spilling with compression") {
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
@@ -289,7 +289,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with hash collisions") {
+  slowTest("spilling with hash collisions") {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -338,7 +338,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with many hash collisions") {
+  slowTest("spilling with many hash collisions") {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -363,7 +363,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with hash collisions using the Int.MaxValue key") {
+  slowTest("spilling with hash collisions using the Int.MaxValue key") {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -380,7 +380,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with null keys and values") {
+  slowTest("spilling with null keys and values") {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)

@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("Regression with continuous features: SquaredError") {
+  slowTest("Regression with continuous features: SquaredError") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
@@ -63,7 +63,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("Regression with continuous features: Absolute Error") {
+  slowTest("Regression with continuous features: Absolute Error") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
@@ -93,7 +93,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("Binary classification with continuous features: Log Loss") {
+  slowTest("Binary classification with continuous features: Log Loss") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
@@ -158,7 +158,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("runWithValidation stops early and performs better on a validation dataset") {
+  slowTest("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
     val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)

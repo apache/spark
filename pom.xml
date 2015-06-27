@@ -1277,6 +1277,7 @@
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
             <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <tagsToExclude>${spark.test.tagsToExclude}</tagsToExclude>
             <stderr/>
             <environmentVariables>
               <!--

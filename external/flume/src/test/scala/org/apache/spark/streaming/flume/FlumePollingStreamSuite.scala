@@ -60,11 +60,11 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
   before(beforeFunction())
 
-  test("flume polling test") {
+  slowTest("flume polling test") {
     testMultipleTimes(testFlumePolling)
   }
 
-  test("flume polling test multiple hosts") {
+  slowTest("flume polling test multiple hosts") {
     testMultipleTimes(testFlumePollingMultipleHost)
   }
 

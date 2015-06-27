@@ -258,7 +258,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(!fs.exists(RDDCheckpointData.rddCheckpointDataPath(sc, rddId).get))
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast") {
+  slowTest("automatically cleanup RDD + shuffle + broadcast") {
     val numRdds = 100
     val numBroadcasts = 4 // Broadcasts are more costly
     val rddBuffer = (1 to numRdds).map(i => randomRdd()).toBuffer
@@ -288,7 +288,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     }, askSlaves = true).isEmpty)
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  slowTest("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
     sc.stop()
 
     val conf2 = new SparkConf()
@@ -366,7 +366,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     postGCTester.assertCleanup()
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  slowTest("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
     sc.stop()
 
     val conf2 = new SparkConf()

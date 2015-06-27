@@ -141,15 +141,15 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     super.afterAll()
   }
 
-  test("run Spark in yarn-client mode") {
+  slowTest("run Spark in yarn-client mode") {
     testBasicYarnApp(true)
   }
 
-  test("run Spark in yarn-cluster mode") {
+  slowTest("run Spark in yarn-cluster mode") {
     testBasicYarnApp(false)
   }
 
-  test("run Spark in yarn-cluster mode unsuccessfully") {
+  slowTest("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val exception = intercept[SparkException] {
       runSpark(false, mainClassName(YarnClusterDriver.getClass))
@@ -157,19 +157,19 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
     }
   }
 
-  test("run Python application in yarn-client mode") {
+  slowTest("run Python application in yarn-client mode") {
     testPySpark(true)
   }
 
-  test("run Python application in yarn-cluster mode") {
+  slowTest("run Python application in yarn-cluster mode") {
     testPySpark(false)
   }
 
-  test("user class path first in client mode") {
+  slowTest("user class path first in client mode") {
     testUseClassPathFirst(true)
   }
 
-  test("user class path first in cluster mode") {
+  slowTest("user class path first in cluster mode") {
     testUseClassPathFirst(false)
   }
 

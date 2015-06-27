@@ -187,7 +187,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     assert(map.contains(null))
   }
 
-  test("support for more than 12M items") {
+  slowTest("support for more than 12M items") {
     val cnt = 12000000 // 12M
     val map = new OpenHashMap[Int, Int](cnt)
     for (i <- 0 until cnt) {

@@ -503,11 +503,22 @@ def determine_java_version(java_exe):
 def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
     line_str = '=' * 72
-
     print
     print line_str
     print title
     print line_str
+
+
+def format_cmd(cmd_tokens):
+    """
+    Format the specified command in a human-readable format.
+    """
+    new_cmd_tokens = []
+    for t in cmd_tokens:
+        if " " in t:
+            t = "\"%s\"" % t
+        new_cmd_tokens.append(t)
+    return " ".join(new_cmd_tokens)
 
 
 def run_apache_rat_checks():
@@ -606,7 +617,7 @@ def build_spark_maven(hadoop_version):
     profiles_and_goals = build_profiles + mvn_goals
 
     print "[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print format_cmd(profiles_and_goals)
 
     exec_maven(profiles_and_goals)
 
@@ -614,13 +625,14 @@ def build_spark_maven(hadoop_version):
 def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
-    sbt_goals = ["package",
+    sbt_goals = ["clean",
+                 "package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print "[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print format_cmd(profiles_and_goals)
 
     exec_sbt(profiles_and_goals)
 
@@ -644,32 +656,47 @@ def detect_binary_inop_with_mima():
     run_cmd([os.path.join(SPARK_HOME, "dev", "mima")])
 
 
-def run_scala_tests_maven(test_profiles):
+def run_scala_tests_maven(test_profiles, tags_to_exclude):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
+    if tags_to_exclude:
+        # This will be read by the scalatest plugin in pom.xml
+        profiles_and_goals += ["-Dspark.test.tagsToExclude='%s'" % tags_to_exclude]
+
     print "[info] Running Spark tests using Maven with these arguments:",
-    print " ".join(profiles_and_goals)
+    print format_cmd(profiles_and_goals)
 
     exec_maven(profiles_and_goals)
 
 
-def run_scala_tests_sbt(test_modules, test_profiles):
-
+def run_scala_tests_sbt(test_modules, test_profiles, tags_to_exclude):
     sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
+        print "[warn] No SBT goals to run... Exiting."
         return
+
+    # In SBT, we can only exclude scalatest tags through "test-only", but not "test"
+    # Here we rewrite each test goal to use "test-only * -- -l <tags>" instead
+    #   e.g. test -> test-only * -- -l SlowTest
+    #   e.g. hive/test -> hive/test-only * -- -l SlowTest
+    if tags_to_exclude:
+        new_sbt_test_goals = []
+        for g in sbt_test_goals:
+            g = re.sub(r"test$", "test-only * -- -l %s" % tags_to_exclude, g)
+            new_sbt_test_goals.append(g)
+        sbt_test_goals = new_sbt_test_goals
 
     profiles_and_goals = test_profiles + list(sbt_test_goals)
 
     print "[info] Running Spark tests using SBT with these arguments:",
-    print " ".join(profiles_and_goals)
+    print format_cmd(profiles_and_goals)
 
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules):
+def run_scala_tests(build_tool, hadoop_version, test_modules, tags_to_exclude):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -678,21 +705,20 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_profiles = get_hadoop_profiles(hadoop_version) + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
+
     if build_tool == "maven":
-        run_scala_tests_maven(test_profiles)
+        run_scala_tests_maven(test_profiles, tags_to_exclude)
     else:
-        run_scala_tests_sbt(test_modules, test_profiles)
+        run_scala_tests_sbt(test_modules, test_profiles, tags_to_exclude)
 
 
 def run_python_tests():
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
-
     run_cmd([os.path.join(SPARK_HOME, "python", "run-tests")])
 
 
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
-
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
@@ -715,6 +741,13 @@ def main():
 
     os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
 
+    is_amplab_jenkins = os.environ.get("AMPLAB_JENKINS")
+    is_amplab_jenkins_prb = os.environ.get("AMPLAB_JENKINS_PRB")
+
+    # Comma-separated list of tags to exclude, e.g. "SlowTest,IntegrationTest"
+    # For a full list of tags, see org/apache/spark/SparkFunSuite.scala
+    tags_to_exclude = "SlowTest" if is_amplab_jenkins_prb else ""
+
     java_exe = determine_java_executable()
 
     if not java_exe:
@@ -727,7 +760,7 @@ def main():
     if java_version.minor < 8:
         print "[warn] Java 8 tests will not run because JDK version is < 1.8."
 
-    if os.environ.get("AMPLAB_JENKINS"):
+    if is_amplab_jenkins:
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
@@ -746,7 +779,7 @@ def main():
 
     changed_modules = None
     changed_files = None
-    if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+    if is_amplab_jenkins and is_amplab_jenkins_prb:
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
@@ -777,7 +810,7 @@ def main():
     detect_binary_inop_with_mima()
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules)
+    run_scala_tests(build_tool, hadoop_version, test_modules, tags_to_exclude)
 
     if any(m.should_run_python_tests for m in test_modules):
         run_python_tests()

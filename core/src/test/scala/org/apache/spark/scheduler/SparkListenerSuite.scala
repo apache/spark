@@ -199,7 +199,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
   }
 
-  test("local metrics") {
+  slowTest("local metrics") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
@@ -267,7 +267,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
   }
 
-  test("onTaskGettingResult() called when result fetched remotely") {
+  slowTest("onTaskGettingResult() called when result fetched remotely") {
     sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)

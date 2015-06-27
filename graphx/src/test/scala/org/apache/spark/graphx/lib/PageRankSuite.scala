@@ -121,7 +121,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   } // end of test Star PageRank
 
-  test("Grid PageRank") {
+  slowTest("Grid PageRank") {
     withSpark { sc =>
       val rows = 10
       val cols = 10
@@ -141,7 +141,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   } // end of Grid PageRank
 
-  test("Chain PageRank") {
+  slowTest("Chain PageRank") {
     withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong) }
@@ -158,7 +158,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Chain PersonalizedPageRank") {
+  slowTest("Chain PersonalizedPageRank") {
     withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x + 1) )
       val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong) }

@@ -93,7 +93,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
   }
 
-  test("from checkpoint") {
+  slowTest("from checkpoint") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
     myConf.set("spark.cleaner.ttl", "10s")
     val ssc1 = new StreamingContext(myConf, batchDuration)
@@ -240,7 +240,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("stop gracefully") {
+  slowTest("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.cleaner.ttl", "3600s")
     sc = new SparkContext(conf)
@@ -271,7 +271,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("stop slow receiver gracefully") {
+  slowTest("stop slow receiver gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.streaming.gracefulStopTimeout", "20000s")
     sc = new SparkContext(conf)

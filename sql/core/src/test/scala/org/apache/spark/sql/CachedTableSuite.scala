@@ -93,7 +93,7 @@ class CachedTableSuite extends QueryTest {
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
   }
 
-  test("too big for memory") {
+  slowTest("too big for memory") {
     val data = "*" * 1000
     ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
       .registerTempTable("bigData")

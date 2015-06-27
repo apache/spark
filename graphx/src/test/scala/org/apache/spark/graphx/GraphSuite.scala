@@ -78,7 +78,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("partitionBy") {
+  slowTest("partitionBy") {
     withSpark { sc =>
       def mkGraph(edges: List[(Long, Long)]): Graph[Int, Int] = {
         Graph.fromEdgeTuples(sc.parallelize(edges, 2), 0)

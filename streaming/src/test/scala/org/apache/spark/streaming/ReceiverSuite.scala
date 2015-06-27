@@ -219,7 +219,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
    * has been applied must remember the data for longer, and hence corresponding
    * WALs should be cleaned later.
    */
-  test("write ahead log - generating and cleaning") {
+  slowTest("write ahead log - generating and cleaning") {
     val sparkConf = new SparkConf()
       .setMaster("local[4]")  // must be at least 3 as we are going to start 2 receivers
       .setAppName(framework)

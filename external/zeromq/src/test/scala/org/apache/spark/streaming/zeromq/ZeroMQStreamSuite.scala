@@ -34,7 +34,7 @@ class ZeroMQStreamSuite extends SparkFunSuite {
 
   private val framework: String = this.getClass.getSimpleName
 
-  test("zeromq input stream") {
+  slowTest("zeromq input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val publishUrl = "abc"
     val subscribe = new Subscribe(null.asInstanceOf[ByteString])

@@ -24,6 +24,8 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
+// TODO: just merge me with SparkListenerSuite
+
 /**
  * Unit tests for SparkListener that require a local cluster.
  */
@@ -37,7 +39,7 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
     sc = new SparkContext("local-cluster[2,1,512]", "SparkListenerSuite")
   }
 
-  test("SparkListener sends executor added message") {
+  slowTest("SparkListener sends executor added message") {
     val listener = new SaveExecutorInfo
     sc.addSparkListener(listener)
 

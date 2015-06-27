@@ -136,7 +136,7 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Distributing files on a standalone cluster") {
+  slowTest("Distributing files on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addFile(tmpFile.toString)
     val testData = Array((1, 1), (1, 1), (2, 1), (3, 5), (2, 2), (3, 0))
@@ -150,7 +150,7 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
     assert(result.toSet === Set((1, 200), (2, 300), (3, 500)))
   }
 
-  test ("Dynamically adding JARS on a standalone cluster") {
+  slowTest("Dynamically adding JARS on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl)
     val testData = Array((1, 1))
@@ -161,7 +161,7 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test ("Dynamically adding JARS on a standalone cluster using local: URL") {
+  slowTest("Dynamically adding JARS on a standalone cluster using local: URL") {
     sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl.replace("file", "local"))
     val testData = Array((1, 1))

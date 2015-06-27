@@ -47,7 +47,7 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
   }
 
   // Test if we can accurately learn Y = 10*X1 + 10*X2 on streaming data
-  test("parameter accuracy") {
+  slowTest("parameter accuracy") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))
@@ -79,7 +79,7 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
   }
 
   // Test that parameter estimates improve when learning Y = 10*X1 on streaming data
-  test("parameter convergence") {
+  slowTest("parameter convergence") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0))
@@ -140,7 +140,7 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
   }
 
   // Test training combined with prediction
-  test("training and prediction") {
+  slowTest("training and prediction") {
     // create model initialized with zero weights
     val model = new StreamingLinearRegressionWithSGD()
       .setInitialWeights(Vectors.dense(0.0, 0.0))

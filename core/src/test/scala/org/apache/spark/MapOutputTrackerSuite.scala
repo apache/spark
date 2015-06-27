@@ -176,7 +176,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("remote fetch exceeds akka frame size") {
+  slowTest("remote fetch exceeds akka frame size") {
     val newConf = new SparkConf
     newConf.set("spark.akka.frameSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast

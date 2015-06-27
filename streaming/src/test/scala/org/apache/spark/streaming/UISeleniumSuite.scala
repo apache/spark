@@ -79,7 +79,7 @@ class UISeleniumSuite
     }
   }
 
-  test("attaching and detaching a Streaming tab") {
+  slowTest("attaching and detaching a Streaming tab") {
     withStreamingContext(newSparkStreamingContext()) { ssc =>
       setupStreams(ssc)
       ssc.start()

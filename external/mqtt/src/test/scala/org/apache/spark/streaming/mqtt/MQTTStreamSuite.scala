@@ -68,7 +68,7 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
     tearDownMQTT()
   }
 
-  test("mqtt input stream") {
+  slowTest("mqtt input stream") {
     val sendMessage = "MQTT demo for spark streaming"
     val receiveStream =
       MQTTUtils.createStream(ssc, "tcp:" + brokerUri, topic, StorageLevel.MEMORY_ONLY)

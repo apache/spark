@@ -32,7 +32,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
   override def maxWaitTimeMillis: Int = 30000
 
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
-  test("parameter accuracy") {
+  slowTest("parameter accuracy") {
 
     val nPoints = 100
     val B = 1.5
@@ -62,7 +62,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
   }
 
   // Test that parameter estimates improve when learning Y = logistic(BX) on streaming data
-  test("parameter convergence") {
+  slowTest("parameter convergence") {
 
     val B = 1.5
     val nPoints = 100

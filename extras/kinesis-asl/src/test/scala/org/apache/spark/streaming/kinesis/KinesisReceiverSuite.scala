@@ -73,7 +73,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
       checkpointStateMock, currentClockMock)
   }
 
-  test("KinesisUtils API") {
+  slowTest("KinesisUtils API") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     // Tests the API, does not actually test data receiving
     val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",

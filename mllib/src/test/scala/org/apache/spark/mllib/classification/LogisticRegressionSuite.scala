@@ -341,7 +341,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
-  test("numerical stability of scaling features using logistic regression with LBFGS") {
+  slowTest("numerical stability of scaling features using logistic regression with LBFGS") {
     /**
      * If we rescale the features, the condition number will be changed so the convergence rate
      * and the solution will not equal to the original solution multiple by the scaling factor
@@ -401,7 +401,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     assert(modelB1.weights(0) !~== modelB3.weights(0) * 1.0E6 absTol 0.1)
   }
 
-  test("multinomial logistic regression with LBFGS") {
+  slowTest("multinomial logistic regression with LBFGS") {
     val nPoints = 10000
 
     /**
@@ -543,7 +543,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
 class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
-  test("task size should be small in both training and prediction using SGD optimizer") {
+  slowTest("task size should be small in both training and prediction using SGD optimizer") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
@@ -560,7 +560,7 @@ class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSpar
     predictions.count()
   }
 
-  test("task size should be small in both training and prediction using LBFGS optimizer") {
+  slowTest("task size should be small in both training and prediction using LBFGS optimizer") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>

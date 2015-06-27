@@ -37,7 +37,7 @@ class XORShiftRandomSuite extends SparkFunSuite with Matchers {
   /*
    * This test is based on a chi-squared test for randomness.
    */
-  test ("XORShift generates valid random numbers") {
+  slowTest("XORShift generates valid random numbers") {
 
     val f = fixture
 

@@ -38,11 +38,11 @@ class FailureSuite extends TestSuiteBase with Logging {
     super.afterFunction()
   }
 
-  test("multiple failures with map") {
+  slowTest("multiple failures with map") {
     MasterFailureTest.testMap(directory.getAbsolutePath, numBatches, batchDuration)
   }
 
-  test("multiple failures with updateStateByKey") {
+  slowTest("multiple failures with updateStateByKey") {
     MasterFailureTest.testUpdateStateByKey(directory.getAbsolutePath, numBatches, batchDuration)
   }
 }

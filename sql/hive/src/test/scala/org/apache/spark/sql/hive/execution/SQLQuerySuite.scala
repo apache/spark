@@ -624,7 +624,7 @@ class SQLQuerySuite extends QueryTest {
     setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
-  test("sanity test for SPARK-6618") {
+  slowTest("sanity test for SPARK-6618") {
     (1 to 100).par.map { i =>
       val tableName = s"SPARK_6618_table_$i"
       sql(s"CREATE TABLE $tableName (col1 string)")
@@ -645,7 +645,7 @@ class SQLQuerySuite extends QueryTest {
       .queryExecution.analyzed
   }
 
-  test("test script transform for stdout") {
+  slowTest("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(100000 ===

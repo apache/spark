@@ -76,7 +76,7 @@ class ReplSuite extends SparkFunSuite {
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
-  test("propagation of local properties") {
+  slowTest("propagation of local properties") {
     // A mock ILoop that doesn't install the SIGINT handler.
     class ILoop(out: PrintWriter) extends SparkILoop(None, out, None) {
       settings = new scala.tools.nsc.Settings
@@ -104,7 +104,7 @@ class ReplSuite extends SparkFunSuite {
     System.clearProperty("spark.driver.port")
   }
 
-  test("simple foreach with accumulator") {
+  slowTest("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
         |val accum = sc.accumulator(0)
@@ -116,7 +116,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res1: Int = 55", output)
   }
 
-  test("external vars") {
+  slowTest("external vars") {
     val output = runInterpreter("local",
       """
         |var v = 7
@@ -130,7 +130,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res1: Int = 100", output)
   }
 
-  test("external classes") {
+  slowTest("external classes") {
     val output = runInterpreter("local",
       """
         |class C {
@@ -143,7 +143,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res0: Int = 50", output)
   }
 
-  test("external functions") {
+  slowTest("external functions") {
     val output = runInterpreter("local",
       """
         |def double(x: Int) = x + x
@@ -154,7 +154,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res0: Int = 110", output)
   }
 
-  test("external functions that access vars") {
+  slowTest("external functions that access vars") {
     val output = runInterpreter("local",
       """
         |var v = 7
@@ -169,7 +169,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res1: Int = 100", output)
   }
 
-  test("broadcast vars") {
+  slowTest("broadcast vars") {
     // Test that the value that a broadcast var had when it was created is used,
     // even if that variable is then modified in the driver program
     // TODO: This doesn't actually work for arrays when we run in local mode!
@@ -187,7 +187,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
 
-  test("interacting with files") {
+  slowTest("interacting with files") {
     val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
@@ -210,7 +210,7 @@ class ReplSuite extends SparkFunSuite {
     Utils.deleteRecursively(tempDir)
   }
 
-  test("local-cluster mode") {
+  slowTest("local-cluster mode") {
     val output = runInterpreter("local-cluster[1,1,512]",
       """
         |var v = 7
@@ -232,7 +232,7 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
   }
 
-  test("SPARK-1199 two instances of same class don't type check.") {
+  slowTest("SPARK-1199 two instances of same class don't type check.") {
     val output = runInterpreter("local-cluster[1,1,512]",
       """
         |case class Sum(exp: String, exp2: String)
@@ -244,7 +244,7 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2452 compound statements.") {
+  slowTest("SPARK-2452 compound statements.") {
     val output = runInterpreter("local",
       """
         |val x = 4 ; def f() = x
@@ -254,7 +254,7 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2576 importing SQLContext.implicits._") {
+  slowTest("SPARK-2576 importing SQLContext.implicits._") {
     // We need to use local-cluster to test this case.
     val output = runInterpreter("local-cluster[1,1,512]",
       """
@@ -267,7 +267,7 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-8461 SQL with codegen") {
+  slowTest("SPARK-8461 SQL with codegen") {
     val output = runInterpreter("local",
     """
       |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
@@ -278,7 +278,7 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("java.lang.ClassNotFoundException", output)
   }
 
-  test("SPARK-2632 importing a method from non serializable class and not using it.") {
+  slowTest("SPARK-2632 importing a method from non serializable class and not using it.") {
     val output = runInterpreter("local",
     """
       |class TestClass() { def testMethod = 3 }
@@ -315,7 +315,7 @@ class ReplSuite extends SparkFunSuite {
     }
   }
 
-  test("collecting objects of class defined in repl") {
+  slowTest("collecting objects of class defined in repl") {
     val output = runInterpreter("local[2]",
       """
         |case class Foo(i: Int)
@@ -325,8 +325,8 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
-  
-  test("collecting objects of class defined in repl - shuffling") {
+
+  slowTest("collecting objects of class defined in repl - shuffling") {
     val output = runInterpreter("local-cluster[1,1,512]",
       """
         |case class Foo(i: Int)

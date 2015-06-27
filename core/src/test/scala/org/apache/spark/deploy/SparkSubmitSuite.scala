@@ -315,7 +315,7 @@ class SparkSubmitSuite
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
-  test("launch simple application with spark-submit") {
+  slowTest("launch simple application with spark-submit") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
@@ -325,7 +325,7 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --jars") {
+  slowTest("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -340,7 +340,7 @@ class SparkSubmitSuite
   }
 
   // SPARK-7287
-  test("includes jars passed in through --packages") {
+  slowTest("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
