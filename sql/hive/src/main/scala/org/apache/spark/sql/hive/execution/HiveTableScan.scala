@@ -53,7 +53,8 @@ case class HiveTableScan(
   // Retrieve the original attributes based on expression ID so that capitalization matches.
   val attributes = requestedAttributes.map(relation.attributeMap)
 
-  private[this] val metastoreFilter = HiveShim.toMetastoreFilter(partitionPruningPred)
+  private[this] val metastoreFilter = HiveShim.toMetastoreFilter(partitionPruningPred,
+    relation.hiveQlTable.getPartitionKeys.map(col => (col.getName, col.getType)).toMap)
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.

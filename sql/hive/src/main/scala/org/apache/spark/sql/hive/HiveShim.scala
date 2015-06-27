@@ -17,30 +17,31 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{InputStream, OutputStream}
-import java.rmi.server.UID
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
-
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
+
+import java.io.{InputStream, OutputStream}
+import java.rmi.server.UID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression}
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryComparison, Expression}
+import org.apache.spark.sql.types.{StringType, IntegralType, Decimal}
 import org.apache.spark.util.Utils
+
+/* Implicit conversions */
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+import scala.reflect.ClassTag
 
 private[hive] object HiveShim {
   // Precision and scale to pass for unlimited decimals; these are the same as the precision and
@@ -101,28 +102,51 @@ private[hive] object HiveShim {
     }
   }
 
-  def toMetastoreFilter(predicates: Seq[Expression]): Option[String] = {
-    if (predicates.nonEmpty) {
-      // Hive getPartitionsByFilter() takes a string that represents partition
-      // predicates like "str_key_1=\"value_1\" and int_key_2=value_2 ..."
-      Some(predicates.foldLeft("") {
-        (str, expr) => {
-          expr match {
-            case op @ BinaryComparison(lhs, rhs) => {
-              val hiveFriendlyExpr =
-                lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
-              if (str.isEmpty) {
-                s"$hiveFriendlyExpr"
-              } else {
-                s"$str and $hiveFriendlyExpr"
+  def toMetastoreFilter(
+      predicates: Seq[Expression],
+      partitionKeyTypes: Map[String, String]): Option[String] = {
+    // Hive getPartitionsByFilter() takes a string that represents partition
+    // predicates like "str_key=\"value\" and int_key=1 ..."
+    val filter = predicates.foldLeft("") {
+      (str, expr) => {
+        expr match {
+          case op @ BinaryComparison(lhs, rhs) => {
+            val cond: String =
+              lhs match {
+                case AttributeReference(_,_,_,_) => {
+                  rhs.dataType match {
+                    case _: IntegralType =>
+                      lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
+                    case StringType => {
+                      // hive varchar is string type in catalyst, but varchar cannot be pushed down.
+                      if (!partitionKeyTypes.getOrElse(lhs.prettyString, "").startsWith(
+                          serdeConstants.VARCHAR_TYPE_NAME)) {
+                        lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
+                      } else {
+                        ""
+                      }
+                    }
+                    case _ => ""
+                  }
+                }
+                case _ => ""
               }
-            }
-            case _ => {
+            if (cond.nonEmpty) {
+              if (str.nonEmpty) {
+                s"$str and $cond"
+              } else {
+                cond
+              }
+            } else {
               str
             }
           }
+          case _ => str
         }
-      })
+      }
+    }
+    if (filter.nonEmpty) {
+      Some(filter)
     } else {
       None
     }
