@@ -32,7 +32,7 @@ trait PartitionStrategy extends Serializable {
 object PartitionStrategy {
   /**
    * Assigns edges to partitions using a 2D partitioning of the sparse edge adjacency matrix,
-   * guaranteeing a `2 * sqrt(numParts) - 1` bound on vertex replication.
+   * guaranteeing a `2 * sqrt(numParts)` bound on vertex replication.
    *
    * Suppose we have a graph with 12 vertices that we want to partition
    * over 9 machines.  We can use the following sparse matrix representation:
@@ -61,7 +61,7 @@ object PartitionStrategy {
    * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3,
    * P6)` or the last
    * row of blocks `(P6, P7, P8)`.  As a consequence we can guarantee that `v11` will need to be
-   * replicated to at most `2 * sqrt(numParts) - 1` machines.
+   * replicated to at most `2 * sqrt(numParts)` machines.
    *
    * Notice that `P0` has many edges and as a consequence this partitioning would lead to poor work
    * balance.  To improve balance we first multiply each vertex id by a large prime to shuffle the
@@ -84,8 +84,8 @@ object PartitionStrategy {
       } else {
         // Otherwise use new method
         val cols = ceilSqrtNumParts
-        val rows = (numParts + cols - 1) / cols // == ceil(numParts.toDouble / cols)
-        val lastColRows = numParts - rows * (cols - 1) // = numParts % rows (mod rows)
+        val rows = (numParts + cols - 1) / cols
+        val lastColRows = numParts - rows * (cols - 1)
         val col = (math.abs(src * mixingPrime) % numParts / rows).toInt
         val row = (math.abs(dst * mixingPrime) % (if (col < cols - 1) rows else lastColRows)).toInt
         col * rows + row
