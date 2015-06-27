@@ -46,7 +46,6 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Adds the LocalResource to the localResources HashMap passed in and saves
    * the stats of the resources to they can be sent to the executors and verified.
    *
-   * @param fs FileSystem
    * @param conf Configuration
    * @param destPath path to the resource
    * @param localResources localResource hashMap to insert the resource into
@@ -56,7 +55,6 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * @param appMasterOnly Whether to only add the resource to the app master
    */
   def addResource(
-      fs: FileSystem,
       conf: Configuration,
       destPath: Path,
       localResources: HashMap[String, LocalResource],
@@ -64,6 +62,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
       link: String,
       statCache: Map[URI, FileStatus],
       appMasterOnly: Boolean = false): Unit = {
+    val fs = FileSystem.get(destPath.toUri(), conf)
     val destStatus = fs.getFileStatus(destPath)
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)

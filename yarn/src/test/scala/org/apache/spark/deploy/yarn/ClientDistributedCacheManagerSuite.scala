@@ -78,7 +78,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
     when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
+    distMgr.addResource(conf, destPath, localResources, LocalResourceType.FILE, "link",
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -105,7 +105,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       null, new Path("/tmp/testing2"))
     val destPath2 = new Path("file:///foo.invalid.com:8080/tmp/testing2")
     when(fs.getFileStatus(destPath2)).thenReturn(realFileStatus)
-    distMgr.addResource(fs, conf, destPath2, localResources, LocalResourceType.FILE, "link2",
+    distMgr.addResource(conf, destPath2, localResources, LocalResourceType.FILE, "link2",
       statCache, false)
     val resource2 = localResources("link2")
     assert(resource2.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -141,7 +141,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     when(fs.getFileStatus(destPath)).thenReturn(new FileStatus())
 
     intercept[Exception] {
-      distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, null,
+      distMgr.addResource(conf, destPath, localResources, LocalResourceType.FILE, null,
         statCache, false)
     }
     assert(localResources.get("link") === None)
@@ -159,7 +159,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       null, new Path("/tmp/testing"))
     when(fs.getFileStatus(destPath)).thenReturn(realFileStatus)
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
+    distMgr.addResource(conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
       statCache, true)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
@@ -193,7 +193,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       null, new Path("/tmp/testing"))
     when(fs.getFileStatus(destPath)).thenReturn(realFileStatus)
 
-    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
+    distMgr.addResource(conf, destPath, localResources, LocalResourceType.ARCHIVE, "link",
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
