@@ -169,7 +169,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       // The SparkException cause should be a RpcTimeoutException with message indicating the
       // controlling timeout property
       assert(e.getCause.isInstanceOf[RpcTimeoutException])
-      assert(e.getCause().getMessage().contains(shortProp))
+      assert(e.getCause.getMessage.contains(shortProp))
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
