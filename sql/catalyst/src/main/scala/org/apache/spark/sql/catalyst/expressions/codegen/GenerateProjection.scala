@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -165,7 +164,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
+    final class SpecificRow extends ${typeOf[MutableRow]} {
 
       $columns
 

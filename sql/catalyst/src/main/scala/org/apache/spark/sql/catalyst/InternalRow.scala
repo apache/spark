@@ -27,15 +27,6 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class InternalRow extends Row {
 
-  // default implementation for codegen (for a Row which does not have those types)
-  override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
-  override def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  override def getShort(i: Int): Short = throw new UnsupportedOperationException
-  override def getInt(i: Int): Int = throw new UnsupportedOperationException
-  override def getLong(i: Int): Long = throw new UnsupportedOperationException
-  override def getFloat(i: Int): Float = throw new UnsupportedOperationException
-  override def getDouble(i: Int): Double = throw new UnsupportedOperationException
-
   // This is only use for test
   override def getString(i: Int): String = getAs[UTF8String](i).toString
 
@@ -57,16 +48,6 @@ abstract class InternalRow extends Row {
   // A default implementation to change the return type
   override def copy(): InternalRow = this
   override def apply(i: Int): Any = get(i)
-  def toSeq(): Seq[Any] = {
-    val n = length
-    val values = new Array[Any](n)
-    var i = 0
-    while (i < n) {
-      values.update(i, get(i))
-      i += 1
-    }
-    values.toSeq
-  }
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[Row]) {
