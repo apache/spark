@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.util.hashing.MurmurHash3
-
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -260,8 +258,14 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  // TODO(davies): This is not the right default implementation, we use Int as Date internally
   def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+
+  /**
+   * Returns the value at position i of date type as java.sql.Timestamp.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
@@ -357,36 +361,6 @@ trait Row extends Serializable {
       i += 1
     }
     false
-  }
-
-  override def equals(that: Any): Boolean = that match {
-    case null => false
-    case that: Row =>
-      if (this.length != that.length) {
-        return false
-      }
-      var i = 0
-      val len = this.length
-      while (i < len) {
-        if (apply(i) != that.apply(i)) {
-          return false
-        }
-        i += 1
-      }
-      true
-    case _ => false
-  }
-
-  override def hashCode: Int = {
-    // Using Scala's Seq hash code implementation.
-    var n = 0
-    var h = MurmurHash3.seqSeed
-    val len = length
-    while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
-      n += 1
-    }
-    MurmurHash3.finalizeHash(h, n)
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

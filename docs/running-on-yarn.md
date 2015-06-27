@@ -258,6 +258,32 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   Principal to be used to login to KDC, while running on secure HDFS.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.config.gatewayPath</code></td>
+  <td>(none)</td>
+  <td>
+  A path that is valid on the gateway host (the host where a Spark application is started) but may
+  differ for paths for the same resource in other nodes in the cluster. Coupled with
+  <code>spark.yarn.config.replacementPath</code>, this is used to support clusters with
+  heterogeneous configurations, so that Spark can correctly launch remote processes.
+  <p/>
+  The replacement path normally will contain a reference to some environment variable exported by
+  YARN (and, thus, visible to Spark containers).
+  <p/>
+  For example, if the gateway node has Hadoop libraries installed on <code>/disk1/hadoop</code>, and
+  the location of the Hadoop install is exported by YARN as the  <code>HADOOP_HOME</code>
+  environment variable, setting this value to <code>/disk1/hadoop</code> and the replacement path to
+  <code>$HADOOP_HOME</code> will make sure that paths used to launch remote processes properly
+  reference the local YARN configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.config.replacementPath</code></td>
+  <td>(none)</td>
+  <td>
+  See <code>spark.yarn.config.gatewayPath</code>.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN

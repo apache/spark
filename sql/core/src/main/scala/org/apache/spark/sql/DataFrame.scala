@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
-import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -33,7 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -169,23 +168,34 @@ class DataFrame private[sql](
 
   /**
    * Internal API for Python
-   * @param numRows Number of rows to show
+   * @param _numRows Number of rows to show
    */
-  private[sql] def showString(numRows: Int): String = {
+  private[sql] def showString(_numRows: Int): String = {
+    val numRows = _numRows.max(0)
     val sb = new StringBuilder
-    val data = take(numRows)
+    val takeResult = take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
     val numCols = schema.fieldNames.length
 
+    // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        val str = if (cell == null) "null" else cell.toString
+        val str = cell match {
+          case null => "null"
+          case array: Array[_] => array.mkString("[", ", ", "]")
+          case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case _ => cell.toString
+        }
         if (str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
     }
 
+    // Initialise the width of each column to a minimum value of '3'
+    val colWidths = Array.fill(numCols)(3)
+
     // Compute the width of each column
-    val colWidths = Array.fill(numCols)(0)
     for (row <- rows) {
       for ((cell, i) <- row.zipWithIndex) {
         colWidths(i) = math.max(colWidths(i), cell.length)
@@ -197,7 +207,7 @@ class DataFrame private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      StringUtils.leftPad(cell.toString, colWidths(i))
+      StringUtils.leftPad(cell, colWidths(i))
     }.addString(sb, "|", "|", "|\n")
 
     sb.append(sep)
@@ -210,6 +220,13 @@ class DataFrame private[sql](
     }
 
     sb.append(sep)
+
+    // For Data that has more than "numRows" records
+    if (hasMoreData) {
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows ${rowsString}\n")
+    }
+
     sb.toString()
   }
 
@@ -395,22 +412,50 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def join(right: DataFrame, usingColumn: String): DataFrame = {
+    join(right, Seq(usingColumn))
+  }
+
+  /**
+   * Inner equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * {{{
+   *   // Joining df1 and df2 using the columns "user_id" and "user_name"
+   *   df1.join(df2, Seq("user_id", "user_name"))
+   * }}}
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @group dfops
+   * @since 1.4.0
+   */
+  def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
-    // Project only one of the join column.
-    val joinedCol = joined.right.resolve(usingColumn)
+    // Project only one of the join columns.
+    val joinedCols = usingColumns.map(col => joined.right.resolve(col))
+    val condition = usingColumns.map { col =>
+      catalyst.expressions.EqualTo(joined.left.resolve(col), joined.right.resolve(col))
+    }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
+      catalyst.expressions.And(cond, eqTo)
+    }
+
     Project(
-      joined.output.filterNot(_ == joinedCol),
+      joined.output.filterNot(joinedCols.contains(_)),
       Join(
         joined.left,
         joined.right,
         joinType = Inner,
-        Some(catalyst.expressions.EqualTo(
-          joined.left.resolve(usingColumn),
-          joined.right.resolve(usingColumn))))
+        condition)
     )
   }
 
@@ -574,7 +619,7 @@ class DataFrame private[sql](
   def as(alias: Symbol): DataFrame = as(alias.name)
 
   /**
-   * Selects a set of expressions.
+   * Selects a set of column based expressions.
    * {{{
    *   df.select($"colA", $"colB" + 1)
    * }}}
@@ -584,6 +629,10 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = {
     val namedExpressions = cols.map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
       // Leave an unaliased explode with an empty list of names since the analzyer will generate the
       // correct defaults after the nested expression's type has been resolved.
@@ -984,9 +1033,10 @@ class DataFrame private[sql](
 
     val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
     val names = schema.toAttributes.map(_.name)
+    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
     val rowFunction =
-      f.andThen(_.map(CatalystTypeConverters.convertToCatalyst(_, schema).asInstanceOf[Row]))
+      f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
@@ -999,7 +1049,7 @@ class DataFrame private[sql](
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
    * {{{
-   *   df.explode("words", "word")(words: String => words.split(" "))
+   *   df.explode("words", "word"){words: String => words.split(" ")}
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -1012,8 +1062,9 @@ class DataFrame private[sql](
     val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable) }
     val names = attributes.map(_.name)
 
-    def rowFunction(row: Row): TraversableOnce[Row] = {
-      f(row(0).asInstanceOf[A]).map(o => Row(CatalystTypeConverters.convertToCatalyst(o, dataType)))
+    def rowFunction(row: Row): TraversableOnce[InternalRow] = {
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
@@ -1080,6 +1131,22 @@ class DataFrame private[sql](
     } else {
       this
     }
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This version of drop accepts a Column rather than a name.
+   * This is a no-op if the DataFrame doesn't have a column
+   * with an equivalent expression.
+   * @group dfops
+   * @since 1.4.1
+   */
+  def drop(col: Column): DataFrame = {
+    val attrs = this.logicalPlan.output
+    val colsAfterDrop = attrs.filter { attr =>
+      attr != col.expr
+    }.map(attr => Column(attr))
+    select(colsAfterDrop : _*)
   }
 
   /**
@@ -1159,7 +1226,7 @@ class DataFrame private[sql](
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
-    val ret: Seq[Row] = if (outputCols.nonEmpty) {
+    val ret: Seq[InternalRow] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
@@ -1168,11 +1235,12 @@ class DataFrame private[sql](
 
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map {
-        case (aggregation, (statistic, _)) => Row(statistic :: aggregation.toList: _*)
+        case (aggregation, (statistic, _)) =>
+          InternalRow(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => Row(name) }
+      statistics.map { case (name, _) => InternalRow(name) }
     }
 
     // All columns are string type
@@ -1295,7 +1363,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  override def distinct: DataFrame = Distinct(logicalPlan)
+  override def distinct: DataFrame = dropDuplicates()
 
   /**
    * @group basic
@@ -1350,11 +1418,13 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().mapPartitions { rows =>
+    internalRowRdd.mapPartitions { rows =>
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
       rows.map(converter(_).asInstanceOf[Row])
     }
   }
+
+  private[sql] def internalRowRdd = queryExecution.executedPlan.execute()
 
   /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.

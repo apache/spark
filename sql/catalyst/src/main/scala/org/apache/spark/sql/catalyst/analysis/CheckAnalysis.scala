@@ -48,28 +48,23 @@ trait CheckAnalysis {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            if (operator.childrenResolved) {
-              a match {
-                case UnresolvedAttribute(nameParts) =>
-                  // Throw errors for specific problems with get field.
-                  operator.resolveChildren(nameParts, resolver, throwErrors = true)
-              }
-            }
-
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+
+          case e: Expression if e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.failAnalysis(
+                  s"cannot resolve '${e.prettyString}' due to data type mismatch: $message")
+            }
 
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-          case b: BinaryExpression if !b.resolved =>
-            failAnalysis(
-              s"invalid expression ${b.prettyString} " +
-              s"between ${b.left.dataType.simpleString} and ${b.right.dataType.simpleString}")
 
           case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
             failAnalysis(
@@ -101,14 +96,7 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            val cleaned = aggregateExprs.map(_.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g, _) => g
-            })
-
-            cleaned.foreach(checkValidAggregateExpression)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case _ => // Fallbacks to the following checks
         }
@@ -134,6 +122,17 @@ trait CheckAnalysis {
 
           case _ => // Analysis successful!
         }
+
+      // Special handling for cases when self-join introduce duplicate expression ids.
+      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        failAnalysis(
+          s"""
+             |Failure when resolving conflicting references in Join:
+             |$plan
+             |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+             |""".stripMargin)
+
     }
     extendedCheckRules.foreach(_(plan))
   }

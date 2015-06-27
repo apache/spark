@@ -24,7 +24,7 @@ import scala.language.existentials
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
@@ -131,6 +131,13 @@ final class OneVsRestModel private[ml] (
     // output label and label metadata as prediction
     val labelUdf = callUDF(label, DoubleType, col(accColName))
     aggregatedDataset.withColumn($(predictionCol), labelUdf.as($(predictionCol), labelMetadata))
+      .drop(accColName)
+  }
+
+  override def copy(extra: ParamMap): OneVsRestModel = {
+    val copied = new OneVsRestModel(
+      uid, labelMetadata, models.map(_.copy(extra).asInstanceOf[ClassificationModel[_, _]]))
+    copyValues(copied, extra)
   }
 }
 
@@ -207,5 +214,13 @@ final class OneVsRest(override val uid: String)
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
     copyValues(model)
+  }
+
+  override def copy(extra: ParamMap): OneVsRest = {
+    val copied = defaultCopy(extra).asInstanceOf[OneVsRest]
+    if (isDefined(classifier)) {
+      copied.setClassifier($(classifier).copy(extra))
+    }
+    copied
   }
 }

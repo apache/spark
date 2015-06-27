@@ -34,24 +34,36 @@ connectBackend <- function(hostname, port, timeout = 6000) {
   con
 }
 
-launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts) {
+determineSparkSubmitBin <- function() {
   if (.Platform$OS.type == "unix") {
     sparkSubmitBinName = "spark-submit"
   } else {
     sparkSubmitBinName = "spark-submit.cmd"
   }
+  sparkSubmitBinName
+}
 
+generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
+  if (jars != "") {
+    jars <- paste("--jars", jars)
+  }
+
+  if (packages != "") {
+    packages <- paste("--packages", packages)
+  }
+
+  combinedArgs <- paste(jars, packages, sparkSubmitOpts, args, sep = " ")
+  combinedArgs
+}
+
+launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
+  sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
     sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName)
   } else {
     sparkSubmitBin <- sparkSubmitBinName
   }
-
-  if (jars != "") {
-    jars <- paste("--jars", jars)
-  }
-
-  combinedArgs <- paste(jars, sparkSubmitOpts, args, sep = " ")
+  combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
   invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
 }
