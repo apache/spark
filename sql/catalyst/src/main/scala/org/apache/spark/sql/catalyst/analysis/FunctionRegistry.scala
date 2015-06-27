@@ -135,6 +135,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
 
     // aggregate functions
     expression[Average]("avg"),
