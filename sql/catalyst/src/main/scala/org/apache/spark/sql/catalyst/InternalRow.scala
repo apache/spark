@@ -31,18 +31,21 @@ abstract class InternalRow extends Row {
   override def getString(i: Int): String = getAs[UTF8String](i).toString
 
   // These expensive API should not be used internally.
-  override def getDecimal(i: Int): java.math.BigDecimal = throw new UnsupportedOperationException
-  override def getDate(i: Int): java.sql.Date = throw new UnsupportedOperationException
-  override def getTimestamp(i: Int): java.sql.Timestamp = throw new UnsupportedOperationException
-  override def getSeq[T](i: Int): Seq[T] = throw new UnsupportedOperationException
-  override def getList[T](i: Int): java.util.List[T] = throw new UnsupportedOperationException
-  override def getMap[K, V](i: Int): scala.collection.Map[K, V] =
+  final override def getDecimal(i: Int): java.math.BigDecimal =
     throw new UnsupportedOperationException
-  override def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+  final override def getDate(i: Int): java.sql.Date =
     throw new UnsupportedOperationException
-  override def getStruct(i: Int): InternalRow = throw new UnsupportedOperationException
-  override def getAs[T](fieldName: String): T = throw new UnsupportedOperationException
-  override def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] =
+  final override def getTimestamp(i: Int): java.sql.Timestamp =
+    throw new UnsupportedOperationException
+  final override def getSeq[T](i: Int): Seq[T] = throw new UnsupportedOperationException
+  final override def getList[T](i: Int): java.util.List[T] = throw new UnsupportedOperationException
+  final override def getMap[K, V](i: Int): scala.collection.Map[K, V] =
+    throw new UnsupportedOperationException
+  final override def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+    throw new UnsupportedOperationException
+  final override def getStruct(i: Int): Row = throw new UnsupportedOperationException
+  final override def getAs[T](fieldName: String): T = throw new UnsupportedOperationException
+  final override def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] =
     throw new UnsupportedOperationException
 
   // A default implementation to change the return type
