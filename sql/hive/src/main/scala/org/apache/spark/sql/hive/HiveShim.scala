@@ -27,6 +27,7 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
@@ -37,6 +38,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObject
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
@@ -96,6 +98,33 @@ private[hive] object HiveShim {
         hdoi.precision(), hdoi.scale())
     } else {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
+    }
+  }
+
+  def toMetastoreFilter(predicates: Seq[Expression]): Option[String] = {
+    if (predicates.nonEmpty) {
+      // Hive getPartitionsByFilter() takes a string that represents partition
+      // predicates like "str_key_1=\"value_1\" and int_key_2=value_2 ..."
+      Some(predicates.foldLeft("") {
+        (str, expr) => {
+          expr match {
+            case op @ BinaryComparison(lhs, rhs) => {
+              val hiveFriendlyExpr =
+                lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
+              if (str.isEmpty) {
+                s"$hiveFriendlyExpr"
+              } else {
+                s"$str and $hiveFriendlyExpr"
+              }
+            }
+            case _ => {
+              str
+            }
+          }
+        }
+      })
+    } else {
+      None
     }
   }
 
