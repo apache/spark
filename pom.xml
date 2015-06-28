@@ -1222,7 +1222,6 @@
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
             <fork>true</fork>
-            <verbose>true</verbose>
           </configuration>
         </plugin>
         <!-- Surefire runs all Java tests -->
