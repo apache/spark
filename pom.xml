@@ -248,7 +248,7 @@
     <repository>
       <id>mapr-repo</id>
       <name>MapR Repository</name>
-      <url>http://repository.mapr.com/maven</url>
+      <url>http://repository.mapr.com/maven/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -681,7 +681,7 @@
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
-        <artifactId>mockito-all</artifactId>
+        <artifactId>mockito-core</artifactId>
         <version>1.9.5</version>
         <scope>test</scope>
       </dependency>
