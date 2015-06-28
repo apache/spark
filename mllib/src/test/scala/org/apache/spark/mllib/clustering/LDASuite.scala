@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
@@ -99,9 +99,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Check: per-doc topic distributions
     val topicDistributions = model.topicDistributions.collect()
+
     //  Ensure all documents are covered.
-    assert(topicDistributions.length === tinyCorpus.length)
-    assert(tinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
+    // SPARK-5562. since the topicDistribution returns the distribution of docsI over topics .
+    // for empty docs, since the distribution of topic won't sum to 1 (and hence it is not a pdf)
+    // So the output will not contain the empty docs and hence we modify the unittest to
+    // compare against nonEmptyTinyCorpus
+    val nonEmptyTinyCorpus = getNonEmptyDoc(tinyCorpus)
+    assert(topicDistributions.length === nonEmptyTinyCorpus.length)
+    assert(nonEmptyTinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
     //  Ensure we have proper distributions
     topicDistributions.foreach { case (docId, topicDistribution) =>
       assert(topicDistribution.size === tinyK)
@@ -232,12 +238,20 @@ private[clustering] object LDASuite {
   }
 
   def tinyCorpus: Array[(Long, Vector)] = Array(
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(1, 3, 0, 2, 8),
     Vectors.dense(0, 2, 1, 0, 4),
     Vectors.dense(2, 3, 12, 3, 1),
+    Vectors.dense(0, 0, 0, 0, 0), // empty doc
     Vectors.dense(0, 3, 1, 9, 8),
     Vectors.dense(1, 1, 4, 2, 6)
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
   assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
+  def getNonEmptyDoc(corpus:Array[(Long, Vector)]): Array[(Long, Vector)] = {
+    corpus.filter { case (docId: Long, wc: Vector) =>
+      wc.toBreeze.reduce(_+_) != BDV(0.0)
+    }
+
+  }
 }

@@ -119,6 +119,18 @@ final class EMLDAOptimizer extends LDAOptimizer {
       }
     }
 
+    // create term vertices for empty docs
+    val emptyDocTermVertices: RDD[(VertexId, TopicCounts)] = {
+      //empty documents
+      val emptyDocs = docs.filter { case (d: Long, tc: Vector) =>
+        tc.toBreeze.reduce(_+_) != BDV(0.0)
+      }
+      emptyDocs.map { case(docID: Long, termCounts: Vector) =>
+        val tc: TopicCounts = BDV.fill[Double](termCounts.size)(0.0)
+        (docID, tc)
+      }
+    }
+
     // Create vertices.
     // Initially, we use random soft assignments of tokens to topics (random gamma).
     val docTermVertices: RDD[(VertexId, TopicCounts)] = {
@@ -134,8 +146,10 @@ final class EMLDAOptimizer extends LDAOptimizer {
       verticesTMP.reduceByKey(_ + _)
     }
 
+    // vertices are non empty docs and empty docs
+    val docAllTermVertices = docTermVertices union emptyDocTermVertices
     // Partition such that edges are grouped by document
-    this.graph = Graph(docTermVertices, edges).partitionBy(PartitionStrategy.EdgePartition1D)
+    this.graph = Graph(docAllTermVertices, edges).partitionBy(PartitionStrategy.EdgePartition1D)
     this.k = k
     this.vocabSize = docs.take(1).head._2.size
     this.checkpointInterval = lda.getCheckpointInterval
