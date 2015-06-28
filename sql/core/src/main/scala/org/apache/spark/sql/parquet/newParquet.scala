@@ -114,7 +114,7 @@ private[sql] class ParquetRelation2(
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
-    parameters.getOrElse(ParquetRelation2.MERGE_SCHEMA, "true").toBoolean
+    parameters.getOrElse(ParquetRelation2.MERGE_SCHEMA, sqlContext.getConf("spark.sql.parquet.mergeSchema" , "true") ).toBoolean
 
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation2.METASTORE_SCHEMA)
@@ -193,6 +193,12 @@ private[sql] class ParquetRelation2(
       SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
       classOf[ParquetOutputCommitter])
+
+    // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
+    // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
+    // we set it here is to setup the output committer class to `ParquetOutputCommitter`, which is
+    // bundled with `ParquetOutputFormat[Row]`.
+    job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
     // TODO There's no need to use two kinds of WriteSupport
     // We should unify them. `SpecificMutableRow` can process both atomic (primitive) types and
