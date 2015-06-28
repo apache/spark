@@ -45,7 +45,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * An empty row used by `initProjection`
    */
-  private static final InternalRow emptyRow = new GenericRow();
+  private static final InternalRow emptyRow = new GenericInternalRow();
 
   /**
    * Whether can the empty aggregation buffer be reuse without calling `initProjection` or not.

@@ -130,7 +130,7 @@ class UnsafeFixedWidthAggregationMapSuite
     )
 
     (0 until 100).foreach { i =>
-      val groupKey = new GenericRow(Array[Any](Decimal(i % 10)))
+      val groupKey = InternalRow(Decimal(i % 10))
       val row = map.getAggregationBuffer(groupKey)
       row.update(0, Decimal(i))
     }
