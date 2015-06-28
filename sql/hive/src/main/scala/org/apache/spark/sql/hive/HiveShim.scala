@@ -22,9 +22,11 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
+import java.util.List
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -104,7 +106,13 @@ private[hive] object HiveShim {
 
   def toMetastoreFilter(
       predicates: Seq[Expression],
-      partitionKeyTypes: Map[String, String]): Option[String] = {
+      partitionKeys: List[FieldSchema]): Option[String] = {
+
+    val varcharKeys = partitionKeys
+      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
+      .map(col => col.getName)
+      .toSet
+
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = predicates.foldLeft("") {
@@ -113,14 +121,14 @@ private[hive] object HiveShim {
           case op @ BinaryComparison(lhs, rhs) => {
             val cond: String =
               lhs match {
-                case AttributeReference(_,_,_,_) => {
+                case AttributeReference(_, _, _, _) => {
                   rhs.dataType match {
                     case _: IntegralType =>
-                      lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
-                    case StringType => {
-                      // hive varchar is string type in catalyst, but varchar cannot be pushed down.
-                      if (!partitionKeyTypes.getOrElse(lhs.prettyString, "").startsWith(
-                          serdeConstants.VARCHAR_TYPE_NAME)) {
+                      lhs.prettyString + op.symbol + rhs.prettyString
+                    case _: StringType => {
+                      // hive varchar is treated as string in catalyst,
+                      // but varchar cannot be pushed down.
+                      if (!varcharKeys.contains(lhs.prettyString)) {
                         lhs.prettyString + op.symbol + "\"" + rhs.prettyString + "\""
                       } else {
                         ""
