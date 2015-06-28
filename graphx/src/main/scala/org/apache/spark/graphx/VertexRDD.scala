@@ -215,6 +215,30 @@ abstract class VertexRDD[VD](
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
 
   /**
+   * Efficiently unions this VertexRDD with another VertexRDD sharing the same index. See
+   * [[union]] for the behavior of the union.
+   */
+
+  def unionZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
+                                       (f: (VertexId, VertexId, VD, U) => VD2): VertexRDD[VD2]
+
+  /**
+   * Unions this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
+   * backed by a VertexRDD with the same index then the efficient [[union]] implementation
+   * is used.
+   *
+   * @param other an RDD containing vertices to union with. If there are multiple entries
+   * for the same vertex, one is picked arbitrarily.
+   * Use [[aggregateUsingIndex]] to merge multiple entries.
+   * @param f the union function applied to corresponding values of `this` and `other`
+   * @return a VertexRDD co-indexed with `this`, containing vertices that appear in both
+   *         `this` and `other`, with values supplied by `f`
+   */
+
+  def unionJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+                                       (f: (VertexId, VertexId, VD, U) => VD2) : VertexRDD[VD2]
+
+  /**
    * Aggregates vertices in `messages` that have the same ids using `reduceFunc`, returning a
    * VertexRDD co-indexed with `this`.
    *

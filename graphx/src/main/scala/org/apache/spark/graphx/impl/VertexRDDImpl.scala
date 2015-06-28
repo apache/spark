@@ -209,6 +209,36 @@ class VertexRDDImpl[VD] private[graphx] (
     }
   }
 
+  override def unionZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
+    (f: (VertexId, VertexId, VD, U) => VD2): VertexRDD[VD2] = {
+    val newPartitionsRDD = partitionsRDD.zipPartitions(
+      other.partitionsRDD, preservesPartitioning = true
+    ) { (thisIter, otherIter) =>
+      val thisPart = thisIter.next()
+      val otherPart = otherIter.next()
+      Iterator(thisPart.union(otherPart)(f))
+    }
+    this.withPartitionsRDD(newPartitionsRDD)
+  }
+
+  override def unionJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+    (f: (VertexId, VertexId, VD, U) => VD2) : VertexRDD[VD2] = {
+    // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
+    // If the other set is a VertexRDD then we use the much more efficient union
+    var msgs = null
+    other match {
+      case other: VertexRDD[_] if this.partitioner == other.partitioner =>
+        unionZipJoin(other)(f)
+      case _ =>
+        this.withPartitionsRDD(
+          partitionsRDD.zipPartitions(
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
+            (partIter, msgs) => partIter.map(_.union(msgs)(f))
+          }
+        )
+    }
+  }
+
   override def aggregateUsingIndex[VD2: ClassTag](
       messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
     val shuffled = messages.partitionBy(this.partitioner.get)

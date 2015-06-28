@@ -90,6 +90,17 @@ class EdgePartitionSuite extends SparkFunSuite {
       List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(5, 5, 0)))
   }
 
+  test("union") {
+    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val bList = List((0, 1, 0), (1, 0, 0), (1, 1, 0), (3, 4, 0), (5, 5, 0))
+    val a = makeEdgePartition(aList)
+    val b = makeEdgePartition(bList)
+
+    assert(a.union(b)((src, dst, a, b) => a )(e => e, e => e).iterator.map(_.copy()).toList ===
+      List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(1, 1, 0),
+           Edge(1, 2, 0), Edge(3, 4, 0), Edge(5, 4, 0), Edge(5, 5, 0)))
+  }
+
   test("isActive, numActives, replaceActives") {
     val ep = new EdgePartitionBuilder[Nothing, Nothing].toEdgePartition
       .withActiveSet(Iterator(0L, 2L, 0L))

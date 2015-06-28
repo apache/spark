@@ -341,6 +341,27 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
 
   /**
+   * Merges two graphs into one single graph. For correct results, the graph
+   * must have been partitioned using [[partitionBy]].
+   *
+   * @param other  the graph to merge current graph with
+   * @param mergeEdges  the user-supplied commutative associative function to
+   *                    merge edge attributes for duplicate edges.
+   * @param mergeVertices  the user-supplied commutative associative function
+   *                       to merge vertex attributes for duplicate vertices
+   * @tparam VD2  other graph vertex type
+   * @tparam ED2  other graph edge type
+   * @tparam VD3  unionized graph vertex type
+   * @tparam ED3  unionized graph edge type
+   * @return  The resulting graph with union of vertices from each constituent
+   *          graph and a single edge for each (source, dest) vertex pair in either graph
+   */
+  def union[VD2: ClassTag, VD3: ClassTag, ED2: ClassTag, ED3: ClassTag]
+  (other: Graph[VD2, ED2],
+   mergeEdges: (VertexId, VertexId, ED, ED2) => ED3,
+   mergeVertices: (VertexId, VertexId, VD, VD2) => VD3): Graph[VD3, ED3]
+
+  /**
    * Aggregates values from the neighboring edges and vertices of each vertex.  The user supplied
    * `mapFunc` function is invoked on each edge of the graph, generating 0 or more "messages" to be
    * "sent" to either vertex in the edge.  The `reduceFunc` is then used to combine the output of

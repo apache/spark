@@ -179,6 +179,47 @@ private[graphx] abstract class VertexPartitionBaseOps
     innerJoin(createUsingIndex(iter))(f)
   }
 
+  /** Union another VertexPartition. */
+  def union[U: ClassTag, VD2: ClassTag]
+  (other: Self[U])
+  (f: (VertexId, VertexId, VD, U) => VD2): Self[VD2] = {
+    if (self.index != other.index) {
+      logWarning("Unioning two VertexPartitions with different indexes is slow.")
+      union(createUsingIndex(other.iterator))(f)
+    } else {
+      val newMask = self.mask | other.mask
+      val newValues = new Array[VD2](self.capacity + other.capacity)
+      val hashMap = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD2]
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        if (self.mask.get(i) && other.mask.get(i))  {
+          newValues(i) = f(self.index.getValue(i), other.index.getValue(i),
+            self.values(i), other.values(i))
+          hashMap.update(self.index.getValue(i), newValues(i))
+        }
+        else if (self.mask.get(i)) {
+          newValues(i) = self.values(i).asInstanceOf[VD2]
+          hashMap.update(self.index.getValue(i), newValues(i))
+        }
+        else {
+          newValues(i) = other.values(i).asInstanceOf[VD2]
+          hashMap.update(other.index.getValue(i), newValues(i))
+        }
+        i = newMask.nextSetBit(i + 1)
+      }
+      this.withIndex(hashMap.keySet).withValues(newValues).withMask(newMask)
+    }
+  }
+
+  /**
+   * Union an iterator of messages.
+   */
+  def union[U: ClassTag, VD2: ClassTag]
+  (iter: Iterator[Product2[VertexId, U]])
+  (f: (VertexId, VertexId, VD, U) => VD2): Self[VD2] = {
+    union(createUsingIndex(iter))(f)
+  }
+
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */

@@ -17,6 +17,10 @@
 
 package org.apache.spark.graphx.impl
 
+import java.util
+
+import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.graphx._
@@ -107,7 +111,7 @@ class EdgePartition[
 
   @inline private def dstIds(pos: Int): VertexId = local2global(localDstIds(pos))
 
-  @inline private def attrs(pos: Int): ED = data(pos)
+  @inline def attrs(pos: Int): ED = data(pos)
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
   def isActive(vid: VertexId): Boolean = {
@@ -303,6 +307,73 @@ class EdgePartition[
       }
       i += 1
     }
+    builder.toEdgePartition
+  }
+
+  /**
+   * Apply `f` to all edges present in either `this` or `other` and return a new `EdgePartition`
+   * containing the resulting edges.
+   *
+   * If there are multiple edges with the same src and dst in `this`, `f` will be invoked once for
+   * each edge, but each time it may be invoked on any corresponding edge in `other`.
+   *
+   * If there are multiple edges with the same src and dst in `other`, `f` will only be invoked
+   * once.
+   */
+  def union[ED2: ClassTag, ED3: ClassTag]
+  (other: EdgePartition[ED2, _])
+  (f: (VertexId, VertexId, ED, ED2) => ED3)
+  (map: (ED) => ED3, rmap: (ED2) => ED3) : EdgePartition[ED3, VD] = {
+    val builder = new EdgePartitionBuilder[ED3, VD]()
+    var i = 0
+    var j = 0
+    // For i = index of each edge in `this`...
+
+    val indexedEdgesThisPartition:
+        HashMap[Long, Tuple5[VertexId, VertexId, ED, PartitionID, PartitionID]] = HashMap()
+    val indexedEdgesOtherPartition :
+        HashMap[Long, Tuple5[VertexId, VertexId, ED2, PartitionID, PartitionID]] = HashMap()
+
+    while (i < this.size) {
+      indexedEdgesThisPartition.put(31*this.srcIds(i) + this.dstIds(i),
+        (this.srcIds(i), this.dstIds(i), this.data(i), localSrcIds(i), localDstIds(i)))
+      i = i + 1
+    }
+    while (j < other.size) {
+      indexedEdgesOtherPartition.put(31*other.srcIds(j) + other.dstIds(j),
+        (other.srcIds(j), other.dstIds(j), other.attrs(j), localSrcIds(j), localDstIds(j)))
+      j = j + 1
+    }
+
+    def unionizePartitions[ED: ClassTag, ED2: ClassTag](
+      thisPartitionMap: HashMap[Long, (VertexId, VertexId, ED, PartitionID, PartitionID)],
+      otherPartitionMap: HashMap[Long, (VertexId, VertexId, ED2, PartitionID, PartitionID)])
+                                       (f: (VertexId, VertexId, ED, ED2) => ED3)
+                                       (map: (ED) => ED3): Unit = {
+      val iter = thisPartitionMap.keysIterator
+      while (iter.hasNext) {
+        val key = iter.next()
+        val srcId = thisPartitionMap.get(key).get._1
+        val dstId = thisPartitionMap.get(key).get._2
+        val localSrcId: PartitionID = thisPartitionMap.get(key).get._4
+        val localDstId: PartitionID = thisPartitionMap.get(key).get._5
+        if (otherPartitionMap.contains(key)) {
+          builder.add(srcId, dstId,
+            f(srcId, dstId, thisPartitionMap.get(key).get._3, otherPartitionMap.get(key).get._3))
+          otherPartitionMap -= key
+        }
+        else {
+          builder.add(srcId, dstId,
+            map(thisPartitionMap.get(key).get._3))
+        }
+      }
+    }
+
+    unionizePartitions[ED, ED2](indexedEdgesThisPartition, indexedEdgesOtherPartition)(f)(map)
+    unionizePartitions[ED2, ED](indexedEdgesOtherPartition,
+      indexedEdgesThisPartition)((v1: VertexId, v2: VertexId,
+                                  e2: ED2, e1: ED) => f(v1, v2, e1, e2))(rmap)
+
     builder.toEdgePartition
   }
 
