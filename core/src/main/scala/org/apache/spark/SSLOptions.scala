@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io.{File, FileInputStream}
 import java.security.{KeyStore, NoSuchAlgorithmException}
-
 import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
