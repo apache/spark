@@ -157,9 +157,9 @@ object EvaluatePython {
   }
 
   /**
-   * Convert InternalRow into Java Array (for pickled into Python)
+   * Convert Row into Java Array (for pickled into Python)
    */
-  def rowToArray(row: InternalRow, fields: Seq[DataType]): Array[Any] = {
+  def rowToArray(row: Row, fields: Seq[DataType]): Array[Any] = {
     // TODO: this is slow!
     row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
