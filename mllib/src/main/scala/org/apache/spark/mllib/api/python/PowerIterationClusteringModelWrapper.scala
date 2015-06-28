@@ -26,8 +26,7 @@ import org.apache.spark.mllib.clustering.PowerIterationClusteringModel
 private[python] class PowerIterationClusteringModelWrapper(model: PowerIterationClusteringModel)
   extends PowerIterationClusteringModel(model.k, model.assignments) {
 
-  def getAssignments: RDD[(Long, Int)] = {
-    SerDe.fromTuple2RDD(model.assignments.map(x => (x.id, x.cluster)))
-      .asInstanceOf[RDD[(Long, Int)]]
+  def getAssignments: RDD[Array[Any]] = {
+    model.assignments.map(x => Array(x.id, x.cluster))
   }
 }

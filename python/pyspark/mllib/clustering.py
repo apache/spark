@@ -317,7 +317,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Returns the cluster assignments of this model.
         """
         return self.call("getAssignments").map(
-            lambda x: (PowerIterationClustering.Assignment(x[0], x[1])))
+            lambda x: (PowerIterationClustering.Assignment(*x)))
 
     @classmethod
     def load(cls, sc, path):
