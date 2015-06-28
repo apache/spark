@@ -334,6 +334,16 @@ class SparkHadoopUtil extends Logging {
    * Stop the thread that does the delegation token updates.
    */
   private[spark] def stopExecutorDelegationTokenRenewer() {}
+
+  /**
+   * Disable the hadoop fs cache mechanism, otherwise DFSClient will use old token to connect nn.
+   */
+  private[spark] def getDiscachedConf(hadoopConf: Configuration, path: Path): Configuration = {
+    val newConf = new Configuration(hadoopConf)
+    val confKey = s"fs.${path.toUri.getScheme}.impl.disable.cache"
+    newConf.setBoolean(confKey, true)
+    newConf
+  }
 }
 
 object SparkHadoopUtil {
