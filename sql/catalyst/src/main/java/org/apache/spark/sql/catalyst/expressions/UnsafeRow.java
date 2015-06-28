@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import scala.collection.Seq;
-import scala.collection.mutable.ArraySeq;
-
-import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.UTF8String;
+
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -56,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends BaseMutableRow {
+public final class UnsafeRow extends MutableRow {
 
   private Object baseObject;
   private long baseOffset;
@@ -70,6 +67,8 @@ public final class UnsafeRow extends BaseMutableRow {
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
+
+  public int length() { return numFields; }
 
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
@@ -337,16 +336,6 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public String getString(int i) {
-    // This is slow, should not be used internally.
-    if (isNullAt(i)) {
-      return null;
-    } else {
-      return get(i).toString();
-    }
-  }
-
-  @Override
   public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
@@ -354,14 +343,5 @@ public final class UnsafeRow extends BaseMutableRow {
   @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
-  }
-
-  @Override
-  public Seq<Object> toSeq() {
-    final ArraySeq<Object> values = new ArraySeq<Object>(numFields);
-    for (int fieldNumber = 0; fieldNumber < numFields; fieldNumber++) {
-      values.update(fieldNumber, get(fieldNumber));
-    }
-    return values;
   }
 }

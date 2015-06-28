@@ -19,14 +19,38 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
 abstract class InternalRow extends Row {
+
+  // This is only use for test
+  override def getString(i: Int): String = getAs[UTF8String](i).toString
+
+  // These expensive API should not be used internally.
+  final override def getDecimal(i: Int): java.math.BigDecimal =
+    throw new UnsupportedOperationException
+  final override def getDate(i: Int): java.sql.Date =
+    throw new UnsupportedOperationException
+  final override def getTimestamp(i: Int): java.sql.Timestamp =
+    throw new UnsupportedOperationException
+  final override def getSeq[T](i: Int): Seq[T] = throw new UnsupportedOperationException
+  final override def getList[T](i: Int): java.util.List[T] = throw new UnsupportedOperationException
+  final override def getMap[K, V](i: Int): scala.collection.Map[K, V] =
+    throw new UnsupportedOperationException
+  final override def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+    throw new UnsupportedOperationException
+  final override def getStruct(i: Int): Row = throw new UnsupportedOperationException
+  final override def getAs[T](fieldName: String): T = throw new UnsupportedOperationException
+  final override def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] =
+    throw new UnsupportedOperationException
+
   // A default implementation to change the return type
   override def copy(): InternalRow = this
+  override def apply(i: Int): Any = get(i)
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[Row]) {
@@ -93,27 +117,15 @@ abstract class InternalRow extends Row {
 }
 
 object InternalRow {
-  def unapplySeq(row: InternalRow): Some[Seq[Any]] = Some(row.toSeq)
-
   /**
    * This method can be used to construct a [[Row]] with the given values.
    */
-  def apply(values: Any*): InternalRow = new GenericRow(values.toArray)
+  def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
-  def fromSeq(values: Seq[Any]): InternalRow = new GenericRow(values.toArray)
-
-  def fromTuple(tuple: Product): InternalRow = fromSeq(tuple.productIterator.toSeq)
-
-  /**
-   * Merge multiple rows into a single row, one after another.
-   */
-  def merge(rows: InternalRow*): InternalRow = {
-    // TODO: Improve the performance of this if used in performance critical part.
-    new GenericRow(rows.flatMap(_.toSeq).toArray)
-  }
+  def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
 
   /** Returns an empty row. */
   val empty = apply()
