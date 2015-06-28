@@ -18,12 +18,12 @@
 package org.apache.spark
 
 import java.io.{File, FileInputStream}
+import java.security.{KeyStore, NoSuchAlgorithmException}
+
+import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
-
-import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
-import java.security.{KeyStore, NoSuchAlgorithmException}
 
 /**
  * SSLOptions class is a common container for SSL configuration options. It offers methods to
@@ -111,22 +111,22 @@ private[spark] case class SSLOptions(
    * are supported by the current Java security provider for this protocol.
    */
   private val supportedAlgorithms: Set[String] = {
-    var context: Option[SSLContext] = Some(SSLContext.getDefault)
+    var context: SSLContext = null
     try {
-      context = Some(SSLContext.getInstance(protocol.orNull))
+      context = SSLContext.getInstance(protocol.orNull)
       /* The set of supported algorithms does not depend upon the keys, trust, or
          rng, although they will influence which algorithms are eventually used. */
-      context.foreach(_.init(null, null, null))
+      context.init(null, null, null)
     } catch {
       case npe: NullPointerException =>
         logDebug("No SSL protocol specified")
+        context = SSLContext.getDefault
       case nsa: NoSuchAlgorithmException =>
         logDebug(s"No support for requested SSL protocol ${protocol.get}")
+        context = SSLContext.getDefault
     }
 
-    val providerAlgorithms = context
-      .map(_.getServerSocketFactory.getSupportedCipherSuites.toSet)
-      .getOrElse(Set.empty)
+    val providerAlgorithms = context.getServerSocketFactory.getSupportedCipherSuites.toSet
 
     // Log which algorithms we are discarding
     (enabledAlgorithms &~ providerAlgorithms).foreach { cipher =>
