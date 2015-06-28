@@ -27,7 +27,6 @@ import scala.collection.Seq;
 import scala.collection.mutable.ArraySeq;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -52,7 +51,7 @@ import static org.apache.spark.sql.types.DataTypes.*;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends BaseMutableRow {
+public final class UnsafeRow extends MutableRow {
 
   private Object baseObject;
   private long baseOffset;
@@ -176,6 +175,27 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
+  public void setBoolean(int ordinal, boolean value) {
+    assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
+    PlatformDependent.UNSAFE.putBoolean(baseObject, getFieldOffset(ordinal), value);
+  }
+
+  @Override
+  public void setByte(int ordinal, byte value) {
+    assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
+    PlatformDependent.UNSAFE.putByte(baseObject, getFieldOffset(ordinal), value);
+  }
+
+  @Override
+  public void setShort(int ordinal, short value) {
+    assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
+    PlatformDependent.UNSAFE.putShort(baseObject, getFieldOffset(ordinal), value);
+  }
+
+  @Override
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
@@ -190,34 +210,6 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public void setDouble(int ordinal, double value) {
-    assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
-  public void setBoolean(int ordinal, boolean value) {
-    assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putBoolean(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
-  public void setShort(int ordinal, short value) {
-    assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putShort(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
-  public void setByte(int ordinal, byte value) {
-    assertIndexIsValid(ordinal);
-    setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putByte(baseObject, getFieldOffset(ordinal), value);
-  }
-
-  @Override
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
@@ -225,7 +217,14 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public int size() {
+  public void setDouble(int ordinal, double value) {
+    assertIndexIsValid(ordinal);
+    setNotNullAt(ordinal);
+    PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
+  }
+
+  @Override
+  public int length() {
     return numFields;
   }
 
@@ -235,7 +234,7 @@ public final class UnsafeRow extends BaseMutableRow {
   }
 
   @Override
-  public Object get(int i) {
+  public Object apply(int i) {
     assertIndexIsValid(i);
     assert (schema != null) : "Schema must be defined when calling generic get() method";
     final DataType dataType = schema.fields()[i].dataType();
