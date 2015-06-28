@@ -183,9 +183,9 @@ object EvaluatePython {
     }.toMap
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
-      }): Row
+      })
 
     case (c: java.util.Calendar, DateType) =>
       DateTimeUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
