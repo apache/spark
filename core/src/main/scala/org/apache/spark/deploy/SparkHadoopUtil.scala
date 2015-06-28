@@ -338,7 +338,8 @@ class SparkHadoopUtil extends Logging {
   /**
    * Disable the hadoop fs cache mechanism, otherwise DFSClient will use old token to connect nn.
    */
-  private[spark] def getDiscachedConf(hadoopConf: Configuration, path: Path): Configuration = {
+  private[spark]
+  def getConfBypassingFSCache(hadoopConf: Configuration, path: Path): Configuration = {
     val newConf = new Configuration(hadoopConf)
     val confKey = s"fs.${path.toUri.getScheme}.impl.disable.cache"
     newConf.setBoolean(confKey, true)

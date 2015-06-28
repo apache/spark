@@ -36,7 +36,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
   private val discachedConfiguration =
-    SparkHadoopUtil.get.getDiscachedConf(hadoopConf, new Path(credentialsFile))
+    SparkHadoopUtil.get.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile))
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
