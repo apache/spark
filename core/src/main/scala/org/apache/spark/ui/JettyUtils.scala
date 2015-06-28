@@ -27,6 +27,7 @@ import scala.xml.Node
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.servlets.GzipFilter
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
@@ -166,8 +167,26 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
+  private def addDefaultFilters(handlers: Seq[ServletContextHandler], conf: SparkConf): Unit = {
+    val compression = conf.getBoolean("spark.ui.compression", true)
+    if (compression) {
+      // Enable gzip for Web UI
+      logInfo("Adding filter: GzipFilter")
+      val holder = new FilterHolder()
+      holder.setClassName(classOf[GzipFilter].getName())
+      holder.setInitParameter("methods", "GET,POST")
+      holder.setInitParameter("mimeTypes", "text/html,text/xml,text/plain,text/css," +
+        "text/javascript,text/json,application/x-javascript,application/javascript," +
+        "application/json,application/xml,application/xml+xhtml,image/svg+xml")
+      val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
+        DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
+      handlers.foreach { case (handler) => handler.addFilter(holder, "/*", enumDispatcher) }
+    }
+  }
+
   /** Add filters, if any, to the given list of ServletContextHandlers */
   def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
+    addDefaultFilters(handlers, conf)
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
       case filter : String =>
