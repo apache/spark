@@ -367,7 +367,8 @@ def randn(seed=None):
 @ignore_unicode_prefix
 @since(1.5)
 def sha1(col):
-    """
+    """Returns the hex string result of SHA-1.
+
     >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
     [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
     """
