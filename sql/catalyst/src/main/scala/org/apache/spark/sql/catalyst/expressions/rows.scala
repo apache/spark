@@ -41,6 +41,16 @@ abstract class MutableRow extends InternalRow {
   def setString(i: Int, value: String): Unit = {
     update(i, UTF8String.fromString(value))
   }
+
+  override def copy(): InternalRow = {
+    val arr = new Array[Any](length)
+    var i = 0
+    while (i < length) {
+      arr(i) = get(i)
+      i += 1
+    }
+    new GenericInternalRow(arr)
+  }
 }
 
 /**
