@@ -2,25 +2,25 @@ Plugins
 =======
 
 Airflow has a simple plugin manager built-in that can integrate external
-features at its core by simply dropping files in your 
+features to its core by simply dropping files in your
 ``$AIRFLOW_HOME/plugins`` folder.
 
-The python modules in the ``plugins`` folder get imported, 
-and **hooks**, **operators**, **macros**, **executors** and web **views** 
+The python modules in the ``plugins`` folder get imported,
+and **hooks**, **operators**, **macros**, **executors** and web **views**
 get integrated to Airflow's main collections and become available for use.
 
 What for?
 ---------
 
-Airflow offers a generic toolbox for working with data. Different 
+Airflow offers a generic toolbox for working with data. Different
 organizations have different stacks and different needs. Using Airflow
 plugins can be a way for companies to customize their Airflow installation
 to reflect their ecosystem.
 
-Plugins can be used as an easy way to write, share and activate new sets of 
+Plugins can be used as an easy way to write, share and activate new sets of
 features.
 
-There's also a need for a set of more complex application to interact with 
+There's also a need for a set of more complex applications to interact with
 different flavors of data and metadata.
 
 Examples:
@@ -29,18 +29,18 @@ Examples:
 * An anomaly detection framework, allowing people to collect metrics, set thresholds and alerts
 * An auditing tool, helping understand who accesses what
 * A config-driven SLA monitoring tool, allowing you to set monitored tables and at what time
-  they should land, alert people and exposes visualization of outages
+  they should land, alert people, and expose visualizations of outages
 * ...
 
-Why build on top Airflow?
--------------------------
+Why build on top of Airflow?
+----------------------------
 
 Airflow has many components that can be reused when building an application:
 
 * A web server you can use to render your views
 * A metadata database to store your models
-* Access to your database, and knowledge of how to connect to them
-* An array of workers that can allow your application to push workload to
+* Access to your databases, and knowledge of how to connect to them
+* An array of workers that your application can push workload to
 * Airflow is deployed, you can just piggy back on it's deployment logistics
 * Basic charting capabilities, underlying libraries and abstractions
 
@@ -48,10 +48,10 @@ Airflow has many components that can be reused when building an application:
 Interface
 ---------
 
-To create a plugin you will need to derive the 
+To create a plugin you will need to derive the
 ``airflow.plugins_manager.AirflowPlugin`` class and reference the objects
 you want to plug into Airflow. Here's what the class you need to derive
-look like:
+looks like:
 
 
 .. code:: python
@@ -67,7 +67,7 @@ look like:
         executors = []
         # A list of references to inject into the macros namespace
         macros = []
-        # A list of objects created from a class derived 
+        # A list of objects created from a class derived
         # from flask_admin.BaseView
         admin_views = []
         # A list of Blueprint object created from flask.Blueprint
@@ -80,10 +80,10 @@ Example
 -------
 
 The code bellow defines a plugin that injects a set of dummy object
-definitions in Airflow. 
+definitions in Airflow.
 
 .. code:: python
-    
+
     # This is the class you derive to create a plugin
     from airflow.plugins_manager import AirflowPlugin
 

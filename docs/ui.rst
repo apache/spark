@@ -8,7 +8,7 @@ can find in the Airflow UI.
 DAGs View
 .........
 List of the DAGs in your environment, and a set of shortcuts to useful pages.
-You can see exactly how many tasks succeeded, failed and are currently
+You can see exactly how many tasks succeeded, failed, or are currently
 running at a glance.
 
 ------------
@@ -20,8 +20,8 @@ running at a glance.
 
 Tree View
 .........
-A tree representation of the DAG that spans across time. If a pipeline is 
-late, you can quickly see where the different steps are at and identify
+A tree representation of the DAG that spans across time. If a pipeline is
+late, you can quickly see where the different steps are and identify
 the blocking ones.
 
 ------------
@@ -32,8 +32,8 @@ the blocking ones.
 
 Graph View
 ..........
-The graph is perhaps the most comprehensive. Visualize your DAG's dependencies
-and their current status for a specific run.
+The graph view is perhaps the most comprehensive. Visualize your DAG's
+dependencies and their current status for a specific run.
 
 ------------
 
@@ -43,7 +43,7 @@ and their current status for a specific run.
 
 Gantt Chart
 ...........
-The Gantt chart lets you analyse task duration and overlap, you can quickly
+The Gantt chart lets you analyse task duration and overlap. You can quickly
 identify bottlenecks and where the bulk of the time is spent for specific
 DAG runs.
 
@@ -55,9 +55,9 @@ DAG runs.
 
 Task Duration
 .............
-The duration of your different tasks over the past N runs. This view lets 
+The duration of your different tasks over the past N runs. This view lets
 you find outliers and quickly understand where the time is spent in your
-DAG, over many runs.
+DAG over many runs.
 
 
 ------------
