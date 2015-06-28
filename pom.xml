@@ -1686,7 +1686,7 @@
     <profile>
       <id>hadoop-1</id>
       <properties>
-        <hadoop.version>1.0.4</hadoop.version>
+        <hadoop.version>1.2.1</hadoop.version>
         <protobuf.version>2.4.1</protobuf.version>
         <hbase.version>0.98.7-hadoop1</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
