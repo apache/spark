@@ -278,7 +278,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for NaiveBayes.train()
    */
-  def trainNaiveBayes(
+  def trainNaiveBayesModel(
       data: JavaRDD[LabeledPoint],
       lambda: Double): JList[Object] = {
     val model = NaiveBayes.train(data.rdd, lambda)
@@ -346,7 +346,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib GaussianMixture.run()
    * Returns a list containing weights, mean and covariance of each mixture component.
    */
-  def trainGaussianMixture(
+  def trainGaussianMixtureModel(
       data: JavaRDD[Vector],
       k: Int,
       convergenceTol: Double,
@@ -553,7 +553,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param seed initial seed for random generator
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
-  def trainWord2Vec(
+  def trainWord2VecModel(
       dataJRDD: JavaRDD[java.util.ArrayList[String]],
       vectorSize: Int,
       learningRate: Double,

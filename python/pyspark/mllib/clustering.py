@@ -265,9 +265,9 @@ class GaussianMixture(object):
             initialModelWeights = initialModel.weights
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
-        weight, mu, sigma = callMLlibFunc("trainGaussianMixture", rdd.map(_convert_to_vector), k,
-                                          convergenceTol, maxIterations, seed, initialModelWeights,
-                                          initialModelMu, initialModelSigma)
+        weight, mu, sigma = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
+                                          k, convergenceTol, maxIterations, seed,
+                                          initialModelWeights, initialModelMu, initialModelSigma)
         mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
 

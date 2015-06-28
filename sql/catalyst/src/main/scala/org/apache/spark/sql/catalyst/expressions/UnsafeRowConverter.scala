@@ -228,7 +228,7 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
     ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes)
   }
 
-  def isString: Boolean
+  protected[this] def isString: Boolean
 
   override def write(source: InternalRow, target: UnsafeRow, column: Int, cursor: Int): Int = {
     val offset = target.getBaseOffset + cursor
@@ -252,14 +252,14 @@ private abstract class BytesUnsafeColumnWriter extends UnsafeColumnWriter {
 }
 
 private class StringUnsafeColumnWriter private() extends BytesUnsafeColumnWriter {
-  def isString: Boolean = true
+  protected[this] def isString: Boolean = true
   def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[UTF8String](column).getBytes
   }
 }
 
 private class BinaryUnsafeColumnWriter private() extends BytesUnsafeColumnWriter {
-  def isString: Boolean = false
+  protected[this] def isString: Boolean = false
   def getBytes(source: InternalRow, column: Int): Array[Byte] = {
     source.getAs[Array[Byte]](column)
   }
