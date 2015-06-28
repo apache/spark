@@ -135,6 +135,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
     expression[Sha1]("sha1"),
     expression[Sha1]("sha"),
 

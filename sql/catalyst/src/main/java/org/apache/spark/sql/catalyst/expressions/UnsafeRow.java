@@ -23,16 +23,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import scala.collection.Seq;
-import scala.collection.mutable.ArraySeq;
-
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
@@ -52,7 +48,7 @@ import static org.apache.spark.sql.types.DataTypes.*;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends BaseMutableRow {
+public final class UnsafeRow extends MutableRow {
 
   private Object baseObject;
   private long baseOffset;
@@ -62,6 +58,8 @@ public final class UnsafeRow extends BaseMutableRow {
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
+
+  public int length() { return numFields; }
 
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
@@ -343,14 +341,5 @@ public final class UnsafeRow extends BaseMutableRow {
   @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
-  }
-
-  @Override
-  public Seq<Object> toSeq() {
-    final ArraySeq<Object> values = new ArraySeq<Object>(numFields);
-    for (int fieldNumber = 0; fieldNumber < numFields; fieldNumber++) {
-      values.update(fieldNumber, get(fieldNumber));
-    }
-    return values;
   }
 }

@@ -538,4 +538,49 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df)
     }
   }
+
+  test("listConflictingPartitionColumns") {
+    def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]): String = {
+      val conflictingColNameLists = colNameLists.zipWithIndex.map { case (list, index) =>
+        s"\tPartition column name list #$index: $list"
+      }.mkString("\n", "\n", "\n")
+
+      // scalastyle:off
+      s"""Conflicting partition column names detected:
+         |$conflictingColNameLists
+         |For partitioned table directories, data files should only live in leaf directories.
+         |And directories at the same level should have the same partition column name.
+         |Please check the following directories for unexpected files or inconsistent partition column names:
+         |${paths.map("\t" + _).mkString("\n", "\n", "")}
+       """.stripMargin.trim
+      // scalastyle:on
+    }
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1"), PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/b=1"), PartitionValues(Seq("b"), Seq(Literal(1)))))).trim ===
+        makeExpectedMessage(Seq("a", "b"), Seq("file:/tmp/foo/a=1", "file:/tmp/foo/b=1")))
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1/_temporary"), PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/a=1"), PartitionValues(Seq("a"), Seq(Literal(1)))))).trim ===
+        makeExpectedMessage(
+          Seq("a"),
+          Seq("file:/tmp/foo/a=1/_temporary", "file:/tmp/foo/a=1")))
+
+    assert(
+      listConflictingPartitionColumns(
+        Seq(
+          (new Path("file:/tmp/foo/a=1"),
+            PartitionValues(Seq("a"), Seq(Literal(1)))),
+          (new Path("file:/tmp/foo/a=1/b=foo"),
+            PartitionValues(Seq("a", "b"), Seq(Literal(1), Literal("foo")))))).trim ===
+        makeExpectedMessage(
+          Seq("a", "a, b"),
+          Seq("file:/tmp/foo/a=1", "file:/tmp/foo/a=1/b=foo")))
+  }
 }

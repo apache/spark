@@ -25,8 +25,6 @@ import org.apache.spark.sql.types._
 abstract class UnaryArithmetic extends UnaryExpression {
   self: Product =>
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
 
   override def eval(input: InternalRow): Any = {

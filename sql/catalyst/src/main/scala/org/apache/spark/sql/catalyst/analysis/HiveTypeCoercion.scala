@@ -317,6 +317,7 @@ trait HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
+      case SumDistinct(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
     }
   }
@@ -590,11 +591,12 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !a.resolved =>
-        val commonType = a.childTypes.reduce(
-          (a, b) => findTightestCommonTypeOfTwo(a, b).getOrElse(StringType))
-        CreateArray(
-          children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
+      case a @ CreateArray(children) if children.map(_.dataType).distinct.size > 1 =>
+        val types = children.map(_.dataType)
+        findTightestCommonTypeAndPromoteToString(types) match {
+          case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
+          case None => a
+        }
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
@@ -620,12 +622,11 @@ trait HiveTypeCoercion {
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
-      case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
+      case c @ Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
         val types = es.map(_.dataType)
         findTightestCommonTypeAndPromoteToString(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
-          case None =>
-            sys.error(s"Could not determine return type of Coalesce for ${types.mkString(",")}")
+          case None => c
         }
     }
   }
@@ -677,8 +678,8 @@ trait HiveTypeCoercion {
           findTightestCommonTypeAndPromoteToString((c.key +: c.whenList).map(_.dataType))
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
-            case Seq(when, then) if when.dataType != commonType =>
-              Seq(Cast(when, commonType), then)
+            case Seq(whenExpr, thenExpr) if whenExpr.dataType != commonType =>
+              Seq(Cast(whenExpr, commonType), thenExpr)
             case other => other
           }.reduce(_ ++ _)
           CaseKeyWhen(Cast(c.key, commonType), castedBranches)

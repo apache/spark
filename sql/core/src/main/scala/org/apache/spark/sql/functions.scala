@@ -1430,6 +1430,26 @@ object functions {
    */
   def sha1(columnName: String): Column = sha1(Column(columnName))
 
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(e: Column, numBits: Int): Column = {
+    require(Seq(0, 224, 256, 384, 512).contains(numBits),
+      s"numBits $numBits is not in the permitted values (0, 224, 256, 384, 512)")
+    Sha2(e.expr, lit(numBits).expr)
+  }
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(columnName: String, numBits: Int): Column = sha2(Column(columnName), numBits)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
