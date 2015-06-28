@@ -73,4 +73,63 @@ class RowSuite extends SparkFunSuite {
       row.getAs[Int]("c")
     }
   }
+
+  test("compare field values between by name and by index") {
+    val row = Seq((
+      "string1", // Any
+      true, // Boolean
+      127, // Byte
+      255, // Short
+      2147483647, // Int
+      9223372036854775807L, // Long
+      2.3F, // Float
+      0.0000001, // Double
+      "string2", // String
+      new java.math.BigDecimal("9223372036854775808"), // Decimal
+      new java.sql.Date(1435475728001L), // Date
+      new java.sql.Timestamp(1435475728001L), // Timestamp
+      (1 to 100).toArray, // Seq
+      (1 to 200).toArray, // List
+      Map(1 -> "Scala", 2 -> "Java", 3 -> "Python", 4 -> "SQL", 5 -> "R"), // Map
+      Map("Tokyo" -> "Shinjuku", "Okinawa" -> "Okinawa", "Hokkaido" -> "Hokkaido"), // Java Map
+      null: String // null
+    )).toDF(
+      "anyCol",
+      "booleanCol",
+      "byteCol",
+      "shortCol",
+      "intCol",
+      "longCol",
+      "floatCol",
+      "doubleCol",
+      "stringCol",
+      "decimalCol",
+      "dateCol",
+      "timestampCol",
+      "seqCol",
+      "listCol",
+      "mapCol",
+      "jmapCol",
+      "nullCol"
+    ).first()
+
+    assert(row.get(0) === row.get("anyCol"))
+    assert(row.get(1) === row.get("booleanCol"))
+    assert(row.get(2) === row.get("byteCol"))
+    assert(row.get(3) === row.get("shortCol"))
+    assert(row.get(4) === row.get("intCol"))
+    assert(row.get(5) === row.get("longCol"))
+    assert(row.get(6) === row.get("floatCol"))
+    assert(row.get(7) === row.get("doubleCol"))
+    assert(row.get(8) === row.get("stringCol"))
+    assert(row.get(9) === row.get("decimalCol"))
+    assert(row.get(10) === row.get("dateCol"))
+    assert(row.get(11) === row.get("timestampCol"))
+    assert(row.get(12) === row.get("seqCol"))
+    assert(row.get(13) === row.get("listCol"))
+    assert(row.get(14) === row.get("mapCol"))
+    assert(row.get(15) === row.get("jmapCol"))
+    assert(row.isNullAt(16) === true)
+    assert(row.isNullAt("nullCol") === true)
+  }
 }
