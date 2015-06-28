@@ -365,7 +365,7 @@ def run_python_tests(test_modules):
 
     command = [os.path.join(SPARK_HOME, "python", "run-tests")]
     if test_modules != [modules.root]:
-        command.append("--modules=%s" % ','.join(m.name for m in modules))
+        command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     run_cmd(command)
 
 
