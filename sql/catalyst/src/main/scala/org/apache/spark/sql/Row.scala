@@ -178,8 +178,36 @@ trait Row extends Serializable {
    */
   def get(i: Int): Any = apply(i)
 
+  /**
+   * Returns the value of a given fieldName. If the value is null, null is returned. The following
+   * is a mapping between Spark SQL types and return types:
+   *
+   * {{{
+   *   BooleanType -> java.lang.Boolean
+   *   ByteType -> java.lang.Byte
+   *   ShortType -> java.lang.Short
+   *   IntegerType -> java.lang.Integer
+   *   FloatType -> java.lang.Float
+   *   DoubleType -> java.lang.Double
+   *   StringType -> String
+   *   DecimalType -> java.math.BigDecimal
+   *
+   *   DateType -> java.sql.Date
+   *   TimestampType -> java.sql.Timestamp
+   *
+   *   BinaryType -> byte array
+   *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
+   *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
+   *   StructType -> org.apache.spark.sql.Row
+   * }}}
+   */
+  def get(fieldName: String): Any = apply(fieldIndex(fieldName))
+
   /** Checks whether the value at position i is null. */
   def isNullAt(i: Int): Boolean
+
+  /** Checks whether the value of a given fieldName is null. */
+  def isNullAt(fieldName: String): Boolean = isNullAt(fieldIndex(fieldName))
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -190,12 +218,28 @@ trait Row extends Serializable {
   def getBoolean(i: Int): Boolean
 
   /**
+   * Returns the value of a given fieldName as a primitive boolean.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getBoolean(fieldName: String): Boolean = getBoolean(fieldIndex(fieldName))
+
+  /**
    * Returns the value at position i as a primitive byte.
    *
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   def getByte(i: Int): Byte
+
+  /**
+   * Returns the value of a given fieldName as a primitive byte.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getByte(fieldName: String): Byte = getByte(fieldIndex(fieldName))
 
   /**
    * Returns the value at position i as a primitive short.
@@ -206,6 +250,14 @@ trait Row extends Serializable {
   def getShort(i: Int): Short
 
   /**
+   * Returns the value of a given fieldName as a primitive short.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getShort(fieldName: String): Short = getShort(fieldIndex(fieldName))
+
+  /**
    * Returns the value at position i as a primitive int.
    *
    * @throws ClassCastException when data type does not match.
@@ -214,12 +266,28 @@ trait Row extends Serializable {
   def getInt(i: Int): Int
 
   /**
+   * Returns the value of a given fieldName as a primitive int.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getInt(fieldName: String): Int = getInt(fieldIndex(fieldName))
+
+  /**
    * Returns the value at position i as a primitive long.
    *
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   def getLong(i: Int): Long
+
+  /**
+   * Returns the value of a given fieldName as a primitive long.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getLong(fieldName: String): Long = getLong(fieldIndex(fieldName))
 
   /**
    * Returns the value at position i as a primitive float.
@@ -231,12 +299,29 @@ trait Row extends Serializable {
   def getFloat(i: Int): Float
 
   /**
+   * Returns the value of a given fieldName as a primitive float.
+   * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getFloat(fieldName: String): Float = getFloat(fieldIndex(fieldName))
+
+  /**
    * Returns the value at position i as a primitive double.
    *
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   def getDouble(i: Int): Double
+
+  /**
+   * Returns the value of a given fieldName as a primitive double.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getDouble(fieldName: String): Double = getDouble(fieldIndex(fieldName))
 
   /**
    * Returns the value at position i as a String object.
@@ -247,11 +332,27 @@ trait Row extends Serializable {
   def getString(i: Int): String
 
   /**
+   * Returns the value of a given fieldName as a String object.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getString(fieldName: String): String = getString(fieldIndex(fieldName))
+
+  /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
+
+  /**
+   * Returns the value of a given fieldName of decimal type as java.math.BigDecimal.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDecimal(fieldName: String): java.math.BigDecimal =
+    apply(fieldIndex((fieldName))).asInstanceOf[java.math.BigDecimal]
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
@@ -261,6 +362,14 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**
+   * Returns the value of a given fieldName of date type as java.sql.Date.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDate(fieldName: String): java.sql.Date =
+    apply(fieldIndex(fieldName)).asInstanceOf[java.sql.Date]
+
+  /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
@@ -268,11 +377,26 @@ trait Row extends Serializable {
   def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
 
   /**
+   * Returns the value of a given fieldName of date type as java.sql.Timestamp.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTimestamp(fieldName: String): java.sql.Timestamp =
+    apply(fieldIndex(fieldName)).asInstanceOf[java.sql.Timestamp]
+
+  /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = apply(i).asInstanceOf[Seq[T]]
+
+  /**
+   * Returns the value of a given fieldName of array type as a Scala Seq.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getSeq[T](fieldName: String): Seq[T] = apply(fieldIndex(fieldName)).asInstanceOf[Seq[T]]
 
   /**
    * Returns the value at position i of array type as [[java.util.List]].
@@ -284,11 +408,28 @@ trait Row extends Serializable {
   }
 
   /**
+   * Returns the value of a given fieldName of array type as [[java.util.List]].
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getList[T](fieldName: String): java.util.List[T] = {
+    scala.collection.JavaConversions.seqAsJavaList(getSeq[T](fieldIndex(fieldName)))
+  }
+
+  /**
    * Returns the value at position i of map type as a Scala Map.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = apply(i).asInstanceOf[Map[K, V]]
+
+  /**
+   * Returns the value of a given fieldName of map type as a Scala Map.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getMap[K, V](fieldName: String): scala.collection.Map[K, V] =
+    apply(fieldIndex(fieldName)).asInstanceOf[Map[K, V]]
 
   /**
    * Returns the value at position i of array type as a [[java.util.Map]].
@@ -300,11 +441,27 @@ trait Row extends Serializable {
   }
 
   /**
+   * Returns the value of a given fieldName of array type as a [[java.util.Map]].
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getJavaMap[K, V](fieldName: String): java.util.Map[K, V] = {
+    scala.collection.JavaConversions.mapAsJavaMap(getMap[K, V](fieldIndex(fieldName)))
+  }
+
+  /**
    * Returns the value at position i of struct type as an [[Row]] object.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getStruct(i: Int): Row = getAs[Row](i)
+
+  /**
+   * Returns the value of a given fieldName of struct type as an [[Row]] object.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getStruct(fieldName: String): Row = getAs[Row](fieldIndex(fieldName))
 
   /**
    * Returns the value at position i.
