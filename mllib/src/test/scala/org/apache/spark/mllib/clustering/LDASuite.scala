@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
+import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
@@ -248,10 +248,7 @@ private[clustering] object LDASuite {
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
   assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
-  def getNonEmptyDoc(corpus:Array[(Long, Vector)]): Array[(Long, Vector)] = {
-    corpus.filter { case (docId: Long, wc: Vector) =>
-      wc.toBreeze.reduce(_+_) != BDV(0.0)
-    }
-
+  def getNonEmptyDoc(corpus:Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
+    case (_, wc: Vector) => Vectors.norm(wc, p = 1.0) != 0.0
   }
 }
