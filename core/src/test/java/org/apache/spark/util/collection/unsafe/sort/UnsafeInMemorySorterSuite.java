@@ -35,11 +35,11 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
 public class UnsafeInMemorySorterSuite {
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset) {
-    final int strLength = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset);
+    final int strLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset);
     final byte[] strBytes = new byte[strLength];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + 8,
+      baseOffset + 4,
       strBytes,
       PlatformDependent.BYTE_ARRAY_OFFSET, strLength);
     return new String(strBytes);
@@ -77,8 +77,8 @@ public class UnsafeInMemorySorterSuite {
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
       final byte[] strBytes = str.getBytes("utf-8");
-      PlatformDependent.UNSAFE.putLong(baseObject, position, strBytes.length);
-      position += 8;
+      PlatformDependent.UNSAFE.putInt(baseObject, position, strBytes.length);
+      position += 4;
       PlatformDependent.copyMemory(
         strBytes,
         PlatformDependent.BYTE_ARRAY_OFFSET,
@@ -114,12 +114,12 @@ public class UnsafeInMemorySorterSuite {
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {
       // position now points to the start of a record (which holds its length).
-      final long recordLength = PlatformDependent.UNSAFE.getLong(baseObject, position);
+      final int recordLength = PlatformDependent.UNSAFE.getInt(baseObject, position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final String str = getStringFromDataPage(baseObject, position);
       final int partitionId = hashPartitioner.getPartition(str);
       sorter.insertRecord(address, partitionId);
-      position += 8 + recordLength;
+      position += 4 + recordLength;
     }
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
     int iterLength = 0;
@@ -127,9 +127,11 @@ public class UnsafeInMemorySorterSuite {
     Arrays.sort(dataToSort);
     while (iter.hasNext()) {
       iter.loadNext();
-      final String str = getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset());
+      // TODO: the logic for how we manipulate record length offsets here is confusing; clean
+      // this up and clarify it in comments.
+      final String str = getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset() - 4);
       final long keyPrefix = iter.getKeyPrefix();
-      assertTrue(Arrays.asList(dataToSort).contains(str));
+      assertThat(str, isIn(Arrays.asList(dataToSort)));
       assertThat(keyPrefix, greaterThanOrEqualTo(prevPrefix));
       prevPrefix = keyPrefix;
       iterLength++;
