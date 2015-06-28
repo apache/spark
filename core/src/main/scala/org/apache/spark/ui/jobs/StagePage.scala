@@ -659,8 +659,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       {TIMELINE_LEGEND}
     </div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)")}
+      {
+        Unparsed(s"""$$(function() {
+          drawTaskAssignmentTimeline(
+            $groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)
+        })""")
+      }
     </script>
   }
 
