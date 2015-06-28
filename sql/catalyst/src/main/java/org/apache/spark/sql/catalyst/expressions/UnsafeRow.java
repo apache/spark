@@ -22,6 +22,7 @@ import scala.collection.mutable.ArraySeq;
 
 import org.apache.spark.sql.BaseMutableRow;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -40,6 +41,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  * base address of the row) that points to the beginning of the variable-length field, and length
  * (they are combined into a long). For other objects, they are stored in a pool, the indexes of
  * them are hold in the the word.
+ *
+ * In order to support fast hashing and equality checks for UnsafeRows that contain objects
+ * when used as grouping key in BytesToBytesMap, we put the objects in an UniqueObjectPool to make
+ * sure all the keyhave the same index for same object, then we can hash/compare the objects by
+ * hash/compare the index.
  *
  * For non-primitive types, the word of a field could be:
  *   UNION {
@@ -121,6 +127,9 @@ public final class UnsafeRow extends BaseMutableRow {
     BitSetMethods.unset(baseObject, baseOffset, i);
   }
 
+  /**
+   * Updates the column `i` as Object `value`, which cannot be primitive types.
+   */
   @Override
   public void update(int i, Object value) {
     if (value == null) {
@@ -151,17 +160,17 @@ public final class UnsafeRow extends BaseMutableRow {
         pool.replace(idx, value);
       } else {
         // old value is UTF8String or byte[], try to reuse the space
-        boolean is_string;
+        boolean isString;
         byte[] newBytes;
         if (value instanceof UTF8String) {
-          newBytes = ((UTF8String)value).getBytes();
-          is_string = true;
+          newBytes = ((UTF8String) value).getBytes();
+          isString = true;
         } else {
           newBytes = (byte[]) value;
-          is_string = false;
+          isString = false;
         }
-        int offset = (int)((v >> OFFSET_BITS) & Integer.MAX_VALUE);
-        int oldLength = (int)(v & Integer.MAX_VALUE);
+        int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
+        int oldLength = (int) (v & Integer.MAX_VALUE);
         if (newBytes.length <= oldLength) {
           // the new value can fit in the old buffer, re-use it
           PlatformDependent.copyMemory(
@@ -170,12 +179,12 @@ public final class UnsafeRow extends BaseMutableRow {
             baseObject,
             baseOffset + offset,
             newBytes.length);
-          long flag = is_string ? 1L << (OFFSET_BITS * 2) : 0L;
-          setLong(i, flag | (((long)offset) << OFFSET_BITS) | (long)newBytes.length);
+          long flag = isString ? 1L << (OFFSET_BITS * 2) : 0L;
+          setLong(i, flag | (((long) offset) << OFFSET_BITS) | (long) newBytes.length);
         } else {
           // Cannot fit in the buffer
           int idx = pool.put(value);
-          setLong(i, (long)-idx);
+          setLong(i, (long) -idx);
         }
       }
     }
@@ -236,6 +245,9 @@ public final class UnsafeRow extends BaseMutableRow {
     return numFields;
   }
 
+  /**
+   * Returns the object for column `i`, which should not be primitive type.
+   */
   @Override
   public Object get(int i) {
     assertIndexIsValid(i);
@@ -244,21 +256,23 @@ public final class UnsafeRow extends BaseMutableRow {
     }
     long v = PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(i));
     if (v <= 0) {
+      // It's an index to object in the pool.
       int idx = (int)-v;
       return pool.get(idx);
     } else {
-      boolean is_string = (v >> (OFFSET_BITS * 2)) > 0;
-      int offset = (int)((v >> OFFSET_BITS) & Integer.MAX_VALUE);
-      int size = (int)(v & Integer.MAX_VALUE);
+      // The column could be StingType or BinaryType
+      boolean isString = (v >> (OFFSET_BITS * 2)) > 0;
+      int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
+      int size = (int) (v & Integer.MAX_VALUE);
       final byte[] bytes = new byte[size];
       PlatformDependent.copyMemory(
-              baseObject,
-              baseOffset + offset,
-              bytes,
-              PlatformDependent.BYTE_ARRAY_OFFSET,
-              size
+        baseObject,
+        baseOffset + offset,
+        bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        size
       );
-      if (is_string) {
+      if (isString) {
         return UTF8String.fromBytes(bytes);
       } else {
         return bytes;

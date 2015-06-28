@@ -23,7 +23,7 @@ import java.util.Arrays
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ObjectPool, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -251,11 +251,40 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
     for (i <- 0 to fieldTypes.length - 1) {
+      if (i >= 8) {
+        setToNullAfterCreation.update(i, null)
+      }
       setToNullAfterCreation.setNullAt(i)
     }
     // There are some garbage left in the var-length area
     assert(Arrays.equals(createdFromNullBuffer,
       java.util.Arrays.copyOf(setToNullAfterCreationBuffer, sizeRequired / 8)))
+
+    setToNullAfterCreation.setNullAt(0)
+    setToNullAfterCreation.setBoolean(1, false)
+    setToNullAfterCreation.setByte(2, 20)
+    setToNullAfterCreation.setShort(3, 30)
+    setToNullAfterCreation.setInt(4, 400)
+    setToNullAfterCreation.setLong(5, 500)
+    setToNullAfterCreation.setFloat(6, 600)
+    setToNullAfterCreation.setDouble(7, 700)
+    setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
+    setToNullAfterCreation.update(9, "world".getBytes)
+    setToNullAfterCreation.update(10, Decimal(10))
+    setToNullAfterCreation.update(11, Array(11))
+
+    assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
+    assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
+    assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
+    assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
+    assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
+    assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
+    assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
+    assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
+    assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
+    assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
+    assert(setToNullAfterCreation.get(10) === rowWithNoNullColumns.get(10))
+    assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
 }

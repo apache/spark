@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.util
 
 import org.scalatest.Matchers
 

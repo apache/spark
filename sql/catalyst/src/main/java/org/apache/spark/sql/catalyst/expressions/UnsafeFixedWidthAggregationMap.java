@@ -22,6 +22,8 @@ import java.util.Iterator;
 import scala.Function1;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ObjectPool;
+import org.apache.spark.sql.catalyst.util.UniqueObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
@@ -41,14 +43,14 @@ public final class UnsafeFixedWidthAggregationMap {
   private final byte[] emptyBuffer;
 
   /**
-   * A empty row used by `initProjection`
+   * An empty row used by `initProjection`
    */
   private static final InternalRow emptyRow = new GenericRow();
 
   /**
    * Whether can the empty aggregation buffer be reuse without calling `initProjection` or not.
    */
-  private boolean reuseEmptyBuffer;
+  private final boolean reuseEmptyBuffer;
 
   /**
    * The projection used to initialize the emptyBuffer
@@ -67,12 +69,12 @@ public final class UnsafeFixedWidthAggregationMap {
   private final BytesToBytesMap map;
 
   /**
-   * A object pool for these in keys.
+   * An object pool for objects that are used in grouping keys.
    */
   private final UniqueObjectPool keyPool;
 
   /**
-   * A object pool for those in aggregation buffers.
+   * An object pool for objects that are used in aggregation buffers.
    */
   private final ObjectPool bufferPool;
 
