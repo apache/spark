@@ -2,13 +2,13 @@
 Tutorial
 ================
 
-This tutorial walks you through some of the fundamental Airflow concepts, 
-objects and their usage while writing your first pipeline.
+This tutorial walks you through some of the fundamental Airflow concepts,
+objects, and their usage while writing your first pipeline.
 
 Example Pipeline definition
 ---------------------------
 
-Here is an example of a basic pipeline definition. Do not worry if this looks 
+Here is an example of a basic pipeline definition. Do not worry if this looks
 complicated, a line by line explanation follows below.
 
 .. code:: python
@@ -72,22 +72,22 @@ complicated, a line by line explanation follows below.
 Importing Modules
 -----------------
 
-An Airflow pipeline is just a common Python script that happens to define
-an Airflow DAG object. Let's start by importing the libraries we will need.
+An Airflow pipeline is just a Python script that happens to define an
+Airflow DAG object. Let's start by importing the libraries we will need.
 
 .. code:: python
 
-    # The DAG object, we'll need this to instantiate a DAG
+    # The DAG object; we'll need this to instantiate a DAG
     from airflow import DAG
 
-    # Operators, we need this to operate!
+    # Operators; we need this to operate!
     from airflow.operators import BashOperator, MySqlOperator
 
 Default Arguments
 -----------------
-We're about to create a DAG and some tasks, and we have the choice to 
-explicitly pass a set of arguments to each task's constructor 
-(which would become redundant), or (better!) we can define a dictionary 
+We're about to create a DAG and some tasks, and we have the choice to
+explicitly pass a set of arguments to each task's constructor
+(which would become redundant), or (better!) we can define a dictionary
 of default parameters that we can use when creating tasks.
 
 .. code:: python
@@ -107,16 +107,16 @@ For more information about the BaseOperator's parameters and what they do,
 refer to the :py:class:``airflow.models.BaseOperator`` documentation.
 
 Also, note that you could easily define different sets of arguments that
-would serve different purposes. An example of that would be to have 
+would serve different purposes. An example of that would be to have
 different settings between a production and development environment.
 
 
 Instantiate a DAG
 -----------------
 
-We'll need a DAG object to nest our tasks into. Here we pass a string 
+We'll need a DAG object to nest our tasks into. Here we pass a string
 that defines the dag_id, which serves as a unique identifier for your DAG.
-We also pass the default argument dictionary that we just define.
+We also pass the default argument dictionary that we just defined.
 
 .. code:: python
 
@@ -124,8 +124,8 @@ We also pass the default argument dictionary that we just define.
 
 Tasks
 -----
-Tasks are generated when instantiating objects from operators. An object
-instatiated from an operator is called a constructor. The first argument
+Tasks are generated when instantiating operator objects. An object
+instantiated from an operator is called a constructor. The first argument
 ``task_id`` acts as a unique identifier for the task.
 
 .. code:: python
@@ -142,10 +142,10 @@ instatiated from an operator is called a constructor. The first argument
         dag=dag)
 
 Notice how we pass a mix of operator specific arguments (``bash_command``) and
-an argument common to all operators (``email_on_failure``) inherited 
+an argument common to all operators (``email_on_failure``) inherited
 from BaseOperator to the operator's constructor. This is simpler than
-passing every argument for every constructor call. Also, notice that in 
-the second task we override ``email_on_failure`` parameter with ``False``.
+passing every argument for every constructor call. Also, notice that in
+the second task we override the ``email_on_failure`` parameter with ``False``.
 
 The precedence rules for a task are as follows:
 
@@ -158,17 +158,17 @@ otherwise Airflow will raise an exception.
 
 Templating with Jinja
 ---------------------
-Airflow leverages the power of 
+Airflow leverages the power of
 `Jinja Templating <http://jinja.pocoo.org/docs/dev/>`_  and provides
 the pipeline author
 with a set of built-in parameters and macros. Airflow also provides
 hooks for the pipeline author to define their own parameters, macros and
 templates.
 
-This tutorial barely scratches the surfaces of what you can do 
-with templating in Airflow, but the goal of this section is to let you know 
-this feature exists, get you familiar with double
-curly brackets, and point to the most common template variable: ``{{ ds }}``.
+This tutorial barely scratches the surface of what you can do with
+templating in Airflow, but the goal of this section is to let you know
+this feature exists, get you familiar with double curly brackets, and
+point to the most common template variable: ``{{ ds }}``.
 
 .. code:: python
 
@@ -196,31 +196,31 @@ parameters and/or objects to your templates. Please take the time
 to understand how the parameter ``my_param`` makes it through to the template.
 
 Files can also be passed to the ``bash_command`` argument, like
-``bash_command='templated_command.sh'`` where the file location is relative to
+``bash_command='templated_command.sh'``, where the file location is relative to
 the directory containing the pipeline file (``tutorial.py`` in this case). This
 may be desirable for many reasons, like separating your script's logic and
 pipeline code, allowing for proper code highlighting in files composed in
 different languages, and general flexibility in structuring pipelines. It is
-also possible to define your ``template_searchpath`` pointing to any folder
+also possible to define your ``template_searchpath`` as pointing to any folder
 locations in the DAG constructor call.
 
 Setting up Dependencies
 -----------------------
-We have two simple tasks that do not depend on each other, here's a few ways
+We have two simple tasks that do not depend on each other. Here's a few ways
 you can define dependencies between them:
 
 .. code:: python
 
     t2.set_upstream(t1)
 
-    # This means that t2 will depend on t1 
+    # This means that t2 will depend on t1
     # running successfully to run
     # It is equivalent to
     # t1.set_downstream(t2)
 
     t3.set_upstream(t1)
 
-    # all of this is equivalent to 
+    # all of this is equivalent to
     # dag.set_dependencies('print_date', 'sleep')
     # dag.set_dependencies('print_date', 'templated')
 
@@ -230,7 +230,7 @@ than once.
 
 Recap
 -----
-Alright, so we have a pretty basic DAG. At this point your code should look 
+Alright, so we have a pretty basic DAG. At this point your code should look
 something like this:
 
 .. code:: python
@@ -340,24 +340,24 @@ gets rendered and executed by running this command:
     # testing templated
     airflow test tutorial templated 2015-01-01
 
-This should result in displaying a verbose log of events and ultimately 
+This should result in displaying a verbose log of events and ultimately
 running your bash command and printing the result.
 
-Note that the ``airflow test`` command runs task instances locally, output
-their log to stdout (on screen), don't bother with dependencies, and
-don't communicate their state (running, success, failed, ...) to the 
-database. It simply allows to test a single a task instance.
+Note that the ``airflow test`` command runs task instances locally, outputs
+their log to stdout (on screen), doesn't bother with dependencies, and
+doesn't communicate state (running, success, failed, ...) to the database.
+It simply allows testing a single task instance.
 
 Backfill
 ''''''''
 Everything looks like it's running fine so let's run a backfill.
-``backfill`` will respect your dependencies, log into files and talk to the
-database to record status. If you do have a webserver up, you'll be able to
-track the progress. ``airflow webserver`` will start a web server if you
-are interested in tracking the progress visually as you backfill progresses.
+``backfill`` will respect your dependencies, emit logs into files and talk to
+the database to record status. If you do have a webserver up, you'll be able
+to track the progress. ``airflow webserver`` will start a web server if you
+are interested in tracking the progress visually as your backfill progresses.
 
-Note that if you use ``depend_on_past=True``, individual task instances 
-depends the success of the preceding task instance, except for the
+Note that if you use ``depends_on_past=True``, individual task instances
+will depend on the success of the preceding task instance, except for the
 start_date specified itself, for which this dependency is disregarded.
 
 .. code-block:: bash
@@ -373,7 +373,7 @@ What's Next?
 -------------
 That's it, you've written, tested and backfilled your very first Airflow
 pipeline. Merging your code into a code repository that has a master scheduler
-running on top of should get it to get triggered and run everyday.
+running against it should get it to get triggered and run every day.
 
 Here's a few things you might want to do next:
 

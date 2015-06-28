@@ -20,12 +20,12 @@ python3 (as of 2015-06).
     # start the web server, default port is 8080
     airflow webserver -p 8080
 
-Upon running these commands, airflow will create the ``$AIRFLOW_HOME`` folder
-and lay a "airflow.cfg" files with defaults that get you going fast. You can
+Upon running these commands, Airflow will create the ``$AIRFLOW_HOME`` folder
+and lay an "airflow.cfg" file with defaults that get you going fast. You can
 inspect the file either in ``$AIRFLOW_HOME/airflow.cfg``, or through the UI in
 the ``Admin->Configuration`` menu.
 
-Out of the box, airflow uses a sqlite database, which you should outgrow
+Out of the box, Airflow uses a sqlite database, which you should outgrow
 fairly quickly since no parallelization is possible using this database
 backend. It works in conjunction with the ``SequentialExecutor`` which will
 only run task instances sequentially. While this is very limiting, it allows
