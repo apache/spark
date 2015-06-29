@@ -102,18 +102,16 @@ private[clustering] trait KMeansParams
  * :: Experimental ::
  * Model fitted by KMeans.
  *
- * @param paramMap a parameter map for fitting.
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
 @Experimental
 class KMeansModel private[ml] (
   override val uid: String,
-  val paramMap: ParamMap,
   val parentModel: MLlibKMeansModel
 ) extends Model[KMeansModel] with KMeansParams {
 
   override def copy(extra: ParamMap): KMeansModel = {
-    val copied = new KMeansModel(uid, paramMap, parentModel)
+    val copied = new KMeansModel(uid, parentModel)
     copyValues(copied, extra)
   }
 
@@ -203,7 +201,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
         .setMaxIterations(map(maxIter))
         .setSeed(map(seed))
     val parentModel = algo.run(rdd)
-    val model = new KMeansModel(uid, map, parentModel)
+    val model = new KMeansModel(uid, parentModel)
     copyValues(model)
   }
 
