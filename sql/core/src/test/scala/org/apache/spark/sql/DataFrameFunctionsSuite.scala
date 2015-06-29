@@ -172,7 +172,7 @@ class DataFrameFunctionsSuite extends QueryTest {
     val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
     val ts = new Timestamp(sdf.parse("2013-04-08 13:10:15").getTime)
 
-    val df = Seq((d, d.toString, ts)).toDF("a", "b", "c")
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(dateFormat("a", "y"), dateFormat("b", "y"), dateFormat("c", "y")),
