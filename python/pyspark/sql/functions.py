@@ -493,6 +493,7 @@ def dateFormat(dateCol, formatCol):
     Convert the given date into the format specified by the second argument.
     Return type is always string.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(dateFormat('a', 'MM/dd/yyy').alias('date')).collect()
     [Row(date=u'04/08/2015')]
     """
@@ -505,6 +506,7 @@ def year(col):
     """
     Extract the year of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(year('a').alias('year')).collect()
     [Row(year=2015)]
     """
@@ -517,6 +519,7 @@ def quarter(col):
     """
     Extract the quarter of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(quarter('a').alias('quarter')).collect()
     [Row(quarter=2)]
     """
@@ -529,6 +532,7 @@ def month(col):
     """
     Extract the month of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(month('a').alias('month')).collect()
    [Row(month=4)]
    """
@@ -552,6 +556,7 @@ def hour(col):
     """
     Extract the hours of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+
     >>> df0.select(hour('a').alias('hour')).collect()
     [Row(hour=13)]
     """
@@ -564,6 +569,7 @@ def minute(col):
     """
     Extract the minutes of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+
     >>> dfo.select(minute('a').alias('minute')).collect()
     [Row(minute=8)]
     """
@@ -576,6 +582,7 @@ def second(col):
     """
     Extract the seconds of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08 13:08:15',)], ['a'])
+
     >>> df0.select(second('a').alias('second')).collect()
     [Row(second=15)]
     """
@@ -588,6 +595,7 @@ def weekOfYear(col):
     """
     Extract the week number of a given date as integer.
     >>> df0 = sqlContext.createDataFrame([('2015-04-08',)], ['a'])
+
     >>> df0.select(weekOfYear('a').alias('week')).collect()
     [Row(week=15)]
     """
