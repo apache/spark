@@ -31,14 +31,15 @@ import org.apache.spark.sql.DataFrame
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
  */
 @Experimental
-class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)])
+  extends Logging with Serializable {
 
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndObservations a DataFrame with two double columns:
    *                                  prediction and observation
    */
-  def this(predictionAndObservations: DataFrame) =
+  private[mllib] def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**

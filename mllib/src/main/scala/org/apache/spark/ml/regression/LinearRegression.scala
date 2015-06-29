@@ -145,7 +145,7 @@ class LinearRegression(override val uid: String)
       if (handlePersistence) instances.unpersist()
       val weights = Vectors.sparse(numFeatures, Seq())
       val intercept = yMean
-      val summary = generateTrainingResults(dataset, Array(), weights, intercept)
+      val summary = generateTrainingResults(instances, Array(), weights, intercept)
       return new LinearRegressionModel(uid, weights ,intercept, summary)
     }
 
@@ -199,25 +199,22 @@ class LinearRegression(override val uid: String)
     val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
     if (handlePersistence) instances.unpersist()
 
-    val summary = generateTrainingResults(dataset, lossHistory.result(), weights, intercept)
+    val summary = generateTrainingResults(instances, lossHistory.result(), weights, intercept)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     copyValues(new LinearRegressionModel(uid, weights.compressed, intercept, summary))
   }
 
-  def generateTrainingResults(
-      dataset: DataFrame,
+  private def generateTrainingResults(
+      instances: RDD[(Double, Vector)],
       objectiveTrace: Array[Double],
       weights: Vector,
       intercept: Double): LinearRegressionTrainingResults = {
 
     // Generate training results summary
-    val predictionAndObservations = dataset
-      .select($(labelCol))
-      .withColumn(
-        $(predictionCol),
-        callUDF(predict(weights.compressed, intercept) _, DoubleType, col($(featuresCol))))
-      .select($(predictionCol), $(labelCol))
+    val predictionAndObservations = instances.map {
+      case (label, feature) => (predict(weights,intercept)(feature), label)
+    }
 
     new LinearRegressionTrainingResults(
       predictionAndObservations,
@@ -226,12 +223,12 @@ class LinearRegression(override val uid: String)
     )
   }
 
-  override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
-
-
   private def predict(weights: Vector, intercept: Double)(features: Vector): Double = {
     dot(features, weights) + intercept
   }
+
+  override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
+
 }
 
 /**
@@ -265,7 +262,7 @@ class LinearRegressionModel private[ml] (
  */
 @Experimental
 class LinearRegressionTrainingResults(
-    @transient predictionAndObservations: DataFrame,
+    @transient predictionAndObservations: RDD[(Double, Double)],
     val totalIterations: Int,
     val objectiveTrace: Array[Double])
   extends LinearRegressionResults(predictionAndObservations)
@@ -276,17 +273,11 @@ class LinearRegressionTrainingResults(
  * label (1).
  */
 @Experimental
-class LinearRegressionResults(@transient val predictionAndObservations: DataFrame)
+class LinearRegressionResults(@transient val predictionAndObservations: RDD[(Double, Double)])
   extends RegressionMetrics(predictionAndObservations) {
 
   /** Get residuals */
-  def residuals: DataFrame = {
-    val colNames = predictionAndObservations.columns
-    val predictions = predictionAndObservations(colNames(0))
-    val observations = predictionAndObservations(colNames(1))
-
-    predictionAndObservations.withColumn("residual", predictions - observations)
-  }
+  def residuals: RDD[Double] = predictionAndObservations.map(r => r._1 - r._2)
 }
 
 /**
