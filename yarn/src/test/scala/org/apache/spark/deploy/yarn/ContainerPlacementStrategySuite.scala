@@ -72,10 +72,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
           .map(_.nodes)
 
-    assert(nodeLocalities === Array(
-      null, // requested container with no locality preference
-      Array("host2", "host3"),
-      Array("host2", "host3")))
+    assert(nodeLocalities === Array(null, Array("host2", "host3"), Array("host2", "host3")))
   }
 
   test("allocate locality preferred containers with limited resource and partially matched " +
