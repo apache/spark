@@ -402,13 +402,13 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
       <version>${avro.version}</version>
-      <scope>compile</scope>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
       <version>${avro.version}</version>
-      <scope>compile</scope>
+      <scope>${hadoop.deps.scope}</scope>
       <exclusions>
         <exclusion>
           <groupId>io.netty</groupId>
