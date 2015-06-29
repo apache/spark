@@ -20,6 +20,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -35,11 +36,10 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       (3, "".split(" ").toSeq), // empty string
       (3, "a notInDict d".split(" ").toSeq)  // with words not in vocabulary
     )).toDF("id", "words")
-    val hashingTF = new CountVectorizer(Array("a", "b", "c", "d"))
+    val cv = new CountVectorizer(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
-      .setMinTermCounts(1)
-    val output = hashingTF.transform(df)
+    val output = cv.transform(df)
     val features = output.select("features").collect()
 
     val expected = Seq(
@@ -50,7 +50,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(4, Seq((0, 1.0), (3, 1.0))))
 
     features.zip(expected).foreach(p =>
-      assert(p._1.getAs[Vector](0) == p._2)
+      assert(p._1.getAs[Vector](0) ~== p._2 absTol 1e-14)
     )
   }
 
@@ -75,7 +75,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(4, Seq()))
 
     features.zip(expected).foreach(p =>
-      assert(p._1.getAs[Vector](0) == p._2)
+      assert(p._1.getAs[Vector](0) ~== p._2 absTol 1e-14)
     )
   }
 }
