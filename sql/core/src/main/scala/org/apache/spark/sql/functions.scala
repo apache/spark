@@ -324,7 +324,7 @@ object functions {
   def max(columnName: String): Column = max(Column(columnName))
 
   /**
-   * Aggregate function: returns the standard deviation of the expression 
+   * Aggregate function: returns the standard deviation of the expression
    * in a group.
    *
    * @group agg_funcs
@@ -333,7 +333,7 @@ object functions {
   def stddev(e: Column): Column = Stddev(e.expr)
 
   /**
-   * Aggregate function: returns the standard deviation of the column 
+   * Aggregate function: returns the standard deviation of the column
    * in a group.
    *
    * @group agg_funcs

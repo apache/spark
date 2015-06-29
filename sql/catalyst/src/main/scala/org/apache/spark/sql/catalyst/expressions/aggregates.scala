@@ -765,12 +765,11 @@ case class LastFunction(expr: Expression, base: AggregateExpression) extends Agg
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 case class Stddev(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(_, _) | DecimalType.Unlimited  => 
-      DecimalType.Unlimited 
-    case _=> 
+    case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
       DoubleType
   }
   override def toString: String = s"STDDEV($child)"
@@ -791,7 +790,7 @@ case class ComputePartialStd(child: Expression) extends AggregateExpression {
       case _ => ArrayType(DoubleType)
     }
     override def toString: String = s"computePartialStddev($child)"
-    override def newInstance(): ComputePartialStdFunction = 
+    override def newInstance(): ComputePartialStdFunction =
       new ComputePartialStdFunction(child, this)
 }
 
@@ -803,7 +802,7 @@ case class CombinePartialStd(child: Expression) extends AggregateExpression {
   override def dataType: DataType = child.dataType match {
     case ArrayType(DecimalType.Unlimited, _) => DecimalType.Unlimited
     case _ => DoubleType
-  } 
+  }
   override def toString: String = s"CombinePartialStd($child)"
   override def newInstance(): CombinePartialStdFunction = {
     new CombinePartialStdFunction(child, this)
@@ -811,37 +810,37 @@ case class CombinePartialStd(child: Expression) extends AggregateExpression {
 }
 
 case class ComputePartialStdFunction (
-  expr: Expression,
-  base: AggregateExpression
+    expr: Expression,
+    base: AggregateExpression
 ) extends AggregateFunction {
   def this() = this(null, null)  // Required for serialization
 
-  private val computeType  =  expr.dataType
+  private val computeType = expr.dataType
   private val zero = Cast(Literal(0), computeType)
   private var partialCount: Long = 0L
 
   // the mean of data processed so far
-  private val partialAvg :MutableLiteral = MutableLiteral(zero.eval(null), computeType)
+  private val partialAvg: MutableLiteral = MutableLiteral(zero.eval(null), computeType)
 
   // update average based on this formula:
   // avg = avg + (value - avg)/count
-  private def avgAddFunction (value: Literal) : Expression= {
+  private def avgAddFunction (value: Literal): Expression = {
     val delta = Subtract(Cast(value, computeType), partialAvg)
-    Add (partialAvg, Divide(delta, Cast(Literal(partialCount), computeType)))
+    Add(partialAvg, Divide(delta, Cast(Literal(partialCount), computeType)))
   }
 
   // the sum of squares of difference from mean
-  private val partialMk :MutableLiteral = MutableLiteral(zero.eval(null), computeType)
+  private val partialMk: MutableLiteral = MutableLiteral(zero.eval(null), computeType)
 
   // update sum of square of difference from mean based on following formula:
   // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-  private def mkAddFunction(value: Literal, prePartialAvg: MutableLiteral) : Expression = {
+  private def mkAddFunction(value: Literal, prePartialAvg: MutableLiteral): Expression = {
     val delta1 = Subtract(Cast(value, computeType), prePartialAvg)
     val delta2 = Subtract(Cast(value, computeType), partialAvg)
     Add(partialMk, Multiply(delta1, delta2))
   }
 
-  override def update(input: Row): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       val exprValue = Literal.create(evaluatedExpr, expr.dataType)
@@ -852,16 +851,16 @@ case class ComputePartialStdFunction (
     }
   }
 
-  override def eval(input: Row): Any = {
-    Seq(Cast(Literal(partialCount), computeType).eval(null), 
-        partialAvg.eval(null), 
+  override def eval(input: InternalRow): Any = {
+    Seq(Cast(Literal(partialCount), computeType).eval(null),
+        partialAvg.eval(null),
         partialMk.eval(null))
   }
 }
 
 case class CombinePartialStdFunction(
-  expr: Expression, 
-  base: AggregateExpression
+    expr: Expression,
+    base: AggregateExpression
 ) extends AggregateFunction {
   def this() = this (null, null) // Required for serialization
 
@@ -870,24 +869,24 @@ case class CombinePartialStdFunction(
     case _ => DoubleType
   }
   private val zero = Cast(Literal(0), computeType)
-  private val combineCount  = MutableLiteral(zero.eval(null), computeType)
+  private val combineCount = MutableLiteral(zero.eval(null), computeType)
   private val combineAvg = MutableLiteral(zero.eval(null), computeType)
   private val combineMk = MutableLiteral(zero.eval(null), computeType)
 
   private def avgUpdateFunction(preCount: Expression,
-                                partialCount: Expression, 
-                                partialAvg: Expression) : Expression = {
+                                partialCount: Expression,
+                                partialAvg: Expression): Expression = {
     Divide(Add(Multiply(combineAvg, preCount),
                Multiply(partialAvg, partialCount)),
            Add(preCount, partialCount))
   }
 
-  override def update(input: Row): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
 
     if (evaluatedExpr != null) {
       val exprValue = evaluatedExpr.asInstanceOf[Seq[Any]]
-      val (partialCount, partialAvg, partialMk) = 
+      val (partialCount, partialAvg, partialMk) =
         (Literal.create(exprValue(0), computeType),
          Literal.create(exprValue(1), computeType),
          Literal.create(exprValue(2), computeType))
@@ -898,9 +897,9 @@ case class CombinePartialStdFunction(
 
         val preAvg = combineAvg.copy()
         val avgDelta = Subtract(partialAvg, preAvg)
-        val mkDelta =  Multiply(Multiply(avgDelta, avgDelta),
-                                Divide(Multiply(preCount, partialCount), 
-                                       combineCount))
+        val mkDelta = Multiply(Multiply(avgDelta, avgDelta),
+                               Divide(Multiply(preCount, partialCount),
+                                      combineCount))
 
         // update average based on following formula
         // (combineAvg * preCount + partialAvg * partialCount) / (preCount + partialCount)
@@ -915,64 +914,63 @@ case class CombinePartialStdFunction(
     }
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val count = Cast(combineCount, LongType).eval(null)
 
     if (count.asInstanceOf[Long] == 0 ) null
-    else if (count.asInstanceOf[Long] < 2) zero.eval(null) 
+    else if (count.asInstanceOf[Long] < 2) zero.eval(null)
     else {
-      // when total count > 2 
+      // when total count > 2
       // stddev = sqrt (combineMk/(combineCount -1))
-      Sqrt(Divide(combineMk, 
+      Sqrt(Divide(combineMk,
            Subtract(combineCount, Cast(Literal(1), computeType)))).eval(null)
     }
   }
 }
 
 case class StddevFunction(
-  expr: Expression, 
-  base: AggregateExpression
+    expr: Expression,
+    base: AggregateExpression
 ) extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization
 
   private val computeType = expr.dataType match {
-    case DecimalType.Fixed(_, _) | DecimalType.Unlimited => 
+    case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
       DecimalType.Unlimited
-    case _ => DoubleType 
+    case _ => DoubleType
   }
-  private var curCount :Long = 0L
+  private var curCount: Long = 0L
   private val zero = Cast(Literal(0), computeType)
   private val curAvg = MutableLiteral(zero.eval(null), computeType)
   private val curMk = MutableLiteral(zero.eval(null), computeType)
 
   private def curAvgAddFunction(value: Literal): Expression = {
-    val delta = Subtract(Cast(value,computeType), curAvg)
+    val delta = Subtract(Cast(value, computeType), curAvg)
     Add(curAvg, Divide(delta, Cast(Literal(curCount), computeType)))
   }
-  private def curMkAddFunction(value: Literal,preAvg: MutableLiteral) : Expression = {
+  private def curMkAddFunction(value: Literal, preAvg: MutableLiteral): Expression = {
     val delta1 = Subtract(Cast(value, computeType), preAvg)
     val delta2 = Subtract(Cast(value, computeType), curAvg)
     Add(curMk, Multiply(delta1, delta2))
   }
 
-  override def update(input: Row): Unit = {
+  override def update(input: InternalRow): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       val preAvg: MutableLiteral = curAvg.copy()
       val exprValue = Literal.create(evaluatedExpr, expr.dataType)
       curCount += 1
       curAvg.update(curAvgAddFunction(exprValue), input)
-      curMk.update(curMkAddFunction(exprValue,preAvg), input)
+      curMk.update(curMkAddFunction(exprValue, preAvg), input)
     }
   }
 
-  override def eval(input: Row): Any = {
-    
+  override def eval(input: InternalRow): Any = {
     if (curCount == 0) null
-    else if (curCount < 2) zero.eval(null) 
+    else if (curCount < 2) zero.eval(null)
     else {
-      // when total count > 2, stddev = sqrt (curMk/(curCount -1))
+      // when total count > 2, stddev = sqrt(curMk/(curCount -1))
       Sqrt(Divide(curMk, Cast(Literal(curCount -1), computeType))).eval(null)
     }
   }

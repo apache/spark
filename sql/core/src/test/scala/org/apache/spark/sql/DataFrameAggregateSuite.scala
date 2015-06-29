@@ -184,9 +184,8 @@ class DataFrameAggregateSuite extends QueryTest {
       Row(testData2ADev))
 
     checkAnswer(
-      decimalData.agg(stddev('a), sumDistinct('a)), 
-      Row(new java.math.BigDecimal(testData2ADev), 
-          new java.math.BigDecimal(6)) :: Nil)
+      decimalData.agg(stddev('a)),
+      Row(new java.math.BigDecimal(testData2ADev)))
   }
 
   test("zero stddev") {
