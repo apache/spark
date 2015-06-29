@@ -128,14 +128,12 @@ private object UnsafeColumnWriter {
       case BooleanType => BooleanUnsafeColumnWriter
       case ByteType => ByteUnsafeColumnWriter
       case ShortType => ShortUnsafeColumnWriter
-      case IntegerType => IntUnsafeColumnWriter
-      case LongType => LongUnsafeColumnWriter
+      case IntegerType | DateType => IntUnsafeColumnWriter
+      case LongType | TimestampType => LongUnsafeColumnWriter
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
       case BinaryType => BinaryUnsafeColumnWriter
-      case DateType => IntUnsafeColumnWriter
-      case TimestampType => LongUnsafeColumnWriter
       case t =>
         throw new UnsupportedOperationException(s"Do not know how to write columns of type $t")
     }
