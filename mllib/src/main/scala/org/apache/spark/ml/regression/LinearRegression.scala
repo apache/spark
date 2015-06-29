@@ -146,7 +146,7 @@ class LinearRegression(override val uid: String)
       val weights = Vectors.sparse(numFeatures, Seq())
       val intercept = yMean
       val summary = generateTrainingResults(instances, Array(), weights, intercept)
-      return new LinearRegressionModel(uid, weights ,intercept, summary)
+      return new LinearRegressionModel(uid, weights, intercept, summary)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -213,7 +213,7 @@ class LinearRegression(override val uid: String)
 
     // Generate training results summary
     val predictionAndObservations = instances.map {
-      case (label, feature) => (predict(weights,intercept)(feature), label)
+      case (label, feature) => (predict(weights, intercept)(feature), label)
     }
 
     new LinearRegressionTrainingResults(
