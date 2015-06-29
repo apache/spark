@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.codec.digest.DigestUtils
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{StringType, BinaryType}
+import org.apache.spark.sql.types.{IntegerType, StringType, BinaryType}
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -29,4 +31,14 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
   }
 
+  test("sha2") {
+    checkEvaluation(Sha2(Literal("ABC".getBytes), Literal(256)), DigestUtils.sha256Hex("ABC"))
+    checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
+      DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
+    // unsupported bit length
+    checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
+    checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
+    checkEvaluation(Sha2(Literal("ABC".getBytes), Literal.create(null, IntegerType)), null)
+    checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
+  }
 }
