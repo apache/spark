@@ -60,7 +60,7 @@ private[spark] class MesosSchedulerBackend(
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
   // Offer constraints
-  private[mesos] val slaveOfferConstraints =
+  private[this] val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   @volatile var appId: String = _
