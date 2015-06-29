@@ -327,7 +327,7 @@ case class Hex(child: Expression)
    * Converts every character in s to two hex digits.
    */
   private def hex(str: UTF8String): UTF8String = {
-    doHex(str.getBytes, str.length())
+    hex(str.getBytes)
   }
 
   private def hex(bytes: Array[Byte]): UTF8String = {
