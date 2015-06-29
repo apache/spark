@@ -232,7 +232,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
     checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
     checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
+    // scalastyle:off
+    // Turn off scala style for non-ascii chars
     checkEvaluation(Hex(Literal("三重的")), "E4B889E9878DE79A84")
+    // scalastyle:on
   }
 
   test("hypot") {
