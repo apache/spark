@@ -37,7 +37,7 @@ private[clustering] trait KMeansParams
     extends Params with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * Param for the column name for the number of clusters to create.
+   * Set the number of clusters to create (k). Default: 2.
    * @group param
    */
   val k = new Param[Int](this, "k", "number of clusters to create")
@@ -46,7 +46,9 @@ private[clustering] trait KMeansParams
   def getK: Int = $(k)
 
   /**
-   * Param for the column name for the number of runs of the algorithm to execute in parallel.
+   * Param the number of runs of the algorithm to execute in parallel. We initialize the algorithm
+   * this many times with random starting conditions (configured by the initialization mode), then
+   * return the best clustering found over any run. Default: 1.
    * @group param
    */
   val runs = new Param[Int](this, "runs", "number of runs of the algorithm to execute in parallel")
@@ -55,8 +57,8 @@ private[clustering] trait KMeansParams
   def getRuns: Int = $(runs)
 
   /**
-   * Param for the column name for the distance threshold
-   * within which we've consider centers to have converged.
+   * Param the distance threshold within which we've consider centers to have converged.
+   * If all centers move less than this Euclidean distance, we stop iterating one run.
    * @group param
    */
   val epsilon = new Param[Double](this, "epsilon", "distance threshold")
@@ -65,7 +67,9 @@ private[clustering] trait KMeansParams
   def getEpsilon: Double = $(epsilon)
 
   /**
-   * Param for the initialization algorithm.
+   * Param for the initialization algorithm. This can be either "random" to choose random points as
+   * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
+   * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    * @group param
    */
   val initializationMode = new Param[String](this, "initializationMode", "initialization algorithm")
@@ -74,7 +78,8 @@ private[clustering] trait KMeansParams
   def getInitializationMode: String = $(initializationMode)
 
   /**
-   * Param for the number of steps for k-means initialization mode.
+   * Param for the number of steps for the k-means|| initialization mode. This is an advanced
+   * setting -- the default of 5 is almost always enough. Default: 5.
    * @group param
    */
   val initializationSteps =
