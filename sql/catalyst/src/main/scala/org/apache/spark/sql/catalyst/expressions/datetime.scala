@@ -54,10 +54,11 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
 
     val sdf = classOf[SimpleDateFormat].getName
     super.defineCodeGen(ctx, ev, (x) => {
-      f(s"""${ctx.stringType}.fromString((new $sdf("$format")).format(new java.sql.Date($x / 10000)))""")
+      f(s"""${ctx.stringType}.fromString((new $sdf("$format"))
+            .format(new java.sql.Date($x / 10000)))""")
     })
   }
-  
+
 }
 
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
@@ -66,7 +67,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
   override def dataType: DataType = StringType
 
   override def toString: String = s"DateFormat($left, $right)"
-  
+
   override def expectedChildTypes: Seq[DataType] = Seq(TimestampType, StringType)
 
   override def eval(input: InternalRow): Any = {
@@ -81,13 +82,14 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
         val sdf = new SimpleDateFormat(valueRight.toString)
         UTF8String.fromString(sdf.format(new Date(valueLeft.asInstanceOf[Long] / 10000)))
       }
-    }   
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (x, y) => {
-      s"""${ctx.stringType}.fromString((new $sdf($y.toString())).format(new java.sql.Date($x / 10000)))"""
+      s"""${ctx.stringType}.fromString((new $sdf($y.toString()))
+          .format(new java.sql.Date($x / 10000)))"""
     })
   }
 }
