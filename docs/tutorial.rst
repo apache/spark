@@ -340,10 +340,10 @@ Let's test by running the actual task instances on a specific date.
     # command layout: command subcommand dag_id task_id date
 
     # testing print_date
-    airflow test tutorial print_date 2015-01-01
+    airflow test tutorial print_date 2015-06-01
 
     # testing sleep
-    airflow test tutorial sleep 2015-01-01
+    airflow test tutorial sleep 2015-06-01
 
 Now remember what we did with templating earlier? See how this template
 gets rendered and executed by running this command:
@@ -351,7 +351,7 @@ gets rendered and executed by running this command:
 .. code-block:: bash
 
     # testing templated
-    airflow test tutorial templated 2015-01-01
+    airflow test tutorial templated 2015-06-01
 
 This should result in displaying a verbose log of events and ultimately
 running your bash command and printing the result.
@@ -379,7 +379,7 @@ start_date specified itself, for which this dependency is disregarded.
     # airflow webserver --debug &
 
     # start your backfill on a date range
-    airflow backfill tutorial -s 2015-01-01 -e 2015-01-07
+    airflow backfill tutorial -s 2015-06-01 -e 2015-06-07
 
 
 What's Next?
