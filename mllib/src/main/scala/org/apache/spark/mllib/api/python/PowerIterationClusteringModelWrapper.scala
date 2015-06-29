@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.mllib.api.python
 
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.clustering.PowerIterationClusteringModel
 
-private[hive]
-case class HiveNativeCommand(sql: String) extends RunnableCommand {
+/**
+ * A Wrapper of PowerIterationClusteringModel to provide helper method for Python
+ */
+private[python] class PowerIterationClusteringModelWrapper(model: PowerIterationClusteringModel)
+  extends PowerIterationClusteringModel(model.k, model.assignments) {
 
-  override def output: Seq[AttributeReference] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-
-  override def run(sqlContext: SQLContext): Seq[Row] =
-    sqlContext.asInstanceOf[HiveContext].runSqlHive(sql).map(Row(_))
+  def getAssignments: RDD[Array[Any]] = {
+    model.assignments.map(x => Array(x.id, x.cluster))
+  }
 }

@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,9 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+context("include an external JAR in SparkContext")
 
+runScript <- function() {
+  sparkHome <- Sys.getenv("SPARK_HOME")
+  jarPath <- paste("--jars",
+                   shQuote(file.path(sparkHome, "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar")))
+  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
+  submitPath <- file.path(sparkHome, "bin/spark-submit")
+  res <- system2(command = submitPath,
+                 args = c(jarPath, scriptPath),
+                 stdout = TRUE)
+  tail(res, 2)
+}
 
-FWDIR="$(cd "`dirname $0`"/..; pwd)"
-cd "$FWDIR"
-
-exec python -u ./python/run-tests.py "$@"
+test_that("sparkJars tag in SparkContext", {
+  testOutput <- runScript()
+  helloTest <- testOutput[1]
+  expect_true(helloTest == "Hello, Dave")
+  basicFunction <- testOutput[2]
+  expect_true(basicFunction == 4L)
+})

@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,9 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+library(SparkR)
 
+sc <- sparkR.init()
 
-FWDIR="$(cd "`dirname $0`"/..; pwd)"
-cd "$FWDIR"
+helloTest <- SparkR:::callJStatic("sparkR.test.hello",
+                                  "helloWorld",
+                                  "Dave")
 
-exec python -u ./python/run-tests.py "$@"
+basicFunction <- SparkR:::callJStatic("sparkR.test.basicFunction",
+                                      "addStuff",
+                                      2L,
+                                      2L)
+
+sparkR.stop()
+output <- c(helloTest, basicFunction)
+writeLines(output)

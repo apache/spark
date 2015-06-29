@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,8 +15,7 @@
 # limitations under the License.
 #
 
+import os
 
-FWDIR="$(cd "`dirname $0`"/..; pwd)"
-cd "$FWDIR"
-
-exec python -u ./python/run-tests.py "$@"
+SPARK_HOME = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../"))
+USER_HOME = os.environ.get("HOME")
