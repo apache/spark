@@ -399,7 +399,7 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us.
         // So we should keep targetNumExecutors == numExecutorsRunning 
-        // to avoid application starve because YARN scheduler PREEMPTED
+        // to avoid application starve because YARN scheduler preemption
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
           logInfo("Container preempted: " + containerId)
           numExecutorsRunning -= 1
