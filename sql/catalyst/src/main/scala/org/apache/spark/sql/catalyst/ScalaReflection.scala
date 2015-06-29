@@ -27,7 +27,11 @@ import org.apache.spark.sql.types._
  */
 object ScalaReflection extends ScalaReflection {
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  val mirror: universe.Mirror = universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+  // Since we are creating a runtime mirror usign the class loader of current thread,
+  // we need to use def at here. So, every time we call mirror, it is using the
+  // class loader of the current thread.
+  override def mirror: universe.Mirror =
+    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
 }
 
 /**
@@ -38,7 +42,7 @@ trait ScalaReflection {
   val universe: scala.reflect.api.Universe
 
   /** The mirror used to access types in the universe */
-  val mirror: universe.Mirror
+  def mirror: universe.Mirror
 
   import universe._
 
