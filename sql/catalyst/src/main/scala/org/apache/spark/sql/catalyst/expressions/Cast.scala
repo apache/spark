@@ -17,18 +17,28 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
 
-  override lazy val resolved = childrenResolved && resolve(child.dataType, dataType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (resolve(child.dataType, dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"cannot cast ${child.dataType} to $dataType")
+    }
+  }
 
   override def foldable: Boolean = child.foldable
 
@@ -111,11 +121,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String(_))
-    case DateType => buildCast[Int](_, d => UTF8String(DateUtils.toString(d)))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.toString(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String(timestampToString(DateUtils.toJavaTimestamp(t))))
-    case _ => buildCast[Any](_, o => UTF8String(o.toString))
+      t => UTF8String.fromString(timestampToString(DateTimeUtils.toJavaTimestamp(t))))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
   // BinaryConverter
@@ -141,7 +151,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != 0)
+      buildCast[Decimal](_, _ != Decimal(0))
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -159,7 +169,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         if (periodIdx != -1 && n.length() - periodIdx > 9) {
           n = n.substring(0, periodIdx + 10)
         }
-        try DateUtils.fromJavaTimestamp(Timestamp.valueOf(n))
+        try DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(n))
         catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
@@ -173,7 +183,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => DateUtils.toMillisSinceEpoch(d) * 10000)
+      buildCast[Int](_, d => DateTimeUtils.toMillisSinceEpoch(d) * 10000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -222,13 +232,13 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s =>
-        try DateUtils.fromJavaDate(Date.valueOf(s.toString))
+        try DateTimeUtils.fromJavaDate(Date.valueOf(s.toString))
         catch { case _: java.lang.IllegalArgumentException => null }
       )
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => DateUtils.millisToDays(t / 10000L))
+      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 10000L))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception,
     // so we can return null
@@ -318,7 +328,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(s.toString.toDouble), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -392,7 +402,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
     // TODO: Could be faster?
     val newRow = new GenericMutableRow(from.fields.size)
-    buildCast[Row](_, row => {
+    buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
         val v = row(i)
@@ -424,7 +434,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
   }
@@ -435,17 +445,17 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
-          s"new ${ctx.stringType}().set($c)")
+          s"${ctx.stringType}.fromBytes($c)")
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
-          s"""new ${ctx.stringType}().set(
-                org.apache.spark.sql.catalyst.util.DateUtils.toString($c))""")
+          s"""${ctx.stringType}.fromString(
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.toString($c))""")
       // Special handling required for timestamps in hive test cases since the toString function
       // does not match the expected output.
       case (TimestampType, StringType) =>
         super.genCode(ctx, ev)
       case (_, StringType) =>
-        defineCodeGen(ctx, ev, c => s"new ${ctx.stringType}().set(String.valueOf($c))")
+        defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
 
       // fallback for DecimalType, this must be before other numeric types
       case (_, dt: DecimalType) =>
@@ -454,14 +464,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (BooleanType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
       case (dt: DecimalType, BooleanType) =>
-        defineCodeGen(ctx, ev, c => s"$c.isZero()")
+        defineCodeGen(ctx, ev, c => s"!$c.isZero()")
       case (dt: NumericType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c != 0")
-
-      case (_: DecimalType, IntegerType) =>
-        defineCodeGen(ctx, ev, c => s"($c).toInt()")
       case (_: DecimalType, dt: NumericType) =>
-        defineCodeGen(ctx, ev, c => s"($c).to${ctx.boxedType(dt)}()")
+        defineCodeGen(ctx, ev, c => s"($c).to${ctx.primitiveTypeName(dt)}()")
       case (_: NumericType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
 

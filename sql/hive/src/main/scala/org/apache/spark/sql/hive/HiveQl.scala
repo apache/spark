@@ -415,13 +415,6 @@ private[hive] object HiveQl {
       throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
   }
 
-  protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
-    exprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"_c$i")()
-    }
-  }
-
   protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
     val (db, tableName) =
       tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
@@ -942,7 +935,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            nameExpressions(select.getChildren.flatMap(selExprNodeToExpr).toSeq)
+            select.getChildren.flatMap(selExprNodeToExpr).map(UnresolvedAlias(_)).toSeq
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>

@@ -267,6 +267,17 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
+  test("SPARK-8461 SQL with codegen") {
+    val output = runInterpreter("local",
+    """
+      |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+      |sqlContext.setConf("spark.sql.codegen", "true")
+      |sqlContext.range(0, 100).filter('id > 50).count()
+    """.stripMargin)
+    assertContains("Long = 49", output)
+    assertDoesNotContain("java.lang.ClassNotFoundException", output)
+  }
+
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
     val output = runInterpreter("local",
     """

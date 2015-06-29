@@ -140,7 +140,8 @@ function renderDagViz(forJob) {
 
   // Find cached RDDs and mark them as such
   metadataContainer().selectAll(".cached-rdd").each(function(v) {
-    var nodeId = VizConstants.nodePrefix + d3.select(this).text();
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
@@ -150,7 +151,7 @@ function renderDagViz(forJob) {
 /* Render the RDD DAG visualization on the stage page. */
 function renderDagVizForStage(svgContainer) {
   var metadata = metadataContainer().select(".stage-metadata");
-  var dot = metadata.select(".dot-file").text();
+  var dot = metadata.select(".dot-file").text().trim();
   var containerId = VizConstants.graphPrefix + metadata.attr("stage-id");
   var container = svgContainer.append("g").attr("id", containerId);
   renderDot(dot, container, false);

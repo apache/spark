@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
-/** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
+/**
+ * Return the unscaled Long value of a Decimal, assuming it fits in a Long.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
+ */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = LongType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"UnscaledValue($child)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val childResult = child.eval(input)
     if (childResult == null) {
       null
@@ -42,15 +44,17 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   }
 }
 
-/** Create a Decimal from an unscaled Long value */
+/**
+ * Create a Decimal from an unscaled Long value.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
+ */
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   override def dataType: DataType = DecimalType(precision, scale)
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  override def eval(input: Row): Decimal = {
+  override def eval(input: InternalRow): Decimal = {
     val childResult = child.eval(input)
     if (childResult == null) {
       null
