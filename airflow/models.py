@@ -15,7 +15,7 @@ import sys
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
     Index,)
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
@@ -539,13 +539,19 @@ class TaskInstance(Base):
         """
         return (self.dag_id, self.task_id, self.execution_date)
 
-    def is_queueable(self):
+    def is_queueable(self, flag_upstream_failed=False):
         """
         Returns a boolean on whether the task instance has met all dependencies
         and is ready to run. It considers the task's state, the state
         of its dependencies, depends_on_past and makes sure the execution
         isn't in the future. It doesn't take into
         account whether the pool has a slot for it to run.
+
+        :param flag_upstream_failed: This is a hack to generate
+            the upstream_failed state creation while checking to see
+            whether the task instance is runnable. It was the shortest
+            path to add the feature
+        :type flag_upstream_failed: boolean
         """
         if self.execution_date > datetime.now() - self.task.schedule_interval:
             return False
@@ -555,7 +561,8 @@ class TaskInstance(Base):
             return False
         elif (
                 self.state in State.runnable() and
-                self.are_dependencies_met()):
+                self.are_dependencies_met(
+                    flag_upstream_failed=flag_upstream_failed)):
             return True
         else:
             return False
@@ -595,10 +602,17 @@ class TaskInstance(Base):
             session.close()
         return count == len(task._downstream_list)
 
-    def are_dependencies_met(self, main_session=None):
+    def are_dependencies_met(
+            self, main_session=None, flag_upstream_failed=False):
         """
         Returns a boolean on whether the upstream tasks are in a SUCCESS state
         and considers depends_on_past and the previous run's state.
+
+        :param flag_upstream_failed: This is a hack to generate
+            the upstream_failed state creation while checking to see
+            whether the task instance is runnable. It was the shortest
+            path to add the feature
+        :type flag_upstream_failed: boolean
         """
         TI = TaskInstance
 
@@ -628,14 +642,29 @@ class TaskInstance(Base):
         # Checking that all upstream dependencies have succeeded
         if task._upstream_list:
             upstream_task_ids = [t.task_id for t in task._upstream_list]
-            ti = session.query(func.count(TI.task_id)).filter(
-                TI.dag_id == self.dag_id,
-                TI.task_id.in_(upstream_task_ids),
-                TI.execution_date == self.execution_date,
-                TI.state == State.SUCCESS,
+            qry = (
+                session
+                .query(
+                    func.sum(
+                        case([(TI.state==State.SUCCESS, 1)], else_=0)),
+                    func.count(TI.task_id),
+                )
+                .filter(
+                    TI.dag_id == self.dag_id,
+                    TI.task_id.in_(upstream_task_ids),
+                    TI.execution_date == self.execution_date,
+                    TI.state.in_([
+                        State.SUCCESS, State.FAILED, State.UPSTREAM_FAILED]),
+                )
             )
-            count = ti[0][0]
-            if count < len(task._upstream_list):
+            successes, done  = qry[0]
+            if successes < done >= len(task._upstream_list):
+                self.state = State.UPSTREAM_FAILED
+                self.start_date = datetime.now()
+                self.end_date = datetime.now()
+                session.merge(self)
+
+            if successes < len(task._upstream_list):
                 return False
 
         if not main_session:

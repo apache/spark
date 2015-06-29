@@ -37,6 +37,9 @@ rect.queued {
 rect.shutdown {
     fill: orange;
 }
+rect.upstream_failed {
+    fill: #FFB400;
+}
 .tooltip.in {
     opacity: 1;
     filter: alpha(opacity=100);

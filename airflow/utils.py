@@ -38,6 +38,8 @@ class State(object):
     SHUTDOWN = "shutdown"  # External request to shut down
     FAILED = "failed"
     UP_FOR_RETRY = "up_for_retry"
+    UPSTREAM_FAILED = "upstream_failed"
+    SKIPPED = "skipped"
 
     state_color = {
         QUEUED: 'gray',
@@ -46,6 +48,7 @@ class State(object):
         SHUTDOWN: 'orange',
         FAILED: 'red',
         UP_FOR_RETRY: 'yellow',
+        UPSTREAM_FAILED: 'blue',
     }
 
     @classmethod
@@ -54,7 +57,9 @@ class State(object):
 
     @classmethod
     def runnable(cls):
-        return [None, cls.FAILED, cls.UP_FOR_RETRY, cls.QUEUED]
+        return [
+            None, cls.FAILED, cls.UP_FOR_RETRY,
+            cls.QUEUED, cls.UPSTREAM_FAILED]
 
 
 def pessimistic_connection_handling():

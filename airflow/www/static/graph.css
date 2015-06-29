@@ -21,6 +21,9 @@ g.node.failed rect {
 g.node.shutdown rect{
     stroke: orange;
 }
+g.node.upstream_failed rect{
+    stroke: #FFB400;
+}
 div#svg_container {
  border: 1px solid black;
  background-color: #EEE;
