@@ -157,14 +157,14 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
     if (value == null) {
       null
     } else {
-      UTF8String.fromString(DigestUtils.sha1Hex(value.asInstanceOf[Array[Byte]]))
+      UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
       "org.apache.spark.unsafe.types.UTF8String.fromString" +
-        s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+        s"(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
     )
   }
 }
