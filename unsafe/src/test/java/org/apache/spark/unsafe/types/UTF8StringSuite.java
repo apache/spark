@@ -28,8 +28,6 @@ public class UTF8StringSuite {
     Assert.assertEquals(UTF8String.fromString(str).length(), len);
     Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")).length(), len);
 
-    Assert.assertEquals(UTF8String.fromString(str), str);
-    Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")), str);
     Assert.assertEquals(UTF8String.fromString(str).toString(), str);
     Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")).toString(), str);
     Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")), UTF8String.fromString(str));

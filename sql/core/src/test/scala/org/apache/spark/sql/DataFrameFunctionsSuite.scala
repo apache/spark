@@ -144,6 +144,23 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
   }
 
+  test("misc sha2 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(sha2($"a", 256), sha2("b", 256)),
+      Row("b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78",
+        "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"))
+
+    checkAnswer(
+      df.selectExpr("sha2(a, 256)", "sha2(b, 256)"),
+      Row("b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78",
+        "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"))
+
+    intercept[IllegalArgumentException] {
+      df.select(sha2($"a", 1024))
+    }
+  }
+
   test("string length function") {
     checkAnswer(
       nullStrings.select(strlen($"s"), strlen("s")),

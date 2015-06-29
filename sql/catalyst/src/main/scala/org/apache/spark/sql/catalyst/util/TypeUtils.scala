@@ -48,6 +48,15 @@ object TypeUtils {
     }
   }
 
+  def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
+    if (types.distinct.size > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to $caller should all be the same type, but it's ${types.mkString("[", ", ", "]")}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 

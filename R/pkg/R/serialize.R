@@ -175,7 +175,7 @@ writeGenericList <- function(con, list) {
     writeObject(con, elem)
   }
 }
-  
+
 # Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)
