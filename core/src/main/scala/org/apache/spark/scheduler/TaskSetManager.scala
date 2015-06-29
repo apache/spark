@@ -662,8 +662,7 @@ private[spark] class TaskSetManager(
 
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
-    var failureException: Option[Throwable] = None
-    reason match {
+    val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
         if (!successful(index)) {
@@ -672,6 +671,7 @@ private[spark] class TaskSetManager(
         }
         // Not adding to failed executors for FetchFailed.
         isZombie = true
+        None
 
       case ef: ExceptionFailure =>
         taskMetrics = ef.metrics.orNull
@@ -707,13 +707,15 @@ private[spark] class TaskSetManager(
             s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on executor ${info.host}: " +
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
-        failureException = ef.exception
+        ef.exception
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
+        None
 
       case e: TaskEndReason =>
         logError("Unknown TaskEndReason: " + e)
+        None
     }
     // always add to failed executors
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
