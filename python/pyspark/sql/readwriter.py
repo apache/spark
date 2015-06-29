@@ -73,7 +73,7 @@ class DataFrameReader(object):
         self._jreader = self._jreader.schema(jschema)
         return self
 
-    @since(1.4)
+    @since(1.5)
     def option(self, key, value):
         """Adds an input option for the underlying data source.
         """
@@ -242,7 +242,7 @@ class DataFrameWriter(object):
         self._jwrite = self._jwrite.format(source)
         return self
 
-    @since(1.4)
+    @since(1.5)
     def option(self, key, value):
         """Adds an output option for the underlying data source.
         """
