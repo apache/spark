@@ -37,6 +37,11 @@ class PlannerSuite extends SparkFunSuite {
                   .queryExecution.executedPlan
     val exchanges = planned.collect { case n: Exchange => n }
 
+    //    testData           testData2       testData3
+    //       \(shuffle: key)  /(shuffle: a)   /(shuffle:a)
+    //               \                       /
+    //                          |
+    //                        result
     assert(exchanges.size === 3)
   }
 
@@ -47,6 +52,11 @@ class PlannerSuite extends SparkFunSuite {
       .queryExecution.executedPlan
     val exchanges = planned.collect { case n: Exchange => n }
 
+    //    testData          testData2
+    //       \(shuffle:key)   /(shuffle:a)
+    //        \              /
+    //               | (shuffle:key)
+    //             result
     assert(exchanges.size === 3)
   }
 
