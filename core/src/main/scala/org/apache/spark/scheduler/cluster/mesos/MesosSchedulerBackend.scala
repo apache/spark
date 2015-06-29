@@ -204,8 +204,14 @@ private[spark] class MesosSchedulerBackend(
         val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
 
-        (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
+        val meetsRequirements = (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
         (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
+
+        // add some debug messaging
+        val debugStatement = if(meetsRequirements) "Accepting" else "Declining"
+        logDebug(s"$debugStatement offer: ${o.getId} with attributes: $offerAttributes mem: $mem cpu: $cpus")
+
+        meetsRequirements
       }
 
       // Decline offers we ruled out immediately
