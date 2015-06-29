@@ -73,6 +73,13 @@ class DataFrameReader(object):
         self._jreader = self._jreader.schema(jschema)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an input option for the underlying data source.
+        """
+        self._jreader = self._jreader.option(key, value)
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
@@ -233,6 +240,13 @@ class DataFrameWriter(object):
         >>> df.write.format('json').save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self._jwrite = self._jwrite.format(source)
+        return self
+
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an output option for the underlying data source.
+        """
+        self._jwrite = self._jwrite.option(key, value)
         return self
 
     @since(1.4)
