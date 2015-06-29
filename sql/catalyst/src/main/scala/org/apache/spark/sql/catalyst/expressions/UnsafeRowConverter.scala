@@ -131,12 +131,10 @@ private object UnsafeColumnWriter {
       case BooleanType => BooleanUnsafeColumnWriter
       case ByteType => ByteUnsafeColumnWriter
       case ShortType => ShortUnsafeColumnWriter
-      case IntegerType => IntUnsafeColumnWriter
-      case LongType => LongUnsafeColumnWriter
+      case IntegerType | DateType => IntUnsafeColumnWriter
+      case LongType | TimestampType => LongUnsafeColumnWriter
       case FloatType => FloatUnsafeColumnWriter
       case DoubleType => DoubleUnsafeColumnWriter
-      case DateType => IntUnsafeColumnWriter
-      case TimestampType => LongUnsafeColumnWriter
       case StringType => StringUnsafeColumnWriter
       case BinaryType => BinaryUnsafeColumnWriter
       case t => ObjectUnsafeColumnWriter

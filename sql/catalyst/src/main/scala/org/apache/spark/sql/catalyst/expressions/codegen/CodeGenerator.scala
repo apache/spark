@@ -120,15 +120,13 @@ class CodeGenContext {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType => JAVA_INT
-    case LongType => JAVA_LONG
+    case IntegerType | DateType => JAVA_INT
+    case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
     case StringType => stringType
-    case DateType => JAVA_INT
-    case TimestampType => JAVA_LONG
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"

@@ -210,7 +210,7 @@ def build_spark_documentation():
     jekyll_bin = which("jekyll")
 
     if not jekyll_bin:
-        print("[error] Cannot find a version of `jekyll` on the system; please"
+        print("[error] Cannot find a version of `jekyll` on the system; please",
               " install one and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
@@ -261,7 +261,7 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
+        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.2.1"],
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
@@ -270,7 +270,7 @@ def get_hadoop_profiles(hadoop_version):
     if hadoop_version in sbt_maven_hadoop_profiles:
         return sbt_maven_hadoop_profiles[hadoop_version]
     else:
-        print("[error] Could not find", hadoop_version, "in the list. Valid options"
+        print("[error] Could not find", hadoop_version, "in the list. Valid options",
               " are", sbt_maven_hadoop_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
@@ -281,7 +281,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: "
+    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -295,7 +295,7 @@ def build_spark_sbt(hadoop_version):
                  "streaming-kafka-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: "
+    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -324,7 +324,7 @@ def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print("[info] Running Spark tests using Maven with these arguments: "
+    print("[info] Running Spark tests using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -339,7 +339,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     profiles_and_goals = test_profiles + list(sbt_test_goals)
 
-    print("[info] Running Spark tests using SBT with these arguments: "
+    print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -382,7 +382,7 @@ def run_sparkr_tests():
 def main():
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
-        print("[error] Cannot determine your home directory as an absolute path;"
+        print("[error] Cannot determine your home directory as an absolute path;",
               " ensure the $HOME environment variable is set properly.")
         sys.exit(1)
 
@@ -397,7 +397,7 @@ def main():
     java_exe = determine_java_executable()
 
     if not java_exe:
-        print("[error] Cannot find a version of `java` on the system; please"
+        print("[error] Cannot find a version of `java` on the system; please",
               " install one and retry.")
         sys.exit(2)
 
