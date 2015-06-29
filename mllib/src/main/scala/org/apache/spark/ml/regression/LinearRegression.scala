@@ -34,7 +34,7 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -240,16 +240,29 @@ class LinearRegressionModel private[ml] (
     override val uid: String,
     val weights: Vector,
     val intercept: Double,
-    val summary: LinearRegressionTrainingResults)
+    val trainingSummary: LinearRegressionTrainingResults)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
+
+  /**
+   * Evaluates the model on a test-set.
+   * @param testset Test dataset to evaluate model on.
+   * @return
+   */
+  def evaluate(testset: DataFrame): LinearRegressionResults = {
+    val predictionAndObservations = testset
+      .select($(labelCol), $(featuresCol))
+      .map { case Row(label: Double, features: Vector) => (predict(features), label) }
+
+    new LinearRegressionResults(predictionAndObservations)
+  }
 
   override protected def predict(features: Vector): Double = {
     dot(features, weights) + intercept
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    copyValues(new LinearRegressionModel(uid, weights, intercept, summary), extra)
+    copyValues(new LinearRegressionModel(uid, weights, intercept, trainingSummary), extra)
   }
 }
 
@@ -269,8 +282,8 @@ class LinearRegressionTrainingResults(
 
 /**
  * :: Experimental ::
- * Linear regression results evaluated on a dataset.  Expects two input columns: prediction (0) and
- * label (1).
+ * Linear regression results evaluated on a dataset.
+ * @param predictionAndObservations an RDD of (prediction, observation) pairs.
  */
 @Experimental
 class LinearRegressionResults(@transient val predictionAndObservations: RDD[(Double, Double)])
