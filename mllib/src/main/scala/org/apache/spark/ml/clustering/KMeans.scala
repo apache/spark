@@ -114,9 +114,6 @@ class KMeansModel private[ml] (
     copyValues(copied, extra)
   }
 
-  /**
-   * Transforms the input dataset.
-   */
   override def transform(dataset: DataFrame): DataFrame = {
     dataset.select(
           dataset("*"),
@@ -124,11 +121,6 @@ class KMeansModel private[ml] (
         )
   }
 
-  /**
-   * :: DeveloperApi ::
-   *
-   * Derives the output schema from the input schema.
-   */
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
