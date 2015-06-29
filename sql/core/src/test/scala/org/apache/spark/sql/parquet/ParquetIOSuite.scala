@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.math.{BigDecimal => JavaBigDecimal}
+
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -430,6 +432,33 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       }
     }
   }
+
+  test("SPARK-8450: java.math.BigDecimal can be cast to org.apache.spark.sql.types.Decimal") {
+    val schema = StructType(Seq(StructField("value", DecimalType(10, 5), true)))
+    val rdd = sqlContext.sparkContext
+      .parallelize(0 to 100)
+      .map(i => Row(new JavaBigDecimal(i / 100.0).setScale(5, JavaBigDecimal.ROUND_CEILING)))
+    val data = sqlContext.createDataFrame(rdd, schema)
+
+    withTempPath { dir =>
+      data.write.parquet(dir.getCanonicalPath)
+      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+    }
+  }
+
+  test("SPARK-8450: scala.math.BigDecimal can be cast to org.apache.spark.sql.types.Decimal") {
+    val schema = StructType(Seq(StructField("value", DecimalType(10, 5), true)))
+    val rdd = sqlContext.sparkContext
+      .parallelize(0 to 100)
+      .map(i => Row(BigDecimal(i / 100.0).setScale(5, BigDecimal.RoundingMode.CEILING)))
+    val data = sqlContext.createDataFrame(rdd, schema)
+
+    withTempPath { dir =>
+      data.write.parquet(dir.getCanonicalPath)
+      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+    }
+  }
+
 }
 
 class BogusParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
