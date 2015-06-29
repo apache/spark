@@ -640,7 +640,6 @@ abstract class RDD[T: ClassTag](
     new PipedRDD(this, command, env)
   }
 
-  // scalastyle:off println
   /**
    * Return an RDD created by piping elements to a forked external process.
    * The print behavior can be customized by providing two functions.
@@ -660,7 +659,6 @@ abstract class RDD[T: ClassTag](
    * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */
-  // scalastyle:on println
   def pipe(
       command: Seq[String],
       env: Map[String, String] = Map(),

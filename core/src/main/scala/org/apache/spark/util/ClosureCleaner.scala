@@ -139,7 +139,6 @@ private[spark] object ClosureCleaner extends Logging {
     clean(closure, checkSerializable, cleanTransitively, Map.empty)
   }
 
-  // scalastyle:off println
   /**
    * Helper method to clean the given closure in place.
    *
@@ -181,7 +180,6 @@ private[spark] object ClosureCleaner extends Logging {
    * @param accessedFields a map from a class to a set of its fields that are accessed by
    *                       the starting closure
    */
-  // scalastyle:on println
   private def clean(
       func: AnyRef,
       checkSerializable: Boolean,

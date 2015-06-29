@@ -41,7 +41,6 @@ import org.apache.spark.{Logging, HttpServer, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 import org.apache.spark.annotation.DeveloperApi
 
-// scalastyle:off
 // /** directory to save .class files to */
 // private class ReplVirtualDirectory(out: JPrintWriter) extends VirtualDirectory("((memory))", None) {
 //   private def pp(root: AbstractFile, indentLevel: Int) {
@@ -53,7 +52,6 @@ import org.apache.spark.annotation.DeveloperApi
 //   // print the contents hierarchically
 //   def show() = pp(this, 0)
 // }
-// scalastyle:on
 
   /** An interpreter for Scala code.
    *

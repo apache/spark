@@ -43,18 +43,6 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
     val newBlockMessages = new ArrayBuffer[BlockMessage]()
     val buffer = bufferMessage.buffers(0)
     buffer.clear()
-    // scalastyle:off println
-    /*
-    println()
-    println("BlockMessageArray: ")
-    while(buffer.remaining > 0) {
-      print(buffer.get())
-    }
-    buffer.rewind()
-    println()
-    println()
-    */
-    // scalastyle:on println
     while (buffer.remaining() > 0) {
       val size = buffer.getInt()
       logDebug("Creating block message of size " + size + " bytes")
@@ -88,20 +76,6 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
 
     logDebug("Buffer list:")
     buffers.foreach((x: ByteBuffer) => logDebug("" + x))
-    // scalastyle:off println
-    /*
-    println()
-    println("BlockMessageArray: ")
-    buffers.foreach(b => {
-      while(b.remaining > 0) {
-        print(b.get())
-      }
-      b.rewind()
-    })
-    println()
-    println()
-    */
-    // scalastyle:on println
     Message.createBufferMessage(buffers)
   }
 }
