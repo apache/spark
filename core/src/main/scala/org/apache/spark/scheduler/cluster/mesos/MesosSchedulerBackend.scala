@@ -195,7 +195,7 @@ private[spark] class MesosSchedulerBackend(
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        val offerAttributes = (o.getAttributesList map getAttribute).toMap
+        val offerAttributes = toAttributeMap(o.getAttributesList)
 
         // check if all constraints are satisfield
         //  1. Attribute constraints

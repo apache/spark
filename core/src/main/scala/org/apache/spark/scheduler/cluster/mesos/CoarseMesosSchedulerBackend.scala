@@ -20,17 +20,16 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
-
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
-
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{HashMap, HashSet}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -176,7 +175,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     synchronized {
       val filters = Filters.newBuilder().setRefuseSeconds(5).build()
       for (offer <- offers) {
-        val offerAttributes = (offer.getAttributesList map getAttribute).toMap
+        val offerAttributes = toAttributeMap(offer.getAttributesList)
         val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")

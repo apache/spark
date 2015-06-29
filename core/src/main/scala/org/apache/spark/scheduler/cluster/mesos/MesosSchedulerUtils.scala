@@ -17,17 +17,17 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
-
-import scala.collection.JavaConversions._
+import java.util.{List => JList}
 
 import com.google.common.base.Splitter
-import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
 import org.apache.mesos.Protos._
-
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.mesos.protobuf.GeneratedMessage
+import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkContext}
+
+import scala.collection.JavaConversions._
 
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
@@ -109,6 +109,23 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /**
+   * Converts the attributes from the resource offer into a Map of name -> Attribute Value
+   * The attribute values are the mesos attribute types and they are
+   * @param offerAttributes
+   * @return
+   */
+  def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] =
+    offerAttributes.map(attr => {
+      val attrValue = attr.getType match {
+        case Value.Type.SCALAR => attr.getScalar
+        case Value.Type.RANGES => attr.getRanges
+        case Value.Type.SET => attr.getSet
+        case Value.Type.TEXT => attr.getText
+      }
+      (attr.getName, attrValue)
+    }).toMap
+
+  /**
    * Match the requirements (if any) to the offer attributes.
    * if attribute requirements are not specified - return true
    * else if attribute is defined and no values are given, simple attribute presence is preformed
@@ -116,15 +133,32 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    */
   def matchesAttributeRequirements(
       slaveOfferConstraints: Map[String, Set[String]],
-      offerAttributes: Map[String, Set[String]]): Boolean =
+      offerAttributes: Map[String, GeneratedMessage]): Boolean =
     slaveOfferConstraints.forall {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
-        // The attributes and their values are case sensitive during comparison
-        // i.e tachyon -> true != Tachyon -> true != tachyon -> True
-        offerAttributes.contains(name) && requiredValues.subsetOf(offerAttributes(name))
-
-    }
+        offerAttributes.get(name) match {
+          case None => false
+          case Some(_) if requiredValues.isEmpty => true // empty value matches presence
+          case Some(scalarValue: Value.Scalar) =>
+            // check if provided values is less than equal to the offered values
+            requiredValues.map(_.toDouble).exists(_ <= scalarValue.getValue)
+          case Some(rangeValue: Value.Range) =>
+            val offerRange = rangeValue.getBegin to rangeValue.getEnd
+            // Check if there is some required value that is between the ranges specified
+            // Note: We only support the ability to specify discrete values, in the future
+            // we may expand it to subsume ranges specified with a XX..YY value or something
+            // similar to that.
+            requiredValues.map(_.toLong).exists(offerRange.contains(_))
+          case Some(offeredValue: Value.Set) =>
+            // check if the specified required values is a subset of offered set
+            requiredValues.subsetOf(offeredValue.getItemList.toSet)
+          case Some(textValue: Value.Text) =>
+            // check if the specified value is equal, if multiple values are specified
+            // we succeed if any of them match.
+            requiredValues.contains(textValue.getValue)
+        }
+  }
 
   /**
    * Parses the attributes constraints provided to spark and build a matching data struct:
@@ -143,6 +177,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *  }}}
    *
    *  Mesos documentation: http://mesos.apache.org/documentation/attributes-resources/
+   *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
+   *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
    * @param constraintsVal constaints string consisting of ';' separated key-value pairs (separated
    *                       by ':')
