@@ -146,7 +146,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        ExtractPythonUdfs ::
+        ExtractPythonUDFs ::
         sources.PreInsertCastAndRename ::
         Nil
 
