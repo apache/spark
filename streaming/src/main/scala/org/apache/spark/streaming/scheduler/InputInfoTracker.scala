@@ -23,7 +23,8 @@ import org.apache.spark.Logging
 import org.apache.spark.streaming.{Time, StreamingContext}
 
 /** To track the information of input stream at specified batch time. */
-private[streaming] case class InputInfo(inputStreamId: Int, numRecords: Long) {
+private[streaming] case class InputInfo(
+    inputStreamId: Int, numRecords: Long, metadata: Option[String] = None) {
   require(numRecords >= 0, "numRecords must not be negative")
 }
 

@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
@@ -120,7 +120,11 @@ class DirectKafkaInputDStream[
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
     // Report the record number of this batch interval to InputInfoTracker.
-    val inputInfo = InputInfo(id, rdd.count)
+    val offsetRanges = currentOffsets.map { case (tp, fo) =>
+      val uo = untilOffsets(tp)
+      OffsetRange(tp.topic, tp.partition, fo, uo.offset)
+    }
+    val inputInfo = InputInfo(id, rdd.count, Some(offsetRanges.mkString(", ")))
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
