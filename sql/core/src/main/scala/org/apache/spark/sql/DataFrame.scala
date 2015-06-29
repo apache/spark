@@ -682,7 +682,6 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -707,7 +706,6 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
