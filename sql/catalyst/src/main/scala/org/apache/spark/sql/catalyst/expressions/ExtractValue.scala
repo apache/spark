@@ -153,7 +153,20 @@ case class GetArrayStructFields(
     }
   }
 
-  // todo: add code gen for this.
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"""
+        final int n = $eval.size();
+        final $arraySeqClass<Object> values = new $arraySeqClass<Object>(n);
+        for (int i = 0; i < n; i++) {
+          InternalRow row = (InternalRow) $eval.apply(i);
+          if (row != null) values.update(i, ${ctx.getColumn("row", field.dataType, ordinal)});
+        }
+        $result = (${ctx.javaType(dataType)}) values;
+      """
+    })
+  }
 }
 
 abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValue {
@@ -208,7 +221,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev,
-      (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.apply((int)$eval2)")
+      (eval1, eval2) => s"(${ctx.boxedType(dataType)})$eval1.apply((int)$eval2)")
   }
 }
 
@@ -226,7 +239,14 @@ case class GetMapValue(child: Expression, ordinal: Expression)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev,
-      (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.getOrElse($eval2, null)")
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"""
+        if ($eval1.contains($eval2)) {
+          $result = (${ctx.boxedType(dataType)})$eval1.apply($eval2);
+        } else {
+          ${ev.isNull} = true;
+        }
+      """
+    })
   }
 }

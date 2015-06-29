@@ -130,9 +130,8 @@ class CodeGenContext {
     case DateType => JAVA_INT
     case TimestampType => JAVA_LONG
     case _: StructType => "InternalRow"
-    case ArrayType(elementType, _) => s"scala.collection.Seq<${boxedType(elementType)}>"
-    case MapType(keyType, valueType, _) =>
-      s"scala.collection.Map<${boxedType(keyType)}, ${boxedType(valueType)}>"
+    case _: ArrayType => s"scala.collection.Seq"
+    case _: MapType => s"scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
