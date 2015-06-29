@@ -114,6 +114,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.trainingSummary.meanSquaredError ~== 0.00972035 relTol 1E-5)
     assert(model.trainingSummary.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
     assert(model.trainingSummary.r2 ~== 0.9998749 relTol 1E-5)
+
+    // Objective function should be monotonically decreasing for linear regression
+    assert(model.trainingSummary.objectiveTrace.sliding(2).forall(x => x(0) >= x(1)))
   }
 
   test("linear regression without intercept without regularization") {
