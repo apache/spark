@@ -46,7 +46,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUdfSuite extends QueryTest {
+class HiveUDFSuite extends QueryTest {
 
   import TestHive.{udf, sql}
   import TestHive.implicits._
