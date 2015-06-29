@@ -51,7 +51,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 @Experimental
 class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams {
 
-  def this() = this(Identifiable.randomUID("PCA"))
+  def this() = this(Identifiable.randomUID("pca"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
