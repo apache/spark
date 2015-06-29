@@ -250,7 +250,7 @@ examples = Module(
 
 pyspark_core = Module(
     name="pyspark-core",
-    dependencies=[mllib, streaming, streaming_kafka, streaming_flume],
+    dependencies=[],
     source_file_regexes=[
         "python/(?!pyspark/(ml|mllib|sql|streaming))"
     ],
