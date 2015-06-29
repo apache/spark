@@ -16,7 +16,7 @@
 #
 
 from py4j.java_collections import MapConverter
-from py4j.java_gateway import java_import, Py4JError
+from py4j.java_gateway import java_import, Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import UTF8Deserializer
@@ -44,15 +44,16 @@ class MQTTUtils(object):
 
         try:
             jstream = ssc._jvm.MQTTUtils.createStream(ssc._jssc, brokerUrl, topic, jlevel)
-        except Py4JError, e:
-	    if 'ClassNotFoundException' in str(e.java_exception):
+        except Py4JJavaError as e:
+            if 'ClassNotFoundException' in str(e.java_exception):
                 MQTTUtils._printErrorMsg(ssc.sparkContext)
             raise e
+
         return DStream(jstream, ssc, UTF8Deserializer())
-	
-	@staticmethod
-	def _printErrorMsg(sc):
-	    print("""
+
+    @staticmethod
+    def _printErrorMsg(sc):
+        print("""
 ________________________________________________________________________________________________
 
   Spark Streaming's MQTT libraries not found in class path. Try one of the following.
