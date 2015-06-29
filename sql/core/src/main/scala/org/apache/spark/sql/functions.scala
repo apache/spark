@@ -1052,13 +1052,13 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def hex(col: Column): Column = Hex(col.expr)
+  def hex(column: Column): Column = Hex(column.expr)
 
   /**
    * Computes hex value of the given input
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 1.5.0
    */
   def hex(colName: String): Column = hex(Column(colName))
 

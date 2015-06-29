@@ -301,7 +301,7 @@ case class Hex(child: Expression)
     if (child.dataType.isInstanceOf[StringType]
       || child.dataType.isInstanceOf[IntegerType]
       || child.dataType.isInstanceOf[LongType]
-      || child .dataType.isInstanceOf[BinaryType]
+      || child.dataType.isInstanceOf[BinaryType]
       || child.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
@@ -327,7 +327,7 @@ case class Hex(child: Expression)
    * Converts every character in s to two hex digits.
    */
   private def hex(str: UTF8String): UTF8String = {
-    doHex(str.toString.getBytes, str.length())
+    doHex(str.getBytes, str.length())
   }
 
   private def hex(bytes: Array[Byte]): UTF8String = {
@@ -335,10 +335,7 @@ case class Hex(child: Expression)
   }
 
   private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
-    var value = new Array[Byte](16)
-    if (value.length < length * 2) {
-      value = new Array[Byte](length * 2);
-    }
+    val value = new Array[Byte](length * 2)
     var i = 0
     while(i < length) {
       value(i * 2) = Character.toUpperCase(Character.forDigit(
@@ -347,7 +344,7 @@ case class Hex(child: Expression)
         bytes(i) & 0x0F, 16)).toByte
       i += 1
     }
-    UTF8String.fromBytes(Arrays.copyOfRange(value, 0, length*2))
+    UTF8String.fromBytes(value)
   }
 
   private def hex(num: Long): UTF8String = {
