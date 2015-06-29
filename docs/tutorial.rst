@@ -62,7 +62,7 @@ complicated, a line by line explanation follows below.
     t3 = BashOperator(
         task_id='templated',
         bash_command=templated_command,
-        params={'my_param': 'Paramater I passed in'},
+        params={'my_param': 'Parameter I passed in'},
         dag=dag)
 
     t2.set_upstream(t1)
@@ -189,7 +189,7 @@ point to the most common template variable: ``{{ ds }}``.
     t3 = BashOperator(
         task_id='templated',
         bash_command=templated_command,
-        params={'my_param': 'Paramater I passed in'},
+        params={'my_param': 'Parameter I passed in'},
         dag=dag)
 
 Notice that the ``templated_command`` contains code logic in ``{% %}`` blocks,
@@ -290,7 +290,7 @@ something like this:
     t3 = BashOperator(
         task_id='templated',
         bash_command=templated_command,
-        params={'my_param': 'Paramater I passed in'},
+        params={'my_param': 'Parameter I passed in'},
         dag=dag)
 
     t2.set_upstream(t1)
