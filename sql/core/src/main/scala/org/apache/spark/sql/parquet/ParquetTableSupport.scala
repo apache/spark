@@ -198,19 +198,18 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
   private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
+        case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
+        case ShortType => writer.addInteger(value.asInstanceOf[Short])
+        case IntegerType | DateType => writer.addInteger(value.asInstanceOf[Int])
+        case LongType => writer.addLong(value.asInstanceOf[Long])
+        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
+        case FloatType => writer.addFloat(value.asInstanceOf[Float])
+        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case StringType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[UTF8String].getBytes))
         case BinaryType => writer.addBinary(
           Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
-        case IntegerType => writer.addInteger(value.asInstanceOf[Int])
-        case ShortType => writer.addInteger(value.asInstanceOf[Short])
-        case LongType => writer.addLong(value.asInstanceOf[Long])
-        case TimestampType => writeTimestamp(value.asInstanceOf[Long])
-        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
-        case DoubleType => writer.addDouble(value.asInstanceOf[Double])
-        case FloatType => writer.addFloat(value.asInstanceOf[Float])
-        case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
-        case DateType => writer.addInteger(value.asInstanceOf[Int])
         case d: DecimalType =>
           if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
@@ -353,19 +352,18 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       record: InternalRow,
       index: Int): Unit = {
     ctype match {
+      case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case ByteType => writer.addInteger(record.getByte(index))
+      case ShortType => writer.addInteger(record.getShort(index))
+      case IntegerType | DateType => writer.addInteger(record.getInt(index))
+      case LongType => writer.addLong(record.getLong(index))
+      case TimestampType => writeTimestamp(record.getLong(index))
+      case FloatType => writer.addFloat(record.getFloat(index))
+      case DoubleType => writer.addDouble(record.getDouble(index))
       case StringType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[UTF8String].getBytes))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
-      case IntegerType => writer.addInteger(record.getInt(index))
-      case ShortType => writer.addInteger(record.getShort(index))
-      case LongType => writer.addLong(record.getLong(index))
-      case ByteType => writer.addInteger(record.getByte(index))
-      case DoubleType => writer.addDouble(record.getDouble(index))
-      case FloatType => writer.addFloat(record.getFloat(index))
-      case BooleanType => writer.addBoolean(record.getBoolean(index))
-      case DateType => writer.addInteger(record.getInt(index))
-      case TimestampType => writeTimestamp(record.getLong(index))
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")
