@@ -106,9 +106,8 @@ private[clustering] trait KMeansParams
  */
 @Experimental
 class KMeansModel private[ml] (
-  override val uid: String,
-  val parentModel: MLlibKMeansModel
-) extends Model[KMeansModel] with KMeansParams {
+    override val uid: String,
+    private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams {
 
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = new KMeansModel(uid, parentModel)
