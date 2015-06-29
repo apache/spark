@@ -21,8 +21,9 @@ import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType, DataType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -138,5 +139,32 @@ case class Sha2(left: Expression, right: Expression)
         }
       }
     """
+  }
+}
+
+/**
+ * A function that calculates a sha1 hash value and returns it as a hex string
+ * For input of type [[BinaryType]] or [[StringType]]
+ */
+case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = StringType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c =>
+      "org.apache.spark.unsafe.types.UTF8String.fromString" +
+        s"(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+    )
   }
 }
