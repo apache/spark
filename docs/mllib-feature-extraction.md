@@ -405,7 +405,7 @@ Note that the user can also construct a `ChiSqSelectorModel` by hand by providin
 
 #### Example
 
-The following example shows the basic use of ChiSqSelector. The data set used has a feature matrix consisting of greyscale values that vary from 0 - 255 for each feature.
+The following example shows the basic use of ChiSqSelector. The data set used has a feature matrix consisting of greyscale values that vary from 0 to 255 for each feature.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -423,7 +423,7 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 val discretizedData = data.map { lp =>
   LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor } ) )
 }
-// Create ChiSqSelector that will select top 50  of 692 features
+// Create ChiSqSelector that will select top 50 of 692 features
 val selector = new ChiSqSelector(50)
 // Create ChiSqSelector model (selecting features)
 val transformer = selector.fit(discretizedData)
@@ -459,13 +459,13 @@ JavaRDD<LabeledPoint> discretizedData = points.map(
       public LabeledPoint call(LabeledPoint lp) {
         final double[] discretizedFeatures = new double[lp.features().size()];
         for (int i = 0; i < lp.features().size(); ++i) {
-        	discretizedFeatures[i] = Math.floor(lp.features().apply(i) / 16);
+          discretizedFeatures[i] = Math.floor(lp.features().apply(i) / 16);
         }
         return new LabeledPoint(lp.label(), Vectors.dense(discretizedFeatures));
       }
     });
 
-// Create ChiSqSelector that will select top 50  of 692 features
+// Create ChiSqSelector that will select top 50 of 692 features
 ChiSqSelector selector = new ChiSqSelector(50);
 // Create ChiSqSelector model (selecting features)
 final ChiSqSelectorModel transformer = selector.fit(discretizedData.rdd());
