@@ -109,9 +109,9 @@ private[hive] object HiveShim {
       partitionKeys: List[FieldSchema],
       hiveMetastoreVersion: String): Option[String] = {
 
-    // Binary comparison operators such as >, <, >=, and <= started being supported by
-    // getPartitionsByFilter() in 0.13. So if Hive matastore version is older than 0.13,
-    // no predicate is pushed down. See HIVE-4888.
+    // Binary comparison operators have been supported in getPartitionsByFilter() since 0.13.
+    // So if Hive matastore version is older than 0.13, predicates cannot be pushed down.
+    // See HIVE-4888.
     val versionPattern = "([\\d]+\\.[\\d]+).*".r
     hiveMetastoreVersion match {
       case versionPattern(version) => if (version.toDouble < 0.13) return None

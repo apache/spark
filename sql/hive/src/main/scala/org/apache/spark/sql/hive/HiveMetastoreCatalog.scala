@@ -300,6 +300,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
+      // This is for non-partitioned tables, so partition pruning predicates
+      // cannot be pushed into Hive metastore.
       val partitions = metastoreRelation.getHiveQlPartitions(None).map { p =>
         val location = p.getLocation
         val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
