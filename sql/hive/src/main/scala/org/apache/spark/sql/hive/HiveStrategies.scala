@@ -106,7 +106,6 @@ private[hive] trait HiveStrategies {
 
         try {
           if (relation.hiveQlTable.isPartitioned) {
-
             val metastoreFilter =
               HiveShim.toMetastoreFilter(
                 pruningPredicates,
