@@ -35,6 +35,15 @@ import org.apache.spark.util.Utils
  */
 private[clustering] trait KMeansParams
     extends Params with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
+
+  setDefault(k, 2)
+  setDefault(maxIter, 20)
+  setDefault(runs, 1)
+  setDefault(initializationMode, MLlibKMeans.K_MEANS_PARALLEL)
+  setDefault(initializationSteps, 5)
+  setDefault(epsilon, 1e-4)
+  setDefault(seed, Utils.random.nextLong())
+
   /**
    * Param for the column name for the number of clusters to create.
    * @group param
@@ -142,13 +151,6 @@ class KMeansModel private[ml] (
  */
 @Experimental
 class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
-  setK(2)
-  setMaxIter(20)
-  setRuns(1)
-  setInitializationMode(MLlibKMeans.K_MEANS_PARALLEL)
-  setInitializationSteps(5)
-  setEpsilon(1e-4)
-  setSeed(Utils.random.nextLong())
 
   override def copy(extra: ParamMap): Estimator[KMeansModel] = defaultCopy(extra)
 
