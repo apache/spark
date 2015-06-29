@@ -31,6 +31,20 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
   }
 
+  test("sha") {
+    checkEvaluation(Sha1(Literal("ABC".getBytes)), "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8")
+    checkEvaluation(Sha1(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+      "5d211bad8f4ee70e16c7d343a838fc344a1ed961")
+    checkEvaluation(Sha1(Literal.create(null, BinaryType)), null)
+  }
+
+  test("crc32") {
+    checkEvaluation(Crc32(Literal("ABC".getBytes)), 2743272264L)
+    checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
+      2180413220L)
+    checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
+  }
+
   test("sha2") {
     checkEvaluation(Sha2(Literal("ABC".getBytes), Literal(256)), DigestUtils.sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
@@ -41,4 +55,5 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sha2(Literal("ABC".getBytes), Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
   }
+
 }

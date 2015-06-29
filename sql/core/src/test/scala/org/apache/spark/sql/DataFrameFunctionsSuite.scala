@@ -144,6 +144,40 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
   }
 
+  test("misc sha function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(sha($"a"), sha("b")),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+
+    checkAnswer(
+      df.selectExpr("sha(a)", "sha(b)"),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+
+    checkAnswer(
+      df.select(sha1($"a"), sha1("b")),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+
+    checkAnswer(
+      df.selectExpr("sha1(a)", "sha1(b)"),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8",
+        "5d211bad8f4ee70e16c7d343a838fc344a1ed961"))
+  }
+
+  test("misc crc32 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(crc32($"a"), crc32("b")),
+      Row(2743272264L, 2180413220L))
+
+    checkAnswer(
+      df.selectExpr("crc32(a)", "crc32(b)"),
+      Row(2743272264L, 2180413220L))
+  }
+
   test("misc sha2 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
