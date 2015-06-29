@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import glob
 import os
 import sys
 from itertools import chain
@@ -825,5 +826,46 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
     def test_flume_polling_multiple_hosts(self):
         self._testMultipleTimes(self._testFlumePollingMultipleHosts)
 
+
+def search_kafka_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
+    jars = glob.glob(
+        os.path.join(kafka_assembly_dir, "target/scala-*/spark-streaming-kafka-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
+                         "remove all but one") % kafka_assembly_dir)
+    else:
+        return jars[0]
+
+
+def search_flume_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    flume_assembly_dir = os.path.join(SPARK_HOME, "external/flume-assembly")
+    jars = glob.glob(
+        os.path.join(flume_assembly_dir, "target/scala-*/spark-streaming-flume-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
+                         "remove all but one") % flume_assembly_dir)
+    else:
+        return jars[0]
+
 if __name__ == "__main__":
+    kafka_assembly_jar = search_kafka_assembly_jar()
+    flume_assembly_jar = search_flume_assembly_jar()
+    jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
+
+    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     unittest.main()

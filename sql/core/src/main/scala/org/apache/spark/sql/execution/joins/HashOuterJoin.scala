@@ -71,8 +71,8 @@ case class HashOuterJoin(
   @transient private[this] lazy val DUMMY_LIST = Seq[InternalRow](null)
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[InternalRow]
 
-  @transient private[this] lazy val leftNullRow = new GenericRow(left.output.length)
-  @transient private[this] lazy val rightNullRow = new GenericRow(right.output.length)
+  @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
+  @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
   @transient private[this] lazy val boundCondition =
     condition.map(
       newPredicate(_, left.output ++ right.output)).getOrElse((row: InternalRow) => true)
