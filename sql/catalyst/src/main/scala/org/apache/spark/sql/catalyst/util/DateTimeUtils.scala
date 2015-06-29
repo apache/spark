@@ -17,18 +17,28 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
- * Helper function to convert between Int value of days since 1970-01-01 and java.sql.Date
+ * Helper functions for converting between internal and external date and time representations.
+ * Dates are exposed externally as java.sql.Date and are represented internally as the number of
+ * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as java.sql.Timestamp
+ * and are stored internally as longs, which are capable of storing timestamps with 100 nanosecond
+ * precision.
  */
-object DateUtils {
-  private val MILLIS_PER_DAY = 86400000
-  private val HUNDRED_NANOS_PER_SECOND = 10000000L
+object DateTimeUtils {
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+
+  // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
+  final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
+  final val SECONDS_PER_DAY = 60 * 60 * 24L
+  final val HUNDRED_NANOS_PER_SECOND = 1000L * 1000L * 10L
+  final val NANOS_PER_SECOND = HUNDRED_NANOS_PER_SECOND * 100
+
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val LOCAL_TIMEZONE = new ThreadLocal[TimeZone] {
@@ -116,5 +126,26 @@ object DateUtils {
     } else {
       0L
     }
+  }
+
+  /**
+   * Return the number of 100ns (hundred of nanoseconds) since epoch from Julian day
+   * and nanoseconds in a day
+   */
+  def fromJulianDay(day: Int, nanoseconds: Long): Long = {
+    // use Long to avoid rounding errors
+    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY - SECONDS_PER_DAY / 2
+    seconds * HUNDRED_NANOS_PER_SECOND + nanoseconds / 100L
+  }
+
+  /**
+   * Return Julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
+   */
+  def toJulianDay(num100ns: Long): (Int, Long) = {
+    val seconds = num100ns / HUNDRED_NANOS_PER_SECOND + SECONDS_PER_DAY / 2
+    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
+    val secondsInDay = seconds % SECONDS_PER_DAY
+    val nanos = (num100ns % HUNDRED_NANOS_PER_SECOND) * 100L
+    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
   }
 }

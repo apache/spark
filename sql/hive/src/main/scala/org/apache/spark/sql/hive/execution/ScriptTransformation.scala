@@ -129,11 +129,11 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
+              new GenericInternalRow(CatalystTypeConverters.convertToCatalyst(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
                 .asInstanceOf[Array[Any]])
             } else {
-              new GenericRow(CatalystTypeConverters.convertToCatalyst(
+              new GenericInternalRow(CatalystTypeConverters.convertToCatalyst(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
                 .asInstanceOf[Array[Any]])
             }
@@ -167,7 +167,8 @@ case class ScriptTransformation(
 
               outputStream.write(data)
             } else {
-              val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+              val writable = inputSerde.serialize(
+                row.asInstanceOf[GenericInternalRow].values, inputSoi)
               prepareWritable(writable).write(dataOutputStream)
             }
           }

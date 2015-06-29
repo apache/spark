@@ -220,6 +220,8 @@ class LogisticRegression(override val uid: String)
 
     new LogisticRegressionModel(uid, weights.compressed, intercept)
   }
+
+  override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
 /**

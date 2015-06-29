@@ -158,7 +158,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = newTemporaryConfiguration())
+      config = newTemporaryConfiguration(),
+      initClassLoader = Utils.getContextOrSparkClassLoader)
   }
   SessionState.setCurrentSessionState(executionHive.state)
 
@@ -441,7 +442,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrdered,
+      TakeOrderedAndProject,
       ParquetOperations,
       InMemoryScans,
       ParquetConversion, // Must be before HiveTableScans

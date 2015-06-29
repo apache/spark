@@ -51,6 +51,7 @@ import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel, RandomForestModel}
 import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
@@ -277,7 +278,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for NaiveBayes.train()
    */
-  def trainNaiveBayes(
+  def trainNaiveBayesModel(
       data: JavaRDD[LabeledPoint],
       lambda: Double): JList[Object] = {
     val model = NaiveBayes.train(data.rdd, lambda)
@@ -345,7 +346,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib GaussianMixture.run()
    * Returns a list containing weights, mean and covariance of each mixture component.
    */
-  def trainGaussianMixture(
+  def trainGaussianMixtureModel(
       data: JavaRDD[Vector],
       k: Int,
       convergenceTol: Double,
@@ -403,6 +404,33 @@ private[python] class PythonMLLibAPI extends Serializable {
       }
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data).map(Vectors.dense)
+  }
+
+  /**
+   * Java stub for Python mllib PowerIterationClustering.run(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see the
+   * Py4J documentation.
+   * @param data an RDD of (i, j, s,,ij,,) tuples representing the affinity matrix.
+   * @param k number of clusters.
+   * @param maxIterations maximum number of iterations of the power iteration loop.
+   * @param initMode the initialization mode. This can be either "random" to use
+   *                 a random vector as vertex properties, or "degree" to use
+   *                 normalized sum similarities. Default: random.
+   */
+  def trainPowerIterationClusteringModel(
+      data: JavaRDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      initMode: String): PowerIterationClusteringModel = {
+
+    val pic = new PowerIterationClustering()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitializationMode(initMode)
+
+    val model = pic.run(data.rdd.map(v => (v(0).toLong, v(1).toLong, v(2))))
+    new PowerIterationClusteringModelWrapper(model)
   }
 
   /**
@@ -520,6 +548,16 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for PCA.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitPCA(k: Int, data: JavaRDD[Vector]): PCAModel = {
+    new PCA(k).fit(data.rdd)
+  }
+
+  /**
    * Java stub for IDF.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
@@ -542,7 +580,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param seed initial seed for random generator
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
-  def trainWord2Vec(
+  def trainWord2VecModel(
       dataJRDD: JavaRDD[java.util.ArrayList[String]],
       vectorSize: Int,
       learningRate: Double,
@@ -686,12 +724,14 @@ private[python] class PythonMLLibAPI extends Serializable {
       lossStr: String,
       numIterations: Int,
       learningRate: Double,
-      maxDepth: Int): GradientBoostedTreesModel = {
+      maxDepth: Int,
+      maxBins: Int): GradientBoostedTreesModel = {
     val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
     boostingStrategy.setLoss(Losses.fromString(lossStr))
     boostingStrategy.setNumIterations(numIterations)
     boostingStrategy.setLearningRate(learningRate)
     boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.setMaxBins(maxBins)
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
 
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
@@ -960,10 +1000,54 @@ private[python] class PythonMLLibAPI extends Serializable {
   def estimateKernelDensity(
       sample: JavaRDD[Double],
       bandwidth: Double, points: java.util.ArrayList[Double]): Array[Double] = {
-    return new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
+    new KernelDensity().setSample(sample).setBandwidth(bandwidth).estimate(
       points.asScala.toArray)
   }
 
+  /**
+   * Java stub for the update method of StreamingKMeansModel.
+   */
+  def updateStreamingKMeansModel(
+      clusterCenters: JList[Vector],
+      clusterWeights: JList[Double],
+      data: JavaRDD[Vector],
+      decayFactor: Double,
+      timeUnit: String): JList[Object] = {
+    val model = new StreamingKMeansModel(
+      clusterCenters.asScala.toArray, clusterWeights.asScala.toArray)
+        .update(data, decayFactor, timeUnit)
+      List[AnyRef](model.clusterCenters, Vectors.dense(model.clusterWeights)).asJava
+  }
+
+  /**
+   * Wrapper around the generateLinearInput method of LinearDataGenerator.
+   */
+  def generateLinearInputWrapper(
+      intercept: Double,
+      weights: JList[Double],
+      xMean: JList[Double],
+      xVariance: JList[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double): Array[LabeledPoint] = {
+    LinearDataGenerator.generateLinearInput(
+      intercept, weights.asScala.toArray, xMean.asScala.toArray,
+      xVariance.asScala.toArray, nPoints, seed, eps).toArray
+  }
+
+  /**
+   * Wrapper around the generateLinearRDD method of LinearDataGenerator.
+   */
+  def generateLinearRDDWrapper(
+      sc: JavaSparkContext,
+      nexamples: Int,
+      nfeatures: Int,
+      eps: Double,
+      nparts: Int,
+      intercept: Double): JavaRDD[LabeledPoint] = {
+    LinearDataGenerator.generateLinearRDD(
+      sc, nexamples, nfeatures, eps, nparts, intercept)
+  }
 }
 
 /**

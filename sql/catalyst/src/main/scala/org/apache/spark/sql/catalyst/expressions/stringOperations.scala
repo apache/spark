@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.Substring
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -117,8 +116,6 @@ trait CaseConversionExpression extends ExpectsInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
