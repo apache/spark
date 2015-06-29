@@ -22,14 +22,16 @@ import java.io.{File}
 import org.apache.spark.SparkException
 
 private[spark] object RUtils {
-  /** Get the SparkR package path in various deployment modes **/
+  /**
+   * Get the SparkR package path in various deployment modes. 
+   */
   def sparkRPackagePath(driver: Boolean): String = {
     val yarnMode = sys.env.get("SPARK_YARN_MODE")
     if (!yarnMode.isEmpty && yarnMode.get == "true" &&
         !(driver && System.getProperty("spark.master") == "yarn-client")) {
       // The SparkR package distributed as an archive resource should be pointed to
       // by a symbol link "sparkr" in the current directory.
-        new File("sparkr").getAbsolutePath
+      new File("sparkr").getAbsolutePath
     } else {
       // TBD: add support for MESOS
       val sparkHome = sys.env.get("SPARK_HOME")
