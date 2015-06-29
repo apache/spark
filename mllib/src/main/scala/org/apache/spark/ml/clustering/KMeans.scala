@@ -72,10 +72,10 @@ private[clustering] trait KMeansParams
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    * @group param
    */
-  val initializationMode = new Param[String](this, "initializationMode", "initialization algorithm")
+  val initMode = new Param[String](this, "initMode", "initialization algorithm")
 
   /** @group getParam */
-  def getInitializationMode: String = $(initializationMode)
+  def getInitializationMode: String = $(initMode)
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
@@ -152,7 +152,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   setDefault(k, 2)
   setDefault(maxIter, 20)
   setDefault(runs, 1)
-  setDefault(initializationMode, MLlibKMeans.K_MEANS_PARALLEL)
+  setDefault(initMode, MLlibKMeans.K_MEANS_PARALLEL)
   setDefault(initializationSteps, 5)
   setDefault(epsilon, 1e-4)
   setDefault(seed, Utils.random.nextLong())
@@ -173,7 +173,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   /** @group setParam */
   def setInitializationMode(value: String): this.type = {
     MLlibKMeans.validateInitializationMode(value)
-    set(initializationMode, value)
+    set(initMode, value)
   }
 
   /** @group setParam */
