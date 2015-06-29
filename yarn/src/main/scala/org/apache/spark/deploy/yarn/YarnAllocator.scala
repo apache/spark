@@ -397,10 +397,12 @@ private[yarn] class YarnAllocator(
           completedContainer.getState,
           completedContainer.getExitStatus))
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
-        // there are some exit status' we shouldn't necessarily count against us, but for
-        // now I think its ok as none of the containers are expected to exit
+        // there are some exit status' we shouldn't necessarily count against us.
+        // So we should keep targetNumExecutors == numExecutorsRunning 
+        // to avoid application starve because YARN scheduler PREEMPTED
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
           logInfo("Container preempted: " + containerId)
+          numExecutorsRunning -= 1
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
