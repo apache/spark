@@ -99,7 +99,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   def getAttribute(attr: Attribute): (String, Set[String]) =
     (attr.getName, attr.getText.getValue.split(',').toSet)
 
-
   /** Build a Mesos resource protobuf object */
   def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
