@@ -1797,7 +1797,9 @@ DataFrame jdbcDF = sqlContext.read().format("jdbc"). options(options).load();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
+
 df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
+
 {% endhighlight %}
 
 </div>
@@ -1805,7 +1807,9 @@ df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', db
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
+
 df <- loadDF(sqlContext, source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+
 {% endhighlight %}
 
 </div>
