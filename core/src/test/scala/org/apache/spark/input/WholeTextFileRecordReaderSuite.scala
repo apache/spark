@@ -76,6 +76,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     out.close()
   }
 
+  // scalastyle:off println
   /**
    * This code will test the behaviors of WholeTextFileRecordReader based on local disk. There are
    * three aspects to check:
@@ -131,6 +132,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
 
     Utils.deleteRecursively(dir)
   }
+  // scalastyle:on println
 }
 
 /**

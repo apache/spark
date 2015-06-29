@@ -146,7 +146,9 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   def matrixApproxEqual(A: BM[Double], B: BM[Double], threshold: Double = 1e-6): Boolean = {
     for (i <- 0 until A.rows; j <- 0 until A.cols) {
       if (!approxEqual(A(i, j), B(i, j), threshold)) {
+        // scalastyle:off println
         println("i, j = " + i + ", " + j + " actual: " + A(i, j) + " expected:" + B(i, j))
+        // scalastyle:on println
         return false
       }
     }

@@ -51,9 +51,11 @@ class SparkSubmitSuite
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
+    // scalastyle:off println
     override def println(line: String) {
       lineBuffer += line
     }
+    // scalastyle:on println
   }
 
   /** Returns true if the script exits and the given search string is printed. */
@@ -81,6 +83,7 @@ class SparkSubmitSuite
     }
   }
 
+  // scalastyle:off println
   test("prints usage on empty input") {
     testPrematureExit(Array[String](), "Usage: spark-submit")
   }
@@ -491,6 +494,7 @@ class SparkSubmitSuite
       appArgs.executorMemory should be ("2.3g")
     }
   }
+  // scalastyle:on println
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {

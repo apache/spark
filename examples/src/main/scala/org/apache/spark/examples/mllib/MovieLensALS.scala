@@ -135,6 +135,7 @@ object MovieLensALS {
     val numUsers = ratings.map(_.user).distinct().count()
     val numMovies = ratings.map(_.product).distinct().count()
 
+    // scalastyle:off println
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
     val splits = ratings.randomSplit(Array(0.8, 0.2))
@@ -170,6 +171,7 @@ object MovieLensALS {
     val rmse = computeRmse(model, test, params.implicitPrefs)
 
     println(s"Test RMSE = $rmse.")
+    // scalastyle:on println
 
     sc.stop()
   }

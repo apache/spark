@@ -48,7 +48,9 @@ object MultiBroadcastTest {
       (barr1.value.size, barr2.value.size)
     }
     // Collect the small RDD so we can print the observed sizes locally.
+    // scalastyle:off println
     observedSizes.collect().foreach(i => println(i))
+    // scalastyle:on println
 
     sc.stop()
   }

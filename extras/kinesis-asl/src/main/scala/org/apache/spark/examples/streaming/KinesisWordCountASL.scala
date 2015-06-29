@@ -76,6 +76,7 @@ object KinesisWordCountASL extends Logging {
   def main(args: Array[String]) {
     // Check that all required args were passed in.
     if (args.length != 3) {
+      // scalastyle:off println
       System.err.println(
         """
           |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
@@ -89,6 +90,7 @@ object KinesisWordCountASL extends Logging {
           |See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more
           |details.
         """.stripMargin)
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -172,6 +174,7 @@ object KinesisWordCountASL extends Logging {
 object KinesisWordProducerASL {
   def main(args: Array[String]) {
     if (args.length != 4) {
+      // scalastyle:off println
       System.err.println(
         """
           |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
@@ -185,6 +188,7 @@ object KinesisWordProducerASL {
           |
         """.stripMargin)
 
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -199,8 +203,10 @@ object KinesisWordProducerASL {
         wordsPerRecord.toInt)
 
     // Print the array of (word, total) tuples
+    // scalastyle:off println
     println("Totals for the words sent")
     totals.foreach(println(_))
+    // scalastyle:on println
   }
 
   def generate(stream: String,
@@ -215,8 +221,10 @@ object KinesisWordProducerASL {
     val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
     kinesisClient.setEndpoint(endpoint)
 
+    // scalastyle:off println
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
         s" $recordsPerSecond records per second and $wordsPerRecord words per record")
+    // scalastyle:on println
 
     // Iterate and put records onto the stream per the given recordPerSec and wordsPerRecord
     for (i <- 1 to 10) {
@@ -248,7 +256,9 @@ object KinesisWordProducerASL {
 
       // Sleep for a second
       Thread.sleep(1000)
+      // scalastyle:off println
       println("Sent " + recordsPerSecond + " records")
+      // scalastyle:on println
     }
      // Convert the totals to (index, total) tuple
     totals.toSeq.sortBy(_._1)

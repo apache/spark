@@ -123,6 +123,7 @@ object LDAExample {
     val actualVocabSize = vocabArray.size
     val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
 
+    // scalastyle:off println
     println()
     println(s"Corpus summary:")
     println(s"\t Training set size: $actualCorpusSize documents")
@@ -178,6 +179,7 @@ object LDAExample {
       }
       println()
     }
+    // scalastyle:on println
     sc.stop()
   }
 

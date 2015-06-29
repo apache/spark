@@ -65,11 +65,13 @@ object LocalKMeans {
   }
 
   def showWarning() {
+    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use the KMeans method found in org.apache.spark.mllib.clustering
         |for more conventional use.
       """.stripMargin)
+    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
@@ -90,7 +92,9 @@ object LocalKMeans {
       kPoints.put(i, iter.next())
     }
 
+    // scalastyle:off println
     println("Initial centers: " + kPoints)
+    // scalastyle:on println
 
     while(tempDist > convergeDist) {
       var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
@@ -116,6 +120,8 @@ object LocalKMeans {
       }
     }
 
+    // scalastyle:off println
     println("Final centers: " + kPoints)
+    // scalastyle:on println
   }
 }

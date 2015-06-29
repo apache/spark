@@ -34,7 +34,9 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 object HdfsWordCount {
   def main(args: Array[String]) {
     if (args.length < 1) {
+      // scalastyle:off println
       System.err.println("Usage: HdfsWordCount <directory>")
+      // scalastyle:on println
       System.exit(1)
     }
 

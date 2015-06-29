@@ -42,7 +42,9 @@ class SparkReplReporter(intp: SparkIMain) extends ConsoleReporter(intp.settings,
       }
       else super.printMessage(msg)
     }
+    // scalastyle:off println
     else Console.println("[init] " + msg)
+    // scalastyle:on println
   }
 
   override def displayPrompt() {

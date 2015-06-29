@@ -93,15 +93,18 @@ object LocalALS {
   }
 
   def showWarning() {
+    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
         |Please use the ALS method found in org.apache.spark.mllib.recommendation
         |for more conventional use.
       """.stripMargin)
+    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
 
+    // scalastyle:off println
     args match {
       case Array(m, u, f, iters) => {
         M = m.toInt
@@ -133,6 +136,7 @@ object LocalALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
+    // scalastyle:on println
   }
 
   private def randomVector(n: Int): RealVector =

@@ -47,12 +47,14 @@ object LocalLR {
   }
 
   def showWarning() {
+    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
         |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
         |for more conventional use.
       """.stripMargin)
+    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
@@ -62,6 +64,7 @@ object LocalLR {
     val data = generateData
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
+    // scalastyle:off println
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
@@ -75,5 +78,6 @@ object LocalLR {
     }
 
     println("Final w: " + w)
+    // scalastyle:on println
   }
 }

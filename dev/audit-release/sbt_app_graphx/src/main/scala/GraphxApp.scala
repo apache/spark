@@ -44,10 +44,12 @@ object GraphXApp {
     // Notice that there is a user 0 (for which we have no information) connected to users
     // 4 (peter) and 5 (franklin).
     val triplets = graph.triplets.map(e => (e.srcAttr._1, e.dstAttr._1)).collect
+    // scalastyle:off println
     if (!triplets.exists(_ == ("peter", "John Doe"))) {
       println("Failed to run GraphX")
       System.exit(-1)
     }
     println("Test succeeded")
+    // scalastyle:on println
   }
 }

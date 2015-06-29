@@ -35,6 +35,7 @@ import org.apache.spark.mllib.linalg.Vectors
  */
 object TallSkinnyPCA {
   def main(args: Array[String]) {
+    // scalastyle:off println
     if (args.length != 1) {
       System.err.println("Usage: TallSkinnyPCA <input>")
       System.exit(1)
@@ -54,6 +55,7 @@ object TallSkinnyPCA {
     val pc = mat.computePrincipalComponents(mat.numCols().toInt)
 
     println("Principal components are:\n" + pc)
+    // scalastyle:on println
 
     sc.stop()
   }

@@ -36,12 +36,14 @@ import org.apache.spark.SparkConf
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println(s"""
         |Usage: DirectKafkaWordCount <brokers> <topics>
         |  <brokers> is a list of one or more Kafka brokers
         |  <topics> is a list of one or more kafka topics to consume from
         |
         """.stripMargin)
+      // scalastyle:on println
       System.exit(1)
     }
 

@@ -113,11 +113,15 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.transform(sparsePoints1) // should work
     intercept[SparkException] {
       model.transform(densePoints2).collect()
+      // scalastyle:off println
       println("Did not throw error when fit, transform were called on vectors of different lengths")
+      // scalastyle:on println
     }
     intercept[SparkException] {
       vectorIndexer.fit(badPoints)
+      // scalastyle:off println
       println("Did not throw error when fitting vectors of different lengths in same RDD.")
+      // scalastyle:on println
     }
   }
 
@@ -196,7 +200,9 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
         }
       } catch {
         case e: org.scalatest.exceptions.TestFailedException =>
+          // scalastyle:off println
           println(errMsg)
+          // scalastyle:on println
           throw e
       }
     }

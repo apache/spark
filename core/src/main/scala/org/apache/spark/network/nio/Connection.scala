@@ -568,7 +568,9 @@ private[spark] class ReceivingConnection(
         /* logDebug("Read " + bytesRead + " bytes for the buffer") */
 
         if (currentChunk.buffer.remaining == 0) {
+          // scalastyle:off println
           /* println("Filled buffer at " + System.currentTimeMillis) */
+          // scalastyle:on println
           val bufferMessage = inbox.getMessageForChunk(currentChunk).get
           if (bufferMessage.isCompletelyReceived) {
             bufferMessage.flip()

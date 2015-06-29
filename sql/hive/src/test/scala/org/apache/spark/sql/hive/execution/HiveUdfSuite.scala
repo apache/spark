@@ -253,7 +253,9 @@ class PairUdf extends GenericUDF {
   )
 
   override def evaluate(args: Array[DeferredObject]): AnyRef = {
+    // scalastyle:off println
     println("Type = %s".format(args(0).getClass.getName))
+    // scalastyle:on println
     Integer.valueOf(args(0).get.asInstanceOf[TestPair].entry._2)
   }
 

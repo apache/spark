@@ -163,6 +163,7 @@ object OneVsRestExample {
     val numClasses = MetadataUtils.getNumClasses(predictionColSchema).get
     val fprs = Range(0, numClasses).map(p => (p, metrics.falsePositiveRate(p.toDouble)))
 
+    // scalastyle:off println
     println(s" Training Time ${trainingDuration} sec\n")
 
     println(s" Prediction Time ${predictionDuration} sec\n")
@@ -172,6 +173,7 @@ object OneVsRestExample {
     println("label\tfpr")
 
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
+    // scalastyle:on println
 
     sc.stop()
   }

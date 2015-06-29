@@ -38,7 +38,9 @@ import org.apache.spark.util.IntParam
 object RawNetworkGrep {
   def main(args: Array[String]) {
     if (args.length != 4) {
+      // scalastyle:off println
       System.err.println("Usage: RawNetworkGrep <numStreams> <host> <port> <batchMillis>")
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -53,7 +55,9 @@ object RawNetworkGrep {
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray
     val union = ssc.union(rawStreams)
     union.filter(_.contains("the")).count().foreachRDD(r =>
+      // scalastyle:off println
       println("Grep count: " + r.collect().mkString))
+      // scalastyle:on println
     ssc.start()
     ssc.awaitTermination()
   }

@@ -69,6 +69,7 @@ object Correlations {
 
     val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
+    // scalastyle:off println
     println(s"Summary of data file: ${params.input}")
     println(s"${examples.count()} data points")
 
@@ -87,6 +88,7 @@ object Correlations {
       feature += 1
     }
     println()
+    // scalastyle:on println
 
     sc.stop()
   }

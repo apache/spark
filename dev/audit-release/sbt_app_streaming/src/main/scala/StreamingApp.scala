@@ -45,6 +45,7 @@ object SparkStreamingExample {
     ssc.start()
     Thread.sleep(5000)
 
+    // scalastyle:off println
     def test(f: => Boolean, failureMsg: String) = {
       if (!f) {
         println(failureMsg)
@@ -57,6 +58,7 @@ object SparkStreamingExample {
     test(rddCounts.toSet == Set(100, 1000, 10000), "Did not find expected streams")
 
     println("Test succeeded")
+    // scalastyle:on println
 
     ssc.stop()
   }

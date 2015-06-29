@@ -48,8 +48,10 @@ object StreamingLogisticRegression {
   def main(args: Array[String]) {
 
     if (args.length != 4) {
+      // scalastyle:off println
       System.err.println(
         "Usage: StreamingLogisticRegression <trainingDir> <testDir> <batchDuration> <numFeatures>")
+      // scalastyle:on println
       System.exit(1)
     }
 

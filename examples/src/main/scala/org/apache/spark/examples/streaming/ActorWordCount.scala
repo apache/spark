@@ -60,6 +60,7 @@ class FeederActor extends Actor {
     }
   }.start()
 
+  // scalastyle:off println
   def receive: Receive = {
 
     case SubscribeReceiver(receiverActor: ActorRef) =>
@@ -71,6 +72,7 @@ class FeederActor extends Actor {
     receivers = receivers.dropWhile(x => x eq receiverActor)
 
   }
+  // scalastyle:on println
 }
 
 /**
@@ -105,7 +107,9 @@ object FeederActor {
 
   def main(args: Array[String]) {
     if (args.length < 2){
+      // scalastyle:off println
       System.err.println("Usage: FeederActor <hostname> <port>\n")
+      // scalastyle:on println
       System.exit(1)
     }
     val Seq(host, port) = args.toSeq
@@ -115,7 +119,9 @@ object FeederActor {
       securityManager = new SecurityManager(conf))._1
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 
+    // scalastyle:off println
     println("Feeder started as:" + feeder)
+    // scalastyle:on println
 
     actorSystem.awaitTermination()
   }
@@ -135,8 +141,10 @@ object FeederActor {
 object ActorWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println(
         "Usage: ActorWordCount <hostname> <port>")
+      // scalastyle:on println
       System.exit(1)
     }
 

@@ -41,7 +41,9 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite {
   test("duplicated metastore relations") {
     import TestHive.implicits._
     val df = TestHive.sql("SELECT * FROM src")
+    // scalastyle:off println
     println(df.queryExecution)
+    // scalastyle:on println
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 }

@@ -142,7 +142,9 @@ object GraphGenerators {
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
+        // scalastyle:off println
         println(edges.size + " edges")
+        // scalastyle:on println
       }
       edges += addEdge(numVertices)
     }

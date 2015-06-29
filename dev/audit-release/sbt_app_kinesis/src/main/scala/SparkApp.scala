@@ -26,7 +26,9 @@ object SimpleApp {
   def main(args: Array[String]) {
     val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisUtils")).isSuccess
     if (!foundKinesis) {
+      // scalastyle:off println
       println("Kinesis not loaded via kinesis-asl")
+      // scalastyle:on println
       System.exit(-1)
     }
   }

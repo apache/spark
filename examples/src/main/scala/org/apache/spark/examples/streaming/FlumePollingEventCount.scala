@@ -40,8 +40,10 @@ import java.net.InetSocketAddress
 object FlumePollingEventCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println(
         "Usage: FlumePollingEventCount <host> <port>")
+      // scalastyle:on println
       System.exit(1)
     }
 

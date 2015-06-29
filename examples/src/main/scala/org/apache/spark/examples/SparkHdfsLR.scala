@@ -53,16 +53,19 @@ object SparkHdfsLR {
   }
 
   def showWarning() {
+    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
         |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
         |for more conventional use.
       """.stripMargin)
+    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
 
+    // scalastyle:off println
     if (args.length < 2) {
       System.err.println("Usage: SparkHdfsLR <file> <iters>")
       System.exit(1)
@@ -94,6 +97,7 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
+    // scalastyle:on println
     sc.stop()
   }
 }

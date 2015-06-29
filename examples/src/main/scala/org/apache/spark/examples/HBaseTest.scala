@@ -37,7 +37,9 @@ object HBaseTest {
     val conf = HBaseConfiguration.create()
 
     if (args.length < 1) {
+      // scalastyle:off println
       System.err.println("Usage: HBaseTest <table_name>")
+      // scalastyle:on println
       System.exit(1)
     }
 

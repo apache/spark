@@ -87,6 +87,7 @@ object SparseNaiveBayes {
     val numTraining = training.count()
     val numTest = test.count()
 
+    // scalastyle:off println
     println(s"numTraining = $numTraining, numTest = $numTest.")
 
     val model = new NaiveBayes().setLambda(params.lambda).run(training)
@@ -96,6 +97,7 @@ object SparseNaiveBayes {
     val accuracy = predictionAndLabel.filter(x => x._1 == x._2).count().toDouble / numTest
 
     println(s"Test accuracy = $accuracy.")
+    // scalastyle:on println
 
     sc.stop()
   }

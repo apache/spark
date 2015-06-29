@@ -92,7 +92,9 @@ object GenerateMIMAIgnore {
         ignoredMembers ++= getAnnotatedOrPackagePrivateMembers(classSymbol)
 
       } catch {
+        // scalastyle:off println
         case _: Throwable => println("Error instrumenting class:" + className)
+        // scalastyle:on println
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
@@ -108,7 +110,9 @@ object GenerateMIMAIgnore {
         .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
     } catch {
       case t: Throwable =>
+        // scalastyle:off println
         println("[WARN] Unable to detect inner functions for class:" + classSymbol.fullName)
+        // scalastyle:on println
         Seq.empty[String]
     }
   }
@@ -128,12 +132,14 @@ object GenerateMIMAIgnore {
       getOrElse(Iterator.empty).mkString("\n")
     File(".generated-mima-class-excludes")
       .writeAll(previousContents + privateClasses.mkString("\n"))
+    // scalastyle:off println
     println("Created : .generated-mima-class-excludes in current directory.")
     val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
       .getOrElse(Iterator.empty).mkString("\n")
     File(".generated-mima-member-excludes").writeAll(previousMembersContents +
       privateMembers.mkString("\n"))
     println("Created : .generated-mima-member-excludes in current directory.")
+    // scalastyle:on println
   }
 
 
@@ -174,7 +180,9 @@ object GenerateMIMAIgnore {
       try {
         classes += Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
       } catch {
+        // scalastyle:off println
         case _: Throwable => println("Unable to load:" + entry)
+        // scalastyle:on println
       }
     }
     classes

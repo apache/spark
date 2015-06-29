@@ -87,7 +87,9 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
     }.getMessage
 
+    // scalastyle:off println
     println("message!!!!" + message)
+    // scalastyle:on println
   }
 
   test("Double create does not fail when allowExisting = true") {

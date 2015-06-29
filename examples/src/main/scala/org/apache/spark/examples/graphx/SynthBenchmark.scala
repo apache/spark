@@ -85,6 +85,7 @@ object SynthBenchmark {
     val sc = new SparkContext(conf)
 
     // Create the graph
+    // scalastyle:off println
     println(s"Creating graph...")
     val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
       numEPart.getOrElse(sc.defaultParallelism), mu, sigma, seed)
@@ -124,6 +125,7 @@ object SynthBenchmark {
     println(s"Num Edges = $numEdges")
     println(s"Creation time = ${loadTime/1000.0} seconds")
     println(s"Run time = ${runTime/1000.0} seconds")
+    // scalastyle:on println
 
     sc.stop()
   }

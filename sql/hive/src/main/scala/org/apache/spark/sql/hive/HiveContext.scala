@@ -70,7 +70,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   import HiveContext._
 
+  // scalastyle:off println
   println("create HiveContext")
+  // scalastyle:on println
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe

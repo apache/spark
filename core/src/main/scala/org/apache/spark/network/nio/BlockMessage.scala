@@ -57,6 +57,7 @@ private[nio] class BlockMessage() {
   }
 
   def set(buffer: ByteBuffer) {
+    // scalastyle:off println
     /*
     println()
     println("BlockMessage: ")
@@ -67,6 +68,7 @@ private[nio] class BlockMessage() {
     println()
     println()
     */
+    // scalastyle:on println
     typ = buffer.getInt()
     val idLength = buffer.getInt()
     val idBuilder = new StringBuilder(idLength)
@@ -138,6 +140,7 @@ private[nio] class BlockMessage() {
       buffers += data
     }
 
+    // scalastyle:off println
     /*
     println()
     println("BlockMessage: ")
@@ -150,6 +153,7 @@ private[nio] class BlockMessage() {
     println()
     println()
     */
+    // scalastyle:on println
     Message.createBufferMessage(buffers)
   }
 

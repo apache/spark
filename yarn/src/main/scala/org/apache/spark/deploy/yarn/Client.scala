@@ -937,8 +937,10 @@ private[spark] class Client(
 object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
+      // scalastyle:off println
       println("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
+      // scalastyle:on println
     }
 
     // Set an env variable indicating we are running in YARN mode.

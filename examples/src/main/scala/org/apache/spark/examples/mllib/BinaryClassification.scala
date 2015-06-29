@@ -115,6 +115,7 @@ object BinaryClassification {
 
     val numTraining = training.count()
     val numTest = test.count()
+    // scalastyle:off println
     println(s"Training: $numTraining, test: $numTest.")
 
     examples.unpersist(blocking = false)
@@ -149,6 +150,7 @@ object BinaryClassification {
 
     println(s"Test areaUnderPR = ${metrics.areaUnderPR()}.")
     println(s"Test areaUnderROC = ${metrics.areaUnderROC()}.")
+    // scalastyle:on println
 
     sc.stop()
   }

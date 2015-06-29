@@ -24,6 +24,7 @@ object HdfsTest {
 
   /** Usage: HdfsTest [file] */
   def main(args: Array[String]) {
+    // scalastyle:off println
     if (args.length < 1) {
       System.err.println("Usage: HdfsTest <file>")
       System.exit(1)
@@ -38,6 +39,7 @@ object HdfsTest {
       val end = System.currentTimeMillis()
       println("Iteration " + iter + " took " + (end-start) + " ms")
     }
+    // scalastyle:on println
     sc.stop()
   }
 }

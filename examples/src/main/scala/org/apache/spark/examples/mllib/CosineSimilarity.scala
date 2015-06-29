@@ -101,7 +101,9 @@ object CosineSimilarity {
         math.abs(u)
     }.mean()
 
+    // scalastyle:off println
     println(s"Average absolute error in estimate is: $MAE")
+    // scalastyle:on println
 
     sc.stop()
   }

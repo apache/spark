@@ -94,6 +94,7 @@ object GradientBoostedTreesRunner {
 
   def run(params: Params) {
 
+    // scalastyle:off println
     val conf = new SparkConf().setAppName(s"GradientBoostedTreesRunner with $params")
     val sc = new SparkContext(conf)
 
@@ -141,6 +142,7 @@ object GradientBoostedTreesRunner {
       val testMSE = DecisionTreeRunner.meanSquaredError(model, test)
       println(s"Test mean squared error = $testMSE")
     }
+    // scalastyle:on println
 
     sc.stop()
   }

@@ -146,7 +146,9 @@ object RandomForestExample {
     params.checkpointDir.foreach(sc.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
+    // scalastyle:off println
     println(s"RandomForestExample with parameters:\n$params")
+    // scalastyle:on println
 
     // Load training and test data and cache it.
     val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
@@ -204,6 +206,7 @@ object RandomForestExample {
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
+    // scalastyle:off println
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained Random Forest from the fitted PipelineModel
@@ -240,6 +243,7 @@ object RandomForestExample {
       case _ =>
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
+    // scalastyle:on println
 
     sc.stop()
   }

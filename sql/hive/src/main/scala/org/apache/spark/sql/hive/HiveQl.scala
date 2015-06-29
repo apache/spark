@@ -186,7 +186,9 @@ private[hive] object HiveQl {
             .map(ast => Option(ast).map(_.transform(rule)).orNull))
       } catch {
         case e: Exception =>
+          // scalastyle:off println
           println(dumpTree(n))
+          // scalastyle:on println
           throw e
       }
     }

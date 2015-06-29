@@ -30,6 +30,7 @@ import org.apache.spark.graphx.PartitionStrategy._
 object Analytics extends Logging {
 
   def main(args: Array[String]): Unit = {
+    // scalastyle:off println
     if (args.length < 2) {
       System.err.println(
         "Usage: Analytics <taskType> <file> --numEPart=<num_edge_partitions> [other options]")
@@ -149,5 +150,6 @@ object Analytics extends Logging {
       case _ =>
         println("Invalid task type.")
     }
+    // scalastyle:on println
   }
 }

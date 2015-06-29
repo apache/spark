@@ -109,6 +109,7 @@ object LinearRegressionExample {
     val conf = new SparkConf().setAppName(s"LinearRegressionExample with $params")
     val sc = new SparkContext(conf)
 
+    // scalastyle:off println
     println(s"LinearRegressionExample with parameters:\n$params")
 
     // Load training and test data and cache it.
@@ -136,6 +137,7 @@ object LinearRegressionExample {
     DecisionTreeExample.evaluateRegressionModel(lirModel, training, "label")
     println("Test data results:")
     DecisionTreeExample.evaluateRegressionModel(lirModel, test, "label")
+    // scalastyle:on println
 
     sc.stop()
   }

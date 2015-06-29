@@ -33,7 +33,9 @@ class NumericParserSuite extends SparkFunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         NumericParser.parse(s)
+        // scalastyle:off println
         println(s"Didn't detect malformatted string $s.")
+        // scalastyle:on println
       }
     }
   }

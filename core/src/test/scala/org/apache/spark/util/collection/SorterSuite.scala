@@ -73,6 +73,7 @@ class SorterSuite extends SparkFunSuite {
 
   /** Runs an experiment several times. */
   def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
+    // scalastyle:off println
     if (skip) {
       println(s"Skipped experiment $name.")
       return
@@ -91,6 +92,7 @@ class SorterSuite extends SparkFunSuite {
     }
 
     println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
+    // scalastyle:on println
   }
 
   /**

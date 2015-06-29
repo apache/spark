@@ -107,6 +107,7 @@ object CassandraCQLTest {
       classOf[java.util.Map[String, ByteBuffer]],
       classOf[java.util.Map[String, ByteBuffer]])
 
+    // scalastyle:off println
     println("Count: " + casRdd.count)
     val productSaleRDD = casRdd.map {
       case (key, value) => {
@@ -117,6 +118,7 @@ object CassandraCQLTest {
     aggregatedRDD.collect().foreach {
       case (productId, saleCount) => println(productId + ":" + saleCount)
     }
+    // scalastyle:on println
 
     val casoutputCF = aggregatedRDD.map {
       case (productId, saleCount) => {

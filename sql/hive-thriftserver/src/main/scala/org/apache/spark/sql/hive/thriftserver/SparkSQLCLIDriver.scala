@@ -158,6 +158,7 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(cli.processLine(sessionState.execString))
     }
 
+    // scalastyle:off println
     try {
       if (sessionState.fileName != null) {
         System.exit(cli.processFile(sessionState.fileName))
@@ -189,6 +190,7 @@ private[hive] object SparkSQLCLIDriver {
                            "history file.  History will not be available during this session.")
         System.err.println(e.getMessage)
     }
+    // scalastyle:on println
 
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
     clientTransportTSocketField.setAccessible(true)
@@ -270,6 +272,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
 
       if (proc != null) {
+        // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
           proc.isInstanceOf[AddResourceProcessor]) {
           val driver = new SparkSQLDriver
@@ -336,6 +339,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           }
           ret = proc.run(cmd_1).getResponseCode
         }
+        // scalastyle:on println
       }
       ret
     }

@@ -87,6 +87,7 @@ object DenseKMeans {
 
     val numExamples = examples.count()
 
+    // scalastyle:off println
     println(s"numExamples = $numExamples.")
 
     val initMode = params.initializationMode match {
@@ -103,6 +104,7 @@ object DenseKMeans {
     val cost = model.computeCost(examples)
 
     println(s"Total cost = $cost.")
+    // scalastyle:on println
 
     sc.stop()
   }

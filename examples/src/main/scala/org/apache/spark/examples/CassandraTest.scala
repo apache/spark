@@ -100,7 +100,9 @@ object CassandraTest {
     val counts = paraRdd.flatMap(p => p.split(" ")).map(word => (word, 1)).reduceByKey(_ + _)
 
     counts.collect().foreach {
+      // scalastyle:off println
       case (word, count) => println(word + ":" + count)
+      // scalastyle:on println
     }
 
     counts.map {

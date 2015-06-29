@@ -50,8 +50,10 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
           EnsembleTestHelper.validateRegressor(gbt, GradientBoostedTreesSuite.data, 0.06)
         } catch {
           case e: java.lang.AssertionError =>
+            // scalastyle:off println
             println(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
               s" subsamplingRate=$subsamplingRate")
+            // scalastyle:on println
             throw e
         }
 
@@ -80,8 +82,10 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
           EnsembleTestHelper.validateRegressor(gbt, GradientBoostedTreesSuite.data, 0.85, "mae")
         } catch {
           case e: java.lang.AssertionError =>
+            // scalastyle:off println
             println(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
               s" subsamplingRate=$subsamplingRate")
+            // scalastyle:on println
             throw e
         }
 
@@ -111,8 +115,10 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
           EnsembleTestHelper.validateClassifier(gbt, GradientBoostedTreesSuite.data, 0.9)
         } catch {
           case e: java.lang.AssertionError =>
+            // scalastyle:off println
             println(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
               s" subsamplingRate=$subsamplingRate")
+            // scalastyle:on println
             throw e
         }
 

@@ -78,7 +78,9 @@ object LogQuery {
     dataSet.map(line => (extractKey(line), extractStats(line)))
       .reduceByKey((a, b) => a.merge(b))
       .collect().foreach{
+        // scalastyle:off println
         case (user, query) => println("%s\t%s".format(user, query))}
+        // scalastyle:on println
 
     sc.stop()
   }

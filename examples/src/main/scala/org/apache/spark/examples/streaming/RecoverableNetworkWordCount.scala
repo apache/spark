@@ -60,7 +60,9 @@ object RecoverableNetworkWordCount {
 
     // If you do not see this printed, that means the StreamingContext has been loaded
     // from the new checkpoint
+    // scalastyle:off println
     println("Creating new context")
+    // scalastyle:on println
     val outputFile = new File(outputPath)
     if (outputFile.exists()) outputFile.delete()
     val sparkConf = new SparkConf().setAppName("RecoverableNetworkWordCount")
@@ -75,8 +77,10 @@ object RecoverableNetworkWordCount {
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
       val counts = "Counts at time " + time + " " + rdd.collect().mkString("[", ", ", "]")
+      // scalastyle:off println
       println(counts)
       println("Appending to " + outputFile.getAbsolutePath)
+      // scalastyle:on println
       Files.append(counts + "\n", outputFile, Charset.defaultCharset())
     })
     ssc
@@ -84,6 +88,7 @@ object RecoverableNetworkWordCount {
 
   def main(args: Array[String]) {
     if (args.length != 4) {
+      // scalastyle:off println
       System.err.println("You arguments were " + args.mkString("[", ", ", "]"))
       System.err.println(
         """
@@ -97,6 +102,7 @@ object RecoverableNetworkWordCount {
           |Both <checkpoint-directory> and <output-file> must be absolute paths
         """.stripMargin
       )
+      // scalastyle:on println
       System.exit(1)
     }
     val Array(ip, IntParam(port), checkpointDirectory, outputPath) = args

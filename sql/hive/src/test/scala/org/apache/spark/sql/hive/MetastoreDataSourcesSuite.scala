@@ -415,7 +415,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
            |)
          """.stripMargin)
 
+      // scalastyle:off println
       sql("DROP TABLE jsonTable").collect().foreach(println)
+      // scalastyle:on println
     }
   }
 

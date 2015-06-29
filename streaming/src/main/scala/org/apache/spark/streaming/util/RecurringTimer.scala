@@ -114,7 +114,9 @@ object RecurringTimer {
 
     def onRecur(time: Long) {
       val currentTime = System.currentTimeMillis()
+      // scalastyle:off println
       println("" + currentTime + ": " + (currentTime - lastRecurTime))
+      // scalastyle:on println
       lastRecurTime = currentTime
     }
     val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")

@@ -101,6 +101,7 @@ object LinearRegression {
 
     val numTraining = training.count()
     val numTest = test.count()
+    // scalastyle:off println
     println(s"Training: $numTraining, test: $numTest.")
 
     examples.unpersist(blocking = false)
@@ -130,6 +131,7 @@ object LinearRegression {
     val rmse = math.sqrt(loss / numTest)
 
     println(s"Test RMSE = $rmse.")
+    // scalastyle:on println
 
     sc.stop()
   }

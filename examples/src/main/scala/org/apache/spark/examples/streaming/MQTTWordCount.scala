@@ -32,6 +32,7 @@ import org.apache.spark.SparkConf
 object MQTTPublisher {
 
   def main(args: Array[String]) {
+    // scalastyle:off println
     if (args.length < 2) {
       System.err.println("Usage: MQTTPublisher <MqttBrokerUrl> <topic>")
       System.exit(1)
@@ -70,6 +71,7 @@ object MQTTPublisher {
         client.disconnect()
       }
     }
+    // scalastyle:on println
   }
 }
 
@@ -96,8 +98,10 @@ object MQTTWordCount {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println(
         "Usage: MQTTWordCount <MqttbrokerUrl> <topic>")
+      // scalastyle:on println
       System.exit(1)
     }
 

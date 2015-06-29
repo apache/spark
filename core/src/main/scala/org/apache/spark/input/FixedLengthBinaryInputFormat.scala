@@ -51,7 +51,9 @@ private[spark] class FixedLengthBinaryInputFormat
       recordLength = FixedLengthBinaryInputFormat.getRecordLength(context)
     }
     if (recordLength <= 0) {
+      // scalastyle:off println
       println("record length is less than 0, file cannot be split")
+      // scalastyle:on println
       false
     } else {
       true

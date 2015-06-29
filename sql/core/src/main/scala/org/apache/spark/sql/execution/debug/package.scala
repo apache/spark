@@ -66,7 +66,9 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
+      // scalastyle:off println
       println(s"Results returned: ${debugPlan.execute().count()}")
+      // scalastyle:on println
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
@@ -82,11 +84,15 @@ package object debug {
           TypeCheck(s)
       }
       try {
+        // scalastyle:off println
         println(s"Results returned: ${debugPlan.execute().count()}")
+        // scalastyle:on println
       } catch {
         case e: Exception =>
           def unwrap(e: Throwable): Throwable = if (e.getCause == null) e else unwrap(e.getCause)
+          // scalastyle:off println
           println(s"Deepest Error: ${unwrap(e)}")
+          // scalastyle:on println
       }
     }
   }
@@ -119,11 +125,15 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
+      // scalastyle:off println
       println(s"== ${child.simpleString} ==")
       println(s"Tuples output: ${tupleCount.value}")
+      // scalastyle:on println
       child.output.zip(columnStats).foreach { case(attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
+        // scalastyle:off println
         println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
+        // scalastyle:on println
       }
     }
 

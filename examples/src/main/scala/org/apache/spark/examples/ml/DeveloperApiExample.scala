@@ -52,7 +52,9 @@ object DeveloperApiExample {
     // Create a LogisticRegression instance.  This instance is an Estimator.
     val lr = new MyLogisticRegression()
     // Print out the parameters, documentation, and any default values.
+    // scalastyle:off println
     println("MyLogisticRegression parameters:\n" + lr.explainParams() + "\n")
+    // scalastyle:on println
 
     // We may set parameters using setter methods.
     lr.setMaxIter(10)

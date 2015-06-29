@@ -76,7 +76,9 @@ class JobGeneratorSuite extends TestSuiteBase {
         if (time.milliseconds == longBatchTime) {
           while (waitLatch.getCount() > 0) {
             waitLatch.await()
+            // scalastyle:off println
             println("Await over")
+            // scalastyle:on println
           }
         }
       })

@@ -35,9 +35,11 @@ import org.apache.spark.examples.streaming.StreamingExamples
 object PageViewStream {
   def main(args: Array[String]) {
     if (args.length != 3) {
+      // scalastyle:off println
       System.err.println("Usage: PageViewStream <metric> <host> <port>")
       System.err.println("<metric> must be one of pageCounts, slidingPageCounts," +
                          " errorRatePerZipCode, activeUserCount, popularUsersSeen")
+      // scalastyle:on println
       System.exit(1)
     }
     StreamingExamples.setStreamingLogLevels()
@@ -89,6 +91,7 @@ object PageViewStream {
     val userList = ssc.sparkContext.parallelize(
        Map(1 -> "Patrick Wendell", 2->"Reynold Xin", 3->"Matei Zaharia").toSeq)
 
+    // scalastyle:off println
     metric match {
       case "pageCounts" => pageCounts.print()
       case "slidingPageCounts" => slidingPageCounts.print()
@@ -103,6 +106,7 @@ object PageViewStream {
             .foreach(u => println("Saw user %s at time %s".format(u, time))))
       case _ => println("Invalid metric entered: " + metric)
     }
+    // scalastyle:on println
 
     ssc.start()
   }

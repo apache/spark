@@ -48,7 +48,9 @@ object GroupByTest {
     // Enforce that everything has been calculated and in cache
     pairs1.count()
 
+    // scalastyle:off println
     println(pairs1.groupByKey(numReducers).count())
+    // scalastyle:on println
 
     sc.stop()
   }

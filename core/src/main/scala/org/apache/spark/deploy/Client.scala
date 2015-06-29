@@ -99,6 +99,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
 
   /* Find out driver status then exit the JVM */
   def pollAndReportStatus(driverId: String) {
+    // scalastyle:off println
     println("... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
@@ -125,10 +126,12 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
         }
         System.exit(0)
     }
+    // scalastyle:on println
   }
 
   override def receiveWithLogging: PartialFunction[Any, Unit] = {
 
+    // scalastyle:off println
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
       if (success) {
@@ -171,6 +174,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           System.exit(-1)
         }
       }
+    // scalastyle:on println
   }
 }
 
@@ -179,10 +183,12 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
  */
 object Client {
   def main(args: Array[String]) {
+    // scalastyle:off println
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a future version of Spark")
       println("Use ./bin/spark-submit with \"--master spark://host:port\"")
     }
+    // scalastyle:on println
 
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)

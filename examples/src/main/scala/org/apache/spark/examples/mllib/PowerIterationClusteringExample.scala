@@ -111,7 +111,9 @@ object PowerIterationClusteringExample {
     val sizesStr = assignments.map {
       _._2.size
     }.sorted.mkString("(", ",", ")")
+    // scalastyle:off println
     println(s"Cluster assignments: $assignmentsStr\ncluster sizes: $sizesStr")
+    // scalastyle:on println
 
     sc.stop()
   }

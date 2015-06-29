@@ -39,6 +39,7 @@ object RDDRelation {
     // automatically inferred using scala reflection.
     df.registerTempTable("records")
 
+    // scalastyle:off println
     // Once tables have been registered, you can run SQL queries over them.
     println("Result of SELECT *:")
     sqlContext.sql("SELECT * FROM records").collect().foreach(println)
@@ -69,6 +70,7 @@ object RDDRelation {
     // These files can also be registered as tables.
     parquetFile.registerTempTable("parquetFile")
     sqlContext.sql("SELECT * FROM parquetFile").collect().foreach(println)
+    // scalastyle:on println
 
     sc.stop()
   }

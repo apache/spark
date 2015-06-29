@@ -130,8 +130,10 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
               Thread.sleep(100)
             }
             if (running.get() != 4) {
+              // scalastyle:off println
               println("Waited 1 second without seeing runningThreads = 4 (it was " +
                 running.get() + "); failing test")
+              // scalastyle:on println
               ThreadingSuiteState.failed.set(true)
             }
             number

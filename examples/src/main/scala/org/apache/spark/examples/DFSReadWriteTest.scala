@@ -56,7 +56,9 @@ object DFSReadWriteTest {
     "localFile - (string) local file to use in test\n" +
     "dfsDir - (string) DFS directory for read/write tests\n"
 
+    // scalastyle:off println
     println(usage)
+    // scalastyle:on println
   }
 
   private def parseArgs(args: Array[String]): Unit = {
@@ -67,6 +69,7 @@ object DFSReadWriteTest {
 
     var i = 0
 
+    // scalastyle:off println
     localFilePath = new File(args(i))
     if (!localFilePath.exists) {
       System.err.println("Given path (" + args(i) + ") does not exist.\n")
@@ -79,6 +82,7 @@ object DFSReadWriteTest {
       printUsage()
       System.exit(1)
     }
+    // scalastyle:on println
 
     i += 1
     dfsDirPath = args(i)
@@ -97,6 +101,7 @@ object DFSReadWriteTest {
   def main(args: Array[String]): Unit = {
     parseArgs(args)
 
+    // scalastyle:off println
     println("Performing local word count")
     val fileContents = readFile(localFilePath.toString())
     val localWordCount = runLocalWordCount(fileContents)
@@ -133,6 +138,7 @@ object DFSReadWriteTest {
       println(s"Failure! Local Word Count ($localWordCount) " +
         s"and DFS Word Count ($dfsWordCount) disagree.")
     }
+    // scalastyle:on println
 
   }
 }

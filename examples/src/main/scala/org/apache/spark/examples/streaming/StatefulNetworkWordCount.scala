@@ -37,7 +37,9 @@ import org.apache.spark.streaming._
 object StatefulNetworkWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println("Usage: StatefulNetworkWordCount <hostname> <port>")
+      // scalastyle:on println
       System.exit(1)
     }
 
