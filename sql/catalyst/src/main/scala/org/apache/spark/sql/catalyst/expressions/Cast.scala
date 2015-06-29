@@ -479,6 +479,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 }
 
 object Cast {
+
+  private[sql] val timestampRegex =
+    """^(\d{4}\-\d{1,2}\-\d{1,2})( \d{2}:\d{2}:\d{2}(\.(\d+))?)?$""".r
+
   // `SimpleDateFormat` is not thread-safe.
   private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {

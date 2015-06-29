@@ -37,6 +37,10 @@ class DataFrameDateTimeSuite extends QueryTest {
     checkAnswer(
       df.select("t").filter($"t" >= "2014-06-01"),
       Row(Timestamp.valueOf("2015-01-01 00:00:00")) :: Nil)
+
+    checkAnswer(
+      df.select("t").filter($"t" === "2014-01-01"),
+      Row(Timestamp.valueOf("2014-01-01 00:00:00")) :: Nil)
   }
 
   test("date comparison with date strings") {
