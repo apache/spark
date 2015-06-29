@@ -38,7 +38,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * @param predictionAndObservations a DataFrame with two double columns:
    *                                  prediction and observation
    */
-  private[mllib] def this(predictionAndObservations: DataFrame) =
+  def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**

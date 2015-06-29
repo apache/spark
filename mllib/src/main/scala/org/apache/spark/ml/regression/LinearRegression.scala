@@ -28,12 +28,15 @@ import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 
@@ -140,7 +143,10 @@ class LinearRegression(override val uid: String)
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
       if (handlePersistence) instances.unpersist()
-      return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
+      val weights = Vectors.sparse(numFeatures, Seq())
+      val intercept = yMean
+      val summary = generateTrainingResults(dataset, Array(), weights, intercept)
+      return new LinearRegressionModel(uid, weights ,intercept, summary)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -193,11 +199,39 @@ class LinearRegression(override val uid: String)
     val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
     if (handlePersistence) instances.unpersist()
 
+    val summary = generateTrainingResults(dataset, lossHistory.result(), weights, intercept)
+
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))
+    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept, summary))
+  }
+
+  def generateTrainingResults(
+      dataset: DataFrame,
+      objectiveTrace: Array[Double],
+      weights: Vector,
+      intercept: Double): LinearRegressionTrainingResults = {
+
+    // Generate training results summary
+    val predictionAndObservations = dataset
+      .select($(labelCol))
+      .withColumn(
+        $(predictionCol),
+        callUDF(predict(weights.compressed, intercept) _, DoubleType, col($(featuresCol))))
+      .select($(predictionCol), $(labelCol))
+
+    new LinearRegressionTrainingResults(
+      predictionAndObservations,
+      objectiveTrace.length,
+      objectiveTrace
+    )
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
+
+
+  private def predict(weights: Vector, intercept: Double)(features: Vector): Double = {
+    dot(features, weights) + intercept
+  }
 }
 
 /**
@@ -208,7 +242,8 @@ class LinearRegression(override val uid: String)
 class LinearRegressionModel private[ml] (
     override val uid: String,
     val weights: Vector,
-    val intercept: Double)
+    val intercept: Double,
+    val summary: LinearRegressionTrainingResults)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
@@ -217,7 +252,40 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
+    copyValues(new LinearRegressionModel(uid, weights, intercept, summary), extra)
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Linear regression training results.
+ * @param predictionAndObservations dataframe with columns predictions (0) and observations(0).
+ * @param totalIterations total number of training iterations.
+ * @param objectiveTrace objective function value at each iteration.
+ */
+@Experimental
+class LinearRegressionTrainingResults(
+    @transient predictionAndObservations: DataFrame,
+    val totalIterations: Int,
+    val objectiveTrace: Array[Double])
+  extends LinearRegressionResults(predictionAndObservations)
+
+/**
+ * :: Experimental ::
+ * Linear regression results evaluated on a dataset.  Expects two input columns: prediction (0) and
+ * label (1).
+ */
+@Experimental
+class LinearRegressionResults(@transient val predictionAndObservations: DataFrame)
+  extends RegressionMetrics(predictionAndObservations) {
+
+  /** Get residuals */
+  def residuals: DataFrame = {
+    val colNames = predictionAndObservations.columns
+    val predictions = predictionAndObservations(colNames(0))
+    val observations = predictionAndObservations(colNames(1))
+
+    predictionAndObservations.withColumn("residual", predictions - observations)
   }
 }
 
