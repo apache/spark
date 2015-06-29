@@ -1209,6 +1209,7 @@ class RowMatrix(DistributedMatrix):
 
     def numCols(self):
         """Get or compute the number of cols.
+
         >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
         >>> rm = DistributedMatrices.rowMatrix(rows)
         >>> rm.numCols()

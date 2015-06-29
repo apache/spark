@@ -372,6 +372,25 @@ long m = mat.numRows();
 long n = mat.numCols();
 {% endhighlight %}
 </div>
+
+<div data-lang="python" markdown="1">
+A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.RowMatrix) can be created from an `RDD` of Vectors.
+
+{% highlight python %}
+from pyspark.mllib.linalg import DistributedMatrices, Vectors
+
+# Create an RDD of Vectors
+rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+
+# Create a RowMatrix from an RDD[Vector]
+mat = DistributedMatrices.rowMatrix(rows)
+
+# Get its size
+m = mat.numRows() # 4
+n = mat.numCols() # 3
+{% endhighlight %}
+
+</div>
 </div>
 
 ### IndexedRowMatrix
