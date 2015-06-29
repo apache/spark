@@ -156,7 +156,11 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[Upper]("ucase"),
-    expression[Upper]("upper")
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[DateAdd]("date_add"),
+    expression[DateSub]("date_sub")
   )
 
   val builtin: FunctionRegistry = {
