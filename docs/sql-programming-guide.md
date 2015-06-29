@@ -1775,7 +1775,7 @@ the Data Sources API.  The following options are supported:
 {% highlight scala %}
 val jdbcDF = sqlContext.read.format("jdbc").options( 
   Map("url" -> "jdbc:postgresql:dbserver",
-  "dbtable" -> "schema.tablename")).load
+  "dbtable" -> "schema.tablename")).load()
 {% endhighlight %}
 
 </div>
@@ -1797,7 +1797,6 @@ DataFrame jdbcDF = sqlContext.read().format("jdbc"). options(options).load();
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-
 df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', dbtable='schema.tablename').load()
 {% endhighlight %}
 
@@ -1806,8 +1805,7 @@ df = sqlContext.read.format('jdbc').options(url = 'jdbc:postgresql:dbserver', db
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-
-df <- read.df(sqlContext, source = "jdbc",url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+df <- loadDF(sqlContext, source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
 {% endhighlight %}
 
 </div>
