@@ -230,7 +230,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       i += 1
     }
 
-    new GenericRow(newValues)
+    new GenericInternalRow(newValues)
   }
 
   override def update(ordinal: Int, value: Any) {

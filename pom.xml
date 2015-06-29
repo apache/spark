@@ -156,7 +156,6 @@
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
-    <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.7</snappy.version>
@@ -249,7 +248,7 @@
     <repository>
       <id>mapr-repo</id>
       <name>MapR Repository</name>
-      <url>http://repository.mapr.com/maven</url>
+      <url>http://repository.mapr.com/maven/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -682,7 +681,7 @@
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
-        <artifactId>mockito-all</artifactId>
+        <artifactId>mockito-core</artifactId>
         <version>1.9.5</version>
         <scope>test</scope>
       </dependency>
@@ -1687,7 +1686,7 @@
     <profile>
       <id>hadoop-1</id>
       <properties>
-        <hadoop.version>1.0.4</hadoop.version>
+        <hadoop.version>1.2.1</hadoop.version>
         <protobuf.version>2.4.1</protobuf.version>
         <hbase.version>0.98.7-hadoop1</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>

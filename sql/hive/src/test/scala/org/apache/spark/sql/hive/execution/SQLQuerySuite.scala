@@ -638,7 +638,7 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-5203 union with different decimal precision") {
     Seq.empty[(Decimal, Decimal)]
       .toDF("d1", "d2")
-      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .select($"d1".cast(DecimalType(10, 5)).as("d"))
       .registerTempTable("dn")
 
     sql("select d from dn union all select d * 2 from dn")
@@ -653,7 +653,7 @@ class SQLQuerySuite extends QueryTest {
         .queryExecution.toRdd.count())
   }
 
-  test("test script transform for stderr") {
+  ignore("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(0 ===

@@ -18,11 +18,16 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new RegressionEvaluator)
+  }
 
   test("Regression Evaluator: default params") {
     /**
@@ -58,7 +63,7 @@ class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext 
 
     // default = rmse
     val evaluator = new RegressionEvaluator()
-    assert(evaluator.evaluate(predictions) ~== 0.1019382 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== -0.1019382 absTol 0.001)
 
     // r2 score
     evaluator.setMetricName("r2")
@@ -66,6 +71,6 @@ class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext 
 
     // mae
     evaluator.setMetricName("mae")
-    assert(evaluator.evaluate(predictions) ~== 0.08036075 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== -0.08036075 absTol 0.001)
   }
 }
