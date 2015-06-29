@@ -60,7 +60,8 @@ private[spark] class MesosSchedulerBackend(
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
   // Offer constraints
-  val slaveOfferConstraints = parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
+  private[mesos] val slaveOfferConstraints =
+    parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
   @volatile var appId: String = _
 
@@ -205,7 +206,7 @@ private[spark] class MesosSchedulerBackend(
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
 
         val meetsRequirements = (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
-        (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
+          (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
 
         // add some debug messaging
         val debugStatement = if(meetsRequirements) "Accepting" else "Declining"

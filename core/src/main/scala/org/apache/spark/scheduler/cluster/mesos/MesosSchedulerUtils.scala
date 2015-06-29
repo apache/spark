@@ -29,7 +29,6 @@ import org.apache.mesos.Protos._
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.util.Utils
 
-
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
@@ -96,7 +95,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     0.0
   }
 
-
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */
   def getAttribute(attr: Attribute): (String, Set[String]) =
     (attr.getName, attr.getText.getValue.split(',').toSet)
@@ -110,7 +108,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       .setScalar(Value.Scalar.newBuilder().setValue(quantity).build())
       .build()
   }
-
 
   /**
    * Match the requirements (if any) to the offer attributes.
@@ -179,7 +176,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       }
     }
   }
-
 
   // These defaults copied from YARN
   private val MEMORY_OVERHEAD_FRACTION = 0.10
