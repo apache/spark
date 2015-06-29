@@ -21,6 +21,8 @@ import java.lang.{Boolean => JBoolean}
 import java.io.{Closeable, InputStream}
 import java.util.{List => JList, Map => JMap}
 
+import org.slf4j.{LoggerFactory, Logger}
+
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -41,6 +43,8 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.hadoop.conf.Configuration
 
+import scala.util.control.NonFatal
+
 /**
  * A Java-friendly version of [[org.apache.spark.streaming.StreamingContext]] which is the main
  * entry point for Spark Streaming functionality. It provides methods to create
@@ -53,6 +57,8 @@ import org.apache.hadoop.conf.Configuration
  * termination of a context by `stop()` or by an exception.
  */
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
+
+  private val logger: Logger = LoggerFactory.getLogger(classOf[JavaStreamingContext])
 
   /**
    * Create a StreamingContext.
@@ -615,7 +621,15 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * will be thrown in this thread.
    */
   def awaitTermination(): Unit = {
-    ssc.awaitTermination()
+    try {
+      ssc.awaitTermination()
+    } catch {
+      case e: InterruptedException =>
+        logger.info("StreamingContext interrupted at awaitTermination")
+      case NonFatal(e) =>
+        logger.info("Exception other than InterruptedException in StreamingContext awaitTermination, throwing", e)
+        throw e
+    }
   }
 
   /**

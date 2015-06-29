@@ -20,6 +20,8 @@ package org.apache.spark.streaming
 import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
+import org.slf4j.{LoggerFactory, Logger}
+
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
@@ -61,6 +63,8 @@ class StreamingContext private[streaming] (
     cp_ : Checkpoint,
     batchDur_ : Duration
   ) extends Logging {
+
+  private val logger: Logger = LoggerFactory.getLogger(classOf[StreamingContext])
 
   /**
    * Create a StreamingContext using an existing SparkContext.
@@ -636,7 +640,16 @@ class StreamingContext private[streaming] (
    *         if the waiting time elapsed before returning from the method.
    */
   def awaitTerminationOrTimeout(timeout: Long): Boolean = {
-    waiter.waitForStopOrError(timeout)
+    try {
+      waiter.waitForStopOrError(timeout)
+    } catch {
+      case e: InterruptedException =>
+        logger.info("StreamingContext interrupted at awaitTerminationOrTimeout")
+        false
+      case NonFatal(e) =>
+        logger.info("Exception other than InterruptedException in StreamingContext awaitTerminationOrTimeout, throwing", e)
+        throw e
+    }
   }
 
   /**
