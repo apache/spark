@@ -1627,7 +1627,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function0[_], returnType: DataType): Column = {
-    ScalaUdf(f, returnType, Seq())
+    ScalaUDF(f, returnType, Seq())
   }
 
   /**
@@ -1640,7 +1640,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr))
   }
 
   /**
@@ -1653,7 +1653,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr))
   }
 
   /**
@@ -1666,7 +1666,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
   }
 
   /**
@@ -1679,7 +1679,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
   }
 
   /**
@@ -1692,7 +1692,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
   }
 
   /**
@@ -1705,7 +1705,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
   }
 
   /**
@@ -1718,7 +1718,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
   }
 
   /**
@@ -1731,7 +1731,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
   }
 
   /**
@@ -1744,7 +1744,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
   }
 
   /**
@@ -1757,7 +1757,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
 
   // scalastyle:on
