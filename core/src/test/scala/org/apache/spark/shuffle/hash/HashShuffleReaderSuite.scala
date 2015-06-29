@@ -104,7 +104,7 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
 
       // Setup the blockManager mock so the buffer gets returned when the shuffle code tries to
       // fetch shuffle data.
-      val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
+      val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId, 0)
       when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
       when(blockManager.wrapForCompression(meq(shuffleBlockId), isA(classOf[InputStream])))
         .thenAnswer(dummyCompressionFunction)
@@ -117,8 +117,8 @@ class HashShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {
     val mapOutputTracker = mock(classOf[MapOutputTracker])
     // Test a scenario where all data is local, just to avoid creating a bunch of additional mocks
     // for the code to read data over the network.
-    val statuses: Array[(BlockManagerId, Long)] =
-      Array.fill(numMaps)((localBlockManagerId, byteOutputStream.size().toLong))
+    val statuses: Array[ServerAttemptSize] =
+      Array.fill(numMaps)(ServerAttemptSize(localBlockManagerId, 0, byteOutputStream.size().toLong))
     when(mapOutputTracker.getServerStatuses(shuffleId, reduceId)).thenReturn(statuses)
 
     // Create a mocked shuffle handle to pass into HashShuffleReader.
