@@ -269,9 +269,8 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       f: (String, String) => String): String = {
     val eval = child.gen(ctx)
     val resultCode = f(ev.primitive, eval.primitive)
-    // reuse the previous isNull
-    ev.isNull = eval.isNull
     eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $resultCode

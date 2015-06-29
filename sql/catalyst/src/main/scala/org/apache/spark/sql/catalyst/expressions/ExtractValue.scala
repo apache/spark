@@ -128,7 +128,20 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"${ctx.getColumn(c, dataType, ordinal)}")
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      val assignResult = s"$result = ${ctx.getColumn(eval, dataType, ordinal)};"
+      if (field.nullable) {
+        s"""
+          if ($eval.isNullAt($ordinal)) {
+            ${ev.isNull} = true;
+          } else {
+            $assignResult
+          }
+        """
+      } else {
+        assignResult
+      }
+    })
   }
 }
 
@@ -155,13 +168,22 @@ case class GetArrayStructFields(
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    val nullCheck = if (field.nullable) {
+      s"row != null && !row.isNullAt($ordinal)"
+    } else {
+      "row != null"
+    }
+    // TODO: consider using Array[_] for ArrayType child to avoid
+    // boxing of primitives
     nullSafeCodeGen(ctx, ev, (result, eval) => {
       s"""
         final int n = $eval.size();
         final $arraySeqClass<Object> values = new $arraySeqClass<Object>(n);
-        for (int i = 0; i < n; i++) {
-          InternalRow row = (InternalRow) $eval.apply(i);
-          if (row != null) values.update(i, ${ctx.getColumn("row", field.dataType, ordinal)});
+        for (int j = 0; j < n; j++) {
+          InternalRow row = (InternalRow) $eval.apply(j);
+          if ($nullCheck) {
+            values.update(j, ${ctx.getColumn("row", field.dataType, ordinal)});
+          }
         }
         $result = (${ctx.javaType(dataType)}) values;
       """
@@ -220,8 +242,17 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev,
-      (eval1, eval2) => s"(${ctx.boxedType(dataType)})$eval1.apply((int)$eval2)")
+    val castToInt = if (ordinal.dataType == LongType) "(int)" else ""
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"""
+        final int index = $castToInt $eval2;
+        if (index >= $eval1.size() || index < 0) {
+          ${ev.isNull} = true;
+        } else {
+          $result = (${ctx.boxedType(dataType)})$eval1.apply(index);
+        }
+      """
+    })
   }
 }
 
