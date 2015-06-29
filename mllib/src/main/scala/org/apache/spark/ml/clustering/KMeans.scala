@@ -82,11 +82,10 @@ private[clustering] trait KMeansParams
    * setting -- the default of 5 is almost always enough. Default: 5.
    * @group param
    */
-  val initializationSteps =
-    new Param[Int](this, "initializationSteps", "number of steps for k-means||")
+  val initSteps = new Param[Int](this, "initSteps", "number of steps for k-means||")
 
   /** @group getParam */
-  def getInitializationSteps: Int = $(initializationSteps)
+  def getInitializationSteps: Int = $(initSteps)
 
   /**
    * Validates and transforms the input schema.
@@ -153,7 +152,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   setDefault(maxIter, 20)
   setDefault(runs, 1)
   setDefault(initMode, MLlibKMeans.K_MEANS_PARALLEL)
-  setDefault(initializationSteps, 5)
+  setDefault(initSteps, 5)
   setDefault(epsilon, 1e-4)
   setDefault(seed, Utils.random.nextLong())
 
@@ -179,7 +178,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   /** @group setParam */
   def setInitializationSteps(value: Int): this.type = {
     require(value > 0, "Number of initialization steps must be positive")
-    set(initializationSteps, value)
+    set(initSteps, value)
   }
 
   /** @group setParam */
