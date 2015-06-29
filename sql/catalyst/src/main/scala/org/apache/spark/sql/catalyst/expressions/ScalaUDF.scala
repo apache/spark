@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.DataType
  * User-defined function.
  * @param dataType  Return type of function.
  */
-case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
+case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expression])
   extends Expression {
 
   override def nullable: Boolean = true

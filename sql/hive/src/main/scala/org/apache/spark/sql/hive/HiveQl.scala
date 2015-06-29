@@ -1638,7 +1638,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             sys.error(s"Couldn't find function $functionName"))
         val functionClassName = functionInfo.getFunctionClass.getName
 
-        (HiveGenericUdtf(
+        (HiveGenericUDTF(
           new HiveFunctionWrapper(functionClassName),
           children.map(nodeToExpr)), attributes)
 
