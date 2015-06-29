@@ -564,6 +564,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
+                .option("noUse", "this option will not be used in save.")\
                 .format("json").save(path=tmpPath)
         actual =\
             self.sqlCtx.read.format("json")\
