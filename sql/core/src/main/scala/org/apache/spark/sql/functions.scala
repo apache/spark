@@ -1047,6 +1047,22 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
+   * Computes hex value of the given column
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def hex(column: Column): Column = Hex(column.expr)
+
+  /**
+   * Computes hex value of the given input
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def hex(colName: String): Column = hex(Column(colName))
+
+  /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group math_funcs
