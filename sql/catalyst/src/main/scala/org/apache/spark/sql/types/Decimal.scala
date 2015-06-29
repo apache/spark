@@ -265,8 +265,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def * (that: Decimal): Decimal = Decimal(toBigDecimal * that.toBigDecimal)
 
-  def / (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toBigDecimal / that.toBigDecimal)
+  def / (that: Decimal): Decimal = {
+    if (that.isZero) {
+      null
+    } else {
+      // To avoid non-terminating decimal expansion problem, we turn to Java BigDecimal's divide
+      // with specified ROUNDING_MODE.
+      Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, ROUNDING_MODE.id))
+    }
+  }
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toBigDecimal % that.toBigDecimal)

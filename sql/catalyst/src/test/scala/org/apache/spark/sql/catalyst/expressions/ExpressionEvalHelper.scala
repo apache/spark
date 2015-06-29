@@ -33,7 +33,7 @@ trait ExpressionEvalHelper {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {
-    new GenericRow(values.map(CatalystTypeConverters.convertToCatalyst).toArray)
+    InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
   protected def checkEvaluation(
@@ -122,7 +122,7 @@ trait ExpressionEvalHelper {
     }
 
     val actual = plan(inputRow)
-    val expectedRow = new GenericRow(Array[Any](expected))
+    val expectedRow = InternalRow(expected)
     if (actual.hashCode() != expectedRow.hashCode()) {
       fail(
         s"""
