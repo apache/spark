@@ -260,8 +260,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       s"""
         if (!$got) {
           ${cond.code}
-          if (${keyEval.isNull} && ${cond.isNull} ||
-            !${keyEval.isNull} && !${cond.isNull}
+          if (!${keyEval.isNull} && !${cond.isNull}
              && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
             $got = true;
             ${res.code}
