@@ -150,40 +150,21 @@ case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def dataType: DataType = StringType
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, StringType)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    if (child.dataType.isInstanceOf[BinaryType] || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (child.dataType.isInstanceOf[StringType]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"Sha1 accepts string or binary, not ${child.dataType}")
-    }
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
       null
     } else {
-      value match {
-        case b: Array[Byte] =>
-          UTF8String.fromString(DigestUtils.sha1Hex(value.asInstanceOf[Array[Byte]]))
-        case s: UTF8String =>
-          UTF8String.fromString(DigestUtils.sha1Hex(s.getBytes))
-      }
+      UTF8String.fromString(DigestUtils.sha1Hex(value.asInstanceOf[Array[Byte]]))
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
-      child.dataType match {
-        case BinaryType =>
-          "org.apache.spark.unsafe.types.UTF8String.fromString" +
-            s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
-        case StringType =>
-          "org.apache.spark.unsafe.types.UTF8String.fromString" +
-            s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c.getBytes()))"
-      })
+      "org.apache.spark.unsafe.types.UTF8String.fromString" +
+        s"(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+    )
   }
 }
