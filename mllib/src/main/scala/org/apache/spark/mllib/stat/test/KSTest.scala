@@ -60,8 +60,8 @@ private[stat] object KSTest {
   def testOneSample(data: RDD[Double], cdf: Double => Double): KSTestResult = {
     val n = data.count().toDouble
     val localData = data.sortBy(x => x).mapPartitions { part =>
-    val partDiffs = oneSampleDifferences(part, n, cdf) // local distances
-    searchOneSampleCandidates(partDiffs) // candidates: local extrema
+      val partDiffs = oneSampleDifferences(part, n, cdf) // local distances
+      searchOneSampleCandidates(partDiffs) // candidates: local extrema
     }.collect()
     val ksStat = searchOneSampleStatistic(localData, n) // result: global extreme
     evalOneSampleP(ksStat, n.toLong)
@@ -76,8 +76,8 @@ private[stat] object KSTest {
   def testOneSample(data: RDD[Double], createDist: () => RealDistribution): KSTestResult = {
     val n = data.count().toDouble
     val localData = data.sortBy(x => x).mapPartitions { part =>
-    val partDiffs = oneSampleDifferences(part, n, createDist) // local distances
-    searchOneSampleCandidates(partDiffs) // candidates: local extrema
+      val partDiffs = oneSampleDifferences(part, n, createDist) // local distances
+      searchOneSampleCandidates(partDiffs) // candidates: local extrema
     }.collect()
     val ksStat = searchOneSampleStatistic(localData, n) // result: global extreme
     evalOneSampleP(ksStat, n.toLong)
@@ -101,13 +101,13 @@ private[stat] object KSTest {
     // zip data with index (within that partition)
     // calculate local (unadjusted) ECDF and subtract CDF
     partData.zipWithIndex.map { case (v, ix) =>
-    // dp and dl are later adjusted by constant, when global info is available
-    val dp = (ix + 1) / n
-    val dl = ix / n
-    val cdfVal = cdf(v)
-    // if dp > cdfVal the adjusted dp is still above cdfVal, if dp < cdfVal
-    // we want negative distance so that constant adjusted gives correct distance
-    if (dp > cdfVal) dp - cdfVal else dl - cdfVal
+      // dp and dl are later adjusted by constant, when global info is available
+      val dp = (ix + 1) / n
+      val dl = ix / n
+      val cdfVal = cdf(v)
+      // if dp > cdfVal the adjusted dp is still above cdfVal, if dp < cdfVal
+      // we want negative distance so that constant adjusted gives correct distance
+      if (dp > cdfVal) dp - cdfVal else dl - cdfVal
     }
   }
 
@@ -132,7 +132,7 @@ private[stat] object KSTest {
     : Iterator[(Double, Double, Double)] = {
     val initAcc = (Double.MaxValue, Double.MinValue, 0.0)
     val partResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), currDiff) =>
-    (Math.min(pMin, currDiff), Math.max(pMax, currDiff), pCt + 1)
+      (Math.min(pMin, currDiff), Math.max(pMax, currDiff), pCt + 1)
     }
     Array(partResults).iterator
   }
@@ -152,15 +152,15 @@ private[stat] object KSTest {
     // adjust differences based on the # of elements preceding it, which should provide
     // the correct distance between ECDF and CDF
     val results = localData.foldLeft(initAcc) { case ((prevMax, prevCt), (minCand, maxCand, ct)) =>
-    val adjConst = prevCt / n
-    val pdist1 = minCand + adjConst
-    val pdist2 = maxCand + adjConst
-    // adjust by 1 / N if pre-constant the value is less than cdf and post-constant
-    // it is greater than or equal to the cdf
-    val dist1 = if (pdist1 >= 0 && minCand < 0) pdist1 + 1 / n else Math.abs(pdist1)
-    val dist2 = if (pdist2 >= 0 && maxCand < 0) pdist2 + 1 / n else Math.abs(pdist2)
-    val maxVal = Array(prevMax, dist1, dist2).max
-    (maxVal, prevCt + ct)
+      val adjConst = prevCt / n
+      val pdist1 = minCand + adjConst
+      val pdist2 = maxCand + adjConst
+      // adjust by 1 / N if pre-constant the value is less than cdf and post-constant
+      // it is greater than or equal to the cdf
+      val dist1 = if (pdist1 >= 0 && minCand < 0) pdist1 + 1 / n else Math.abs(pdist1)
+      val dist2 = if (pdist2 >= 0 && maxCand < 0) pdist2 + 1 / n else Math.abs(pdist2)
+      val maxVal = Array(prevMax, dist1, dist2).max
+      (maxVal, prevCt + ct)
     }
     results._1
   }
