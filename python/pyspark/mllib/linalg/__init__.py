@@ -1168,22 +1168,30 @@ class DistributedMatrix(object):
 class DistributedMatrices(object):
     """Factory methods for distributed matrices."""
     @staticmethod
-    def rowMatrix(rows):
+    def rowMatrix(rows, numRows=0, numCols=0):
         """
         Create a RowMatrix
 
         :param rows: an RDD of Vectors
         """
-        rowMatrix = callMLlibFunc("createRowMatrix", rows)
-        return RowMatrix(rowMatrix)
+        return RowMatrix(rows, numRows, numCols)
 
 
-class RowMatrix(DistributedMatrix, JavaModelWrapper):
+class RowMatrix(DistributedMatrix):
     """
     Represents a row-oriented distributed Matrix with no meaningful row indices.
 
     .. note:: Experimental
     """
+    def __init__(self, rows, numRows=0, numCols=0):
+        """
+        Create a wrapper over a Java RowMatrix
+
+        :param rows: an RDD of Vectors
+        """
+        javaRowMatrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
+        self._jrm = JavaModelWrapper(javaRowMatrix)
+
     def numRows(self):
         """Get or compute the number of rows.
 
@@ -1191,8 +1199,13 @@ class RowMatrix(DistributedMatrix, JavaModelWrapper):
         >>> rm = DistributedMatrices.rowMatrix(rows)
         >>> rm.numRows()
         4L
+
+        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rm = DistributedMatrices.rowMatrix(rows, 7, 6)
+        >>> rm.numRows()
+        7L
         """
-        return self.call("numRows")
+        return self._jrm.call("numRows")
 
     def numCols(self):
         """Get or compute the number of cols.
@@ -1200,8 +1213,13 @@ class RowMatrix(DistributedMatrix, JavaModelWrapper):
         >>> rm = DistributedMatrices.rowMatrix(rows)
         >>> rm.numCols()
         3L
+
+        >>> rows = sc.parallelize([Vectors.dense([1, 2, 3]), Vectors.dense([4, 5, 6]), Vectors.dense([7, 8, 9]), Vectors.dense([10, 11, 12])])
+        >>> rm = DistributedMatrices.rowMatrix(rows, 7, 6)
+        >>> rm.numCols()
+        6L
         """
-        return self.call("numCols")
+        return self._jrm.call("numCols")
 
 
 def _test():

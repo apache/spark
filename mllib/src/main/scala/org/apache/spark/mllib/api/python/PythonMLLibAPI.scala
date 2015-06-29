@@ -1101,8 +1101,8 @@ private[python] class PythonMLLibAPI extends Serializable {
   /**
    * Wrapper around DistributedMatrices.rowMatrix factory method
    */
-  def createRowMatrix(rows: JavaRDD[Vector]): RowMatrix = {
-    DistributedMatrices.rowMatrix(rows.rdd)
+  def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
+    DistributedMatrices.rowMatrix(rows.rdd, numRows, numCols)
   }
 }
 

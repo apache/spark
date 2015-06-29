@@ -45,9 +45,11 @@ object DistributedMatrices {
    * Creates a Row Matrix
    *
    * @param rows An RDD of Vectors
+   * @param numRows Number of rows in the matrix
+   * @param numCols Number of columns in the matrix
    */
-  def rowMatrix(rows: RDD[Vector]): RowMatrix = {
-    new RowMatrix(rows)
+  def rowMatrix(rows: RDD[Vector], numRows: Long = 0, numCols: Int = 0): RowMatrix = {
+    new RowMatrix(rows, numRows, numCols)
   }
 
 }
