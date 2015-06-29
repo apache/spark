@@ -440,11 +440,11 @@ class DataFrameSuite extends QueryTest {
       ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count",   "4",               "4"),
-      Row("mean",    "33.0",            "178.0"),
-      Row("stddev",  "19.148542155126762", "11.547005383792516"),
-      Row("min",     "16",              "164"),
-      Row("max",     "60",              "192"))
+      Row("count", "4", "4"),
+      Row("mean", "33.0", "178.0"),
+      Row("stddev", "19.148542155126762", "11.547005383792516"), 
+      Row("min", "16", "164"),
+      Row("max", "60", "192"))
 
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),

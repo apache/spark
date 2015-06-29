@@ -287,14 +287,14 @@ class GroupedData protected[sql](
   /**
    * Compute the standard deviation for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the sum for them.
+   * When specified columns are given, only compute the stddev for them.
    *
    * @since 1.5.0
    */
   @scala.annotation.varargs
   def stddev(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Stddev)
-  }    
+    aggregateNumericColumns(colNames : _*)(Stddev)
+  }
 
   /**
    * Compute the sum for each numeric columns for each group.
