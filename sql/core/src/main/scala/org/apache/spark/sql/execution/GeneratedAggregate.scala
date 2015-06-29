@@ -57,11 +57,7 @@ case class GeneratedAggregate(
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
-      if (groupingExpressions == Nil) {
-        AllTuples :: Nil
-      } else {
-        ClusteredDistribution(groupingExpressions, true) :: Nil
-      }
+      ClusteredDistribution(groupingExpressions, true) :: Nil
     }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)

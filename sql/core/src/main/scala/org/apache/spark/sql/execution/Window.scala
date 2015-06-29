@@ -40,31 +40,21 @@ case class Window(
   override def output: Seq[Attribute] =
     (projectList ++ windowExpression).map(_.toAttribute)
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (windowSpec.partitionSpec.isEmpty) {
-      // This operator will be very expensive.
-      AllTuples :: Nil
-    } else {
-      // The required child ordering has two parts.
-      // The first part is the expressions in the partition specification.
-      // We add these expressions to the required ordering to make sure input rows are grouped
-      // based on the partition specification. So, we only need to process a single partition
-      // at a time.
-      // The second part is the expressions specified in the ORDER BY cluase.
-      // Basically, we first use sort to group rows based on partition specifications and then sort
-      // Rows in a group based on the order specification.
-      val sortKeys = (windowSpec.partitionSpec.map(SortOrder(_, Ascending)) ++ windowSpec.orderSpec)
-      ClusteredDistribution(windowSpec.partitionSpec, true, sortKeys) :: Nil
-    }
+  override def requiredChildDistribution: Seq[Distribution] = {
+    // The required child ordering has two parts.
+    // The first part is the expressions in the partition specification.
+    // We add these expressions to the required ordering to make sure input rows are grouped
+    // based on the partition specification. So, we only need to process a single partition
+    // at a time.
+    // The second part is the expressions specified in the ORDER BY clause.
+    // Basically, we first use sort to group rows based on partition specifications and then sort
+    // Rows in a group based on the order specification.
 
-  // Since window functions are adding columns to the input rows, the child's outputPartitioning
-  // is preserved.
-  override def outputPartitioning: Partitioning = if (windowSpec.partitionSpec.isEmpty) {
-    SinglePartition()
-  } else {
-    HashPartition(windowSpec.partitionSpec)
+    val sortKeys = (windowSpec.partitionSpec.map(SortOrder(_, Ascending)) ++ windowSpec.orderSpec)
+    ClusteredDistribution(windowSpec.partitionSpec, true, sortKeys) :: Nil
   }
 
+  override def outputPartitioning: Partitioning = HashPartition(windowSpec.partitionSpec)
 
   case class ComputedWindow(
     unbound: WindowExpression,

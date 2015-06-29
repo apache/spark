@@ -268,13 +268,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           case SortKeyWithinPartition(sortKeys) => addSortOperator(sortKeys, child)
           case GlobalOrdering(ordering) =>
             Exchange(RangePartition(ordering).withNumPartitions(numPartitions), child)
-          case RepartitionKey(clustering, singlePartition) =>
-            val partitions = if (singlePartition) 1 else numPartitions
+          case RepartitionKey(clustering) =>
+            val partitions = if (clustering.isEmpty) 1 else numPartitions
             Exchange(HashPartition(clustering).withNumPartitions(partitions), child)
-          case RepartitionKeyAndSort(clustering, sortKeys, singlePartition) =>
-            // TODO ideally, we probably will be benefit from the sort-base shuffle
+          case RepartitionKeyAndSort(clustering, sortKeys) =>
+            // TODO ideally, we probably will be benefit from the sort-based shuffle
             // as the data is partially sorted during the shuffling
-            val num = if (singlePartition) 1 else numPartitions
+            val num = if (clustering.isEmpty) 1 else numPartitions
             val exchanged = Exchange(HashPartition(clustering).withNumPartitions(num), child)
               addSortOperator(
                 bindSortKeys(sortKeys, exchanged.output),

@@ -54,11 +54,7 @@ case class Aggregate(
     if (partial) {
       UnspecifiedDistribution :: Nil
     } else {
-      if (groupingExpressions == Nil) {
-        AllTuples :: Nil
-      } else {
-        ClusteredDistribution(groupingExpressions, true) :: Nil
-      }
+      ClusteredDistribution(groupingExpressions, true) :: Nil
     }
   }
 

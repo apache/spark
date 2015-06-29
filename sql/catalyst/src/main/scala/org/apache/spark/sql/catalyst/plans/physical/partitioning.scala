@@ -37,12 +37,6 @@ sealed trait Distribution
 case object UnspecifiedDistribution extends Distribution
 
 /**
- * Represents a distribution that only has a single partition and all tuples of the dataset
- * are co-located.
- */
-case object AllTuples extends Distribution
-
-/**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
@@ -59,14 +53,7 @@ case object AllTuples extends Distribution
 case class ClusteredDistribution(
     clustering: Seq[Expression],
     nullKeysSensitive: Boolean,
-    sortKeys: Seq[SortOrder] = Nil) extends Distribution {
-
-  require(
-    clustering != Nil,
-    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
-      "An AllTuples should be used to represent a distribution that only has " +
-      "a single partition.")
-}
+    sortKeys: Seq[SortOrder] = Nil) extends Distribution
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
@@ -112,11 +99,9 @@ private[sql] case class GlobalOrdering(ordering: Seq[SortOrder]) extends Gap
  * Repartition the data according to the new clustering expression, and it's possible that
  * only a single partition needed, if in that cases, the clustering expression would be ignored.
  * @param clustering the clustering keys
- * @param singlePartition if it's a single partition
  */
 private[sql] case class RepartitionKey(
-                          clustering: Seq[Expression],
-                          singlePartition: Boolean = false) extends Gap
+                          clustering: Seq[Expression]) extends Gap
 
 /**
  * Repartition the data according to the the new clustering expression, and we also need to
@@ -125,12 +110,10 @@ private[sql] case class RepartitionKey(
  * @param clustering the clustering expression
  * @param sortKeys the sorting keys, should be the same with clustering expression, but with
  *                 sorting direction.
- * @param singlePartition if all of the tuples fall into a single partition.
  */
 private[sql] case class RepartitionKeyAndSort(
                           clustering: Seq[Expression],
-                          sortKeys: Seq[SortOrder],
-                          singlePartition: Boolean = false) extends Gap
+                          sortKeys: Seq[SortOrder]) extends Gap
 
 
 /**
@@ -145,12 +128,16 @@ private[sql] case class RepartitionKeyAndSort(
 sealed case class Partitioning(
   /** the number of partitions that the data is split across */
   numPartitions: Option[Int] = None,
+
   /** the expressions that are used to key the partitioning. */
   clusterKeys: Seq[Expression] = Nil,
+
   /** the expression that are used to sort the data. */
   sortKeys: Seq[SortOrder] = Nil,
-  /** work with [[sortKeys]] if the sorting cross or just within the partition. */
+
+  /** work with `sortKeys` if the sorting cross or just within the partition. */
   globalOrdered: Boolean = false,
+
   /** to indicate if null clustering key will be generated. */
   additionalNullClusterKeyGenerated: Boolean = true) {
 
@@ -172,13 +159,22 @@ sealed case class Partitioning(
       additionalNullClusterKeyGenerated)
   }
 
-  def withSortKeys(sortKeys: Seq[SortOrder]): Partitioning = {
-    new Partitioning(
-      numPartitions,
-      clusterKeys,
-      sortKeys = sortKeys,
-      globalOrdered,
-      additionalNullClusterKeyGenerated)
+  def withSortKeys(sortKeys: Seq[SortOrder], globalOrdering: Boolean = false): Partitioning = {
+    if (globalOrdering) {
+      new Partitioning(
+        numPartitions,
+        clusterKeys = sortKeys.map(_.child),
+        sortKeys = sortKeys,
+        globalOrdered = true,
+        additionalNullClusterKeyGenerated)
+    } else {
+      new Partitioning(
+        numPartitions,
+        clusterKeys,
+        sortKeys = sortKeys,
+        globalOrdered = false,
+        additionalNullClusterKeyGenerated)
+    }
   }
 
   def withGlobalOrdered(globalOrdered: Boolean): Partitioning = {
@@ -207,34 +203,48 @@ sealed case class Partitioning(
    */
   def gap(required: Distribution): Gap = required match {
     case UnspecifiedDistribution => NoGap
-    case AllTuples if numPartitions.isDefined && numPartitions.get == 1 => NoGap
-    case AllTuples => RepartitionKey(Nil, true)
     case OrderedDistribution(ordering) if ordering == this.sortKeys && this.globalOrdered => NoGap
     case OrderedDistribution(ordering) => GlobalOrdering(ordering)
     case ClusteredDistribution(clustering, nullKeysSensitive, sortKeys) =>
-      if (this.globalOrdered) { // Child is a global ordering partition (clustered by range)
+      if (this.globalOrdered) {
+        // Child is a global ordering partition (clustered by range), definitely requires
+        // the repartitioning for a ClusteredDistribution
         if (sortKeys.nonEmpty) { // required sorting
           RepartitionKeyAndSort(clustering, sortKeys)
         } else {
           RepartitionKey(clustering)
         }
-      } else { // Child is not a global ordering partition (clustered by keys)
+      } else {
+        // Child is not a global ordering partition, probably a Clustered Partitioning or
+        // UnspecifiedPartitioning
         if (this.clusterKeys == clustering) { // same distribution
-          if (nullKeysSensitive) { // requires no null cluster key generated from the child
+          if (nullKeysSensitive) {
+            // No NEW null cluster key generated from the child to be required
+            // e.g. In GROUP BY clause, even the clustering key is the same, however,
+            // if new null clustering key generated in child, we need to put all of the
+            // null clustering into a single partition.
             if (this.additionalNullClusterKeyGenerated == false) {
+              // No null clustering key generated
               if (sortKeys.isEmpty || sortKeys == this.sortKeys) {
+                // No sorting required or the sorting keys are the same with current partitioning
                 NoGap
               } else {
+                // Sorting the data within the partition
                 SortKeyWithinPartition(sortKeys)
               }
-            } else { // child possible generate the null value for cluster keys
-              if (sortKeys.isEmpty) { // required sorting
-                RepartitionKey(clustering)
-              } else {
+            } else {
+              // child possible generate the null value for cluster keys,
+              // we need to repartitioning the data
+              if (sortKeys.nonEmpty) { // required sorting
                 RepartitionKeyAndSort(clustering, sortKeys)
+              } else {
+                RepartitionKey(clustering)
               }
             }
-          } else { // don't care if null cluster key generated from the child
+          } else {
+            // Don't care if null cluster key generated from the child.
+            // E.g. In EQUAL-JOIN, we don't care about if null key should be in the same partition,
+            // As we always consider the null key would be not equal to each other.
             if (sortKeys.isEmpty || sortKeys == this.sortKeys) {
               NoGap
             } else {
@@ -315,10 +325,12 @@ object SinglePartition {
   def apply(): Partitioning = {
     UnknownPartitioning.withClusterKeys(Nil).withNumPartitions(1)
   }
-  def unapply(part: Partitioning): Option[Int] = if (part.numPartitions.get == 1) {
-    Some(1)
-  } else {
-    None
-  }
+
+  def unapply(part: Partitioning): Option[Int] =
+    if (part.numPartitions.get == 1 || part.clusterKeys.isEmpty) {
+      Some(1)
+    } else {
+      None
+    }
 }
 
