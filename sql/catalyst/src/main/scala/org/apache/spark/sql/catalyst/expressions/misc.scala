@@ -109,7 +109,7 @@ case class Crc32(child: Expression)
     s"""
       ${value.code}
       boolean ${ev.isNull} = ${value.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      long ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${CRC32} checksum = new ${CRC32}();
         checksum.update(${value.primitive}, 0, ${value.primitive}.length);
