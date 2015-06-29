@@ -134,17 +134,14 @@ def _load_from_socket(port, serializer):
             sock = None
             continue
         break
-    if sock:
-        try:
-            rf = sock.makefile("rb", 65536)
-            for item in serializer.load_stream(rf):
-                yield item
-        except socket.error:
-            raise Exception("encounter error when connecting to socket server")
-        finally:
-            sock.close()
-    else:
+    if not sock:
         raise Exception("could not open socket")
+    try:
+        rf = sock.makefile("rb", 65536)
+        for item in serializer.load_stream(rf):
+            yield item
+    finally:
+        sock.close()
 
 
 def ignore_unicode_prefix(f):
