@@ -50,6 +50,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetArrayItem(nullArray, Literal(1)), null)
     checkEvaluation(GetArrayItem(array, nullInt), null)
     checkEvaluation(GetArrayItem(nullArray, nullInt), null)
+
+    val nestedArray = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
   }
 
   test("GetMapValue") {
@@ -62,6 +65,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(map, nullString), null)
     checkEvaluation(GetMapValue(nullMap, nullString), null)
     checkEvaluation(GetMapValue(map, nullString), null)
+
+    val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
+    checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
   }
 
   test("GetStructField") {
@@ -79,6 +85,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(getStructField(struct, "a"), 1)
     checkEvaluation(getStructField(nullStruct, "a"), null)
+
+    val nestedStruct = Literal.create(create_row(create_row(1)),
+      StructType(StructField("a", typeS) :: Nil))
+    checkEvaluation(getStructField(nestedStruct, "a"), create_row(1))
 
     val typeS_fieldNotNullable = StructType(StructField("a", IntegerType, false) :: Nil)
     val struct_fieldNotNullable = Literal.create(create_row(1), typeS_fieldNotNullable)

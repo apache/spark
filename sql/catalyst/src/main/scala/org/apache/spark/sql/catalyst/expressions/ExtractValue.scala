@@ -153,7 +153,7 @@ case class GetArrayStructFields(
     }
   }
 
-  //todo: add code gen for this.
+  // todo: add code gen for this.
 }
 
 abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValue {
@@ -162,8 +162,8 @@ abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValu
   def ordinal: Expression
   def child: Expression
 
-  def left = child
-  def right = ordinal
+  override def left: Expression = child
+  override def right: Expression = ordinal
 
   /** `Null` is returned for invalid ordinals. */
   override def nullable: Boolean = true
@@ -207,7 +207,8 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.apply((int)$eval2)")
+    defineCodeGen(ctx, ev,
+      (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.apply((int)$eval2)")
   }
 }
 
@@ -225,6 +226,7 @@ case class GetMapValue(child: Expression, ordinal: Expression)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.getOrElse($eval2, null)")
+    defineCodeGen(ctx, ev,
+      (eval1, eval2) => s"(${ctx.javaType(dataType)})$eval1.getOrElse($eval2, null)")
   }
 }
