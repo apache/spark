@@ -181,6 +181,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
+        val id = offer.getId.getValue
         if (meetsConstraints &&
             totalCoresAcquired < maxCores &&
             mem >= calculateTotalMemory(sc) &&
@@ -208,11 +209,11 @@ private[spark] class CoarseMesosSchedulerBackend(
           }
 
           // accept the offer and launch the task
-          logDebug(s"Accepting offer: ${offer.getId} with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
           d.launchTasks(List(offer.getId), List(task.build()), filters)
         } else {
           // Decline the offer
-          logDebug(s"Declining offer: ${offer.getId} with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
           d.declineOffer(offer.getId)
         }
       }

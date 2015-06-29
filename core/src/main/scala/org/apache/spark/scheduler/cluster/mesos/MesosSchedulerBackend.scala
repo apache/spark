@@ -209,7 +209,8 @@ private[spark] class MesosSchedulerBackend(
 
         // add some debug messaging
         val debugStatement = if(meetsRequirements) "Accepting" else "Declining"
-        logDebug(s"$debugStatement offer: ${o.getId} with attributes: $offerAttributes mem: $mem cpu: $cpus")
+        val id = o.getId.getValue
+        logDebug(s"$debugStatement offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
 
         meetsRequirements
       }
