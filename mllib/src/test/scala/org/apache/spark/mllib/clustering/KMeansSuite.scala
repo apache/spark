@@ -296,8 +296,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInitialModel(initialModel)
       .run(rdd)
    // comparing the returned model and the initial model
-    assert(returnModel.clusterCenters(0) == initialModel.clusterCenters(0))
-    assert(returnModel.clusterCenters(1) == initialModel.clusterCenters(1))
+    assert(returnModel.clusterCenters(0) === initialModel.clusterCenters(0))
+    assert(returnModel.clusterCenters(1) === initialModel.clusterCenters(1))
   }
 
 }
