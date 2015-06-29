@@ -295,6 +295,8 @@ case class Pow(left: Expression, right: Expression)
 case class Hex(child: Expression)
   extends UnaryExpression with Serializable  {
 
+  private var value = new Array[Byte](16)
+
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -335,7 +337,9 @@ case class Hex(child: Expression)
   }
 
   private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
-    val value = new Array[Byte](length * 2)
+    if (value.length < length * 2) {
+      value = new Array[Byte](length * 2)
+    }
     var i = 0
     while(i < length) {
       value(i * 2) = Character.toUpperCase(Character.forDigit(
@@ -344,12 +348,11 @@ case class Hex(child: Expression)
         bytes(i) & 0x0F, 16)).toByte
       i += 1
     }
-    UTF8String.fromBytes(value)
+    UTF8String.fromBytes(Arrays.copyOfRange(value, 0, length*2))
   }
 
   private def hex(num: Long): UTF8String = {
     // Extract the hex digits of num into value[] from right to left
-    val value = new Array[Byte](16)
     var numBuf = num
     var len = 0
     do {
