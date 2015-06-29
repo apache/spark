@@ -28,7 +28,8 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[IntColumnStats], INT, InternalRow(Int.MaxValue, Int.MinValue, 0))
   testColumnStats(classOf[DateColumnStats], DATE, InternalRow(Int.MaxValue, Int.MinValue, 0))
   testColumnStats(classOf[LongColumnStats], LONG, InternalRow(Long.MaxValue, Long.MinValue, 0))
-  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, InternalRow(Long.MaxValue, Long.MinValue, 0))
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP,
+    InternalRow(Long.MaxValue, Long.MinValue, 0))
   testColumnStats(classOf[FloatColumnStats], FLOAT, InternalRow(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE,
     InternalRow(Double.MaxValue, Double.MinValue, 0))
