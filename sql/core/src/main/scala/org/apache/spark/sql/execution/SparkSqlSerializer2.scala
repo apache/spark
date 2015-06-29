@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.Logging
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -329,7 +330,7 @@ private[sql] object SparkSqlSerializer2 {
    */
   def createDeserializationFunction(
       schema: Array[DataType],
-      in: DataInputStream): (MutableRow) => Row = {
+      in: DataInputStream): (MutableRow) => InternalRow = {
     if (schema == null) {
       (mutableRow: MutableRow) => null
     } else {

@@ -1421,7 +1421,8 @@ class DaemonTests(unittest.TestCase):
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
-        daemon = Popen([sys.executable, daemon_path], stdin=PIPE, stdout=PIPE)
+        python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
+        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
 
         # read the port number
         port = read_int(daemon.stdout)
