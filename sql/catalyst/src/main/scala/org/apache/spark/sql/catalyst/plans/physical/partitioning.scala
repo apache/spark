@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -73,8 +73,10 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 }
 
 /**
- * A gap that represents what need to be done for the satisfying the its parent operator in
- * data distribution.
+ * To a child operator, a `Gap` represents what need to be done for satisfying its parent operator
+ * in the data distribution.
+ *
+ * NOTE: This trait and its inherits are not used by the physical operators directly,
  */
 private[sql] sealed trait Gap
 
@@ -199,7 +201,7 @@ sealed case class Partitioning(
    * Compute the gap between the required data distribution and the existed data distribution.
    *
    * @param required the required data distribution
-   * @return the gap that need to apply to the existed data, for its parent operator.
+   * @return the gap that need to apply to the existed data.
    */
   def gap(required: Distribution): Gap = required match {
     case UnspecifiedDistribution => NoGap
