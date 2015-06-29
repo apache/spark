@@ -25,9 +25,10 @@ import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 
 /**
@@ -51,7 +52,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
-  val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
+  val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
@@ -115,11 +116,9 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = AkkaUtils.address(
-      AkkaUtils.protocol(sc.env.actorSystem),
+    val driverUrl = sc.env.rpcEnv.uriOf(
       SparkEnv.driverActorSystemName,
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
+      RpcAddress(conf.get("spark.driver.host"), conf.get("spark.driver.port").toInt),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
 
     val uri = conf.getOption("spark.executor.uri")

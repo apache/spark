@@ -17,14 +17,15 @@
 
 package org.apache.spark.util
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
+
+import org.apache.spark.SparkFunSuite
 
 /**
  *
  */
 
-class DistributionSuite extends FunSuite with Matchers {
+class DistributionSuite extends SparkFunSuite with Matchers {
   test("summary") {
     val d = new Distribution((1 to 100).toArray.map{_.toDouble})
     val stats = d.statCounter

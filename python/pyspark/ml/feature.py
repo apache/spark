@@ -324,65 +324,73 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A one-hot encoder that maps a column of label indices to a column of binary vectors, with
-    at most a single one-value. By default, the binary vector has an element for each category, so
-    with 5 categories, an input value of 2.0 would map to an output vector of
-    (0.0, 0.0, 1.0, 0.0, 0.0). If includeFirst is set to false, the first category is omitted, so
-    the output vector for the previous example would be (0.0, 1.0, 0.0, 0.0) and an input value
-    of 0.0 would map to a vector of all zeros. Including the first category makes the vector columns
-    linearly dependent because they sum up to one.
+    A one-hot encoder that maps a column of category indices to a
+    column of binary vectors, with at most a single one-value per row
+    that indicates the input category index.
+    For example with 5 categories, an input value of 2.0 would map to
+    an output vector of `[0.0, 0.0, 1.0, 0.0]`.
+    The last category is not included by default (configurable via
+    :py:attr:`dropLast`) because it makes the vector entries sum up to
+    one, and hence linearly dependent.
+    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+    Note that this is different from scikit-learn's OneHotEncoder,
+    which keeps all categories.
+    The output vectors are sparse.
 
-    TODO: This method requires the use of StringIndexer first. Decouple them.
+    .. seealso::
+
+       :py:class:`StringIndexer` for converting categorical values into
+       category indices
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
-    >>> encoder = OneHotEncoder(includeFirst=False, inputCol="indexed", outputCol="features")
+    >>> encoder = OneHotEncoder(inputCol="indexed", outputCol="features")
     >>> encoder.transform(td).head().features
-    SparseVector(2, {})
+    SparseVector(2, {0: 1.0})
     >>> encoder.setParams(outputCol="freqs").transform(td).head().freqs
-    SparseVector(2, {})
-    >>> params = {encoder.includeFirst: True, encoder.outputCol: "test"}
+    SparseVector(2, {0: 1.0})
+    >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
     >>> encoder.transform(td, params).head().test
     SparseVector(3, {0: 1.0})
     """
 
     # a placeholder to make it appear in the generated doc
-    includeFirst = Param(Params._dummy(), "includeFirst", "include first category")
+    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category")
 
     @keyword_only
-    def __init__(self, includeFirst=True, inputCol=None, outputCol=None):
+    def __init__(self, dropLast=True, inputCol=None, outputCol=None):
         """
         __init__(self, includeFirst=True, inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self.includeFirst = Param(self, "includeFirst", "include first category")
-        self._setDefault(includeFirst=True)
+        self.dropLast = Param(self, "dropLast", "whether to drop the last category")
+        self._setDefault(dropLast=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, includeFirst=True, inputCol=None, outputCol=None):
+    def setParams(self, dropLast=True, inputCol=None, outputCol=None):
         """
-        setParams(self, includeFirst=True, inputCol=None, outputCol=None)
+        setParams(self, dropLast=True, inputCol=None, outputCol=None)
         Sets params for this OneHotEncoder.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    def setIncludeFirst(self, value):
+    def setDropLast(self, value):
         """
-        Sets the value of :py:attr:`includeFirst`.
+        Sets the value of :py:attr:`dropLast`.
         """
-        self._paramMap[self.includeFirst] = value
+        self._paramMap[self.dropLast] = value
         return self
 
-    def getIncludeFirst(self):
+    def getDropLast(self):
         """
-        Gets the value of includeFirst or its default value.
+        Gets the value of dropLast or its default value.
         """
-        return self.getOrDefault(self.includeFirst)
+        return self.getOrDefault(self.dropLast)
 
 
 @inherit_doc
@@ -446,23 +454,25 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 @ignore_unicode_prefix
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A regex based tokenizer that extracts tokens either by repeatedly matching the regex(default)
-    or using it to split the text (set matching to false). Optional parameters also allow filtering
-    tokens using a minimal length.
+    A regex based tokenizer that extracts tokens either by using the
+    provided regex pattern (in Java dialect) to split the text
+    (default) or repeatedly matching the regex (if gaps is true).
+    Optional parameters also allow filtering tokens using a minimal
+    length.
     It returns an array of strings that can be empty.
 
-    >>> df = sqlContext.createDataFrame([("a b c",)], ["text"])
+    >>> df = sqlContext.createDataFrame([("a b  c",)], ["text"])
     >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
     >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
     >>> # Temporarily modify a parameter.
     >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
     >>> # Must use keyword arguments to specify params.
     >>> reTokenizer.setParams("text")
     Traceback (most recent call last):
@@ -472,31 +482,27 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 
     # a placeholder to make it appear in the generated doc
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
-    gaps = Param(Params._dummy(), "gaps", "Set regex to match gaps or tokens")
-    pattern = Param(Params._dummy(), "pattern", "regex pattern used for tokenizing")
+    gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
+    pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
 
     @keyword_only
-    def __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
-                 inputCol=None, outputCol=None):
+    def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
         """
-        __init__(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
-                 inputCol=None, outputCol=None)
+        __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
         """
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self.minTokenLength = Param(self, "minTokenLength", "minimum token length (>= 0)")
-        self.gaps = Param(self, "gaps", "Set regex to match gaps or tokens")
-        self.pattern = Param(self, "pattern", "regex pattern used for tokenizing")
-        self._setDefault(minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+")
+        self.gaps = Param(self, "gaps", "whether regex splits on gaps (True) or matches tokens")
+        self.pattern = Param(self, "pattern", "regex pattern (Java dialect) used for tokenizing")
+        self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+",
-                  inputCol=None, outputCol=None):
+    def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
         """
-        setParams(self, minTokenLength=1, gaps=False, pattern="\\p{L}+|[^\\p{L}\\s]+", \
-                  inputCol="input", outputCol="output")
+        setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
         Sets params for this RegexTokenizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -876,10 +882,10 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                 seed=42, inputCol=None, outputCol=None):
+                 seed=None, inputCol=None, outputCol=None):
         """
         __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
-                 seed=42, inputCol=None, outputCol=None)
+                 seed=None, inputCol=None, outputCol=None)
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
@@ -891,15 +897,15 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
                               "the minimum number of times a token must appear to be included " +
                               "in the word2vec model's vocabulary")
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         seed=42)
+                         seed=None)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                  seed=42, inputCol=None, outputCol=None):
+                  seed=None, inputCol=None, outputCol=None):
         """
-        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=42, \
+        setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=None, \
                  inputCol=None, outputCol=None)
         Sets params for this Word2Vec.
         """

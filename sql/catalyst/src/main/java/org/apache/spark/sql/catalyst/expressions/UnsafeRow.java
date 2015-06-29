@@ -17,22 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import scala.collection.Map;
-import scala.collection.Seq;
-import scala.collection.mutable.ArraySeq;
-
 import javax.annotation.Nullable;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
-import static org.apache.spark.sql.types.DataTypes.*;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.UTF8String;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -45,11 +43,12 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
- * base address of the row) that points to the beginning of the variable-length field.
+ * base address of the row) that points to the beginning of the variable-length field, and length
+ * (they are combined into a long).
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow implements MutableRow {
+public final class UnsafeRow extends MutableRow {
 
   private Object baseObject;
   private long baseOffset;
@@ -59,6 +58,8 @@ public final class UnsafeRow implements MutableRow {
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
+
+  public int length() { return numFields; }
 
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
@@ -90,6 +91,7 @@ public final class UnsafeRow implements MutableRow {
    */
   public static final Set<DataType> readableFieldTypes;
 
+  // TODO: support DecimalType
   static {
     settableFieldTypes = Collections.unmodifiableSet(
       new HashSet<DataType>(
@@ -101,13 +103,16 @@ public final class UnsafeRow implements MutableRow {
           IntegerType,
           LongType,
           FloatType,
-          DoubleType
+          DoubleType,
+          DateType,
+          TimestampType
     })));
 
     // We support get() on a superset of the types for which we support set():
     final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
       Arrays.asList(new DataType[]{
-        StringType
+        StringType,
+        BinaryType
       }));
     _readableFieldTypes.addAll(settableFieldTypes);
     readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
@@ -218,28 +223,13 @@ public final class UnsafeRow implements MutableRow {
   }
 
   @Override
-  public void setString(int ordinal, String value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public int size() {
     return numFields;
   }
 
   @Override
-  public int length() {
-    return size();
-  }
-
-  @Override
   public StructType schema() {
     return schema;
-  }
-
-  @Override
-  public Object apply(int i) {
-    return get(i);
   }
 
   @Override
@@ -255,6 +245,8 @@ public final class UnsafeRow implements MutableRow {
       return null;
     } else if (dataType == StringType) {
       return getUTF8String(i);
+    } else if (dataType == BinaryType) {
+      return getBinary(i);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -317,21 +309,23 @@ public final class UnsafeRow implements MutableRow {
   }
 
   public UTF8String getUTF8String(int i) {
+    return UTF8String.fromBytes(getBinary(i));
+  }
+
+  public byte[] getBinary(int i) {
     assertIndexIsValid(i);
-    final UTF8String str = new UTF8String();
-    final long offsetToStringSize = getLong(i);
-    final int stringSizeInBytes =
-      (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offsetToStringSize);
-    final byte[] strBytes = new byte[stringSizeInBytes];
+    final long offsetAndSize = getLong(i);
+    final int offset = (int)(offsetAndSize >> 32);
+    final int size = (int)(offsetAndSize & ((1L << 32) - 1));
+    final byte[] bytes = new byte[size];
     PlatformDependent.copyMemory(
       baseObject,
-      baseOffset + offsetToStringSize + 8,  // The `+ 8` is to skip past the size to get the data
-      strBytes,
+      baseOffset + offset,
+      bytes,
       PlatformDependent.BYTE_ARRAY_OFFSET,
-      stringSizeInBytes
+      size
     );
-    str.set(strBytes);
-    return str;
+    return bytes;
   }
 
   @Override
@@ -340,96 +334,12 @@ public final class UnsafeRow implements MutableRow {
   }
 
   @Override
-  public BigDecimal getDecimal(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Date getDate(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> Seq<T> getSeq(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> List<T> getList(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> Map<K, V> getMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> scala.collection.immutable.Map<String, T> getValuesMap(Seq<String> fieldNames) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <K, V> java.util.Map<K, V> getJavaMap(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row getStruct(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(int i) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public <T> T getAs(String fieldName) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int fieldIndex(String name) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Row copy() {
+  public InternalRow copy() {
     throw new UnsupportedOperationException();
   }
 
   @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes);
-  }
-
-  @Override
-  public Seq<Object> toSeq() {
-    final ArraySeq<Object> values = new ArraySeq<Object>(numFields);
-    for (int fieldNumber = 0; fieldNumber < numFields; fieldNumber++) {
-      values.update(fieldNumber, get(fieldNumber));
-    }
-    return values;
-  }
-
-  @Override
-  public String toString() {
-    return mkString("[", ",", "]");
-  }
-
-  @Override
-  public String mkString() {
-    return toSeq().mkString();
-  }
-
-  @Override
-  public String mkString(String sep) {
-    return toSeq().mkString(sep);
-  }
-
-  @Override
-  public String mkString(String start, String sep, String end) {
-    return toSeq().mkString(start, sep, end);
   }
 }

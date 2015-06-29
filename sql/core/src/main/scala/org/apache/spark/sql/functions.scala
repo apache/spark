@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.mathfuncs._
+import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -37,6 +37,9 @@ import org.apache.spark.util.Utils
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
+ * @groupname misc_funcs Misc functions
+ * @groupname window_funcs Window functions
+ * @groupname string_funcs String functions
  * @groupname Ungrouped Support functions for DataFrames.
  * @since 1.3.0
  */
@@ -186,7 +189,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -339,6 +342,218 @@ object functions {
   def stddev(columnName: String): Column = stddev(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Window functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(e: Column, offset: Int): Column = {
+    lag(e, offset, null)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `null` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(columnName: String, offset: Int): Column = {
+    lag(columnName, offset, null)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lag(Column(columnName), offset, defaultValue)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. For example,
+   * an `offset` of one will return the previous row at any given point in the window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lag(e: Column, offset: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(columnName: String, offset: Int): Column = {
+    lead(columnName, offset, null)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `null` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(e: Column, offset: Int): Column = {
+    lead(e, offset, null)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(columnName: String, offset: Int, defaultValue: Any): Column = {
+    lead(Column(columnName), offset, defaultValue)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. For example,
+   * an `offset` of one will return the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def lead(e: Column, offset: Int, defaultValue: Any): Column = {
+    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+  }
+
+  /**
+   * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
+   * partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
+   *
+   * This is equivalent to the NTILE function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def ntile(n: Int): Column = {
+    UnresolvedWindowFunction("ntile", lit(n).expr :: Nil)
+  }
+
+  /**
+   * Window function: returns a sequential number starting at 1 within a window partition.
+   *
+   * This is equivalent to the ROW_NUMBER function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def rowNumber(): Column = {
+    UnresolvedWindowFunction("row_number", Nil)
+  }
+
+  /**
+   * Window function: returns the rank of rows within a window partition, without any gaps.
+   *
+   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using denseRank
+   * and had three people tie for second place, you would say that all three were in second
+   * place and that the next person came in third.
+   *
+   * This is equivalent to the DENSE_RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def denseRank(): Column = {
+    UnresolvedWindowFunction("dense_rank", Nil)
+  }
+
+  /**
+   * Window function: returns the rank of rows within a window partition.
+   *
+   * The difference between rank and denseRank is that denseRank leaves no gaps in ranking
+   * sequence when there are ties. That is, if you were ranking a competition using denseRank
+   * and had three people tie for second place, you would say that all three were in second
+   * place and that the next person came in third.
+   *
+   * This is equivalent to the RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def rank(): Column = {
+    UnresolvedWindowFunction("rank", Nil)
+  }
+
+  /**
+   * Window function: returns the cumulative distribution of values within a window partition,
+   * i.e. the fraction of rows that are below the current row.
+   *
+   * {{{
+   *   N = total number of rows in the partition
+   *   cumeDist(x) = number of values before (and including) x / N
+   * }}}
+   *
+   *
+   * This is equivalent to the CUME_DIST function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def cumeDist(): Column = {
+    UnresolvedWindowFunction("cume_dist", Nil)
+  }
+
+  /**
+   * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+   *
+   * This is computed by:
+   * {{{
+   *   (rank of row in its partition - 1) / (number of rows in the partition - 1)
+   * }}}
+   *
+   * This is equivalent to the PERCENT_RANK function in SQL.
+   *
+   * @group window_funcs
+   * @since 1.4.0
+   */
+  def percentRank(): Column = {
+    UnresolvedWindowFunction("percent_rank", Nil)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -367,6 +582,22 @@ object functions {
    */
   def array(colName: String, colNames: String*): Column = {
     array((colName +: colNames).map(col) : _*)
+  }
+
+  /**
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def broadcast(df: DataFrame): DataFrame = {
+    DataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
@@ -512,10 +743,18 @@ object functions {
   /**
    * Computes the square root of the specified float value.
    *
-   * @group normal_funcs
+   * @group math_funcs
    * @since 1.3.0
    */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
    * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
@@ -687,6 +926,24 @@ object functions {
   def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
 
   /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(e: Column): Column = Bin(e.expr)
+
+  /**
+   * An expression that returns the string representation of the binary value of the given long
+   * column. For example, bin("12") returns "1100".
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def bin(columnName: String): Column = bin(Column(columnName))
+
+  /**
    * Computes the cube-root of the given value.
    *
    * @group math_funcs
@@ -749,6 +1006,15 @@ object functions {
    * @since 1.4.0
    */
   def cosh(columnName: String): Column = cosh(Column(columnName))
+
+  /**
+   * Returns the double value that is closer than any other to e, the base of the natural
+   * logarithms.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def e(): Column = EulerNumber()
 
   /**
    * Computes the exponential of the given value.
@@ -880,7 +1146,23 @@ object functions {
   def log(columnName: String): Column = log(Column(columnName))
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, a: Column): Column = Logarithm(lit(base).expr, a.expr)
+
+  /**
+   * Returns the first argument-base logarithm of the second argument.
+   *
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  def log(base: Double, columnName: String): Column = log(base, Column(columnName))
+
+  /**
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -888,7 +1170,7 @@ object functions {
   def log10(e: Column): Column = Log10(e.expr)
 
   /**
-   * Computes the logarithm of the given value in Base 10.
+   * Computes the logarithm of the given value in base 10.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -910,6 +1192,31 @@ object functions {
    * @since 1.4.0
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
+
+  /**
+   * Returns the double value that is closer than any other to pi, the ratio of the circumference
+   * of a circle to its diameter.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def pi(): Column = Pi()
+
+  /**
+   * Computes the logarithm of the given column in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(expr: Column): Column = Log2(expr.expr)
+
+  /**
+   * Computes the logarithm of the given value in base 2.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1104,7 +1411,64 @@ object functions {
    * @since 1.4.0
    */
   def toRadians(columnName: String): Column = toRadians(Column(columnName))
-    
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Misc functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(e: Column): Column = Md5(e.expr)
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def md5(columnName: String): Column = md5(Column(columnName))
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(e: Column, numBits: Int): Column = {
+    require(Seq(0, 224, 256, 384, 512).contains(numBits),
+      s"numBits $numBits is not in the permitted values (0, 224, 256, 384, 512)")
+    Sha2(e.expr, lit(numBits).expr)
+  }
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(columnName: String, numBits: Int): Column = sha2(Column(columnName), numBits)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // String functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the length of a given string value
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def strlen(e: Column): Column = StringLength(e.expr)
+
+  /**
+   * Computes the length of a given string column
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def strlen(columnName: String): Column = strlen(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1139,7 +1503,9 @@ object functions {
      *
      * @group udf_funcs
      * @since 1.3.0
+     * @deprecated As of 1.5.0, since it's redundant with udf()
      */
+    @deprecated("Use udf", "1.5.0")
     def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
       ScalaUdf(f, returnType, Seq($argsInUdf))
     }""")
@@ -1275,7 +1641,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function0[_], returnType: DataType): Column = {
     ScalaUdf(f, returnType, Seq())
   }
@@ -1286,7 +1654,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr))
   }
@@ -1297,7 +1667,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr))
   }
@@ -1308,7 +1680,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
   }
@@ -1319,7 +1693,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
   }
@@ -1330,7 +1706,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
   }
@@ -1341,7 +1719,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
   }
@@ -1352,7 +1732,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
   }
@@ -1363,7 +1745,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
   }
@@ -1374,7 +1758,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
   }
@@ -1385,7 +1771,9 @@ object functions {
    *
    * @group udf_funcs
    * @since 1.3.0
+   * @deprecated As of 1.5.0, since it's redundant with udf()
    */
+  @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
@@ -1401,12 +1789,33 @@ object functions {
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
    *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
+   *  df.select($"id", callUDF("simpleUdf", $"value"))
+   * }}}
+   *
+   * @group udf_funcs
+   * @since 1.5.0
+   */
+  def callUDF(udfName: String, cols: Column*): Column = {
+    UnresolvedFunction(udfName, cols.map(_.expr))
+  }
+
+  /**
+   * Call an user-defined function.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *
+   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+   *  val sqlContext = df.sqlContext
+   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
    *  df.select($"id", callUdf("simpleUdf", $"value"))
    * }}}
    *
    * @group udf_funcs
    * @since 1.4.0
+   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF
    */
+  @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
      UnresolvedFunction(udfName, cols.map(_.expr))
   }

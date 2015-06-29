@@ -146,7 +146,7 @@ class ExecutorRunnable(
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
-      prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
+      prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
@@ -195,7 +195,7 @@ class ExecutorRunnable(
     val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
       val absPath =
         if (new File(uri.getPath()).isAbsolute()) {
-          uri.getPath()
+          Client.getClusterPath(sparkConf, uri.getPath())
         } else {
           Client.buildPath(Environment.PWD.$(), uri.getPath())
         }
@@ -303,8 +303,8 @@ class ExecutorRunnable(
       val address = container.getNodeHttpAddress
       val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
 
-      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=0"
-      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=0"
+      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
+      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }

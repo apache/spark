@@ -19,13 +19,12 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class LDASuite extends FunSuite with MLlibTestSparkContext {
+class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import LDASuite._
 

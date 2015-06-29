@@ -18,20 +18,21 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
-import java.util.logging.Level
+import java.util.logging.{Level, Logger => JLogger}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-import org.apache.spark.sql.types.{StructType, DataType}
-import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.schema.MessageType
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat, ParquetRecordReader}
+import org.apache.parquet.schema.MessageType
+import org.apache.parquet.{Log => ParquetLog}
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -94,40 +95,44 @@ private[sql] case class ParquetRelation(
 private[sql] object ParquetRelation {
 
   def enableLogForwarding() {
-    // Note: the parquet.Log class has a static initializer that
-    // sets the java.util.logging Logger for "parquet". This
+    // Note: the org.apache.parquet.Log class has a static initializer that
+    // sets the java.util.logging Logger for "org.apache.parquet". This
     // checks first to see if there's any handlers already set
     // and if not it creates them. If this method executes prior
     // to that class being loaded then:
     //  1) there's no handlers installed so there's none to
     // remove. But when it IS finally loaded the desired affect
     // of removing them is circumvented.
-    //  2) The parquet.Log static initializer calls setUseParentHanders(false)
+    //  2) The parquet.Log static initializer calls setUseParentHandlers(false)
     // undoing the attempt to override the logging here.
     //
     // Therefore we need to force the class to be loaded.
     // This should really be resolved by Parquet.
-    Class.forName(classOf[parquet.Log].getName)
+    Class.forName(classOf[ParquetLog].getName)
 
     // Note: Logger.getLogger("parquet") has a default logger
     // that appends to Console which needs to be cleared.
-    val parquetLogger = java.util.logging.Logger.getLogger("parquet")
+    val parquetLogger = JLogger.getLogger(classOf[ParquetLog].getPackage.getName)
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
-    // TODO(witgo): Need to set the log level ?
-    // if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
-    if (!parquetLogger.getUseParentHandlers) parquetLogger.setUseParentHandlers(true)
+    parquetLogger.setUseParentHandlers(true)
 
-    // Disables WARN log message in ParquetOutputCommitter.
+    // Disables a WARN log message in ParquetOutputCommitter.  We first ensure that
+    // ParquetOutputCommitter is loaded and the static LOG field gets initialized.
     // See https://issues.apache.org/jira/browse/SPARK-5968 for details
     Class.forName(classOf[ParquetOutputCommitter].getName)
-    java.util.logging.Logger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
+    JLogger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
+
+    // Similar as above, disables a unnecessary WARN log message in ParquetRecordReader.
+    // See https://issues.apache.org/jira/browse/PARQUET-220 for details
+    Class.forName(classOf[ParquetRecordReader[_]].getName)
+    JLogger.getLogger(classOf[ParquetRecordReader[_]].getName).setLevel(Level.OFF)
   }
 
   // The element type for the RDDs that this relation maps to.
   type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
   // The compression type
-  type CompressionType = parquet.hadoop.metadata.CompressionCodecName
+  type CompressionType = org.apache.parquet.hadoop.metadata.CompressionCodecName
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(

@@ -61,6 +61,7 @@ class SparkSubmitOptionParser {
   // Options that do not take arguments.
   protected final String HELP = "--help";
   protected final String SUPERVISE = "--supervise";
+  protected final String USAGE_ERROR = "--usage-error";
   protected final String VERBOSE = "--verbose";
   protected final String VERSION = "--version";
 
@@ -120,6 +121,7 @@ class SparkSubmitOptionParser {
   final String[][] switches = {
     { HELP, "-h" },
     { SUPERVISE },
+    { USAGE_ERROR },
     { VERBOSE, "-v" },
     { VERSION },
   };

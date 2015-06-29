@@ -362,7 +362,7 @@ class ExternalMerger(Merger):
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
-        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+        MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
     def items(self):
         """ Return all merged items as iterator """
@@ -486,7 +486,7 @@ class ExternalSorter(object):
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch, limit = 100, self.memory_limit
+        batch, limit = 100, self._next_limit()
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:
@@ -512,10 +512,7 @@ class ExternalSorter(object):
                     f.close()
                 chunks.append(load(open(path, 'rb')))
                 current_chunk = []
-                gc.collect()
-                batch //= 2
-                limit = self._next_limit()
-                MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+                MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
                 DiskBytesSpilled += os.path.getsize(path)
                 os.unlink(path)  # data will be deleted after close
 
@@ -630,7 +627,7 @@ class ExternalList(object):
         self.values = []
         gc.collect()
         DiskBytesSpilled += self._file.tell() - pos
-        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+        MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
 
 class ExternalListOfList(ExternalList):
@@ -794,7 +791,7 @@ class ExternalGroupBy(ExternalMerger):
 
         self.spills += 1
         gc.collect()  # release the memory as much as possible
-        MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
+        MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
     def _merged_items(self, index):
         size = sum(os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
@@ -841,4 +838,6 @@ class ExternalGroupBy(ExternalMerger):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

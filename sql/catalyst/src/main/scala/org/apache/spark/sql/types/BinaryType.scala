@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.sql.catalyst.util.TypeUtils
 
 
 /**
@@ -43,11 +44,7 @@ class BinaryType private() extends AtomicType {
 
   private[sql] val ordering = new Ordering[InternalType] {
     def compare(x: Array[Byte], y: Array[Byte]): Int = {
-      for (i <- 0 until x.length; if i < y.length) {
-        val res = x(i).compareTo(y(i))
-        if (res != 0) return res
-      }
-      x.length - y.length
+      TypeUtils.compareBinary(x, y)
     }
   }
 

@@ -44,8 +44,8 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
     private val pair: Parser[LogicalPlan] =
       (key ~ ("=".r ~> value).?).? ^^ {
-        case None => SetCommand(None, output)
-        case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)), output)
+        case None => SetCommand(None)
+        case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)))
       }
 
     def apply(input: String): LogicalPlan = parseAll(pair, input) match {
@@ -54,15 +54,15 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
   }
 
-  protected val AS      = Keyword("AS")
-  protected val CACHE   = Keyword("CACHE")
-  protected val CLEAR   = Keyword("CLEAR")
-  protected val IN      = Keyword("IN")
-  protected val LAZY    = Keyword("LAZY")
-  protected val SET     = Keyword("SET")
-  protected val SHOW    = Keyword("SHOW")
-  protected val TABLE   = Keyword("TABLE")
-  protected val TABLES  = Keyword("TABLES")
+  protected val AS = Keyword("AS")
+  protected val CACHE = Keyword("CACHE")
+  protected val CLEAR = Keyword("CLEAR")
+  protected val IN = Keyword("IN")
+  protected val LAZY = Keyword("LAZY")
+  protected val SET = Keyword("SET")
+  protected val SHOW = Keyword("SHOW")
+  protected val TABLE = Keyword("TABLE")
+  protected val TABLES = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
 
   override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | show | others
