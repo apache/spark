@@ -21,7 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
+import java.util.{Locale, PriorityQueue, Properties, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
@@ -1956,30 +1956,42 @@ private[spark] object Utils extends Logging {
    * Attempt to start a service on the given port, or fail after a number of attempts.
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
-   * @param startPort The initial port to start the service on.
+   * @param port The minimum and maximum port to start the service on, separated by colon.
+   *             If just set one number, take it as the minimum.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
    */
   def startServiceOnPort[T](
-      startPort: Int,
+      port: String,
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
-
-    require(startPort == 0 || (1024 <= startPort && startPort < 65536),
-      "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
+    val ports = port.split(":", 2)
+    val (minPort, maxPort, maxRetries) = if (ports.length == 2) {
+      val _minPort = ports(0).toInt
+      val _maxPort = ports(1).toInt
+      (_minPort, _maxPort, _maxPort - _minPort)
+    } else {
+      val _minPort = ports(0).toInt
+      (_minPort, 65535, portMaxRetries(conf))
+    }
+    require(minPort == 0 || (1024 <= minPort && minPort <= 65535),
+      s"Minimum port ${minPort} should be between 1024 and 65535 (inclusive)," +
+        " or 0 for a random free port.")
+    require((1024 <= maxPort && maxPort <= 65535),
+      s"Maximum port ${maxPort} should be between 1024 and 65535 (inclusive).")
+    require(minPort <= maxPort, s"Minimum ${minPort} port should not be" +
+      s" less than the maximum ${maxPort}.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
-      // Do not increment port if startPort is 0, which is treated as a special port
-      val tryPort = if (startPort == 0) {
-        startPort
+      val tryPort = if (minPort == 0) {
+        minPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        // If user specify minimum and maximum ports, retry in the range.
+        (offset % (maxPort - minPort + 1)) + minPort
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2000,7 +2012,7 @@ private[spark] object Utils extends Logging {
       }
     }
     // Should never happen
-    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+    throw new SparkException(s"Failed to start service$serviceString on port $minPort")
   }
 
   /**

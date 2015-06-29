@@ -63,7 +63,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   override def init(blockDataManager: BlockDataManager): Unit = {
     this.blockDataManager = blockDataManager
     cm = new ConnectionManager(
-      conf.getInt("spark.blockManager.port", 0),
+      conf.get("spark.blockManager.port", "0"),
       conf,
       securityManager,
       "Connection manager for block manager")

@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class RestSubmissionServer(
     val host: String,
-    val requestedPort: Int,
+    val requestedPort: String,
     val masterConf: SparkConf) extends Logging {
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet

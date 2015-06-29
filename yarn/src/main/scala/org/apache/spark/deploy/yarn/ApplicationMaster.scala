@@ -300,7 +300,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    val port = sparkConf.get("spark.yarn.am.port", "0")
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
     waitForSparkDriver()
     addAmIpFilter()

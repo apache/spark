@@ -50,7 +50,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
  */
 private[deploy] class StandaloneRestServer(
     host: String,
-    requestedPort: Int,
+    requestedPort: String,
     masterConf: SparkConf,
     masterActor: ActorRef,
     masterUrl: String)

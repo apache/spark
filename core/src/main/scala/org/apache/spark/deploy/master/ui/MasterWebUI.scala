@@ -29,7 +29,7 @@ import org.apache.spark.util.RpcUtils
  * Web UI server for the standalone master.
  */
 private[master]
-class MasterWebUI(val master: Master, requestedPort: Int)
+class MasterWebUI(val master: Master, requestedPort: String)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging
   with UIRoot {
 

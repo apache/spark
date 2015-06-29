@@ -44,7 +44,7 @@ private[spark] object RpcEnv {
   def create(
       name: String,
       host: String,
-      port: Int,
+      port: String,
       conf: SparkConf,
       securityManager: SecurityManager): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
@@ -53,7 +53,6 @@ private[spark] object RpcEnv {
   }
 
 }
-
 
 /**
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
@@ -145,7 +144,7 @@ private[spark] case class RpcEnvConfig(
     conf: SparkConf,
     name: String,
     host: String,
-    port: Int,
+    port: String,
     securityManager: SecurityManager)
 
 

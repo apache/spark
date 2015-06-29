@@ -22,7 +22,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 
-  override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
+  override def createRpcEnv(conf: SparkConf, name: String, port: String): RpcEnv = {
     new AkkaRpcEnvFactory().create(
       RpcEnvConfig(conf, name, "localhost", port, new SecurityManager(conf)))
   }
@@ -37,7 +37,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     })
     val conf = new SparkConf()
     val newRpcEnv = new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
+      RpcEnvConfig(conf, "test", "localhost", "12346", new SecurityManager(conf)))
     try {
       val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_endpoint")
       assert(s"akka.tcp://local@${env.address}/user/test_endpoint" ===

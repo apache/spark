@@ -68,7 +68,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   }
 
   before {
-    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    rpcEnv = RpcEnv.create("test", "localhost", "0", conf, securityMgr)
 
     conf.set("spark.authenticate", "false")
     conf.set("spark.driver.port", rpcEnv.address.port.toString)

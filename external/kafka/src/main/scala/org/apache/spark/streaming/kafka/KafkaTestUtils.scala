@@ -62,7 +62,7 @@ private class KafkaTestUtils extends Logging {
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
-  private var brokerPort = 9092
+  private var brokerPort = "9092"
   private var brokerConf: KafkaConfig = _
 
   // Kafka broker server
@@ -108,7 +108,7 @@ private class KafkaTestUtils extends Logging {
 
     // Kafka broker startup
     Utils.startServiceOnPort(brokerPort, port => {
-      brokerPort = port
+      brokerPort = port.toString
       brokerConf = new KafkaConfig(brokerConfiguration)
       server = new KafkaServer(brokerConf)
       server.startup()
@@ -183,7 +183,7 @@ private class KafkaTestUtils extends Logging {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")
-    props.put("port", brokerPort.toString)
+    props.put("port", brokerPort)
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
     props.put("log.flush.interval.messages", "1")

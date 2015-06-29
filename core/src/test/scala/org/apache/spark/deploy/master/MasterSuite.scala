@@ -135,7 +135,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually {
     )
 
     val (actorSystem, port, uiPort, restPort) =
-      Master.startSystemAndActor("127.0.0.1", 7077, 8080, conf)
+      Master.startSystemAndActor("127.0.0.1", "7077", "8080", conf)
 
     try {
       Await.result(actorSystem.actorSelection("/user/Master").resolveOne(10 seconds), 10 seconds)

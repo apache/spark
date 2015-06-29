@@ -65,7 +65,7 @@ class ReceivedBlockHandlerSuite
   var tempDirectory: File = null
 
   before {
-    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    rpcEnv = RpcEnv.create("test", "localhost", "0", conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",

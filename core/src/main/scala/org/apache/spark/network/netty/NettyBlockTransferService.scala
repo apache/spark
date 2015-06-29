@@ -71,7 +71,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       (server, server.getPort)
     }
 
-    val portToTry = conf.getInt("spark.blockManager.port", 0)
+    val portToTry = conf.get("spark.blockManager.port", "0")
     Utils.startServiceOnPort(portToTry, startService, conf, getClass.getName)._1
   }
 

@@ -27,8 +27,8 @@ import org.apache.spark.SparkConf
  */
 private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
-  var port = 0
-  var webUiPort = 8081
+  var port = "0"
+  var webUiPort = "8081"
   var cores = inferDefaultCores()
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
@@ -37,7 +37,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {
-    port = System.getenv("SPARK_WORKER_PORT").toInt
+    port = System.getenv("SPARK_WORKER_PORT")
   }
   if (System.getenv("SPARK_WORKER_CORES") != null) {
     cores = System.getenv("SPARK_WORKER_CORES").toInt
@@ -46,7 +46,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
     memory = Utils.memoryStringToMb(conf.getenv("SPARK_WORKER_MEMORY"))
   }
   if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
-    webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
+    webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT")
   }
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
@@ -58,7 +58,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   if (conf.contains("spark.worker.ui.port")) {
-    webUiPort = conf.get("spark.worker.ui.port").toInt
+    webUiPort = conf.get("spark.worker.ui.port")
   }
 
   checkWorkerMemory()
@@ -74,7 +74,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       host = value
       parse(tail)
 
-    case ("--port" | "-p") :: IntParam(value) :: tail =>
+    case ("--port" | "-p") :: value :: tail =>
       port = value
       parse(tail)
 
@@ -90,7 +90,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       workDir = value
       parse(tail)
 
-    case "--webui-port" :: IntParam(value) :: tail =>
+    case "--webui-port" :: value :: tail =>
       webUiPort = value
       parse(tail)
 

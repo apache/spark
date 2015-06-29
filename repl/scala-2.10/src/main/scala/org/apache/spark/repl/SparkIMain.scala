@@ -114,7 +114,7 @@ import org.apache.spark.annotation.DeveloperApi
 
     private val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
-    private val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
+    private val classServerPort                               = conf.get("spark.replClassServer.port", "0")
     private val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
     private var printResults                                  = true      // whether to print result lines
