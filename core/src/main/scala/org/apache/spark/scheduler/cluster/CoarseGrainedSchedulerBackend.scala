@@ -353,13 +353,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-   * Express a preference to the cluster manager for a given total number of executors. This can
+   * Express a preference to the cluster manager for a given total number of executors,
+   * number of locality aware pending tasks and related locality preferences. This can
    * result in canceling pending requests or filing additional requests.
    * @return whether the request is acknowledged.
    */
-  final override def requestTotalExecutors(numExecutors: Int,
+  final override def requestTotalExecutors(
+      numExecutors: Int,
       localityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]): Boolean = synchronized {
+      preferredLocalityToCount: Map[String, Int]
+    ): Boolean = synchronized {
     if (numExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +

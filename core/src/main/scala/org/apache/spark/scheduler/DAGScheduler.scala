@@ -802,7 +802,7 @@ class DAGScheduler(
           (id, getPreferredLocs(stage.rdd, p))
         }.toMap
     }
-    stage.latestInfo.taskToPreferredLocalities = Some(taskIdToLocations.values.toSeq)
+    stage.latestInfo.taskLocalityPreferences = Some(taskIdToLocations.values.toSeq)
 
     outputCommitCoordinator.stageStart(stage.id)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))

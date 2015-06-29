@@ -41,9 +41,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val handler = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host2")))
+    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
     val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(3, 15,
@@ -75,7 +73,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
           .map(_.nodes)
 
     assert(nodeLocalities === Array(
-      null, // requested requested container with no locality preference
+      null, // requested container with no locality preference
       Array("host2", "host3"),
       Array("host2", "host3")))
   }
@@ -98,9 +96,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
           .map(_.nodes)
 
-    assert(nodeLocalities === Array(
-      /** newly requested locality preferred containers */
-      Array("host2", "host3")))
+    assert(nodeLocalities === Array(Array("host2", "host3")))
   }
 
   test("allocate locality preferred containers with fully matched containers") {
@@ -121,11 +117,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
         Map("host1" -> 15, "host2" -> 15, "host3" -> 10))
           .map(_.nodes)
 
-    assert(nodeLocalities === Array(
-      /** newly requested locality preferred containers */
-      null,
-      null,
-      null))
+    assert(nodeLocalities === Array(null, null, null))
   }
 
   test("allocate containers with no locality preference") {
@@ -133,10 +125,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with B
 
     val handler = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(
-      createContainer("host1"),
-      createContainer("host2")
-    ))
+    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
 
     val nodeLocalities =
       handler.containerPlacementStrategy.localityOfRequestedContainers(1, 0, Map.empty)

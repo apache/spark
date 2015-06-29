@@ -295,8 +295,7 @@ private[spark] class ExecutorAllocationManager(
 
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
-        val (localityAwarePendingTasks, preferredLocalities) =
-          listener.getPreferredLocalitiesAndTasks()
+        val (localityAwarePendingTasks, preferredLocalities) = listener.executorPlacementHints()
         client.requestTotalExecutors(numExecutorsTarget, localityAwarePendingTasks,
           preferredLocalities)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
@@ -352,7 +351,7 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
-    val (localityAwarePendingTasks, preferredLocalities) = listener.getPreferredLocalitiesAndTasks()
+    val (localityAwarePendingTasks, preferredLocalities) = listener.executorPlacementHints()
     val addRequestAcknowledged = testing ||
       client.requestTotalExecutors(numExecutorsTarget, localityAwarePendingTasks,
         preferredLocalities)
@@ -537,7 +536,7 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks(stageId) = numTasks
         allocationManager.onSchedulerBacklogged()
 
-        stageSubmitted.stageInfo.taskToPreferredLocalities.foreach { m =>
+        stageSubmitted.stageInfo.taskLocalityPreferences.foreach { m =>
           stageIdToPreferredLocations.put(stageId, m)
         }
       }
@@ -653,8 +652,12 @@ private[spark] class ExecutorAllocationManager(
       !executorIdToTaskIds.contains(executorId)
     }
 
-    def getPreferredLocalitiesAndTasks():
-        (Int, Map[String, Int]) = allocationManager.synchronized {
+    /**
+     * Get the number of locality aware pending tasks and related locality preferences as the
+     * hints used for executor allocation.
+     */
+    def executorPlacementHints(): (Int, Map[String, Int]) =
+      allocationManager.synchronized {
       var localityAwarePendingTasks: Int = 0
       val localityToCount = new mutable.HashMap[String, Int]()
       stageIdToPreferredLocations.values.foreach { localities =>
@@ -662,7 +665,7 @@ private[spark] class ExecutorAllocationManager(
           if (!locality.isEmpty) {
             localityAwarePendingTasks += 1
             locality.foreach { location =>
-              val count = localityToCount.getOrElseUpdate(location.host, 0) + 1
+              val count = localityToCount.getOrElse(location.host, 0) + 1
               localityToCount(location.host) = count
             }
           }

@@ -32,15 +32,15 @@ private[yarn] trait ContainerPlacementStrategy {
    * Calculate each container's node locality and rack locality
    * @param numContainer number of containers to calculate
    * @param numLocalityAwarePendingTasks number of locality required pending tasks
-   * @param preferredLocalityToCount a map to store the preferred host name and its required count
-   *
+   * @param preferredLocalityToCounts a map to store the preferred hostname and possible task
+   *                                  numbers running on it, used as hints for container allocation
    * @return node localities and rack localities, each locality is an array of string,
    *         the length of localities is the same as number of containers
    */
   def localityOfRequestedContainers(
       numContainer: Int,
       numLocalityAwarePendingTasks: Int,
-      preferredLocalityToCount: Map[String, Int]
+      preferredLocalityToCounts: Map[String, Int]
     ): Array[ContainerLocalityPreferences]
 }
 
@@ -101,22 +101,33 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   // Number of CPUs per task
   private val CPUS_PER_TASK = sparkConf.getInt("spark.task.cpus", 1)
 
-  // Get the required cores of locality aware task
+  /**
+   * Get the required cores of locality aware tasks
+   */
   private def localityAwareTaskCores(localityAwarePendingTasks: Int): Int = {
     localityAwarePendingTasks * CPUS_PER_TASK
   }
 
-  // Get the expected number of locality aware containers
+  /**
+   * Get the expected number of locality aware containers
+   */
   private def expectedLocalityAwareContainerNum(localityAwarePendingTasks: Int): Int = {
     (localityAwareTaskCores(localityAwarePendingTasks) +
       yarnAllocator.resource.getVirtualCores - 1) /
         yarnAllocator.resource.getVirtualCores
   }
 
-  // Update the expected locality distribution by considering the existing allocated container
-  // host distributions.
-  private def updateExpectedLocalityToCounts(localityAwarePendingTasks: Int,
-      preferredLocalityToCounts: Map[String, Int]): Map[String, Int] = {
+  /**
+   * Update the expected host to number of containers by considering with allocated containers.
+   * @param localityAwarePendingTasks number of locality aware pending tasks
+   * @param preferredLocalityToCounts a map to store the preferred hostname and possible task
+   *                                  numbers running on it, used as hints for container allocation
+   * @return a map with hostname as key and required number of containers on this host as value
+   */
+  private def updateExpectedLocalityToCounts(
+      localityAwarePendingTasks: Int,
+      preferredLocalityToCounts: Map[String, Int]
+    ): Map[String, Int] = {
     val totalPreferredLocalities = preferredLocalityToCounts.values.sum
     preferredLocalityToCounts.map { case (host, count) =>
       val expectedCount =
@@ -126,19 +137,23 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         .map(_.size)
         .getOrElse(0)
 
-      if (expectedCount > existedCount) {
-        // Get the actual container number if existing container can not fully satisfy the
-        // expected number of container
-        (host, (expectedCount - existedCount).ceil.toInt)
-      } else {
-        // If the current existed container number can fully satisfy the expected number of
-        // containers, set the required containers to be 0
-        (host, 0)
-      }
+      // If existing container can not fully satisfy the expected number of container,
+      // the required container number is expected count minus existed count. Otherwise the
+      // required container number is 0.
+      (host, math.max(0, (expectedCount - existedCount).ceil.toInt))
     }
   }
 
-  def localityOfRequestedContainers(
+  /**
+   * Calculate each container's node locality and rack locality
+   * @param numContainer number of containers to calculate
+   * @param numLocalityAwarePendingTasks number of locality required pending tasks
+   * @param preferredLocalityToCounts a map to store the preferred hostname and possible task
+   *                                  numbers running on it, used as hints for container allocation
+   * @return node localities and rack localities, each locality is an array of string,
+   *         the length of localities is the same as number of containers
+   */
+  override def localityOfRequestedContainers(
       numContainer: Int,
       numLocalityAwarePendingTasks: Int,
       preferredLocalityToCounts: Map[String, Int]
@@ -149,25 +164,9 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
     // and the other without locality preference.
-    var requiredLocalityFreeContainerNum: Int = 0
-    var requiredLocalityAwareContainerNum: Int = 0
-
-    if (updatedLocalityAwareContainerNum == 0) {
-      // If the current existed containers can satisfy all the locality preferred tasks,
-      // allocate the new container with no locality preference
-      requiredLocalityFreeContainerNum = numContainer
-    } else {
-      if (updatedLocalityAwareContainerNum >= numContainer) {
-        // If newly requested containers cannot satisfy the locality preferred tasks,
-        // allocate all the new container with locality preference
-        requiredLocalityAwareContainerNum = numContainer
-      } else {
-        // If part of newly requested can satisfy the locality preferred tasks, allocate part of
-        // the containers with locality preference, and another part with no locality preference
-        requiredLocalityAwareContainerNum = updatedLocalityAwareContainerNum
-        requiredLocalityFreeContainerNum = numContainer - updatedLocalityAwareContainerNum
-      }
-    }
+    val requiredLocalityFreeContainerNum =
+      math.max(0, numContainer - updatedLocalityAwareContainerNum)
+    val requiredLocalityAwareContainerNum = numContainer - requiredLocalityFreeContainerNum
 
     val containerLocalityPreferences = ArrayBuffer[ContainerLocalityPreferences]()
     if (requiredLocalityFreeContainerNum > 0) {
