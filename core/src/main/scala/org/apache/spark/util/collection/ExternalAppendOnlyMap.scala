@@ -157,22 +157,6 @@ class ExternalAppendOnlyMap[K, V, C](
     spilledMaps.append(spillMemoryToDisk(it))
   }
 
-  def diskBytesSpilled: Long = _diskBytesSpilled
-
-  /**
-   * Return an iterator that merges the in-memory map with the spilled maps.
-   * If no spill has occurred, simply return the in-memory map's iterator.
-   */
-  override def iterator: Iterator[(K, C)] = {
-    shuffleMemoryManager.addSpillableToReservedList(this)
-    if (spilledMaps.isEmpty) {
-      memoryOrDiskIter = Some(MemoryOrDiskIterator(currentMap.iterator))
-      memoryOrDiskIter.get
-    } else {
-      new ExternalIterator()
-    }
-  }
-
   /**
    * spill contents of the in-memory map to a temporary file on disk.
    */
@@ -229,6 +213,22 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
     new DiskMapIterator(file, blockId, batchSizes)
+  }
+
+  def diskBytesSpilled: Long = _diskBytesSpilled
+
+  /**
+   * Return an iterator that merges the in-memory map with the spilled maps.
+   * If no spill has occurred, simply return the in-memory map's iterator.
+   */
+  override def iterator: Iterator[(K, C)] = {
+    shuffleMemoryManager.addSpillableToReservedList(this)
+    if (spilledMaps.isEmpty) {
+      memoryOrDiskIter = Some(MemoryOrDiskIterator(currentMap.iterator))
+      memoryOrDiskIter.get
+    } else {
+      new ExternalIterator()
+    }
   }
 
   /**
