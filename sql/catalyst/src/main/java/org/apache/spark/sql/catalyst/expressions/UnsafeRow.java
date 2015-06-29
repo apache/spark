@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * In order to support fast hashing and equality checks for UnsafeRows that contain objects
  * when used as grouping key in BytesToBytesMap, we put the objects in an UniqueObjectPool to make
- * sure all the keyhave the same index for same object, then we can hash/compare the objects by
+ * sure all the key have the same index for same object, then we can hash/compare the objects by
  * hash/compare the index.
  *
  * For non-primitive types, the word of a field could be:

@@ -27,7 +27,7 @@ public class UniqueObjectPool extends ObjectPool {
   /**
    * A hash map from objects to their indexes in the array.
    */
-  private  HashMap<Object, Integer> objIndex;
+  private HashMap<Object, Integer> objIndex;
 
   public UniqueObjectPool(int capacity) {
     super(capacity);
