@@ -54,7 +54,10 @@ case class HiveTableScan(
   val attributes = requestedAttributes.map(relation.attributeMap)
 
   private[this] val metastoreFilter =
-    HiveShim.toMetastoreFilter(partitionPruningPred, relation.hiveQlTable.getPartitionKeys)
+    HiveShim.toMetastoreFilter(
+      partitionPruningPred,
+      relation.hiveQlTable.getPartitionKeys,
+      context.hiveMetastoreVersion)
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
