@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 
 private[spark] object RUtils {
   /**
-   * Get the SparkR package path in various deployment modes. 
+   * Get the SparkR package path in various deployment modes.
    */
   def sparkRPackagePath(driver: Boolean): String = {
     val yarnMode = sys.env.get("SPARK_YARN_MODE")
