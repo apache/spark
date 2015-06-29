@@ -1477,7 +1477,7 @@ object functions {
   (0 to 10).map { x =>
     val args = (1 to x).map(i => s"arg$i: Column").mkString(", ")
     val fTypes = Seq.fill(x + 1)("_").mkString(", ")
-    val argsInUdf = (1 to x).map(i => s"arg$i.expr").mkString(", ")
+    val argsInUDF = (1 to x).map(i => s"arg$i.expr").mkString(", ")
     println(s"""
     /**
      * Call a Scala function of ${x} arguments as user-defined function (UDF). This requires
@@ -1489,7 +1489,7 @@ object functions {
      */
     @deprecated("Use udf", "1.5.0")
     def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
-      ScalaUdf(f, returnType, Seq($argsInUdf))
+      ScalaUDF(f, returnType, Seq($argsInUDF))
     }""")
   }
   }
@@ -1770,8 +1770,8 @@ object functions {
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", callUDF("simpleUdf", $"value"))
+   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", callUDF("simpleUDF", $"value"))
    * }}}
    *
    * @group udf_funcs
@@ -1789,8 +1789,8 @@ object functions {
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", callUdf("simpleUdf", $"value"))
+   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", callUdf("simpleUDF", $"value"))
    * }}}
    *
    * @group udf_funcs
