@@ -35,7 +35,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * :: DeveloperApi ::
- * An append-only map that spills sorted content to disk when there is insufficient space for inMemory
+ * An append-only map that spills sorted content to disk when there is insufficient space for it
  * to grow.
  *
  * This map takes two passes over the data:
@@ -283,7 +283,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private class ExternalIterator extends Iterator[(K, C)] {
 
     // A queue that maintains a buffer for each stream we are currently merging
-    // This queue maintains the invariant that inMemory only contains non-empty buffers
+    // This queue maintains the invariant that it only contains non-empty buffers
     private val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
@@ -332,7 +332,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val pair = buffer.pairs(i)
         if (pair._1 == key) {
           // Note that there's at most one pair in the buffer with a given key, since we always
-          // merge stuff in a map before spilling, so inMemory's safe to return after the first we find
+          // merge stuff in a map before spilling, so it's safe to return after the first we find
           removeFromBuffer(buffer.pairs, i)
           return mergeCombiners(baseCombiner, pair._2)
         }
@@ -343,7 +343,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     /**
      * Remove the index'th element from an ArrayBuffer in constant time, swapping another element
-     * into its place. This is more efficient than the ArrayBuffer.remove method because inMemory does
+     * into its place. This is more efficient than the ArrayBuffer.remove method because it does
      * not have to shift all the elements in the array over. It works for our array buffers because
      * we don't care about the order of elements inside, we just want to search them for a key.
      */
@@ -385,7 +385,7 @@ class ExternalAppendOnlyMap[K, V, C](
         mergedBuffers += newBuffer
       }
 
-      // Repopulate each visited stream buffer and add inMemory back to the queue if inMemory is non-empty
+      // Repopulate each visited stream buffer and add it back to the queue if it is non-empty
       mergedBuffers.foreach { buffer =>
         if (buffer.isEmpty) {
           readNextHashCode(buffer.iterator, buffer.pairs)
@@ -488,7 +488,7 @@ class ExternalAppendOnlyMap[K, V, C](
     /**
      * Return the next (K, C) pair from the deserialization stream.
      *
-     * If the current batch is drained, construct a stream for the next batch and read from inMemory.
+     * If the current batch is drained, construct a stream for the next batch and read from it.
      * If no more pairs are left, return null.
      */
     private def readNextItem(): (K, C) = {

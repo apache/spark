@@ -19,8 +19,6 @@ package org.apache.spark.util.collection
 
 import org.apache.spark.{Logging, SparkEnv, Spillable}
 
-import scala.reflect.ClassTag
-
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
  * has been exceeded.
