@@ -201,7 +201,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     def convertToHiveRawString(col: String, value: Any): String = {
       val raw = String.valueOf(value)
       schema(col).dataType match {
-        case DateType => DateTimeUtils.toString(raw.toInt)
+        case DateType => DateTimeUtils.dateToString(raw.toInt)
         case _: DecimalType => BigDecimal(raw).toString()
         case _ => raw
       }

@@ -21,6 +21,7 @@ import scala.collection.Map
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 
 object ExtractValue {
@@ -38,7 +39,7 @@ object ExtractValue {
   def apply(
       child: Expression,
       extraction: Expression,
-      resolver: Resolver): ExtractValue = {
+      resolver: Resolver): Expression = {
 
     (child.dataType, extraction) match {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
@@ -73,7 +74,7 @@ object ExtractValue {
   def unapply(g: ExtractValue): Option[(Expression, Expression)] = {
     g match {
       case o: ExtractValueWithOrdinal => Some((o.child, o.ordinal))
-      case _ => Some((g.child, null))
+      case s: ExtractValueWithStruct => Some((s.child, null))
     }
   }
 
@@ -101,11 +102,11 @@ object ExtractValue {
  * Note: concrete extract value expressions are created only by `ExtractValue.apply`,
  * we don't need to do type check for them.
  */
-trait ExtractValue extends UnaryExpression {
-  self: Product =>
+trait ExtractValue {
+  self: Expression =>
 }
 
-abstract class ExtractValueWithStruct extends ExtractValue {
+abstract class ExtractValueWithStruct extends UnaryExpression with ExtractValue {
   self: Product =>
 
   def field: StructField
@@ -125,6 +126,18 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
     val baseValue = child.eval(input).asInstanceOf[InternalRow]
     if (baseValue == null) null else baseValue(ordinal)
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"""
+        if ($eval.isNullAt($ordinal)) {
+          ${ev.isNull} = true;
+        } else {
+          $result = ${ctx.getColumn(eval, dataType, ordinal)};
+        }
+      """
+    })
+  }
 }
 
 /**
@@ -137,6 +150,7 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends ExtractValueWithStruct {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
+  override def nullable: Boolean = child.nullable || containsNull || field.nullable
 
   override def eval(input: InternalRow): Any = {
     val baseValue = child.eval(input).asInstanceOf[Seq[InternalRow]]
@@ -146,18 +160,39 @@ case class GetArrayStructFields(
       }
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arraySeqClass = "scala.collection.mutable.ArraySeq"
+    // TODO: consider using Array[_] for ArrayType child to avoid
+    // boxing of primitives
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"""
+        final int n = $eval.size();
+        final $arraySeqClass<Object> values = new $arraySeqClass<Object>(n);
+        for (int j = 0; j < n; j++) {
+          InternalRow row = (InternalRow) $eval.apply(j);
+          if (row != null && !row.isNullAt($ordinal)) {
+            values.update(j, ${ctx.getColumn("row", field.dataType, ordinal)});
+          }
+        }
+        $result = (${ctx.javaType(dataType)}) values;
+      """
+    })
+  }
 }
 
-abstract class ExtractValueWithOrdinal extends ExtractValue {
+abstract class ExtractValueWithOrdinal extends BinaryExpression with ExtractValue {
   self: Product =>
 
   def ordinal: Expression
+  def child: Expression
+
+  override def left: Expression = child
+  override def right: Expression = ordinal
 
   /** `Null` is returned for invalid ordinals. */
   override def nullable: Boolean = true
-  override def foldable: Boolean = child.foldable && ordinal.foldable
   override def toString: String = s"$child[$ordinal]"
-  override def children: Seq[Expression] = child :: ordinal :: Nil
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
@@ -195,6 +230,19 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
       baseValue(index)
     }
   }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"""
+        final int index = (int)$eval2;
+        if (index >= $eval1.size() || index < 0) {
+          ${ev.isNull} = true;
+        } else {
+          $result = (${ctx.boxedType(dataType)})$eval1.apply(index);
+        }
+      """
+    })
+  }
 }
 
 /**
@@ -208,5 +256,17 @@ case class GetMapValue(child: Expression, ordinal: Expression)
   protected def evalNotNull(value: Any, ordinal: Any) = {
     val baseValue = value.asInstanceOf[Map[Any, _]]
     baseValue.get(ordinal).orNull
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"""
+        if ($eval1.contains($eval2)) {
+          $result = (${ctx.boxedType(dataType)})$eval1.apply($eval2);
+        } else {
+          ${ev.isNull} = true;
+        }
+      """
+    })
   }
 }

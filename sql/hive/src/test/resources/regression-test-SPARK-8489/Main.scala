@@ -38,6 +38,7 @@ object Main {
     val df = hc.createDataFrame(Seq(MyCoolClass("1", "2", "3")))
     df.collect()
     println("Regression test for SPARK-8489 success!")
+    sc.stop()
   }
 }
 

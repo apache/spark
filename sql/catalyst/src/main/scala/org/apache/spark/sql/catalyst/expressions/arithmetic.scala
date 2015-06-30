@@ -82,8 +82,6 @@ case class Abs(child: Expression) extends UnaryArithmetic {
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
 
-  /** Name of the function for this expression on a [[Decimal]] type. */
-  def decimalMethod: String = ""
 
   override def dataType: DataType = left.dataType
 
@@ -112,6 +110,10 @@ abstract class BinaryArithmetic extends BinaryExpression {
       }
     }
   }
+
+  /** Name of the function for this expression on a [[Decimal]] type. */
+  def decimalMethod: String =
+    sys.error("BinaryArithmetics must override either decimalMethod or genCode")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>

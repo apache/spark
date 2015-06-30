@@ -212,6 +212,19 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
+  test("hex") {
+    val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
+    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
+    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
+    checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
+    checkAnswer(data.selectExpr("hex(d)"), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(cast(d as binary))"), Seq(Row("68656C6C6F")))
+  }
+
   test("hypot") {
     testTwoToOneMathFunction(hypot, hypot, math.hypot)
   }

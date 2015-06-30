@@ -28,7 +28,10 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class InternalRow extends Row {
 
   // This is only use for test
-  override def getString(i: Int): String = getAs[UTF8String](i).toString
+  override def getString(i: Int): String = {
+    val str = getAs[UTF8String](i)
+    if (str != null) str.toString else null
+  }
 
   // These expensive API should not be used internally.
   final override def getDecimal(i: Int): java.math.BigDecimal =

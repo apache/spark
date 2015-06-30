@@ -673,4 +673,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(nullFile, parentDir))
     assert(!Utils.isInDirectory(nullFile, childFile3))
   }
+
+  test("circular buffer") {
+    val buffer = new CircularBuffer(25)
+    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+
+    stream.println("test circular test circular test circular test circular test circular")
+    assert(buffer.toString === "t circular test circular\n")
+  }
 }
