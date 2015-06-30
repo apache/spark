@@ -46,7 +46,7 @@ private[spark] trait CollectionSpillable[C] extends Logging with Spillable{
   // Initial threshold for the size of a collection before we start tracking its memory usage
   // Exposed for testing
   protected val initialMemoryThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 0L)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
