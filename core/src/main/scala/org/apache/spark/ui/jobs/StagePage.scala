@@ -573,13 +573,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
         val svgTag =
           if (totalExecutionTime == 0) {
+            // SPARK-8705: Avoid invalid attribute error in JavaScript if execution time is 0
             """<svg class="task-assignment-timeline-duration-bar"></svg>"""
-          }
-          else {
+          } else {
            s"""<svg class="task-assignment-timeline-duration-bar">
                  |<rect class="scheduler-delay-proportion"
                    |x="$schedulerDelayProportionPos%" y="0px" height="26px"
-                   |width="$schedulerDelayProportion%""></rect>
+                   |width="$schedulerDelayProportion%"></rect>
                  |<rect class="deserialization-time-proportion"
                    |x="$deserializationTimeProportionPos%" y="0px" height="26px"
                    |width="$deserializationTimeProportion%"></rect>
