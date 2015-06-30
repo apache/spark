@@ -83,6 +83,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
+  private val appStatus = new mutable.HashMap[String, Boolean]()
+
   // Constants used to parse Spark 1.0.0 log directories.
   private[history] val LOG_PREFIX = "EVENT_LOG_"
   private[history] val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
@@ -445,6 +447,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
       bus.replay(logInput, logPath.toString, !appCompleted)
+      appStatus.put(logPath.getName(), appCompleted)
       new FsApplicationAttemptInfo(
         logPath.getName(),
         appListener.appName.getOrElse(NOT_STARTED),
@@ -526,6 +529,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
     } else {
       !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
+    }
+  }
+
+   def getAppStatus(appid: String): Boolean = {
+     if (appStatus.keySet.contains(appid)) {
+       return true
+     }
+     else if (appStatus.contains(appid + EventLoggingListener.IN_PROGRESS)) {
+       return false
+     }
+    else {
+       val e = new NoSuchElementException(s"no app with key $appid.")
+       e.initCause(new NoSuchElementException)
+       throw e
     }
   }
 
