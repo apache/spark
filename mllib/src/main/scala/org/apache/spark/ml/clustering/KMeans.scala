@@ -177,7 +177,6 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-
   override def fit(dataset: DataFrame): KMeansModel = {
     val map = this.extractParamMap()
     val rdd = dataset.select(col(map(featuresCol))).map { case Row(point: Vector) => point}
