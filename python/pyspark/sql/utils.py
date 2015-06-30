@@ -44,8 +44,11 @@ def install_exception_handler():
     If any exception happened in JVM, the result will be Java exception object, it raise
     py4j.protocol.Py4JJavaError. We replace the original `get_return_value` with one that
     could capture the Java exception and throw a Python one (with the same error message).
+
+    It's idempotent, could be called multiple times.
     """
-    old_func = py4j.protocol.get_return_value
-    new_func = capture_sql_exception(old_func)
+    original = py4j.protocol.get_return_value
+    # The original `get_return_value` is not patched, it's idempotent.
+    patched = capture_sql_exception(original)
     # only patch the one used in in py4j.java_gateway (call Java API)
-    py4j.java_gateway.get_return_value = new_func
+    py4j.java_gateway.get_return_value = patched
