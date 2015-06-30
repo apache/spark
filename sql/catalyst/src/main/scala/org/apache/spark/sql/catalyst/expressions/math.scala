@@ -373,7 +373,7 @@ case class UnHex(child: Expression)
       unhex(num.asInstanceOf[UTF8String].toString)
     }
   }
-  
+
   private def unhex(s: String): Array[Byte] = {
     // append a leading 0 if needed
     val str = if (s.length % 2 == 1) {"0" + s} else {s}
