@@ -56,7 +56,7 @@ LOGGER = logging.getLogger()
 
 def run_individual_python_test(test_name, pyspark_python):
     env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python)}
-    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
+    LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     per_test_output = tempfile.TemporaryFile()
     retcode = subprocess.Popen(
@@ -108,6 +108,10 @@ def parse_opts():
         "-p", "--parallelism", type="int", default=4,
         help="The number of suites to test in parallel (default %default)"
     )
+    parser.add_option(
+        "--verbose", action="store_true",
+        help="Enable additional debug logging"
+    )
 
     (opts, args) = parser.parse_args()
     if args:
@@ -118,8 +122,12 @@ def parse_opts():
 
 
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(message)s")
     opts = parse_opts()
+    if (opts.verbose):
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+    logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
     LOGGER.info("Running PySpark tests. Output is in python/%s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
