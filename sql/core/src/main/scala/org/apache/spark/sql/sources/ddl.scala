@@ -308,6 +308,18 @@ private[sql] object ResolvedDataSource {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
       case dataSource: HadoopFsRelationProvider =>
+        // If output format is parquet, check if
+        // dataframe has multiple columns before proceeding
+        if(provider == "parquet") {
+          if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
+            val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
+              case (x, ys) if ys.length > 1 => "\"" + x + "\""
+            }.mkString(", ")
+            throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+              s"cannot save to $provider format")
+          }
+        }
+
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;

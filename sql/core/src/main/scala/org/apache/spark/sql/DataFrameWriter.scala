@@ -37,19 +37,6 @@ import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelec
 final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
-   * Check if the provided dataframe has multiple columns
-   * before writing it to an external source
-   */
-  private val error : Unit = {
-    if (df.schema.fieldNames.length != df.schema.fieldNames.distinct.length) {
-      val duplicateColumns = df.schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found")
-    }
-  }
-
-  /**
    * Specifies the behavior when data or table already exists. Options include:
    *   - `SaveMode.Overwrite`: overwrite the existing data.
    *   - `SaveMode.Append`: append the data.

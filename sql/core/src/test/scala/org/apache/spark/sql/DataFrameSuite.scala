@@ -709,7 +709,7 @@ class DataFrameSuite extends QueryTest {
     // only one duplicate column present
     val e = intercept[org.apache.spark.sql.AnalysisException] {
       val df1 = Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
-                .write.save()
+                .write.format("parquet").save()
     }
     assert(e.getMessage.contains("Duplicate column(s) :"))
     assert(e.getMessage.contains("column1"))
@@ -719,7 +719,7 @@ class DataFrameSuite extends QueryTest {
     val f = intercept[org.apache.spark.sql.AnalysisException] {
       val df2 = Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
                 .toDF("column1", "column2", "column3", "column1", "column3")
-                .write.save()
+                .write.format("parquet").save()
     }
     assert(f.getMessage.contains("Duplicate column(s) :"))
     assert(f.getMessage.contains("column1"))
