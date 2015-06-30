@@ -66,7 +66,7 @@ public class JavaDCTSuite {
     double[] expectedResult = input.clone();
     (new DoubleDCT_1D(input.length)).forward(expectedResult, true);
 
-    DCT DCT = new DCT()
+    DCT dct = new DCT()
       .setInputCol("vec")
       .setOutputCol("resultVec");
 
