@@ -20,7 +20,7 @@ import py4j
 
 class AnalysisException(Exception):
     """
-    Fail to analysis SQL query plan.
+    Failed to analyze a SQL query plan.
     """
 
 
