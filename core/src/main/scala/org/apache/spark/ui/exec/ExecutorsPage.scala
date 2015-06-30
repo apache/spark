@@ -50,6 +50,8 @@ private[ui] class ExecutorsPage(
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
   private val listener = parent.listener
+  private val isHistoryUI = parent.isHistoryUI
+  private val aggregatedLogPrefix = "aggregated_"
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
@@ -59,7 +61,11 @@ private[ui] class ExecutorsPage(
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield
       ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
-    val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
+    val aggregatedLogsExist = execInfo.filter(
+      _.executorLogs.filter(_._1.startsWith(aggregatedLogPrefix)).nonEmpty).nonEmpty
+    val nonAggregatedLogsExist = execInfo.filter(
+      _.executorLogs.filter(!_._1.startsWith(aggregatedLogPrefix)).nonEmpty).nonEmpty
+    val logsExist = aggregatedLogsExist || nonAggregatedLogsExist
 
     val execTable =
       <table class={UIUtils.TABLE_CLASS_STRIPED}>
@@ -84,11 +90,17 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
-          {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
+          {
+            if ((!isHistoryUI && nonAggregatedLogsExist) || (isHistoryUI && logsExist)) {
+              <th class="sorttable_nosort">Logs</th>
+            } else {
+              Seq.empty
+            }
+          }
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_, logsExist))}
+          {execInfoSorted.map(execRow(_, aggregatedLogsExist, nonAggregatedLogsExist))}
         </tbody>
       </table>
 
@@ -113,7 +125,10 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
+  private def execRow(
+      info: ExecutorSummary,
+      aggregatedLogsExist: Boolean,
+      nonAggregatedLogsExist: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -145,16 +160,30 @@ private[ui] class ExecutorsPage(
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
       {
-        if (logsExist) {
+        if (isHistoryUI && aggregatedLogsExist) {
           <td>
             {
-              info.executorLogs.map { case (logName, logUrl) =>
-                <div>
-                  <a href={logUrl}>
-                    {logName}
-                  </a>
-                </div>
+              info.executorLogs.filter(_._1.startsWith(aggregatedLogPrefix)).map {
+                case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>
+                      {logName.substring(aggregatedLogPrefix.length)}
+                    </a>
+                  </div>
               }
+            }
+          </td>
+        } else if (nonAggregatedLogsExist) {
+          <td>
+            {
+              info.executorLogs.filter(!_._1.startsWith(aggregatedLogPrefix)).map {
+                case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>
+                      {logName}
+                    </a>
+                  </div>
+                }
             }
           </td>
         }

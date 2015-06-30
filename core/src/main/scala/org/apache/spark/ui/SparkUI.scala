@@ -45,8 +45,10 @@ private[spark] class SparkUI private (
     val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
+    val appId: String,
     val basePath: String,
-    val startTime: Long)
+    val startTime: Long,
+    val isHistoryUI: Boolean)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
@@ -137,8 +139,9 @@ private[spark] object SparkUI {
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String,
+      appId: String,
       startTime: Long): SparkUI = {
-    create(Some(sc), conf, listenerBus, securityManager, appName,
+    create(Some(sc), conf, listenerBus, securityManager, appName, appId,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
@@ -147,9 +150,11 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
       appName: String,
+      appId: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    create(None, conf, listenerBus, securityManager, appName, appId, basePath,
+      startTime = startTime, isHistoryUI = true)
   }
 
   /**
@@ -165,9 +170,11 @@ private[spark] object SparkUI {
       listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
       appName: String,
+      appId: String,
       basePath: String = "",
       jobProgressListener: Option[JobProgressListener] = None,
-      startTime: Long): SparkUI = {
+      startTime: Long,
+      isHistoryUI: Boolean = false): SparkUI = {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
       val listener = new JobProgressListener(conf)
@@ -189,6 +196,6 @@ private[spark] object SparkUI {
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,
-      appName, basePath, startTime)
+      appName, appId, basePath, startTime, isHistoryUI)
   }
 }
