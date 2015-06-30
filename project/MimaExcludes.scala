@@ -74,7 +74,11 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.ParquetTypeInfo"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
+              "org.apache.spark.sql.parquet.ParquetTypeInfo$"),
+            // SPARK-8464 Separating aggregator and non-aggregator paths in ExternalSorter
+            ProblemFilters.exclude[AbstractClassProblem]
+              ("org.apache.spark.util.collection.ExternalSorter")
+
           )
         case v if v.startsWith("1.4") =>
           Seq(
