@@ -57,9 +57,7 @@ class State(object):
 
     @classmethod
     def runnable(cls):
-        return [
-            None, cls.FAILED, cls.UP_FOR_RETRY,
-            cls.QUEUED, cls.UPSTREAM_FAILED]
+        return [None, cls.FAILED, cls.UP_FOR_RETRY, cls.UPSTREAM_FAILED]
 
 
 def pessimistic_connection_handling():

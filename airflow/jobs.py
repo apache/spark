@@ -337,13 +337,18 @@ class SchedulerJob(BaseJob):
                     tis, key=lambda ti: ti.priority_weight, reverse=True)
                 for ti in tis[:open_slots]:
                     task = None
+                    if (
+                            ti.dag_id not in dagbag.dags or not
+                            dagbag.dags[ti.dag_id].has_task(ti.task_id)):
+                        session.delete(ti)
+                        session.commit()
                     try:
                         task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
                     except:
                         logging.error("Queued task {} seems gone".format(ti))
                     if task:
                         ti.task = task
-                        executor.queue_task_instance(ti)
+                        executor.queue_task_instance(ti, force=True)
 
     def _execute(self):
         dag_id = self.dag_id
