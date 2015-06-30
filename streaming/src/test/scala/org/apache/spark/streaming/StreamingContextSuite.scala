@@ -20,6 +20,8 @@ package org.apache.spark.streaming
 import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.Queue
+
 import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
@@ -663,6 +665,19 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       input.map { x => x * 2 } }
     testForException("no error on adding output operation after stop", "stop") {
       transformed.foreachRDD { rdd => rdd.collect() } }
+  }
+
+  test("queueStream doesn't support checkpointing") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val rdd = ssc.sparkContext.parallelize(1 to 10)
+    ssc.queueStream[Int](Queue(rdd)).print()
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    val e = intercept[NotSerializableException] {
+      ssc.start()
+    }
+    // StreamingContext.validate changes the message, so use "contains" here
+    assert(e.getMessage.contains("queueStream doesn't support checkpointing"))
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
