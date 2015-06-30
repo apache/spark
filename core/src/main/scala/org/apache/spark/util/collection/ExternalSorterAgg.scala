@@ -82,11 +82,11 @@ import org.apache.spark.storage.BlockId
  * - Users are expected to call stop() at the end to delete all the intermediate files.
  */
 private[spark] class ExternalSorterAgg[K, V, C](
-  aggregator: Aggregator[K, V, C],
-  partitioner: Option[Partitioner] = None,
-  ordering: Option[Ordering[K]] = None,
-  serializer: Option[Serializer] = None)
-  extends ExternalSorter[K,V,C]
+    aggregator: Aggregator[K, V, C],
+    partitioner: Option[Partitioner] = None,
+    ordering: Option[Ordering[K]] = None,
+    serializer: Option[Serializer] = None)
+  extends ExternalSorter[K, V, C]
   with Spillable[WritablePartitionedPairCollection[K, C]]
   with SortShuffleFileWriter[K, V] {
 
@@ -165,9 +165,9 @@ private[spark] class ExternalSorterAgg[K, V, C](
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   override def writePartitionedFile(
-    blockId: BlockId,
-    context: TaskContext,
-    outputFile: File): Array[Long] = {
+      blockId: BlockId,
+      context: TaskContext,
+      outputFile: File): Array[Long] = {
     writePartitionedFile(blockId, context, outputFile, map)
   }
 }

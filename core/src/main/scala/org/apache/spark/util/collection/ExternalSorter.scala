@@ -86,9 +86,9 @@ import org.apache.spark.storage.{BlockId, BlockObjectWriter}
  * - Users are expected to call stop() at the end to delete all the intermediate files.
  */
 private[spark] abstract class ExternalSorter[K, V, C](
-  partitioner: Option[Partitioner] = None,
-  ordering: Option[Ordering[K]] = None,
-  serializer: Option[Serializer] = None)
+    partitioner: Option[Partitioner] = None,
+    ordering: Option[Ordering[K]] = None,
+    serializer: Option[Serializer] = None)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]]
   with SortShuffleFileWriter[K, V] {
@@ -324,10 +324,10 @@ private[spark] abstract class ExternalSorter[K, V, C](
    * they're not), we still merge them by doing equality tests for all keys that compare as equal.
    */
   protected def mergeWithAggregation(
-    iterators: Seq[Iterator[Product2[K, C]]],
-    mergeCombiners: (C, C) => C,
-    comparator: Comparator[K],
-    totalOrder: Boolean): Iterator[Product2[K, C]] =
+      iterators: Seq[Iterator[Product2[K, C]]],
+      mergeCombiners: (C, C) => C,
+      comparator: Comparator[K],
+      totalOrder: Boolean): Iterator[Product2[K, C]] =
   {
     if (!totalOrder) {
       // We only have a partial ordering, e.g. comparing the keys by hash code, which means that
@@ -558,8 +558,8 @@ private[spark] abstract class ExternalSorter[K, V, C](
   @VisibleForTesting
   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])]
 
-  protected def partitionedIterator(collection: WritablePartitionedPairCollection[K, C]):
-  Iterator[(Int, Iterator[Product2[K, C]])] = {
+  protected def partitionedIterator(collection: WritablePartitionedPairCollection[K, C])
+      : Iterator[(Int, Iterator[Product2[K, C]])] = {
     if (spills.isEmpty) {
       // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
       // we don't even need to sort by anything other than partition ID
@@ -592,15 +592,15 @@ private[spark] abstract class ExternalSorter[K, V, C](
    * This interface abstracts away aggregator dependence.
    */
   override def writePartitionedFile(
-    blockId: BlockId,
-    context: TaskContext,
-    outputFile: File): Array[Long]
+      blockId: BlockId,
+      context: TaskContext,
+      outputFile: File): Array[Long]
 
   protected def writePartitionedFile(
-    blockId: BlockId,
-    context: TaskContext,
-    outputFile: File,
-    collection: WritablePartitionedPairCollection[K, C]): Array[Long] = {
+      blockId: BlockId,
+      context: TaskContext,
+      outputFile: File,
+      collection: WritablePartitionedPairCollection[K, C]): Array[Long] = {
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
@@ -664,8 +664,8 @@ private[spark] abstract class ExternalSorter[K, V, C](
    * stream, assuming this partition is the next one to be read. Used to make it easier to return
    * partitioned iterators from our in-memory collection.
    */
-  protected[this] class IteratorForPartition(partitionId: Int, data: BufferedIterator[((Int, K), C)])
-    extends Iterator[Product2[K, C]]
+  protected[this] class IteratorForPartition(partitionId: Int,
+      data: BufferedIterator[((Int, K), C)]) extends Iterator[Product2[K, C]]
   {
     override def hasNext: Boolean = data.hasNext && data.head._1._1 == partitionId
 
