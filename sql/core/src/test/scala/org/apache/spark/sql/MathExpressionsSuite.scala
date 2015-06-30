@@ -69,7 +69,7 @@ class MathExpressionsSuite extends QueryTest {
     if (f(-1) === math.log1p(-1)) {
       checkAnswer(
         nnDoubleData.select(c('b)),
-        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(Double.NegativeInfinity)
+        (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     } else {
       checkAnswer(
@@ -258,7 +258,7 @@ class MathExpressionsSuite extends QueryTest {
       Row(math.log(123), math.log(123) / math.log(2), null))
 
     checkAnswer(
-      df.selectExpr("log(a)", "log(2.0, a)", "log(b)"),
+      df.selectExpr("ln(a)", "log(2.0, a)", "ln(b)"),
       Row(math.log(123), math.log(123) / math.log(2), null))
   }
 
