@@ -80,12 +80,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
-  // Constants used to parse Spark 1.0.0 log directories.
-  private[history] val LOG_PREFIX = "EVENT_LOG_"
-  private[history] val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
-  private[history] val COMPRESSION_CODEC_PREFIX = EventLoggingListener.COMPRESSION_CODEC_KEY + "_"
-  private[history] val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
-
   /**
    * Return a runnable that performs the given operation on the event logs.
    * This operation is expected to be executed periodically.
@@ -143,7 +137,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
-        appInfo.attempts.find(_.attemptId == attemptId).map { attempt =>
+        appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
           val ui = {
             val conf = this.conf.clone()
@@ -152,20 +146,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
-
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
+          appInfo.map { info =>
+            ui.setAppName(s"${info.name} ($appId)")
 
-          ui.setAppName(s"${appInfo.name} ($appId)")
-
-          val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-          ui.getSecurityManager.setAcls(uiAclsEnabled)
-          // make sure to set admin acls before view acls so they are properly picked up
-          ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
-          ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-            appListener.viewAcls.getOrElse(""))
-          ui
+            val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
+            ui.getSecurityManager.setAcls(uiAclsEnabled)
+            // make sure to set admin acls before view acls so they are properly picked up
+            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
+            ui.getSecurityManager.setViewAcls(attempt.sparkUser,
+              appListener.viewAcls.getOrElse(""))
+            ui
+          }
         }
       }
     } catch {
@@ -227,8 +221,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = logs.flatMap { fileStatus =>
       try {
         val res = replay(fileStatus, bus)
-        logInfo(s"Application log ${res.logPath} loaded successfully.")
-        Some(res)
+        res match {
+          case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
+          case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
+            "The application may have not started.")
+        }
+        res
       } catch {
         case e: Exception =>
           logError(
@@ -374,9 +372,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replays the events in the specified log file and returns information about the associated
-   * application.
+   * application. Return `None` if the application ID cannot be located.
    */
-  private def replay(eventLog: FileStatus, bus: ReplayListenerBus): FsApplicationAttemptInfo = {
+  private def replay(
+      eventLog: FileStatus,
+      bus: ReplayListenerBus): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     val logInput =
@@ -390,16 +390,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
       bus.replay(logInput, logPath.toString, !appCompleted)
-      new FsApplicationAttemptInfo(
-        logPath.getName(),
-        appListener.appName.getOrElse(NOT_STARTED),
-        appListener.appId.getOrElse(logPath.getName()),
-        appListener.appAttemptId,
-        appListener.startTime.getOrElse(-1L),
-        appListener.endTime.getOrElse(-1L),
-        getModificationTime(eventLog).get,
-        appListener.sparkUser.getOrElse(NOT_STARTED),
-        appCompleted)
+
+      // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
+      // try to show their UI. Some old versions of Spark generate logs without an app ID, so let
+      // logs generated by those versions go through.
+      if (appListener.appId.isDefined || !sparkVersionHasAppId(eventLog)) {
+        Some(new FsApplicationAttemptInfo(
+          logPath.getName(),
+          appListener.appName.getOrElse(NOT_STARTED),
+          appListener.appId.getOrElse(logPath.getName()),
+          appListener.appAttemptId,
+          appListener.startTime.getOrElse(-1L),
+          appListener.endTime.getOrElse(-1L),
+          getModificationTime(eventLog).get,
+          appListener.sparkUser.getOrElse(NOT_STARTED),
+          appCompleted))
+      } else {
+        None
+      }
     } finally {
       logInput.close()
     }
@@ -474,10 +482,34 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  /**
+   * Returns whether the version of Spark that generated logs records app IDs. App IDs were added
+   * in Spark 1.1.
+   */
+  private def sparkVersionHasAppId(entry: FileStatus): Boolean = {
+    if (isLegacyLogDirectory(entry)) {
+      fs.listStatus(entry.getPath())
+        .find { status => status.getPath().getName().startsWith(SPARK_VERSION_PREFIX) }
+        .map { status =>
+          val version = status.getPath().getName().substring(SPARK_VERSION_PREFIX.length())
+          version != "1.0" && version != "1.1"
+        }
+        .getOrElse(true)
+    } else {
+      true
+    }
+  }
+
 }
 
-private object FsHistoryProvider {
+private[history] object FsHistoryProvider {
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
+
+  // Constants used to parse Spark 1.0.0 log directories.
+  val LOG_PREFIX = "EVENT_LOG_"
+  val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
+  val COMPRESSION_CODEC_PREFIX = EventLoggingListener.COMPRESSION_CODEC_KEY + "_"
+  val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 }
 
 private class FsApplicationAttemptInfo(
