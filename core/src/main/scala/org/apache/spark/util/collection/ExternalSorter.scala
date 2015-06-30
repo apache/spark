@@ -689,8 +689,8 @@ private[spark] class ExternalSorter[K, V, C](
       } else {
         _memoryBytesSpilled += buffer.estimateSize()
       }
-      freeMemory = myMemoryThreshold - initialMemoryThreshold
-      myMemoryThreshold = initialMemoryThreshold
+      freeMemory = myMemoryThreshold
+      myMemoryThreshold = 0L
     }
     freeMemory
   }

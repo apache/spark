@@ -244,8 +244,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
       _elementsRead = 0
       _memoryBytesSpilled += currentMap.estimateSize()
-      freeMemory = myMemoryThreshold - initialMemoryThreshold
-      myMemoryThreshold = initialMemoryThreshold
+      freeMemory = myMemoryThreshold
+      myMemoryThreshold = 0L
     }
 
     freeMemory
