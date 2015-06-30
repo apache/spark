@@ -628,7 +628,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                |'start': new Date($launchTime),
                |'end': new Date($finishTime)
              |}
-           |""".stripMargin.replaceAll("\n", " ")
+           |""".stripMargin.replaceAll("""[\r\n]+""", " ")
         timelineObject
       }.mkString("[", ",", "]")
 
