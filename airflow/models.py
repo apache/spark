@@ -1036,6 +1036,18 @@ class BaseOperator(object):
     :param pool: the slot pool this task should run in, slot pools are a
         way to limit concurrency for certain tasks
     :type pool: str
+    :param sla: time by which the job is expected to succeed. Note that
+        this represents the ``timedelta`` after the period is closed. For
+        example if you set an SLA of 1 hour, the scheduler would send dan email
+        soon after 1:00AM on the ``2016-01-02`` if the ``2016-01-01`` instance
+        has not succeede yet.
+        The scheduler pays special attention for jobs with an SLA and
+        sends alert
+        emails for sla misses. SLA misses are also recorded in the database
+        for future reference. All tasks that share the same SLA time
+        get bundled in a single email, sent soon after that time. SLA
+        notification are sent once and only once for each task instance.
+    :type sla: datetime.timedelta
     """
 
     # For derived classes to define which fields will get jinjaified
@@ -1068,6 +1080,7 @@ class BaseOperator(object):
             priority_weight=1,
             queue=conf.get('celery', 'default_queue'),
             pool=None,
+            sla=None,
             *args,
             **kwargs):
 
@@ -1086,6 +1099,7 @@ class BaseOperator(object):
         self.retries = retries
         self.queue = queue
         self.pool = pool
+        self.sla = sla
         if isinstance(retry_delay, timedelta):
             self.retry_delay = retry_delay
         else:
@@ -1561,7 +1575,8 @@ class DAG(object):
         self.get_task(upstream_task_id).set_downstream(
             self.get_task(downstream_task_id))
 
-    def get_task_instances(self, session, start_date=None, end_date=None):
+    def get_task_instances(
+            self, session, start_date=None, end_date=None, state=None):
         TI = TaskInstance
         if not start_date:
             start_date = (datetime.today()-timedelta(30)).date()
@@ -1572,7 +1587,10 @@ class DAG(object):
             TI.dag_id == self.dag_id,
             TI.execution_date >= start_date,
             TI.execution_date <= end_date,
-        ).all()
+        )
+        if state:
+            tis = tis.filter(TI.state == state)
+        tis = tis.all()
         return tis
 
     @property
@@ -1928,3 +1946,23 @@ class Pool(Base):
         """
         used_slots = self.used_slots(session=session)
         return self.slots - used_slots
+
+
+class SlaMiss(Base):
+    """
+    Model that stores a history of the SLA that have been missed.
+    It is used to keep track of SLA failures over time and to avoid double
+    triggering alert emails.
+    """
+    __tablename__ = "sla_miss"
+
+    task_id = Column(String(ID_LEN), primary_key=True)
+    dag_id = Column(String(ID_LEN), primary_key=True)
+    execution_date = Column(DateTime, primary_key=True)
+    email_sent = Column(Boolean, default=False)
+    timestamp = Column(DateTime)
+    description = Column(Text)
+
+    def __repr__(self):
+        return str((
+            self.dag_id, self.task_id, self.execution_date.isoformat()))
