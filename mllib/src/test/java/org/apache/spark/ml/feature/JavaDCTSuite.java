@@ -70,7 +70,7 @@ public class JavaDCTSuite {
       .setInputCol("vec")
       .setOutputCol("resultVec");
 
-    Row[] result = DCT.transform(dataset).select("resultVec").collect();
+    Row[] result = dct.transform(dataset).select("resultVec").collect();
     Vector resultVec = result[0].getAs("resultVec");
 
     Assert.assertArrayEquals(expectedResult, resultVec.toArray(), 1e-6);
