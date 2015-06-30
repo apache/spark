@@ -95,22 +95,18 @@ class SparkEnv (
 
     if (!isStopped) {
       isStopped = true
-      try {
-        pythonWorkers.foreach { case (key, worker) => worker.stop()}
-        Option(httpFileServer).foreach(_.stop())
-        mapOutputTracker.stop()
-        shuffleManager.stop()
-        broadcastManager.stop()
-        blockManager.stop()
-        blockManager.master.stop()
-        metricsSystem.stop()
-        outputCommitCoordinator.stop()
-        rpcEnv.shutdown()
-      } catch {
-        case NonFatal(e) =>
-          logInfo("Exception while SparkEnv stop", e)
-          throw e;
-      }
+
+      pythonWorkers.foreach { case (key, worker) => worker.stop()}
+      Option(httpFileServer).foreach(_.stop())
+      mapOutputTracker.stop()
+      shuffleManager.stop()
+      broadcastManager.stop()
+      blockManager.stop()
+      blockManager.master.stop()
+      metricsSystem.stop()
+      outputCommitCoordinator.stop()
+      rpcEnv.shutdown()
+
 
       // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
       // down, but let's call it anyway in case it gets fixed in a later release
