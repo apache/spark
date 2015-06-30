@@ -55,9 +55,17 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   }
 
-  test("linear regression with intercept without regularization") {
+  test("linear regression defaults to stabdardization enabled") {
     val trainer = new LinearRegression
-    val model = trainer.fit(dataset)
+    assert(trainer.getStandardization)
+  }
+
+  test("linear regression with intercept without regularization") {
+    val trainer1 = new LinearRegression
+    // The result should be the same regardless of standardization without regularization
+    val trainer2 = (new LinearRegression).setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -70,29 +78,38 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        > weights
         3 x 1 sparse Matrix of class "dgCMatrix"
                                  s0
-       (Intercept)         6.300528
-       as.numeric.data.V2. 4.701024
-       as.numeric.data.V3. 7.198257
+       (Intercept)         6.298698
+       as.numeric.data.V2. 4.700706
+       as.numeric.data.V3. 7.199082
      */
     val interceptR = 6.298698
     val weightsR = Array(4.700706, 7.199082)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
   test("linear regression without intercept without regularization") {
-    val trainer = (new LinearRegression).setFitIntercept(false)
-    val model = trainer.fit(dataset)
-    val modelWithoutIntercept = trainer.fit(datasetWithoutIntercept)
+    val trainer1 = (new LinearRegression).setFitIntercept(false)
+    // Without regularization the results should be the same
+    val trainer2 = (new LinearRegression).setFitIntercept(false).setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val modelWithoutIntercept1 = trainer1.fit(datasetWithoutIntercept)
+    val model2 = trainer2.fit(dataset)
+    val modelWithoutIntercept2 = trainer2.fit(datasetWithoutIntercept)
+
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0, lambda = 0,
@@ -106,9 +123,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      */
     val weightsR = Array(6.995908, 5.275131)
 
-    assert(model.intercept ~== 0 relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== 0 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model2.intercept ~== 0 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR(1) relTol 1E-3)
     /*
        Then again with the data with no intercept:
        > weightsWithoutIntercept
@@ -120,14 +140,20 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
      */
     val weightsWithoutInterceptR = Array(4.70011, 7.19943)
 
-    assert(modelWithoutIntercept.intercept ~== 0 relTol 1E-3)
-    assert(modelWithoutIntercept.weights(0) ~== weightsWithoutInterceptR(0) relTol 1E-3)
-    assert(modelWithoutIntercept.weights(1) ~== weightsWithoutInterceptR(1) relTol 1E-3)
+    assert(modelWithoutIntercept1.intercept ~== 0 relTol 1E-3)
+    assert(modelWithoutIntercept1.weights(0) ~== weightsWithoutInterceptR(0) relTol 1E-3)
+    assert(modelWithoutIntercept1.weights(1) ~== weightsWithoutInterceptR(1) relTol 1E-3)
+    assert(modelWithoutIntercept2.intercept ~== 0 relTol 1E-3)
+    assert(modelWithoutIntercept2.weights(0) ~== weightsWithoutInterceptR(0) relTol 1E-3)
+    assert(modelWithoutIntercept2.weights(1) ~== weightsWithoutInterceptR(1) relTol 1E-3)
   }
 
-  test("linear regression with intercept with L1 regularization with standardization") {
-    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-    val model = trainer.fit(dataset)
+  test("linear regression with intercept with L1 regularization") {
+    val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+    val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+      .setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57))
@@ -138,49 +164,46 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        as.numeric.data.V2. 4.024821
        as.numeric.data.V3. 6.679841
      */
-    val interceptR = 6.24300
-    val weightsR = Array(4.024821, 6.679841)
+    val interceptR1 = 6.24300
+    val weightsR1 = Array(4.024821, 6.679841)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    /*
+      weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+        standardize=FALSE))
+      > weights
+       3 x 1 sparse Matrix of class "dgCMatrix"
+                                s0
+      (Intercept)         6.416948
+      as.numeric.data.V2. 3.893869
+      as.numeric.data.V3. 6.724286
+     */
+    val interceptR2 = 6.416948
+    val weightsR2 = Array(3.893869, 6.724286)
+
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
+
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
-  test("linear regression with intercept with L1 regularization without standardization") {
-    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
-      .setStandardization(false)
-    val model = trainer.fit(dataset)
-
-    /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
-     *   standardize=FALSE))
-     * > weights
-     *  3 x 1 sparse Matrix of class "dgCMatrix"
-     *                           s0
-     * (Intercept)         6.416948
-     * as.numeric.data.V2. 3.893869
-     * as.numeric.data.V3. 6.724286
-     */
-    val interceptR = 6.416948
-    val weightsR = Array(3.893869, 6.724286)
-
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
-  }
-
-
   test("linear regression without intercept with L1 regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+    val trainer1 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
       .setFitIntercept(false)
-    val model = trainer.fit(dataset)
+    val trainer2 = (new LinearRegression).setElasticNetParam(1.0).setRegParam(0.57)
+      .setFitIntercept(false).setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
@@ -192,83 +215,95 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        as.numeric.data.V2. 6.299752
        as.numeric.data.V3. 4.772913
      */
-    val interceptR = 0.0
-    val weightsR = Array(6.299752, 4.772913)
+    val interceptR1 = 0.0
+    val weightsR1 = Array(6.299752, 4.772913)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    /*
+       weights <- coef(glmnet(features, label, family="gaussian", alpha = 1.0, lambda = 0.57,
+         intercept=FALSE, standardize=FALSE))
+       > weights
+       3 x 1 sparse Matrix of class "dgCMatrix"
+                                 s0
+       (Intercept)         .
+       as.numeric.data.V2. 6.232193
+       as.numeric.data.V3. 4.764229
+     */
+    val interceptR2 = 0.0
+    val weightsR2 = Array(6.232193, 4.764229)
+
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
+
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
   test("linear regression with intercept with L2 regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
-    val model = trainer.fit(dataset)
-
-    /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3))
-     * > weights
-     *  3 x 1 sparse Matrix of class "dgCMatrix"
-     *                           s0
-     * (Intercept)         5.269376
-     * as.numeric.data.V2. 3.736216
-     * as.numeric.data.V3. 5.712356)
-     */
-    val interceptR = 5.269376
-    val weightsR = Array(3.736216, 5.712356)
-
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
-
-    model.transform(dataset).select("features", "prediction").collect().foreach {
-      case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-        assert(prediction1 ~== prediction2 relTol 1E-5)
-    }
-  }
-
-  test("linear regression with intercept with L2 regularization without standardization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
+    val trainer1 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
+    val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
       .setStandardization(false)
-    val model = trainer.fit(dataset)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
-    /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
-     *   standardize=FALSE))
-     * > weights
-     *  3 x 1 sparse Matrix of class "dgCMatrix"
-     *                           s0
-     * (Intercept)         5.791109
-     * as.numeric.data.V2. 3.435466
-     * as.numeric.data.V3. 5.910406
+    /*
+      weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3))
+      > weights
+       3 x 1 sparse Matrix of class "dgCMatrix"
+                                s0
+      (Intercept)         5.269376
+      as.numeric.data.V2. 3.736216
+      as.numeric.data.V3. 5.712356)
      */
-    val interceptR = 5.791109
-    val weightsR = Array(3.435466, 5.910406)
+    val interceptR1 = 5.269376
+    val weightsR1 = Array(3.736216, 5.712356)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    /*
+      weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
+        standardize=FALSE))
+      > weights
+       3 x 1 sparse Matrix of class "dgCMatrix"
+                                s0
+      (Intercept)         5.791109
+      as.numeric.data.V2. 3.435466
+      as.numeric.data.V3. 5.910406
+     */
+    val interceptR2 = 5.791109
+    val weightsR2 = Array(3.435466, 5.910406)
+
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
+
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
   test("linear regression without intercept with L2 regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
+    val trainer1 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
       .setFitIntercept(false)
-    val model = trainer.fit(dataset)
+    val trainer2 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
+      .setFitIntercept(false).setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -280,24 +315,45 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        as.numeric.data.V2. 5.522875
        as.numeric.data.V3. 4.214502
      */
-    val interceptR = 0.0
-    val weightsR = Array(5.522875, 4.214502)
+    val interceptR1 = 0.0
+    val weightsR1 = Array(5.522875, 4.214502)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    /*
+       weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
+         intercept = FALSE, standardize=FALSE))
+       > weights
+        3 x 1 sparse Matrix of class "dgCMatrix"
+                                 s0
+       (Intercept)         .
+       as.numeric.data.V2. 5.263704
+       as.numeric.data.V3. 4.187419
+     */
+    val interceptR2 = 0.0
+    val weightsR2 = Array(5.263704, 4.187419)
+
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
+
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
   test("linear regression with intercept with ElasticNet regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-    val model = trainer.fit(dataset)
+    val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+    val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+      .setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6))
@@ -308,55 +364,45 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        as.numeric.data.V2. 3.168435
        as.numeric.data.V3. 5.200403
      */
-    val interceptR = 5.696056
-    val weightsR = Array(3.670489, 6.001122)
+    val interceptR1 = 5.696056
+    val weightsR1 = Array(3.670489, 6.001122)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
-      case Row(features: DenseVector, prediction1: Double) =>
-        val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
-        assert(prediction1 ~== prediction2 relTol 1E-5)
-    }
-  }
-
-  test("linear regression with intercept with ElasticNet regularization without standardization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
-      .setStandardization(false)
-    val model = trainer.fit(dataset)
-
-    /**
-     * weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
-     *  standardize=FALSE))
-     * > weights
-     * 3 x 1 sparse Matrix of class "dgCMatrix"
-     * s0
-     * (Intercept)         6.114723
-     * as.numeric.data.V2. 3.409937
-     * as.numeric.data.V3. 6.146531
+    /*
+      weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
+       standardize=FALSE))
+      > weights
+      3 x 1 sparse Matrix of class "dgCMatrix"
+      s0
+      (Intercept)         6.114723
+      as.numeric.data.V2. 3.409937
+      as.numeric.data.V3. 6.146531
      */
-    val interceptR = 6.114723
-    val weightsR = Array(3.409937, 6.146531)
+    val interceptR2 = 6.114723
+    val weightsR2 = Array(3.409937, 6.146531)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
 
   test("linear regression without intercept with ElasticNet regularization") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+    val trainer1 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
       .setFitIntercept(false)
-    val model = trainer.fit(dataset)
+    val trainer2 = (new LinearRegression).setElasticNetParam(0.3).setRegParam(1.6)
+      .setFitIntercept(false).setStandardization(false)
+    val model1 = trainer1.fit(dataset)
+    val model2 = trainer2.fit(dataset)
 
     /*
        weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
@@ -368,17 +414,35 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        as.numeric.dataM.V2. 5.673348
        as.numeric.dataM.V3. 4.322251
      */
-    val interceptR = 0.0
-    val weightsR = Array(5.673348, 4.322251)
+    val interceptR1 = 0.0
+    val weightsR1 = Array(5.673348, 4.322251)
 
-    assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.weights(0) ~== weightsR(0) relTol 1E-3)
-    assert(model.weights(1) ~== weightsR(1) relTol 1E-3)
+    assert(model1.intercept ~== interceptR1 relTol 1E-3)
+    assert(model1.weights(0) ~== weightsR1(0) relTol 1E-3)
+    assert(model1.weights(1) ~== weightsR1(1) relTol 1E-3)
 
-    model.transform(dataset).select("features", "prediction").collect().foreach {
+    /*
+       weights <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6,
+         intercept=FALSE, standardize=FALSE))
+       > weights
+       3 x 1 sparse Matrix of class "dgCMatrix"
+       s0
+       (Intercept)         .
+       as.numeric.data.V2. 5.477988
+       as.numeric.data.V3. 4.297622
+     */
+    val interceptR2 = 0.0
+    val weightsR2 = Array(5.477988, 4.297622)
+
+    assert(model2.intercept ~== interceptR2 relTol 1E-3)
+    assert(model2.weights(0) ~== weightsR2(0) relTol 1E-3)
+    assert(model2.weights(1) ~== weightsR2(1) relTol 1E-3)
+
+
+    model1.transform(dataset).select("features", "prediction").collect().foreach {
       case Row(features: DenseVector, prediction1: Double) =>
         val prediction2 =
-          features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
+          features(0) * model1.weights(0) + features(1) * model1.weights(1) + model1.intercept
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
   }
