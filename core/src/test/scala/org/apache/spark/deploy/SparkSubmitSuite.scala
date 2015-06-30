@@ -548,6 +548,7 @@ object JarCreationTest extends Logging {
     if (result.nonEmpty) {
       throw new Exception("Could not load user class from jar:\n" + result(0))
     }
+    sc.stop()
   }
 }
 
@@ -573,6 +574,7 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
+    sc.stop()
   }
 }
 
