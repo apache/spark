@@ -265,7 +265,8 @@ class TreeEnsembleModels(JavaModel):
 
     @property
     def treeWeights(self):
-        return list(self._call_java("treeWeights"))
+        """Return the weights for each tree"""
+        return list(self._call_java("pyTreeWeights"))
 
     def __repr__(self):
         return self._call_java("toString")
