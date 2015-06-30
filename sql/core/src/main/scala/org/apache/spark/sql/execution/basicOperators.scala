@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
-import org.apache.spark.{SparkEnv, HashPartitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -275,7 +274,7 @@ case class UnsafeExternalSort(
       val prefixComparator = new PrefixComparator {
         override def compare(prefix1: Long, prefix2: Long): Int = 0
       }
-      // TODO: do real prefix comparsion. For dev/testing purposes, this is a dummy implementation.
+      // TODO: do real prefix comparison. For dev/testing purposes, this is a dummy implementation.
       def prefixComputer(row: InternalRow): Long = 0
       new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer).sort(iterator)
     }

@@ -38,7 +38,6 @@ import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
-import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -56,8 +55,6 @@ public class UnsafeExternalSorterSuite {
 
   final TaskMemoryManager memoryManager =
     new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
-  // Compute key prefixes based on the records' partition ids
-  final HashPartitioner hashPartitioner = new HashPartitioner(4);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
     @Override
@@ -138,11 +135,8 @@ public class UnsafeExternalSorterSuite {
     sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
   }
 
-  /**
-   * Tests the type of sorting that's used in the non-combiner path of sort-based shuffle.
-   */
   @Test
-  public void testSortingOnlyByPartitionId() throws Exception {
+  public void testSortingOnlyByPrefix() throws Exception {
 
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
       memoryManager,
