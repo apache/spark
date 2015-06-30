@@ -23,6 +23,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.Spillable
+
+class FakeSpillable extends Spillable {
+  var myMemoryThreshold: Long = 0L
+  def addMemory(currentMemory: Long) = {
+    myMemoryThreshold += currentMemory
+  }
+
+  override def forceSpill(): Long = {
+    return myMemoryThreshold
+  }
+}
 
 class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
   /** Launch a thread with the given body block and return it. */
@@ -306,5 +318,18 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
 
     val granted = manager.tryToAcquire(300L)
     assert(0 === granted, "granted is negative")
+  }
+
+  test("latter spillable grab full memory of previous spillable") {
+    val manager = new ShuffleMemoryManager(1000L)
+    val spill1 = new FakeSpillable()
+    val spill2 = new FakeSpillable()
+    spill1.addMemory(manager.tryToAcquire(700L))
+    spill1.addMemory(manager.tryToAcquire(300L))
+    manager.addSpillableToReservedList(spill1)
+    val granted1 = manager.tryToAcquire(300L)
+    assert(300L === granted1, "granted memory")
+    val granted2 = manager.tryToAcquire(800L)
+    assert(700L === granted2, "granted remained memory")
   }
 }

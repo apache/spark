@@ -116,7 +116,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
         if (freeMemory >= math.min(maxToGrant, maxMemory / (2 * numActiveThreads) - curMem)) {
           val toGrant = math.min(maxToGrant, freeMemory)
           threadMemory(threadId) += toGrant
-          return toGrant
+          return this.releaseReservedMemory(toGrant, numBytes)
         } else {
           logInfo(s"Thread $threadId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
@@ -125,7 +125,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
         // Only give it as much memory as is free, which might be none if it reached 1 / numThreads
         val toGrant = math.min(maxToGrant, freeMemory)
         threadMemory(threadId) += toGrant
-        return toGrant
+        return this.releaseReservedMemory(toGrant, numBytes)
       }
     }
     0L  // Never reached
