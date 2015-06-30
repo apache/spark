@@ -792,15 +792,22 @@ class DAGScheduler(
     // event.
     stage.makeNewStageAttempt(partitionsToCompute.size)
     stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
-    val taskIdToLocations = stage match {
-      case s: ShuffleMapStage =>
-        partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id)) }.toMap
-      case s: ResultStage =>
-        val job = s.resultOfJob.get
-        partitionsToCompute.map { id =>
-          val p: Int = job.partitions(id)
-          (id, getPreferredLocs(stage.rdd, p))
-        }.toMap
+    val taskIdToLocations = try {
+      stage match {
+        case s: ShuffleMapStage =>
+          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
+        case s: ResultStage =>
+          val job = s.resultOfJob.get
+          partitionsToCompute.map { id =>
+            val p: Int = job.partitions(id)
+            (id, getPreferredLocs(stage.rdd, p))
+          }.toMap
+      }
+    } catch {
+      case NonFatal(e) =>
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        return
     }
     stage.latestInfo.taskLocalityPreferences = Some(taskIdToLocations.values.toSeq)
 
