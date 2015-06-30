@@ -112,6 +112,8 @@ def parse_opts():
     (opts, args) = parser.parse_args()
     if args:
         parser.error("Unsupported arguments: %s" % ' '.join(args))
+    if opts.parallelism < 1:
+        parser.error("Parallelism cannot be less than 1")
     return opts
 
 
