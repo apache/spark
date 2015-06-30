@@ -65,6 +65,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
+  private val actuallyLostExecutorsId = new HashSet[String]
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -220,6 +221,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
+            actuallyLostExecutorsId += executorId
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
@@ -377,7 +379,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val filteredExecutorIds = new ArrayBuffer[String]
     executorIds.foreach { id =>
-      if (executorDataMap.contains(id)) {
+      if (executorDataMap.contains(id) && !actuallyLostExecutorsId.contains(id)
+          && !executorsPendingToRemove.contains(id)) {
         filteredExecutorIds += id
       } else {
         logWarning(s"Executor to kill $id does not exist!")
@@ -390,6 +393,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     doRequestTotalExecutors(newTotal)
 
     executorsPendingToRemove ++= filteredExecutorIds
+    doKillExecutors(filteredExecutorIds)
+  }
+
+  /**
+   * Request that the cluster manager kill the specified executor and expect new one
+   * @return whether the request is acknowledged by the cluster manager.
+   */
+  def expireExecutor(id: String): Boolean = synchronized {
+    logInfo(s"Requesting to expired executor ${id}")
+    val filteredExecutorIds = new ArrayBuffer[String]
+    if (executorDataMap.contains(id) && !actuallyLostExecutorsId.contains(id)
+      && !executorsPendingToRemove.contains(id)) {
+      filteredExecutorIds += id
+    } else {
+      logWarning(s"Executor to kill $id does not exist!")
+    }
+
     doKillExecutors(filteredExecutorIds)
   }
 
