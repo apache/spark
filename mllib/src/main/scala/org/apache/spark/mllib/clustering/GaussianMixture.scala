@@ -140,6 +140,9 @@ class GaussianMixture private (
     // Get length of the input vectors
     val d = breezeData.first().length
 
+    // indicate whether to update mixture components on driver or distribute the computation
+    val distributeComputation = true
+
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
     // we start with uniform weights, a random mean from the data, and
@@ -171,14 +174,30 @@ class GaussianMixture private (
       // Create new distributions based on the partial assignments
       // (often referred to as the "M" step in literature)
       val sumWeights = sums.weights.sum
-      var i = 0
-      while (i < k) {
-        val mu = sums.means(i) / sums.weights(i)
-        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
-          Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
-        weights(i) = sums.weights(i) / sumWeights
-        gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
-        i = i + 1
+
+      if (distributeComputation) {
+        val (ws, gs) = sc.parallelize(0 until k).map { i =>
+          val mu = sums.means(i) / sums.weights(i)
+          BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
+            Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
+          val weight = sums.weights(i) / sumWeights
+          val gaussian = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
+          (weight, gaussian)
+        }.collect.unzip
+        (0 until k).foreach { i =>
+          weights(i) = ws(i)
+          gaussians(i) = gs(i)
+        }
+      } else {
+        var i = 0
+        while (i < k) {
+          val mu = sums.means(i) / sums.weights(i)
+          BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
+            Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
+          weights(i) = sums.weights(i) / sumWeights
+          gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
+          i = i + 1
+        }
       }
 
       llhp = llh // current becomes previous
