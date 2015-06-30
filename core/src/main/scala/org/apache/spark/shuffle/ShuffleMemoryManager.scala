@@ -46,30 +46,30 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   /**
    * release other Spillable's memory of current thread until freeMemory >= requestedMemory
    */
-  def releaseReservedMemory(toGrant: Long, requestedAmount: Long): Long = synchronized {
+  def releaseReservedMemory(toGrant: Long, requestMemory: Long): Long = synchronized {
     val threadId = Thread.currentThread().getId
-    if (toGrant >= requestedAmount || !threadReservedList.contains(threadId)){
+    if (toGrant >= requestMemory || !threadReservedList.contains(threadId)){
       toGrant
     } else {
-      //try to spill objs in current thread to make space for new request
-      var addedMemory = toGrant
-      while(addedMemory < requestedAmount && !threadReservedList(threadId).isEmpty ) {
+      //try to release Spillable's memory in current thread to make space for new request
+      var addMemory = toGrant
+      while(addMemory < requestMemory && !threadReservedList(threadId).isEmpty ) {
         val toSpill = threadReservedList(threadId).remove(0)
         val spillMemory = toSpill.forceSpill()
         logInfo(s"Thread $threadId forceSpill $spillMemory bytes to be free")
-        addedMemory += spillMemory
+        addMemory += spillMemory
       }
-      if (addedMemory > requestedAmount) {
-        this.release(addedMemory - requestedAmount)
-        addedMemory = requestedAmount
+      if (addMemory > requestMemory) {
+        this.release(addMemory - requestMemory)
+        addMemory = requestMemory
       }
-      addedMemory
+      addMemory
     }
   }
 
   /**
    * add Spillable to memoryReservedList of current thread, when current thread has
-   * no enough memory, we can release memory of current thread's memory reserved list
+   * no enough memory, we can release memory of current thread's memoryReservedList
    */
   def addSpillableToReservedList(spill: Spillable) = synchronized {
     val threadId = Thread.currentThread().getId
