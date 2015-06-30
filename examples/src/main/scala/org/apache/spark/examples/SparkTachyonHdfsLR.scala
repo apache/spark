@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -42,14 +43,12 @@ object SparkTachyonHdfsLR {
   val rand = new Random(42)
 
   def showWarning() {
-    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
         |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
         |for more conventional use.
       """.stripMargin)
-    // scalastyle:on println
   }
 
   case class DataPoint(x: Vector[Double], y: Double)
@@ -82,7 +81,6 @@ object SparkTachyonHdfsLR {
 
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
-    // scalastyle:off println
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
@@ -94,7 +92,7 @@ object SparkTachyonHdfsLR {
     }
 
     println("Final w: " + w)
-    // scalastyle:on println
     sc.stop()
   }
 }
+// scalastyle:on println

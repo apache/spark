@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -115,7 +116,6 @@ object BinaryClassification {
 
     val numTraining = training.count()
     val numTest = test.count()
-    // scalastyle:off println
     println(s"Training: $numTraining, test: $numTest.")
 
     examples.unpersist(blocking = false)
@@ -150,8 +150,8 @@ object BinaryClassification {
 
     println(s"Test areaUnderPR = ${metrics.areaUnderPR()}.")
     println(s"Test areaUnderROC = ${metrics.areaUnderROC()}.")
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

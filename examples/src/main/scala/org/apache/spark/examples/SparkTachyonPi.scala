@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.math.random
@@ -41,10 +42,9 @@ object SparkTachyonPi {
       val y = random * 2 - 1
       if (x * x + y * y < 1) 1 else 0
     }.reduce(_ + _)
-    // scalastyle:off println
     println("Pi is roughly " + 4.0 * count / n)
-    // scalastyle:on println
 
     spark.stop()
   }
 }
+// scalastyle:on println

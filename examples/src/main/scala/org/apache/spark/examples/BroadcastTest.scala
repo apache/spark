@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -38,7 +39,6 @@ object BroadcastTest {
 
     val arr1 = (0 until num).toArray
 
-    // scalastyle:off println
     for (i <- 0 until 3) {
       println("Iteration " + i)
       println("===========")
@@ -49,8 +49,8 @@ object BroadcastTest {
       observedSizes.collect().foreach(i => println(i))
       println("Iteration %d took %.0f milliseconds".format(i, (System.nanoTime - startTime) / 1E6))
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

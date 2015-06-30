@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -35,7 +36,6 @@ import org.apache.spark.mllib.linalg.Vectors
  */
 object TallSkinnySVD {
   def main(args: Array[String]) {
-    // scalastyle:off println
     if (args.length != 1) {
       System.err.println("Usage: TallSkinnySVD <input>")
       System.exit(1)
@@ -55,8 +55,8 @@ object TallSkinnySVD {
     val svd = mat.computeSVD(mat.numCols().toInt)
 
     println("Singular values are " + svd.s)
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

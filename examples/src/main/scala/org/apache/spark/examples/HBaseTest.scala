@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.hadoop.hbase.client.HBaseAdmin
@@ -37,9 +38,7 @@ object HBaseTest {
     val conf = HBaseConfiguration.create()
 
     if (args.length < 1) {
-      // scalastyle:off println
       System.err.println("Usage: HBaseTest <table_name>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -64,3 +63,4 @@ object HBaseTest {
     admin.close()
   }
 }
+// scalastyle:on println

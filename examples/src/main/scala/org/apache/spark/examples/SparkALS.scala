@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
@@ -78,13 +79,11 @@ object SparkALS {
   }
 
   def showWarning() {
-    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
         |Please use the ALS method found in org.apache.spark.mllib.recommendation
         |for more conventional use.
       """.stripMargin)
-    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
@@ -93,7 +92,6 @@ object SparkALS {
 
     val options = (0 to 4).map(i => if (i < args.length) Some(args(i)) else None)
 
-    // scalastyle:off println
     options.toArray match {
       case Array(m, u, f, iters, slices_) =>
         M = m.getOrElse("100").toInt
@@ -136,7 +134,6 @@ object SparkALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
-    // scalastyle:on println
 
     sc.stop()
   }
@@ -148,3 +145,4 @@ object SparkALS {
     new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random))
 
 }
+// scalastyle:on println

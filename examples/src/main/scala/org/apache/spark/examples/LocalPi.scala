@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.math.random
@@ -30,8 +31,7 @@ object LocalPi {
       val y = random * 2 - 1
       if (x*x + y*y < 1) count += 1
     }
-    // scalastyle:off println
     println("Pi is roughly " + 4 * count / 100000.0)
-    // scalastyle:on println
   }
 }
+// scalastyle:on println

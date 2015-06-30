@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -78,10 +79,9 @@ object LogQuery {
     dataSet.map(line => (extractKey(line), extractStats(line)))
       .reduceByKey((a, b) => a.merge(b))
       .collect().foreach{
-        // scalastyle:off println
         case (user, query) => println("%s\t%s".format(user, query))}
-        // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

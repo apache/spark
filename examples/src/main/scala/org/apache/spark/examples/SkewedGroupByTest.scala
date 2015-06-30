@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -52,10 +53,9 @@ object SkewedGroupByTest {
     // Enforce that everything has been calculated and in cache
     pairs1.count()
 
-    // scalastyle:off println
     println(pairs1.groupByKey(numReducers).count())
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

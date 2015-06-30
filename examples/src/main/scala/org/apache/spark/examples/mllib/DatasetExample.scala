@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import java.io.File
@@ -68,7 +69,6 @@ object DatasetExample {
 
   def run(params: Params) {
 
-    // scalastyle:off println
     val conf = new SparkConf().setAppName(s"DatasetExample with $params")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
@@ -115,9 +115,9 @@ object DatasetExample {
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${newFeaturesSummary.mean.toString}")
-    // scalastyle:on println
 
     sc.stop()
   }
 
 }
+// scalastyle:on println

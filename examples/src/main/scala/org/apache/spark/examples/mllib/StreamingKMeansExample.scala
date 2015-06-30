@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
@@ -51,11 +52,9 @@ object StreamingKMeansExample {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      // scalastyle:off println
       System.err.println(
         "Usage: StreamingKMeansExample " +
           "<trainingDir> <testDir> <batchDuration> <numClusters> <numDimensions>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -77,3 +76,4 @@ object StreamingKMeansExample {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -35,9 +36,7 @@ import org.apache.spark.storage.StorageLevel
 object NetworkWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println("Usage: NetworkWordCount <hostname> <port>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -59,3 +58,4 @@ object NetworkWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

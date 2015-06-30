@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import java.io.{InputStreamReader, BufferedReader, InputStream}
@@ -37,9 +38,7 @@ import org.apache.spark.streaming.receiver.Receiver
 object CustomReceiver {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println("Usage: CustomReceiver <hostname> <port>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -102,3 +101,4 @@ class CustomReceiver(host: String, port: Int)
    }
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
 import com.google.common.io.{ByteStreams, Files}
@@ -49,7 +50,6 @@ object HiveFromSpark {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")
 
-    // scalastyle:off println
     // Queries are expressed in HiveQL
     println("Result of 'SELECT *': ")
     sql("SELECT * FROM src").collect().foreach(println)
@@ -74,8 +74,8 @@ object HiveFromSpark {
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

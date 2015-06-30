@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -111,9 +112,7 @@ object PowerIterationClusteringExample {
     val sizesStr = assignments.map {
       _._2.size
     }.sorted.mkString("(", ",", ")")
-    // scalastyle:off println
     println(s"Cluster assignments: $assignmentsStr\ncluster sizes: $sizesStr")
-    // scalastyle:on println
 
     sc.stop()
   }
@@ -156,4 +155,4 @@ object PowerIterationClusteringExample {
     coeff * math.exp(expCoeff * ssquares)
   }
 }
-
+// scalastyle:on println

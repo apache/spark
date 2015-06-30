@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.util.MLUtils
@@ -70,7 +71,6 @@ object SampledRDDs {
     if (numExamples == 0) {
       throw new RuntimeException("Error: Data file had no samples to load.")
     }
-    // scalastyle:off println
     println(s"Loaded data with $numExamples examples from file: ${params.input}")
 
     // Example: RDD.sample() and RDD.takeSample()
@@ -122,8 +122,8 @@ object SampledRDDs {
       }
       println(s"$key\t$origFrac\t$approxFrac\t$exactFrac")
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

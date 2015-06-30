@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.beans.BeanInfo
@@ -83,11 +84,10 @@ object SimpleTextClassificationPipeline {
       .select("id", "text", "probability", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-        // scalastyle:off println
         println(s"($id, $text) --> prob=$prob, prediction=$prediction")
-        // scalastyle:on println
       }
 
     sc.stop()
   }
 }
+// scalastyle:on println

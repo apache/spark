@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scala.language.reflectiveCalls
@@ -200,7 +201,6 @@ object DecisionTreeRunner {
           }
         }
         val numExamples = examples.count()
-        // scalastyle:off println
         println(s"numClasses = $numClasses.")
         println(s"Per-class example fractions, counts:")
         println(s"Class\tFrac\tCount")
@@ -209,7 +209,6 @@ object DecisionTreeRunner {
           println(s"$c\t$frac\t${classCounts(c)}")
         }
         (examples, classIndexMap, numClasses)
-        // scalastyle:on println
       }
       case Regression =>
         (origExamples, null, 0)
@@ -249,9 +248,7 @@ object DecisionTreeRunner {
 
     val numTraining = training.count()
     val numTest = test.count()
-    // scalastyle:off println
     println(s"numTraining = $numTraining, numTest = $numTest.")
-    // scalastyle:on println
 
     examples.unpersist(blocking = false)
 
@@ -263,7 +260,6 @@ object DecisionTreeRunner {
     val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
     val sc = new SparkContext(conf)
 
-    // scalastyle:off println
     println(s"DecisionTreeRunner with parameters:\n$params")
 
     // Load training and test data and cache it.
@@ -352,7 +348,6 @@ object DecisionTreeRunner {
         println(s"Test mean squared error = $testMSE")
       }
     }
-    // scalastyle:on println
 
     sc.stop()
   }
@@ -374,3 +369,4 @@ object DecisionTreeRunner {
   }
   // scalastyle:on structural.type
 }
+// scalastyle:on println

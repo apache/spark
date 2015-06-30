@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -87,7 +88,6 @@ object DenseKMeans {
 
     val numExamples = examples.count()
 
-    // scalastyle:off println
     println(s"numExamples = $numExamples.")
 
     val initMode = params.initializationMode match {
@@ -104,8 +104,8 @@ object DenseKMeans {
     val cost = model.computeCost(examples)
 
     println(s"Total cost = $cost.")
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

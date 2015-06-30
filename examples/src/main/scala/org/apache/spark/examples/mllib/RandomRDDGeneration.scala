@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.random.RandomRDDs
@@ -41,7 +42,6 @@ object RandomRDDGeneration {
 
     // Example: RandomRDDs.normalRDD
     val normalRDD: RDD[Double] = RandomRDDs.normalRDD(sc, numExamples)
-    // scalastyle:off println
     println(s"Generated RDD of ${normalRDD.count()}" +
       " examples sampled from the standard normal distribution")
     println("  First 5 samples:")
@@ -54,9 +54,9 @@ object RandomRDDGeneration {
     normalVectorRDD.take(5).foreach( x => println(s"    $x") )
 
     println()
-    // scalastyle:on println
 
     sc.stop()
   }
 
 }
+// scalastyle:on println

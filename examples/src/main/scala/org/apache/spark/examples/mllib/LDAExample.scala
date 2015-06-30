@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import java.text.BreakIterator
@@ -123,7 +124,6 @@ object LDAExample {
     val actualVocabSize = vocabArray.size
     val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
 
-    // scalastyle:off println
     println()
     println(s"Corpus summary:")
     println(s"\t Training set size: $actualCorpusSize documents")
@@ -179,7 +179,6 @@ object LDAExample {
       }
       println()
     }
-    // scalastyle:on println
     sc.stop()
   }
 
@@ -304,3 +303,4 @@ private class SimpleTokenizer(sc: SparkContext, stopwordFile: String) extends Se
   }
 
 }
+// scalastyle:on println

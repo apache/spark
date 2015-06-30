@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import java.util.HashMap
@@ -41,9 +42,7 @@ import org.apache.spark.SparkConf
 object KafkaWordCount {
   def main(args: Array[String]) {
     if (args.length < 4) {
-      // scalastyle:off println
       System.err.println("Usage: KafkaWordCount <zkQuorum> <group> <topics> <numThreads>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -71,10 +70,8 @@ object KafkaWordCountProducer {
 
   def main(args: Array[String]) {
     if (args.length < 4) {
-      // scalastyle:off println
       System.err.println("Usage: KafkaWordCountProducer <metadataBrokerList> <topic> " +
         "<messagesPerSec> <wordsPerMessage>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -105,3 +102,4 @@ object KafkaWordCountProducer {
   }
 
 }
+// scalastyle:on println

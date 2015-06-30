@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.rdd.RDD
@@ -48,10 +49,9 @@ object MultiBroadcastTest {
       (barr1.value.size, barr2.value.size)
     }
     // Collect the small RDD so we can print the observed sizes locally.
-    // scalastyle:off println
     observedSizes.collect().foreach(i => println(i))
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

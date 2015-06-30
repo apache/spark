@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.collection.JavaConversions._
@@ -25,7 +26,6 @@ import org.apache.spark.util.Utils
   * test driver submission in the standalone scheduler. */
 object DriverSubmissionTest {
   def main(args: Array[String]) {
-    // scalastyle:off println
     if (args.size < 1) {
       println("Usage: DriverSubmissionTest <seconds-to-sleep>")
       System.exit(0)
@@ -45,6 +45,6 @@ object DriverSubmissionTest {
       println(s"Alive for $i out of $numSecondsToSleep seconds")
       Thread.sleep(1000)
     }
-    // scalastyle:on println
   }
 }
+// scalastyle:on println

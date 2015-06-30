@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -31,9 +32,7 @@ import org.apache.spark.mllib.linalg.Vectors
 object DenseGaussianMixture {
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
-      // scalastyle:off println
       println("usage: DenseGmmEM <input file> <k> <convergenceTol> [maxIterations]")
-      // scalastyle:on println
     } else {
       val maxIterations = if (args.length > 3) args(3).toInt else 100
       run(args(0), args(1).toInt, args(2).toDouble, maxIterations)
@@ -54,7 +53,6 @@ object DenseGaussianMixture {
       .setMaxIterations(maxIterations)
       .run(data)
 
-    // scalastyle:off println
     for (i <- 0 until clusters.k) {
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format
         (clusters.weights(i), clusters.gaussians(i).mu, clusters.gaussians(i).sigma))
@@ -66,6 +64,6 @@ object DenseGaussianMixture {
       print(" " + x)
     }
     println()
-    // scalastyle:on println
   }
 }
+// scalastyle:on println

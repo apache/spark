@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird._
@@ -81,7 +82,6 @@ object TwitterAlgebirdCMS {
     val exactTopUsers = users.map(id => (id, 1))
       .reduceByKey((a, b) => a + b)
 
-    // scalastyle:off println
     approxTopUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
@@ -109,9 +109,9 @@ object TwitterAlgebirdCMS {
         println("Exact heavy hitters overall: %s".format(globalTopK.mkString("[", ",", "]")))
       }
     })
-    // scalastyle:on println
 
     ssc.start()
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

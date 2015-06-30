@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -204,11 +205,9 @@ object DecisionTreeExample {
     val numTraining = training.count()
     val numTest = test.count()
     val numFeatures = training.select("features").first().getAs[Vector](0).size
-    // scalastyle:off println
     println("Loaded data:")
     println(s"  numTraining = $numTraining, numTest = $numTest")
     println(s"  numFeatures = $numFeatures")
-    // scalastyle:on println
 
     (training, test)
   }
@@ -219,9 +218,7 @@ object DecisionTreeExample {
     params.checkpointDir.foreach(sc.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
-    // scalastyle:off println
     println(s"DecisionTreeExample with parameters:\n$params")
-    // scalastyle:on println
 
     // Load training and test data and cache it.
     val (training: DataFrame, test: DataFrame) =
@@ -275,7 +272,6 @@ object DecisionTreeExample {
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
-    // scalastyle:off println
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained Decision Tree from the fitted PipelineModel
@@ -312,7 +308,6 @@ object DecisionTreeExample {
       case _ =>
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
-    // scalastyle:on println
 
     sc.stop()
   }
@@ -339,9 +334,7 @@ object DecisionTreeExample {
         "Unknown failure when indexing labels for classification.")
     }
     val accuracy = new MulticlassMetrics(predictions.zip(labels)).precision
-    // scalastyle:off println
     println(s"  Accuracy ($numClasses classes): $accuracy")
-    // scalastyle:on println
   }
 
   /**
@@ -360,8 +353,7 @@ object DecisionTreeExample {
     val predictions = fullPredictions.select("prediction").map(_.getDouble(0))
     val labels = fullPredictions.select(labelColName).map(_.getDouble(0))
     val RMSE = new RegressionMetrics(predictions.zip(labels)).rootMeanSquaredError
-    // scalastyle:off println
     println(s"  Root mean squared error (RMSE): $RMSE")
-    // scalastyle:on println
   }
 }
+// scalastyle:on println

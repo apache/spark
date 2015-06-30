@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -101,10 +102,9 @@ object CosineSimilarity {
         math.abs(u)
     }.mean()
 
-    // scalastyle:off println
     println(s"Average absolute error in estimate is: $MAE")
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

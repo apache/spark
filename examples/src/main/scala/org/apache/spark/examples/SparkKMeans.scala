@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
@@ -50,21 +51,17 @@ object SparkKMeans {
   }
 
   def showWarning() {
-    // scalastyle:off println
     System.err.println(
       """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use the KMeans method found in org.apache.spark.mllib.clustering
         |for more conventional use.
       """.stripMargin)
-    // scalastyle:on println
   }
 
   def main(args: Array[String]) {
 
     if (args.length < 3) {
-      // scalastyle:off println
       System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -80,7 +77,6 @@ object SparkKMeans {
     val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
     var tempDist = 1.0
 
-    // scalastyle:off println
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
@@ -102,7 +98,7 @@ object SparkKMeans {
 
     println("Final centers:")
     kPoints.foreach(println)
-    // scalastyle:on println
     sc.stop()
   }
 }
+// scalastyle:on println

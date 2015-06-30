@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -114,7 +115,6 @@ object LogisticRegressionExample {
     val conf = new SparkConf().setAppName(s"LogisticRegressionExample with $params")
     val sc = new SparkContext(conf)
 
-    // scalastyle:off println
     println(s"LogisticRegressionExample with parameters:\n$params")
 
     // Load training and test data and cache it.
@@ -154,8 +154,8 @@ object LogisticRegressionExample {
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, training, "indexedLabel")
     println("Test data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, test, "indexedLabel")
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

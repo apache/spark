@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -94,7 +95,6 @@ object GradientBoostedTreesRunner {
 
   def run(params: Params) {
 
-    // scalastyle:off println
     val conf = new SparkConf().setAppName(s"GradientBoostedTreesRunner with $params")
     val sc = new SparkContext(conf)
 
@@ -142,8 +142,8 @@ object GradientBoostedTreesRunner {
       val testMSE = DecisionTreeRunner.meanSquaredError(model, test)
       println(s"Test mean squared error = $testMSE")
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

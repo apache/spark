@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -37,9 +38,7 @@ import org.apache.spark.streaming._
 object StatefulNetworkWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println("Usage: StatefulNetworkWordCount <hostname> <port>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -80,3 +79,4 @@ object StatefulNetworkWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

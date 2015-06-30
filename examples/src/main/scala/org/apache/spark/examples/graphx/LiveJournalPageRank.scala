@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
 /**
@@ -24,7 +25,6 @@ package org.apache.spark.examples.graphx
 object LiveJournalPageRank {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      // scalastyle:off println
       System.err.println(
         "Usage: LiveJournalPageRank <edge_list_file>\n" +
           "    --numEPart=<num_edge_partitions>\n" +
@@ -37,10 +37,10 @@ object LiveJournalPageRank {
           "    [--partStrategy=RandomVertexCut | EdgePartition1D | EdgePartition2D | " +
           "CanonicalRandomVertexCut]\n" +
           "        The way edges are assigned to edge partitions. Default is RandomVertexCut.")
-      // scalastyle:on println
       System.exit(-1)
     }
 
     Analytics.main(args.patch(0, List("pagerank"), 0))
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
 import java.net.ServerSocket
@@ -81,26 +82,20 @@ object PageViewGenerator {
 
   def main(args : Array[String]) {
     if (args.length != 2) {
-      // scalastyle:off println
       System.err.println("Usage: PageViewGenerator <port> <viewsPerSecond>")
-      // scalastyle:on println
       System.exit(1)
     }
     val port = args(0).toInt
     val viewsPerSecond = args(1).toFloat
     val sleepDelayMs = (1000.0 / viewsPerSecond).toInt
     val listener = new ServerSocket(port)
-    // scalastyle:off println
     println("Listening on port: " + port)
-    // scalastyle:on println
 
     while (true) {
       val socket = listener.accept()
       new Thread() {
         override def run(): Unit = {
-          // scalastyle:off println
           println("Got client connected from: " + socket.getInetAddress)
-          // scalastyle:on println
           val out = new PrintWriter(socket.getOutputStream(), true)
 
           while (true) {
@@ -114,3 +109,4 @@ object PageViewGenerator {
     }
   }
 }
+// scalastyle:on println

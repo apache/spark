@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
@@ -135,7 +136,6 @@ object MovieLensALS {
     val numUsers = ratings.map(_.user).distinct().count()
     val numMovies = ratings.map(_.product).distinct().count()
 
-    // scalastyle:off println
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
     val splits = ratings.randomSplit(Array(0.8, 0.2))
@@ -171,7 +171,6 @@ object MovieLensALS {
     val rmse = computeRmse(model, test, params.implicitPrefs)
 
     println(s"Test RMSE = $rmse.")
-    // scalastyle:on println
 
     sc.stop()
   }
@@ -191,3 +190,4 @@ object MovieLensALS {
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
+// scalastyle:on println

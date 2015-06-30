@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.linalg.Vectors
@@ -48,10 +49,8 @@ object StreamingLogisticRegression {
   def main(args: Array[String]) {
 
     if (args.length != 4) {
-      // scalastyle:off println
       System.err.println(
         "Usage: StreamingLogisticRegression <trainingDir> <testDir> <batchDuration> <numFeatures>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -73,3 +72,4 @@ object StreamingLogisticRegression {
   }
 
 }
+// scalastyle:on println

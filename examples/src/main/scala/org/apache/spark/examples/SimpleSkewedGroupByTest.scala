@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -58,14 +59,13 @@ object SimpleSkewedGroupByTest {
     // Enforce that everything has been calculated and in cache
     pairs1.count
 
-    // scalastyle:off println
     println("RESULT: " + pairs1.groupByKey(numReducers).count)
     // Print how many keys each reducer got (for debugging)
     // println("RESULT: " + pairs1.groupByKey(numReducers)
     //                           .map{case (k,v) => (k, v.size)}
     //                           .collectAsMap)
 
-    // scalastyle:on println
     sc.stop()
   }
 }
+// scalastyle:on println

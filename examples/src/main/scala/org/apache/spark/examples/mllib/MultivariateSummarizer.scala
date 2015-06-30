@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -70,7 +71,6 @@ object MultivariateSummarizer {
 
     val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
-    // scalastyle:off println
     println(s"Summary of data file: ${params.input}")
     println(s"${examples.count()} data points")
 
@@ -94,8 +94,8 @@ object MultivariateSummarizer {
     println(s"max\t${labelSummary.max(0)}\t${featureSummary.max.toArray.mkString("\t")}")
     println(s"min\t${labelSummary.min(0)}\t${featureSummary.min.toArray.mkString("\t")}")
     println()
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

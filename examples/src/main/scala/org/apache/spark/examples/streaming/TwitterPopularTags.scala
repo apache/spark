@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -33,9 +34,7 @@ import org.apache.spark.SparkConf
 object TwitterPopularTags {
   def main(args: Array[String]) {
     if (args.length < 4) {
-      // scalastyle:off println
       System.err.println("Usage: TwitterPopularTags <consumer key> <consumer secret> " +
-      // scalastyle:on println
         "<access token> <access token secret> [<filters>]")
       System.exit(1)
     }
@@ -68,7 +67,6 @@ object TwitterPopularTags {
 
 
     // Print popular hashtags
-    // scalastyle:off println
     topCounts60.foreachRDD(rdd => {
       val topList = rdd.take(10)
       println("\nPopular topics in last 60 seconds (%s total):".format(rdd.count()))
@@ -80,9 +78,9 @@ object TwitterPopularTags {
       println("\nPopular topics in last 10 seconds (%s total):".format(rdd.count()))
       topList.foreach{case (count, tag) => println("%s (%s tweets)".format(tag, count))}
     })
-    // scalastyle:on println
 
     ssc.start()
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

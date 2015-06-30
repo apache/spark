@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -64,7 +65,6 @@ object FPGrowthExample {
     val sc = new SparkContext(conf)
     val transactions = sc.textFile(params.input).map(_.split(" ")).cache()
 
-    // scalastyle:off println
     println(s"Number of transactions: ${transactions.count()}")
 
     val model = new FPGrowth()
@@ -77,8 +77,8 @@ object FPGrowthExample {
     model.freqItemsets.collect().foreach { itemset =>
       println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

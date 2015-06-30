@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import akka.actor.ActorSystem
@@ -37,9 +38,7 @@ object SimpleZeroMQPublisher {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println("Usage: SimpleZeroMQPublisher <zeroMQUrl> <topic> ")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -79,9 +78,7 @@ object SimpleZeroMQPublisher {
 object ZeroMQWordCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println("Usage: ZeroMQWordCount <zeroMQurl> <topic>")
-      // scalastyle:on println
       System.exit(1)
     }
     StreamingExamples.setStreamingLogLevels()
@@ -101,3 +98,4 @@ object ZeroMQWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

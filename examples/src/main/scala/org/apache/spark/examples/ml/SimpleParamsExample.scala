@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -34,7 +35,6 @@ import org.apache.spark.sql.{Row, SQLContext}
 object SimpleParamsExample {
 
   def main(args: Array[String]) {
-    // scalastyle:off println
     val conf = new SparkConf().setAppName("SimpleParamsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
@@ -97,8 +97,8 @@ object SimpleParamsExample {
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
         println(s"($features, $label) -> prob=$prob, prediction=$prediction")
       }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

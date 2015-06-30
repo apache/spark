@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -140,9 +141,7 @@ object GBTExample {
     params.checkpointDir.foreach(sc.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
-    // scalastyle:off println
     println(s"GBTExample with parameters:\n$params")
-    // scalastyle:on println
 
     // Load training and test data and cache it.
     val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
@@ -198,7 +197,6 @@ object GBTExample {
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
-    // scalastyle:off println
     println(s"Training time: $elapsedTime seconds")
 
     // Get the trained GBT from the fitted PipelineModel
@@ -235,8 +233,8 @@ object GBTExample {
       case _ =>
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

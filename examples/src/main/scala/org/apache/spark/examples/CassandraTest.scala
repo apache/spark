@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -100,9 +101,7 @@ object CassandraTest {
     val counts = paraRdd.flatMap(p => p.split(" ")).map(word => (word, 1)).reduceByKey(_ + _)
 
     counts.collect().foreach {
-      // scalastyle:off println
       case (word, count) => println(word + ":" + count)
-      // scalastyle:on println
     }
 
     counts.map {
@@ -132,6 +131,7 @@ object CassandraTest {
     sc.stop()
   }
 }
+// scalastyle:on println
 
 /*
 create keyspace casDemo;

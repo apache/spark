@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird.HyperLogLogMonoid
@@ -66,7 +67,6 @@ object TwitterAlgebirdHLL {
 
     val exactUsers = users.map(id => Set(id)).reduce(_ ++ _)
 
-    // scalastyle:off println
     approxUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
@@ -86,9 +86,9 @@ object TwitterAlgebirdHLL {
           ) * 100))
       }
     })
-    // scalastyle:on println
 
     ssc.start()
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

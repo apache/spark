@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scopt.OptionParser
@@ -117,7 +118,6 @@ object MovieLensALS {
     val numUsers = ratings.map(_.userId).distinct().count()
     val numMovies = ratings.map(_.movieId).distinct().count()
 
-    // scalastyle:off println
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
     val splits = ratings.randomSplit(Array(0.8, 0.2), 0L)
@@ -175,8 +175,8 @@ object MovieLensALS {
       println(s"Example false positives:")
       falsePositives.limit(100).collect().foreach(println)
     }
-    // scalastyle:on println
 
     sc.stop()
   }
 }
+// scalastyle:on println

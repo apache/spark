@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.eclipse.paho.client.mqttv3._
@@ -32,7 +33,6 @@ import org.apache.spark.SparkConf
 object MQTTPublisher {
 
   def main(args: Array[String]) {
-    // scalastyle:off println
     if (args.length < 2) {
       System.err.println("Usage: MQTTPublisher <MqttBrokerUrl> <topic>")
       System.exit(1)
@@ -71,7 +71,6 @@ object MQTTPublisher {
         client.disconnect()
       }
     }
-    // scalastyle:on println
   }
 }
 
@@ -117,3 +116,4 @@ object MQTTWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

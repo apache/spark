@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
@@ -41,10 +42,8 @@ import org.apache.spark.util.IntParam
 object FlumeEventCount {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      // scalastyle:off println
       System.err.println(
         "Usage: FlumeEventCount <host> <port>")
-      // scalastyle:on println
       System.exit(1)
     }
 
@@ -68,3 +67,4 @@ object FlumeEventCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println
