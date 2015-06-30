@@ -310,7 +310,7 @@ private[sql] object ResolvedDataSource {
       case dataSource: HadoopFsRelationProvider =>
         // If output format is parquet, check if
         // dataframe has multiple columns before proceeding
-        if(provider == "parquet") {
+        if (provider == "parquet") {
           if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
             val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
               case (x, ys) if ys.length > 1 => "\"" + x + "\""
