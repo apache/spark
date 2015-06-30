@@ -56,7 +56,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
     val newReloadConf = new SparkConf(loadDefaults = true)
-    propertiesToReload.foreach { prop  =>
+    propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>
         newSparkConf.set(prop, value)
       }
