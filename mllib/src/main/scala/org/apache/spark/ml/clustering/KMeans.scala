@@ -115,10 +115,7 @@ class KMeansModel private[ml] (
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
-    dataset.select(
-          dataset("*"),
-          callUDF(predict _, IntegerType, col($(featuresCol))).as($(predictionCol))
-        )
+    dataset.withColumn($(predictionCol), callUDF(predict _, IntegerType, col($(featuresCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
