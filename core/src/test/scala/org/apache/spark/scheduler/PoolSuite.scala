@@ -186,7 +186,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(3, rootPool, 2)
   }
 
-  test("Concurrency Limiting Test") {
+  test("Fair Scheduler maxRunning Test") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 

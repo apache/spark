@@ -100,8 +100,8 @@ private[spark] class Pool(
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     def targetSchedulables = { sq:ConcurrentLinkedQueue[Schedulable] =>
-      if (initMaxRunning != 0)
-        sq.take(initMaxRunning).toSeq
+      if (maxRunning != 0)
+        sq.take(maxRunning).toSeq
       else
         sq.toSeq
     }
