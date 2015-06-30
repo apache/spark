@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -149,6 +148,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       """
     }.mkString("\n")
 
+    val copyColumns = expressions.zipWithIndex.map { case (e, i) =>
+        s"""arr[$i] = c$i;"""
+    }.mkString("\n      ")
+
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
@@ -167,7 +170,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
+    final class SpecificRow extends ${typeOf[MutableRow]} {
 
       $columns
 
@@ -175,7 +178,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         $initColumns
       }
 
-      public int size() { return ${expressions.length};}
+      public int length() { return ${expressions.length};}
       protected boolean[] nullBits = new boolean[${expressions.length}];
       public void setNullAt(int i) { nullBits[i] = true; }
       public boolean isNullAt(int i) { return nullBits[i]; }
@@ -215,6 +218,13 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           return true;
         }
         return super.equals(other);
+      }
+
+      @Override
+      public InternalRow copy() {
+        Object[] arr = new Object[${expressions.length}];
+        ${copyColumns}
+        return new ${typeOf[GenericInternalRow]}(arr);
       }
     }
     """

@@ -122,9 +122,7 @@ abstract class Predictor[
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
     dataset.select($(labelCol), $(featuresCol))
-      .map { case Row(label: Double, features: Vector) =>
-      LabeledPoint(label, features)
-    }
+      .map { case Row(label: Double, features: Vector) => LabeledPoint(label, features) }
   }
 }
 
@@ -171,7 +169,10 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
-      dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
+      val predictUDF = udf { (features: Any) =>
+        predict(features.asInstanceOf[FeaturesType])
+      }
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")

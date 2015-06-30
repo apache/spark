@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.lang.{Boolean => JBoolean, Integer => JInteger}
+import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
@@ -94,6 +94,8 @@ private[client] sealed abstract class Shim {
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
+  def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit
+
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
@@ -166,6 +168,14 @@ private[client] class Shim_v0_12 extends Shim {
       JInteger.TYPE,
       JBoolean.TYPE,
       JBoolean.TYPE)
+  private lazy val dropIndexMethod =
+    findMethod(
+      classOf[Hive],
+      "dropIndex",
+      classOf[String],
+      classOf[String],
+      classOf[String],
+      JBoolean.TYPE)
 
   override def setCurrentSessionState(state: SessionState): Unit = {
     // Starting from Hive 0.13, setCurrentSessionState will internally override
@@ -232,6 +242,10 @@ private[client] class Shim_v0_12 extends Shim {
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean)
+  }
+
+  override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
+    dropIndexMethod.invoke(hive, dbName, tableName, indexName, true: JBoolean)
   }
 
 }
@@ -378,4 +392,58 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY,
       TimeUnit.MILLISECONDS).asInstanceOf[Long]
   }
+}
+
+private[client] class Shim_v1_0 extends Shim_v0_14 {
+
+}
+
+private[client] class Shim_v1_1 extends Shim_v1_0 {
+
+  private lazy val dropIndexMethod =
+    findMethod(
+      classOf[Hive],
+      "dropIndex",
+      classOf[String],
+      classOf[String],
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+
+  override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
+    dropIndexMethod.invoke(hive, dbName, tableName, indexName, true: JBoolean, true: JBoolean)
+  }
+
+}
+
+private[client] class Shim_v1_2 extends Shim_v1_1 {
+
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JLong.TYPE)
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean,
+      listBucketingEnabled: Boolean): Unit = {
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE,
+      0: JLong)
+  }
+
 }
