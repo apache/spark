@@ -676,7 +676,7 @@ private[spark] class Client(
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
+        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(libraryPaths)))
       }
       if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
         logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
@@ -698,7 +698,7 @@ private[spark] class Client(
       }
 
       sparkConf.getOption("spark.yarn.am.extraLibraryPath").foreach { paths =>
-        prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(paths)))
+        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
       }
     }
 
@@ -1106,10 +1106,10 @@ object Client extends Logging {
       env: HashMap[String, String],
       isAM: Boolean,
       extraClassPath: Option[String] = None): Unit = {
-    extraClassPath.foreach(addClasspathEntry(_, env))
-    addClasspathEntry(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
-    )
+    extraClassPath.foreach { cp =>
+      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+    }
+    addClasspathEntry(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env)
 
     if (isAM) {
       addClasspathEntry(
@@ -1125,12 +1125,14 @@ object Client extends Logging {
           getUserClasspath(sparkConf)
         }
       userClassPath.foreach { x =>
-        addFileToClasspath(x, null, env)
+        addFileToClasspath(sparkConf, x, null, env)
       }
     }
-    addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
-    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
+    sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
+      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+    }
   }
 
   /**
@@ -1159,16 +1161,18 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
+   * @parma conf      Spark configuration.
    * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
    */
   private def addFileToClasspath(
+      conf: SparkConf,
       uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
     if (uri != null && uri.getScheme == LOCAL_SCHEME) {
-      addClasspathEntry(uri.getPath, env)
+      addClasspathEntry(getClusterPath(conf, uri.getPath), env)
     } else if (fileName != null) {
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
@@ -1181,6 +1185,29 @@ object Client extends Logging {
    */
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
     YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
+
+  /**
+   * Returns the path to be sent to the NM for a path that is valid on the gateway.
+   *
+   * This method uses two configuration values:
+   *
+   * - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
+   *   only be valid in the gateway node.
+   * - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
+   *   contain, for example, env variable references, which will be expanded by the NMs when
+   *   starting containers.
+   *
+   * If either config is not available, the input path is returned.
+   */
+  def getClusterPath(conf: SparkConf, path: String): String = {
+    val localPath = conf.get("spark.yarn.config.gatewayPath", null)
+    val clusterPath = conf.get("spark.yarn.config.replacementPath", null)
+    if (localPath != null && clusterPath != null) {
+      path.replace(localPath, clusterPath)
+    } else {
+      path
+    }
+  }
 
   /**
    * Obtains token for the Hive metastore and adds them to the credentials.

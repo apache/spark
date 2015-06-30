@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
+import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType, DataType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -30,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * For input of type [[BinaryType]]
  */
 case class Md5(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with AutoCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -60,7 +62,7 @@ case class Md5(child: Expression)
  * the hash length is not one of the permitted values, the return value is NULL.
  */
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ExpectsInputTypes {
+  extends BinaryExpression with Serializable with AutoCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -139,4 +141,70 @@ case class Sha2(left: Expression, right: Expression)
       }
     """
   }
+}
+
+/**
+ * A function that calculates a sha1 hash value and returns it as a hex string
+ * For input of type [[BinaryType]] or [[StringType]]
+ */
+case class Sha1(child: Expression) extends UnaryExpression with AutoCastInputTypes {
+
+  override def dataType: DataType = StringType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      UTF8String.fromString(DigestUtils.shaHex(value.asInstanceOf[Array[Byte]]))
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c =>
+      "org.apache.spark.unsafe.types.UTF8String.fromString" +
+        s"(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+    )
+  }
+}
+
+/**
+ * A function that computes a cyclic redundancy check value and returns it as a bigint
+ * For input of type [[BinaryType]]
+ */
+case class Crc32(child: Expression)
+  extends UnaryExpression with AutoCastInputTypes {
+
+  override def dataType: DataType = LongType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val checksum = new CRC32
+      checksum.update(value.asInstanceOf[Array[Byte]], 0, value.asInstanceOf[Array[Byte]].length)
+      checksum.getValue
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val value = child.gen(ctx)
+    val CRC32 = "java.util.zip.CRC32"
+    s"""
+      ${value.code}
+      boolean ${ev.isNull} = ${value.isNull};
+      long ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${CRC32} checksum = new ${CRC32}();
+        checksum.update(${value.primitive}, 0, ${value.primitive}.length);
+        ${ev.primitive} = checksum.getValue();
+      }
+    """
+  }
+
 }

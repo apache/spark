@@ -144,6 +144,18 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
   }
 
+  test("misc sha1 function") {
+    val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
+    checkAnswer(
+      df.select(sha1($"a"), sha1("b")),
+      Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
+
+    val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
+    checkAnswer(
+      dfEmpty.selectExpr("sha1(a)", "sha1(b)"),
+      Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
+  }
+
   test("misc sha2 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
@@ -159,6 +171,17 @@ class DataFrameFunctionsSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       df.select(sha2($"a", 1024))
     }
+  }
+
+  test("misc crc32 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(crc32($"a"), crc32("b")),
+      Row(2743272264L, 2180413220L))
+
+    checkAnswer(
+      df.selectExpr("crc32(a)", "crc32(b)"),
+      Row(2743272264L, 2180413220L))
   }
 
   test("string length function") {

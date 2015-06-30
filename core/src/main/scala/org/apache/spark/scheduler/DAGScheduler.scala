@@ -907,22 +907,29 @@ class DAGScheduler(
         return
     }
 
-    val tasks: Seq[Task[_]] = stage match {
-      case stage: ShuffleMapStage =>
-        partitionsToCompute.map { id =>
-          val locs = getPreferredLocs(stage.rdd, id)
-          val part = stage.rdd.partitions(id)
-          new ShuffleMapTask(stage.id, taskBinary, part, locs)
-        }
+    val tasks: Seq[Task[_]] = try {
+      stage match {
+        case stage: ShuffleMapStage =>
+          partitionsToCompute.map { id =>
+            val locs = getPreferredLocs(stage.rdd, id)
+            val part = stage.rdd.partitions(id)
+            new ShuffleMapTask(stage.id, taskBinary, part, locs)
+          }
 
-      case stage: ResultStage =>
-        val job = stage.resultOfJob.get
-        partitionsToCompute.map { id =>
-          val p: Int = job.partitions(id)
-          val part = stage.rdd.partitions(p)
-          val locs = getPreferredLocs(stage.rdd, p)
-          new ResultTask(stage.id, taskBinary, part, locs, id)
-        }
+        case stage: ResultStage =>
+          val job = stage.resultOfJob.get
+          partitionsToCompute.map { id =>
+            val p: Int = job.partitions(id)
+            val part = stage.rdd.partitions(p)
+            val locs = getPreferredLocs(stage.rdd, p)
+            new ResultTask(stage.id, taskBinary, part, locs, id)
+          }
+      }
+    } catch {
+      case NonFatal(e) =>
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        return
     }
 
     if (tasks.size > 0) {
