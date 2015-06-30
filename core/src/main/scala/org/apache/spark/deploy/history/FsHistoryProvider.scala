@@ -140,7 +140,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
-        appInfo.attempts.find(_.attemptId == attemptId).map { attempt =>
+        appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
           val ui = {
             val conf = this.conf.clone()
@@ -162,7 +162,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
             ui
-          }.orNull
+          }
         }
       }
     } catch {
