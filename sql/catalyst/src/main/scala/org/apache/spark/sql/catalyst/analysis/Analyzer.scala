@@ -192,49 +192,17 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
-    /**
-     * Create an array of Projections for the child projection, and replace the projections'
-     * expressions which equal GroupBy expressions with Literal(null), if those expressions
-     * are not set for this grouping set (according to the bit mask).
-     */
-    private[this] def expand(g: GroupingSets): Seq[Seq[Expression]] = {
-      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
-
-      g.bitmasks.foreach { bitmask =>
-        // get the non selected grouping attributes according to the bit mask
-        val nonSelectedGroupExprs = ArrayBuffer.empty[Expression]
-        var bit = g.groupByExprs.length - 1
-        while (bit >= 0) {
-          if (((bitmask >> bit) & 1) == 0) nonSelectedGroupExprs += g.groupByExprs(bit)
-          bit -= 1
-        }
-
-        val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if nonSelectedGroupExprs.find(_ semanticEquals x).isDefined =>
-            // if the input attribute in the Invalid Grouping Expression set of for this group
-            // replace it with constant null
-            Literal.create(null, expr.dataType)
-          case x if x == g.gid =>
-            // replace the groupingId with concrete value (the bit mask)
-            Literal.create(bitmask, IntegerType)
-        })
-
-        result += substitution
-      }
-
-      result.toSeq
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case a: Cube if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case a: Rollup if a.resolved =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case x: GroupingSets if x.resolved =>
+      case a: Cube =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case a: Rollup =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case x: GroupingSets =>
+        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
         Aggregate(
-          x.groupByExprs :+ x.gid,
+          x.groupByExprs :+ VirtualColumn.groupingIdAttribute,
           x.aggregations,
-          Expand(expand(x), x.child.output :+ x.gid, x.child))
+          Expand(x.bitmasks, x.groupByExprs, gid, x.child))
     }
   }
 
@@ -315,7 +283,7 @@ class Analyzer(
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
         logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
-        val (oldRelation, newRelation) = right.collect {
+        right.collect {
           // Handle base relations that might appear more than once.
           case oldVersion: MultiInstanceRelation
               if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
@@ -340,25 +308,27 @@ class Analyzer(
               if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
-        }.headOption.getOrElse { // Only handle first case, others will be fixed on the next pass.
-          sys.error(
-            s"""
-              |Failure when resolving conflicting references in Join:
-              |$plan
-              |
-              |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-              """.stripMargin)
         }
-
-        val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-        val newRight = right transformUp {
-          case r if r == oldRelation => newRelation
-        } transformUp {
-          case other => other transformExpressions {
-            case a: Attribute => attributeRewrites.get(a).getOrElse(a)
-          }
+        // Only handle first case, others will be fixed on the next pass.
+        .headOption match {
+          case None =>
+            /*
+             * No result implies that there is a logical plan node that produces new references
+             * that this rule cannot handle. When that is the case, there must be another rule
+             * that resolves these conflicts. Otherwise, the analysis will fail.
+             */
+            j
+          case Some((oldRelation, newRelation)) =>
+            val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
+            val newRight = right transformUp {
+              case r if r == oldRelation => newRelation
+            } transformUp {
+              case other => other transformExpressions {
+                case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+              }
+            }
+            j.copy(right = newRight)
         }
-        j.copy(right = newRight)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild
@@ -368,12 +338,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp {
-          case u @ UnresolvedAttribute(nameParts) if nameParts.length == 1 &&
-            resolver(nameParts(0), VirtualColumn.groupingIdName) &&
-            q.isInstanceOf[GroupingAnalytics] =>
-            // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
-            q.asInstanceOf[GroupingAnalytics].gid
+        q transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -622,8 +587,8 @@ class Analyzer(
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) => Some(g, names)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
       }
     }

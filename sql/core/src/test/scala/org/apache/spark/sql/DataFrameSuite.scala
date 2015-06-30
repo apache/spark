@@ -160,6 +160,12 @@ class DataFrameSuite extends QueryTest {
       testData.collect().filter(_.getInt(0) > 90).toSeq)
   }
 
+  test("filterExpr using where") {
+    checkAnswer(
+      testData.where("key > 50"),
+      testData.collect().filter(_.getInt(0) > 50).toSeq)
+  }
+
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),

@@ -43,7 +43,7 @@ sparkR.stop <- function() {
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
     }
-  
+
     if (exists(".backendLaunched", envir = env)) {
       callJStatic("SparkRHandler", "stopBackend")
     }
@@ -81,6 +81,7 @@ sparkR.stop <- function() {
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
 #' @param sparkRLibDir The path where R is installed on the worker nodes.
+#' @param sparkPackages Character string vector of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -100,7 +101,8 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "") {
+  sparkRLibDir = "",
+  sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
@@ -129,7 +131,8 @@ sparkR.init <- function(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"))
+        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        packages = sparkPackages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
@@ -174,7 +177,7 @@ sparkR.init <- function(
   for (varname in names(sparkEnvir)) {
     sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
   }
-  
+
   sparkExecutorEnvMap <- new.env()
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <- paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
@@ -214,7 +217,7 @@ sparkR.init <- function(
 
 #' Initialize a new SQLContext.
 #'
-#' This function creates a SparkContext from an existing JavaSparkContext and 
+#' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
