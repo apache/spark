@@ -42,6 +42,7 @@ __all__ = [
     'monotonicallyIncreasingId',
     'rand',
     'randn',
+    'sha1',
     'sha2',
     'sparkPartitionId',
     'struct',
@@ -379,6 +380,19 @@ def sha2(col, numBits):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def sha1(col):
+    """Returns the hex string result of SHA-1.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
     return Column(jc)
 
 

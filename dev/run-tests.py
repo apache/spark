@@ -19,6 +19,7 @@
 
 from __future__ import print_function
 import itertools
+from optparse import OptionParser
 import os
 import re
 import sys
@@ -360,12 +361,13 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules):
+def run_python_tests(test_modules, parallelism):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     command = [os.path.join(SPARK_HOME, "python", "run-tests")]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 
 
@@ -379,7 +381,25 @@ def run_sparkr_tests():
         print("Ignoring SparkR tests as R was not found in PATH")
 
 
+def parse_opts():
+    parser = OptionParser(
+        prog="run-tests"
+    )
+    parser.add_option(
+        "-p", "--parallelism", type="int", default=4,
+        help="The number of suites to test in parallel (default %default)"
+    )
+
+    (opts, args) = parser.parse_args()
+    if args:
+        parser.error("Unsupported arguments: %s" % ' '.join(args))
+    if opts.parallelism < 1:
+        parser.error("Parallelism cannot be less than 1")
+    return opts
+
+
 def main():
+    opts = parse_opts()
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
         print("[error] Cannot determine your home directory as an absolute path;",
@@ -461,7 +481,7 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests)
+        run_python_tests(modules_with_python_tests, opts.parallelism)
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

@@ -82,24 +82,24 @@ class CodeGenContext {
   /**
    * Returns the code to access a column in Row for a given DataType.
    */
-  def getColumn(dataType: DataType, ordinal: Int): String = {
+  def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"i.get${primitiveTypeName(jt)}($ordinal)"
+      s"$row.get${primitiveTypeName(jt)}($ordinal)"
     } else {
-      s"($jt)i.apply($ordinal)"
+      s"($jt)$row.apply($ordinal)"
     }
   }
 
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
-  def setColumn(dataType: DataType, ordinal: Int, value: String): String = {
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"set${primitiveTypeName(jt)}($ordinal, $value)"
+      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
     } else {
-      s"update($ordinal, $value)"
+      s"$row.update($ordinal, $value)"
     }
   }
 
@@ -120,15 +120,16 @@ class CodeGenContext {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType => JAVA_INT
-    case LongType => JAVA_LONG
+    case IntegerType | DateType => JAVA_INT
+    case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
     case StringType => stringType
-    case DateType => JAVA_INT
-    case TimestampType => JAVA_LONG
+    case _: StructType => "InternalRow"
+    case _: ArrayType => s"scala.collection.Seq"
+    case _: MapType => s"scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"

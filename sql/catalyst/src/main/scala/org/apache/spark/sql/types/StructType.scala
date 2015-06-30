@@ -94,7 +94,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
-  protected def this() = this(null)
+  def this() = this(Array.empty[StructField])
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -102,6 +102,108 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+
+  /**
+   * Creates a new [[StructType]] by adding a new field.
+   * {{{
+   * val struct = (new StructType)
+   *   .add(StructField("a", IntegerType, true))
+   *   .add(StructField("b", LongType, false))
+   *   .add(StructField("c", StringType, true))
+   *}}}
+   */
+  def add(field: StructField): StructType = {
+    StructType(fields :+ field)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata.
+   *
+   * val struct = (new StructType)
+   *   .add("a", IntegerType)
+   *   .add("b", LongType)
+   *   .add("c", StringType)
+   */
+  def add(name: String, dataType: DataType): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable = true, Metadata.empty))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata.
+   *
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true)
+   *   .add("b", LongType, false)
+   *   .add("c", StringType, true)
+   */
+  def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, Metadata.empty)
+   *   .add("b", LongType, false, Metadata.empty)
+   *   .add("c", StringType, true, Metadata.empty)
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, metadata))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int")
+   *   .add("b", "long")
+   *   .add("c", "string")
+   * }}}
+   */
+  def add(name: String, dataType: String): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true)
+   *   .add("b", "long", false)
+   *   .add("c", "string", true)
+   * }}}
+   */
+  def add(name: String, dataType: String, nullable: Boolean): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, Metadata.empty)
+   *   .add("b", "long", false, Metadata.empty)
+   *   .add("c", "string", true, Metadata.empty)
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+  }
 
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not

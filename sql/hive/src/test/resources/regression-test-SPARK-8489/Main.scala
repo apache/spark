@@ -40,6 +40,7 @@ object Main {
     df.collect()
     println("Regression test for SPARK-8489 success!")
     // scalastyle:on println
+    sc.stop()
   }
 }
 

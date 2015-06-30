@@ -492,6 +492,27 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("showString: truncate = [true, false]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = ctx.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+---------------------+
+                                   ||_1                   |
+                                   |+---------------------+
+                                   ||1                    |
+                                   ||111111111111111111111|
+                                   |+---------------------+
+                                   |""".stripMargin
+    assert(df.showString(10, false) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+--------------------+
+                                  ||                  _1|
+                                  |+--------------------+
+                                  ||                   1|
+                                  ||11111111111111111...|
+                                  |+--------------------+
+                                  |""".stripMargin
+    assert(df.showString(10, true) === expectedAnswerForTrue)
+  }
+
   test("showString(negative)") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
