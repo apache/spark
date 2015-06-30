@@ -88,16 +88,25 @@ class MatrixFactorizationModel(
    * @return RDD of Ratings.
    */
   def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] = {
-    val users = userFeatures.join(usersProducts).map {
-      case (user, (uFeatures, product)) => ((user, product), uFeatures)
-    }
-    val productUsers = usersProducts.map(up => (up._2, up._1))
-    val products = productFeatures.join(productUsers).map {
-      case (product, (pFeatures, user)) => ((user, product), pFeatures)
-    }
-    users.join(products).map {
-      case ((user, product), (uFeatures, pFeatures)) =>
-        Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+    val usersCount = usersProducts.keys.countApproxDistinct()
+    val productsCount = usersProducts.values.countApproxDistinct()
+
+    if (usersCount < productsCount) {
+      val users = userFeatures.join(usersProducts).map {
+        case (user, (uFeatures, product)) => (product, (user, uFeatures))
+      }
+      users.join(productFeatures).map {
+        case (product, ((user, uFeatures), pFeatures)) =>
+          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+      }
+    } else {
+      val products = productFeatures.join(usersProducts.map(_.swap)).map {
+        case (product, (pFeatures, user)) => (user, (product, pFeatures))
+      }
+      products.join(userFeatures).map {
+        case (user, ((product, pFeatures), uFeatures)) =>
+          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+      }
     }
   }
 
