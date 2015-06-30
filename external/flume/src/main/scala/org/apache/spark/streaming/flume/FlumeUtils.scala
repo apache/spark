@@ -257,7 +257,7 @@ private class FlumeUtilsPythonHelper {
       enableDecompression: Boolean
     ): JavaPairDStream[Array[Byte], Array[Byte]] = {
     val dstream = FlumeUtils.createStream(jssc, hostname, port, storageLevel, enableDecompression)
-    FlumeUtilsPythonHelper.toDStreamForPython(dstream)
+    FlumeUtilsPythonHelper.toByteArrayPairDStream(dstream)
   }
 
   def createPollingStream(
@@ -274,7 +274,7 @@ private class FlumeUtilsPythonHelper {
     }
     val dstream = FlumeUtils.createPollingStream(
       jssc.ssc, addresses, storageLevel, maxBatchSize, parallelism)
-    FlumeUtilsPythonHelper.toDStreamForPython(dstream)
+    FlumeUtilsPythonHelper.toByteArrayPairDStream(dstream)
   }
 
 }
@@ -297,7 +297,7 @@ private object FlumeUtilsPythonHelper {
     }
   }
 
-  private def toDStreamForPython(dstream: JavaReceiverInputDStream[SparkFlumeEvent]):
+  private def toByteArrayPairDStream(dstream: JavaReceiverInputDStream[SparkFlumeEvent]):
     JavaPairDStream[Array[Byte], Array[Byte]] = {
     dstream.mapToPair(new PairFunction[SparkFlumeEvent, Array[Byte], Array[Byte]] {
       override def call(sparkEvent: SparkFlumeEvent): (Array[Byte], Array[Byte]) = {

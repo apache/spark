@@ -37,11 +37,9 @@ import org.apache.spark.streaming.flume.sink.{SparkSinkConfig, SparkSink}
 private[flume] class PollingFlumeTestUtils {
 
   private val batchCount = 5
-  private val eventsPerBatch = 100
+  val eventsPerBatch = 100
   private val totalEventsPerChannel = batchCount * eventsPerBatch
   private val channelCapacity = 5000
-
-  def getEventsPerBatch: Int = eventsPerBatch
 
   def getTotalEvents: Int = totalEventsPerChannel * channels.size
 

@@ -771,7 +771,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
             dstream = FlumeUtils.createPollingStream(
                 ssc,
                 addresses,
-                maxBatchSize=self._utils.getEventsPerBatch(),
+                maxBatchSize=self._utils.eventsPerBatch(),
                 parallelism=5)
             outputBuffer = []
 

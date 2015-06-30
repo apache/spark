@@ -42,15 +42,9 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName(this.getClass.getSimpleName)
+    .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
-  var utils = new PollingFlumeTestUtils
-
-  def beforeFunction() {
-    logInfo("Using manual clock")
-    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
-  }
-
-  before(beforeFunction())
+  val utils = new PollingFlumeTestUtils
 
   test("flume polling test") {
     testMultipleTimes(testFlumePolling)
