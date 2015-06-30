@@ -617,7 +617,9 @@ private[spark] class ExternalSorter[K, V, C](
    * Spill in-memory inMemory to a temporary file on disk.
    * Return on-disk iterator over a temporary file.
    */
-  private[this] def spillMemoryToDisk(iterator: Iterator[((Int, K), C)]): Iterator[((Int, K), C)] = {
+  private[this] def spillMemoryToDisk(iterator: Iterator[((Int, K), C)])
+    : Iterator[((Int, K), C)] = {
+
     val it = new WritablePartitionedIterator {
       private[this] var cur = if (iterator.hasNext) iterator.next() else null
 
@@ -643,7 +645,8 @@ private[spark] class ExternalSorter[K, V, C](
    * An iterator that read elements from in-memory iterator or disk iterator when in-memory
    * iterator have spilled to disk.
    */
-  case class MemoryOrDiskIterator(memIter: Iterator[((Int, K), C)]) extends Iterator[((Int, K), C)] {
+  case class MemoryOrDiskIterator(memIter: Iterator[((Int, K), C)])
+    extends Iterator[((Int, K), C)] {
 
     var currentIter = memIter
 
@@ -671,26 +674,13 @@ private[spark] class ExternalSorter[K, V, C](
   override def forceSpill(): Long = {
     var freeMemory = 0L
     if (memoryOrDiskIter.isDefined) {
-      // has memory buffer that can be spilled
-      _spillCount += 1
-
       val shouldCombine = aggregator.isDefined
       if (shouldCombine) {
-        logSpillage(map.estimateSize())
+        freeMemory = logForceSpill(map.estimateSize())
       } else {
-        logSpillage(buffer.estimateSize())
+        freeMemory = logForceSpill(buffer.estimateSize())
       }
-
       memoryOrDiskIter.get.spill()
-
-      _elementsRead = 0
-      if (shouldCombine) {
-        _memoryBytesSpilled += map.estimateSize()
-      } else {
-        _memoryBytesSpilled += buffer.estimateSize()
-      }
-      freeMemory = myMemoryThreshold
-      myMemoryThreshold = 0L
     }
     freeMemory
   }

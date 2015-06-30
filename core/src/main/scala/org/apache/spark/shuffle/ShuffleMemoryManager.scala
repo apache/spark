@@ -46,7 +46,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   /**
    * release other Spillable's memory of current thread until freeMemory >= requestedMemory
    */
-  private[spark] def releaseReservedMemory(toGrant: Long, requestMemory: Long): Long =
+  private[this] def releaseReservedMemory(toGrant: Long, requestMemory: Long): Long =
     synchronized {
     val threadId = Thread.currentThread().getId
     if (toGrant >= requestMemory || !threadReservedList.contains(threadId)){

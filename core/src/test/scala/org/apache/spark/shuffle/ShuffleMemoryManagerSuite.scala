@@ -25,7 +25,7 @@ import java.util.concurrent.CountDownLatch
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.Spillable
 
-class FakeSpillable extends Spillable {
+private[this] class FakeSpillable extends Spillable {
 
   var myMemoryThreshold: Long = 0L
 

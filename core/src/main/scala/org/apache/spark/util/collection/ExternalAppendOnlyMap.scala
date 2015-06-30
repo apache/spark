@@ -237,17 +237,9 @@ class ExternalAppendOnlyMap[K, V, C](
   override def forceSpill(): Long = {
     var freeMemory = 0L
     if (memoryOrDiskIter.isDefined) {
-      _spillCount += 1
-      logSpillage(currentMap.estimateSize())
-
+      freeMemory = logForceSpill(currentMap.estimateSize())
       memoryOrDiskIter.get.spill()
-
-      _elementsRead = 0
-      _memoryBytesSpilled += currentMap.estimateSize()
-      freeMemory = myMemoryThreshold
-      myMemoryThreshold = 0L
     }
-
     freeMemory
   }
 
