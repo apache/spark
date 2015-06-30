@@ -768,6 +768,58 @@ will get better!
 
 </div>
 
+<div data-lang="python" markdown="1">
+
+First, we import the necessary classes for parsing our input data and creating the model.
+
+{% highlight python %}
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.regression import StreamingLinearRegressionWithSGD
+{% endhighlight %}
+
+Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+for more info. For this example, we use labeled points in training and testing streams,
+but in practice you will likely want to use unlabeled vectors for test data.
+
+{% highlight python %}
+def parse(lp):
+    label = float(lp[lp.find('(') + 1: lp.find(',')])
+    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+    return LabeledPoint(label, vec)
+
+trainingData = ssc.textFileStream("/training/data/dir").map(parse).cache()
+testData = ssc.textFileStream("/testing/data/dir").map(parse)
+{% endhighlight %}
+
+We create our model by initializing the weights to 0
+
+{% highlight python %}
+numFeatures = 3
+model = StreamingLinearRegressionWithSGD()
+model.setInitialWeights([0.0, 0.0, 0.0])
+{% endhighlight %}
+
+Now we register the streams for training and testing and start the job.
+
+{% highlight python %}
+model.trainOn(trainingData)
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
+
+ssc.start()
+ssc.awaitTermination()
+{% endhighlight %}
+
+We can now save text files with data to the training or testing folders.
+Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
+and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
+the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+As you feed more data to the training directory, the predictions
+will get better!
+
+</div>
+
 </div>
 
 
