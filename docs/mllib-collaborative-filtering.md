@@ -77,7 +77,7 @@ val ratings = data.map(_.split(',') match { case Array(user, item, rate) =>
 
 // Build the recommendation model using ALS
 val rank = 10
-val numIterations = 20
+val numIterations = 10
 val model = ALS.train(ratings, rank, numIterations, 0.01)
 
 // Evaluate the model on rating data
