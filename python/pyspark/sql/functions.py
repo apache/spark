@@ -309,7 +309,7 @@ def e():
     logarithms.
 
     >>> sqlContext.createDataFrame([(1,)], ['a']).select((e()).alias('e')).collect()
-    [Row(e=2.718281828459045)]
+    [Row(e=2.7182818284590451)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.e()
@@ -378,7 +378,7 @@ def pi():
     of a circle to its diameter.
 
     >>> sqlContext.createDataFrame([(1,)], ['a']).select((pi()).alias('pi')).collect()
-    [Row(pi=3.141592653589793)]
+    [Row(pi=3.1415926535897931)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.pi()
