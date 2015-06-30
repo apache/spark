@@ -682,7 +682,6 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -707,12 +706,23 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
    */
   def where(condition: Column): DataFrame = filter(condition)
+
+  /**
+   * Filters rows using the given SQL expression.
+   * {{{
+   *   peopleDf.where("age > 15")
+   * }}}
+   * @group dfops
+   * @since 1.5.0
+   */
+  def where(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
+  }
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -1418,11 +1428,13 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().mapPartitions { rows =>
+    internalRowRdd.mapPartitions { rows =>
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
       rows.map(converter(_).asInstanceOf[Row])
     }
   }
+
+  private[sql] def internalRowRdd = queryExecution.executedPlan.execute()
 
   /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.

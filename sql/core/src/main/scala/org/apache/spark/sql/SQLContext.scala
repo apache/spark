@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -145,7 +146,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        ExtractPythonUdfs ::
+        ExtractPythonUDFs ::
         sources.PreInsertCastAndRename ::
         Nil
 
@@ -256,7 +257,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * The following example registers a Scala closure as UDF:
    * {{{
-   *   sqlContext.udf.register("myUdf", (arg1: Int, arg2: String) => arg2 + arg1)
+   *   sqlContext.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
    * }}}
    *
    * The following example registers a UDF in Java:
@@ -377,10 +378,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
         val row = new SpecificMutableRow(dataType :: Nil)
         iter.map { v =>
           row.setInt(0, v)
-          row: Row
+          row: InternalRow
         }
       }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /**
@@ -393,10 +395,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
         val row = new SpecificMutableRow(dataType :: Nil)
         iter.map { v =>
           row.setLong(0, v)
-          row: Row
+          row: InternalRow
         }
       }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /**
@@ -408,11 +411,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
         iter.map { v =>
-          row.setString(0, v)
-          row: Row
+          row.update(0, UTF8String.fromString(v))
+          row: InternalRow
         }
       }
-      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(
+        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
 
@@ -559,9 +563,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
         (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
       }
       iter.map { row =>
-        new GenericRow(
+        new GenericInternalRow(
           methodsToConverts.map { case (e, convert) => convert(e.invoke(row)) }.toArray[Any]
-        ) : InternalRow
+        ): InternalRow
       }
     }
     DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
@@ -858,7 +862,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       experimental.extraStrategies ++ (
       DataSourceStrategy ::
       DDLStrategy ::
-      TakeOrdered ::
+      TakeOrderedAndProject ::
       HashAggregation ::
       LeftSemiJoin ::
       HashJoin ::
@@ -1065,7 +1069,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericRow(m): InternalRow}
+      iter.map { m => new GenericInternalRow(m): InternalRow}
     }
 
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
