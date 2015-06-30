@@ -21,15 +21,36 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  /**
+   * Runs through the testFunc for all integral data types.
+   *
+   * @param testFunc a test function that accepts a conversion function to convert an integer
+   *                 into another data type.
+   */
+  private def testIntegralDataTypes(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toByte)
+    testFunc(_.toShort)
+    testFunc(identity)
+    testFunc(_.toLong)
+  }
+
+  test("GetArrayItem") {
+    testIntegralDataTypes { convert =>
+      val array = Literal.create(Seq("a", "b"), ArrayType(StringType))
+      checkEvaluation(GetArrayItem(array, Literal(convert(1))), "b")
+    }
+  }
+
   test("CreateStruct") {
-    val row = Row(1, 2, 3)
+    val row = InternalRow(1, 2, 3)
     val c1 = 'a.int.at(0).as("a")
     val c3 = 'c.int.at(2).as("c")
-    checkEvaluation(CreateStruct(Seq(c1, c3)), Row(1, 3), row)
+    checkEvaluation(CreateStruct(Seq(c1, c3)), InternalRow(1, 3), row)
   }
 
   test("complex type") {

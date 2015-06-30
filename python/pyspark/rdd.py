@@ -121,10 +121,22 @@ def _parse_memory(s):
 
 
 def _load_from_socket(port, serializer):
-    sock = socket.socket()
-    sock.settimeout(3)
+    sock = None
+    # Support for both IPv4 and IPv6.
+    # On most of IPv6-ready systems, IPv6 will take precedence.
+    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, canonname, sa = res
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(3)
+            sock.connect(sa)
+        except socket.error:
+            sock = None
+            continue
+        break
+    if not sock:
+        raise Exception("could not open socket")
     try:
-        sock.connect(("localhost", port))
         rf = sock.makefile("rb", 65536)
         for item in serializer.load_stream(rf):
             yield item
@@ -960,7 +972,7 @@ class RDD(object):
         >>> sc.parallelize([1.0, 2.0, 3.0]).sum()
         6.0
         """
-        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self.mapPartitions(lambda x: [sum(x)]).fold(0, operator.add)
 
     def count(self):
         """
@@ -2198,7 +2210,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000))
-        >>> (rdd.sumApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.sumApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.mapPartitions(lambda it: [float(sum(it))])._to_java_object_rdd()
@@ -2215,7 +2227,7 @@ class RDD(object):
 
         >>> rdd = sc.parallelize(range(1000), 10)
         >>> r = sum(range(1000)) / 1000.0
-        >>> (rdd.meanApprox(1000) - r) / r < 0.05
+        >>> abs(rdd.meanApprox(1000) - r) / r < 0.05
         True
         """
         jrdd = self.map(float)._to_java_object_rdd()

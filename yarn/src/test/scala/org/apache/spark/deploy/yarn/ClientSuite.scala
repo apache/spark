@@ -113,7 +113,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
         Environment.PWD.$()
       }
     cp should contain(pwdVar)
-    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_HADOOP_CONF_DIR}")
+    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_CONF_DIR}")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -129,7 +129,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
+      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
       sparkConf.getOption(Client.CONF_SPARK_USER_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -149,6 +149,25 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     } finally {
       Utils.deleteRecursively(tempDir)
     }
+  }
+
+  test("Cluster path translation") {
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(Client.CONF_SPARK_JAR, "local:/localPath/spark.jar")
+      .set("spark.yarn.config.gatewayPath", "/localPath")
+      .set("spark.yarn.config.replacementPath", "/remotePath")
+
+    Client.getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
+    Client.getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
+      "/remotePath/1:/remotePath/2")
+
+    val env = new MutableHashMap[String, String]()
+    Client.populateClasspath(null, conf, sparkConf, env, false,
+      extraClassPath = Some("/localPath/my1.jar"))
+    val cp = classpath(env)
+    cp should contain ("/remotePath/spark.jar")
+    cp should contain ("/remotePath/my1.jar")
   }
 
   object Fixtures {

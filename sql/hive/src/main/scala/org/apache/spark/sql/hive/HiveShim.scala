@@ -20,6 +20,11 @@ package org.apache.spark.sql.hive
 import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.hadoop.conf.Configuration
@@ -34,10 +39,6 @@ import org.apache.hadoop.io.Writable
 import org.apache.spark.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
-import scala.reflect.ClassTag
 
 private[hive] object HiveShim {
   // Precision and scale to pass for unlimited decimals; these are the same as the precision and
@@ -68,10 +69,10 @@ private[hive] object HiveShim {
    * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null or empty
    */
   def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
-    if (ids != null && ids.size > 0) {
+    if (ids != null && ids.nonEmpty) {
       ColumnProjectionUtils.appendReadColumns(conf, ids)
     }
-    if (names != null && names.size > 0) {
+    if (names != null && names.nonEmpty) {
       appendReadColumnNames(conf, names)
     }
   }
@@ -197,11 +198,11 @@ private[hive] object HiveShim {
   }
 
   /*
- * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
- * Fix it through wrapper.
- * */
+   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
+   * Fix it through wrapper.
+   */
   implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
-    var f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
+    val f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
     f.setCompressCodec(w.compressCodec)
     f.setCompressType(w.compressType)
     f.setTableInfo(w.tableInfo)

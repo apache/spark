@@ -539,11 +539,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /**
    * For testing only. Wait until at least `numExecutors` executors are up, or throw
    * `TimeoutException` if the waiting time elapsed before `numExecutors` executors up.
+   * Exposed for testing.
    *
    * @param numExecutors the number of executors to wait at least
    * @param timeout time to wait in milliseconds
    */
-  @VisibleForTesting
   private[spark] def waitUntilExecutorsUp(numExecutors: Int, timeout: Long): Unit = {
     val finishTime = System.currentTimeMillis() + timeout
     while (System.currentTimeMillis() < finishTime) {

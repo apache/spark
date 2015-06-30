@@ -112,9 +112,12 @@ case class Alias(child: Expression, name: String)(
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
-  override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
-  override def eval(input: Row): Any = child.eval(input)
+  override def eval(input: InternalRow): Any = child.eval(input)
+
+  override def isThreadSafe: Boolean = child.isThreadSafe
 
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
 
@@ -230,7 +233,7 @@ case class AttributeReference(
   }
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
-  override def eval(input: Row = null): Any =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
@@ -252,12 +255,12 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def eval(input: Row): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
   override def dataType: DataType = NullType
 }
 
 object VirtualColumn {
   val groupingIdName: String = "grouping__id"
-  def newGroupingId: AttributeReference = AttributeReference(groupingIdName, IntegerType, false)()
+  val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

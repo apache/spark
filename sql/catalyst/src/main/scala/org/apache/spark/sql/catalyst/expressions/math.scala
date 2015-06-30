@@ -17,25 +17,54 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Long => JLong}
+import java.util.Arrays
+
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{DataType, DoubleType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+
+/**
+ * A leaf expression specifically for math constants. Math constants expect no input.
+ * @param c The math constant.
+ * @param name The short name of the function
+ */
+abstract class LeafMathExpression(c: Double, name: String)
+  extends LeafExpression with Serializable {
+  self: Product =>
+
+  override def dataType: DataType = DoubleType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def toString: String = s"$name()"
+
+  override def eval(input: InternalRow): Any = c
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.primitive} = java.lang.Math.$name;
+    """
+  }
+}
 
 /**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
  * input format, therefore these functions extend `ExpectsInputTypes`.
+ * @param f The math function.
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ExpectsInputTypes {
+  extends UnaryExpression with Serializable with AutoCastInputTypes {
   self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
-  override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
@@ -70,7 +99,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with AutoCastInputTypes { self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -78,7 +107,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def dataType: DataType = DoubleType
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -97,6 +126,16 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
   }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Leaf math functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+case class EulerNumber() extends LeafMathExpression(math.E, "E")
+
+case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -126,6 +165,23 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
 case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 
+case class Log2(child: Expression)
+  extends UnaryMathExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.primitive} = java.lang.Math.log(${eval.primitive}) / java.lang.Math.log(2);
+        if (Double.valueOf(${ev.primitive}).isNaN()) {
+          ${ev.isNull} = true;
+        }
+      }
+    """
+  }
+}
+
 case class Log10(child: Expression) extends UnaryMathExpression(math.log10, "LOG10")
 
 case class Log1p(child: Expression) extends UnaryMathExpression(math.log1p, "LOG1P")
@@ -140,6 +196,8 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
@@ -150,6 +208,102 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
 
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
+}
+
+case class Bin(child: Expression)
+  extends UnaryExpression with Serializable with AutoCastInputTypes {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      UTF8String.fromString(JLong.toBinaryString(evalE.asInstanceOf[Long]))
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (c) =>
+      s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
+  }
+}
+
+
+/**
+ * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
+ * Otherwise if the number is a STRING, it converts each character into its hex representation
+ * and returns the resulting STRING. Negative numbers would be treated as two's complement.
+ */
+case class Hex(child: Expression) extends UnaryExpression with Serializable  {
+
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType.isInstanceOf[StringType]
+      || child.dataType.isInstanceOf[IntegerType]
+      || child.dataType.isInstanceOf[LongType]
+      || child.dataType.isInstanceOf[BinaryType]
+      || child.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"hex doesn't accepts ${child.dataType} type")
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val num = child.eval(input)
+    if (num == null) {
+      null
+    } else {
+      child.dataType match {
+        case LongType => hex(num.asInstanceOf[Long])
+        case IntegerType => hex(num.asInstanceOf[Integer].toLong)
+        case BinaryType => hex(num.asInstanceOf[Array[Byte]])
+        case StringType => hex(num.asInstanceOf[UTF8String])
+      }
+    }
+  }
+
+  /**
+   * Converts every character in s to two hex digits.
+   */
+  private def hex(str: UTF8String): UTF8String = {
+    hex(str.getBytes)
+  }
+
+  private def hex(bytes: Array[Byte]): UTF8String = {
+    doHex(bytes, bytes.length)
+  }
+
+  private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
+    val value = new Array[Byte](length * 2)
+    var i = 0
+    while (i < length) {
+      value(i * 2) = Character.toUpperCase(Character.forDigit(
+        (bytes(i) & 0xF0) >>> 4, 16)).toByte
+      value(i * 2 + 1) = Character.toUpperCase(Character.forDigit(
+        bytes(i) & 0x0F, 16)).toByte
+      i += 1
+    }
+    UTF8String.fromBytes(value)
+  }
+
+  private def hex(num: Long): UTF8String = {
+    // Extract the hex digits of num into value[] from right to left
+    val value = new Array[Byte](16)
+    var numBuf = num
+    var len = 0
+    do {
+      len += 1
+      value(value.length - len) = Character.toUpperCase(Character
+        .forDigit((numBuf & 0xF).toInt, 16)).toByte
+      numBuf >>>= 4
+    } while (numBuf != 0)
+    UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
+  }
 }
 
 
@@ -163,7 +317,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
     if (evalE1 == null) {
       null
@@ -189,9 +343,6 @@ case class Atan2(left: Expression, right: Expression)
   }
 }
 
-case class Hypot(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.hypot, "HYPOT")
-
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -200,5 +351,32 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
+  }
+}
+
+case class Hypot(left: Expression, right: Expression)
+  extends BinaryMathExpression(math.hypot, "HYPOT")
+
+case class Logarithm(left: Expression, right: Expression)
+  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+
+  /**
+   * Natural log, i.e. using e as the base.
+   */
+  def this(child: Expression) = {
+    this(EulerNumber(), child)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val logCode = if (left.isInstanceOf[EulerNumber]) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
+    }
+    logCode + s"""
+      if (Double.valueOf(${ev.primitive}).isNaN()) {
+        ${ev.isNull} = true;
+      }
+    """
   }
 }

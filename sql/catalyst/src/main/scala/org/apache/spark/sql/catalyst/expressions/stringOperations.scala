@@ -22,8 +22,9 @@ import java.util.regex.Pattern
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-trait StringRegexExpression extends ExpectsInputTypes {
+trait StringRegexExpression extends AutoCastInputTypes {
   self: BinaryExpression =>
 
   def escape(v: String): String
@@ -48,7 +49,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
     if (l == null) {
       null
@@ -110,17 +111,15 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }
 
-trait CaseConversionExpression extends ExpectsInputTypes {
+trait CaseConversionExpression extends AutoCastInputTypes {
   self: UnaryExpression =>
 
   def convert(v: UTF8String): UTF8String
 
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
     if (evaluated == null) {
       null
@@ -159,7 +158,7 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-trait StringComparison extends ExpectsInputTypes {
+trait StringComparison extends AutoCastInputTypes {
   self: BinaryExpression =>
 
   def compare(l: UTF8String, r: UTF8String): Boolean
@@ -168,7 +167,7 @@ trait StringComparison extends ExpectsInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
     if(leftEval == null) {
       null
@@ -222,11 +221,16 @@ case class EndsWith(left: Expression, right: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with ExpectsInputTypes {
+  extends Expression with AutoCastInputTypes {
+
+  def this(str: Expression, pos: Expression) = {
+    this(str, pos, Literal(Integer.MAX_VALUE))
+  }
 
   override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
 
   override  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+
   override def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
@@ -260,7 +264,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     (start, end)
   }
 
-  override def eval(input: Row): Any = {
+  override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
     val po = pos.eval(input)
     val ln = len.eval(input)
@@ -276,7 +280,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           ba.slice(st, end)
         case s: UTF8String =>
           val (st, end) = slicePos(start, length, () => s.length())
-          s.slice(st, end)
+          s.substring(st, end)
       }
     }
   }
@@ -285,5 +289,24 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     // TODO: This is broken because max is not an integer value.
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"
+  }
+}
+
+/**
+ * A function that return the length of the given string expression.
+ */
+case class StringLength(child: Expression) extends UnaryExpression with AutoCastInputTypes {
+  override def dataType: DataType = IntegerType
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) null else string.asInstanceOf[UTF8String].length
+  }
+
+  override def toString: String = s"length($child)"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"($c).length()")
   }
 }
