@@ -247,8 +247,11 @@ class DataFrame(object):
         return self._jdf.isLocal()
 
     @since(1.3)
-    def show(self, n=20):
+    def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
+
+        :param n: Number of rows to show.
+        :param truncate: Whether truncate long strings and align cells right.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -260,7 +263,7 @@ class DataFrame(object):
         |  5|  Bob|
         +---+-----+
         """
-        print(self._jdf.showString(n))
+        print(self._jdf.showString(n, truncate))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))

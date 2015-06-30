@@ -56,7 +56,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ExpectsInputTypes {
+  extends UnaryExpression with Serializable with AutoCastInputTypes {
   self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
@@ -78,17 +78,14 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"""
+        ${ev.primitive} = java.lang.Math.${funcName}($eval);
         if (Double.valueOf(${ev.primitive}).isNaN()) {
           ${ev.isNull} = true;
         }
-      }
-    """
+      """
+    })
   }
 }
 
@@ -99,7 +96,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with AutoCastInputTypes { self: Product =>
 
   override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -211,18 +208,10 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 }
 
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with ExpectsInputTypes {
-
-  val name: String = "BIN"
-
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
+  extends UnaryExpression with Serializable with AutoCastInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
-
-  def funcName: String = name.toLowerCase
 
   override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
@@ -238,6 +227,82 @@ case class Bin(child: Expression)
       s"${ctx.stringType}.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
+
+
+/**
+ * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
+ * Otherwise if the number is a STRING, it converts each character into its hex representation
+ * and returns the resulting STRING. Negative numbers would be treated as two's complement.
+ */
+case class Hex(child: Expression) extends UnaryExpression with Serializable  {
+
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType.isInstanceOf[StringType]
+      || child.dataType.isInstanceOf[IntegerType]
+      || child.dataType.isInstanceOf[LongType]
+      || child.dataType.isInstanceOf[BinaryType]
+      || child.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"hex doesn't accepts ${child.dataType} type")
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val num = child.eval(input)
+    if (num == null) {
+      null
+    } else {
+      child.dataType match {
+        case LongType => hex(num.asInstanceOf[Long])
+        case IntegerType => hex(num.asInstanceOf[Integer].toLong)
+        case BinaryType => hex(num.asInstanceOf[Array[Byte]])
+        case StringType => hex(num.asInstanceOf[UTF8String])
+      }
+    }
+  }
+
+  /**
+   * Converts every character in s to two hex digits.
+   */
+  private def hex(str: UTF8String): UTF8String = {
+    hex(str.getBytes)
+  }
+
+  private def hex(bytes: Array[Byte]): UTF8String = {
+    doHex(bytes, bytes.length)
+  }
+
+  private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
+    val value = new Array[Byte](length * 2)
+    var i = 0
+    while (i < length) {
+      value(i * 2) = Character.toUpperCase(Character.forDigit(
+        (bytes(i) & 0xF0) >>> 4, 16)).toByte
+      value(i * 2 + 1) = Character.toUpperCase(Character.forDigit(
+        bytes(i) & 0x0F, 16)).toByte
+      i += 1
+    }
+    UTF8String.fromBytes(value)
+  }
+
+  private def hex(num: Long): UTF8String = {
+    // Extract the hex digits of num into value[] from right to left
+    val value = new Array[Byte](16)
+    var numBuf = num
+    var len = 0
+    do {
+      len += 1
+      value(value.length - len) = Character.toUpperCase(Character
+        .forDigit((numBuf & 0xF).toInt, 16)).toByte
+      numBuf >>>= 4
+    } while (numBuf != 0)
+    UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
+  }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,82 +348,6 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
-  }
-}
-
-/**
- * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
- * Otherwise if the number is a STRING,
- * it converts each character into its hexadecimal representation and returns the resulting STRING.
- * Negative numbers would be treated as two's complement.
- */
-case class Hex(child: Expression)
-  extends UnaryExpression with Serializable  {
-
-  override def dataType: DataType = StringType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[StringType]
-      || child.dataType.isInstanceOf[IntegerType]
-      || child.dataType.isInstanceOf[LongType]
-      || child.dataType.isInstanceOf[BinaryType]
-      || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"hex doesn't accepts ${child.dataType} type")
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val num = child.eval(input)
-    if (num == null) {
-      null
-    } else {
-      child.dataType match {
-        case LongType => hex(num.asInstanceOf[Long])
-        case IntegerType => hex(num.asInstanceOf[Integer].toLong)
-        case BinaryType => hex(num.asInstanceOf[Array[Byte]])
-        case StringType => hex(num.asInstanceOf[UTF8String])
-      }
-    }
-  }
-
-  /**
-   * Converts every character in s to two hex digits.
-   */
-  private def hex(str: UTF8String): UTF8String = {
-    hex(str.getBytes)
-  }
-
-  private def hex(bytes: Array[Byte]): UTF8String = {
-    doHex(bytes, bytes.length)
-  }
-
-  private def doHex(bytes: Array[Byte], length: Int): UTF8String = {
-    val value = new Array[Byte](length * 2)
-    var i = 0
-    while(i < length) {
-      value(i * 2) = Character.toUpperCase(Character.forDigit(
-        (bytes(i) & 0xF0) >>> 4, 16)).toByte
-      value(i * 2 + 1) = Character.toUpperCase(Character.forDigit(
-        bytes(i) & 0x0F, 16)).toByte
-      i += 1
-    }
-    UTF8String.fromBytes(value)
-  }
-
-  private def hex(num: Long): UTF8String = {
-    // Extract the hex digits of num into value[] from right to left
-    val value = new Array[Byte](16)
-    var numBuf = num
-    var len = 0
-    do {
-      len += 1
-      value(value.length - len) = Character.toUpperCase(Character
-        .forDigit((numBuf & 0xF).toInt, 16)).toByte
-      numBuf >>>= 4
-    } while (numBuf != 0)
-    UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
   }
 }
 

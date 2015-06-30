@@ -82,24 +82,24 @@ class CodeGenContext {
   /**
    * Returns the code to access a column in Row for a given DataType.
    */
-  def getColumn(dataType: DataType, ordinal: Int): String = {
+  def getColumn(row: String, dataType: DataType, ordinal: Int): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"i.get${primitiveTypeName(jt)}($ordinal)"
+      s"$row.get${primitiveTypeName(jt)}($ordinal)"
     } else {
-      s"($jt)i.apply($ordinal)"
+      s"($jt)$row.apply($ordinal)"
     }
   }
 
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
-  def setColumn(dataType: DataType, ordinal: Int, value: String): String = {
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     if (isPrimitiveType(jt)) {
-      s"set${primitiveTypeName(jt)}($ordinal, $value)"
+      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
     } else {
-      s"update($ordinal, $value)"
+      s"$row.update($ordinal, $value)"
     }
   }
 
@@ -127,6 +127,9 @@ class CodeGenContext {
     case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
     case StringType => stringType
+    case _: StructType => "InternalRow"
+    case _: ArrayType => s"scala.collection.Seq"
+    case _: MapType => s"scala.collection.Map"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
