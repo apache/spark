@@ -169,9 +169,9 @@ class DataFrame private[sql](
   /**
    * Internal API for Python
    * @param _numRows Number of rows to show
-   * @param pretty Whether truncate long strings and align cells right
+   * @param truncate Whether truncate long strings and align cells right
    */
-  private[sql] def showString(_numRows: Int, pretty: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val sb = new StringBuilder
     val takeResult = take(numRows + 1)
@@ -189,7 +189,7 @@ class DataFrame private[sql](
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString
         }
-        if (pretty && str.length > 20) str.substring(0, 17) + "..." else str
+        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
     }
 
@@ -208,7 +208,7 @@ class DataFrame private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      if (pretty) {
+      if (truncate) {
         StringUtils.leftPad(cell, colWidths(i))
       } else {
         StringUtils.rightPad(cell, colWidths(i))
@@ -220,7 +220,7 @@ class DataFrame private[sql](
     // data
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
-        if (pretty) {
+        if (truncate) {
           StringUtils.leftPad(cell.toString, colWidths(i))
         } else {
           StringUtils.rightPad(cell.toString, colWidths(i))
@@ -368,13 +368,13 @@ class DataFrame private[sql](
   /**
    * Displays the top 20 rows of [[DataFrame]] in a tabular form.
    *
-   * @param pretty Whether truncate long strings. If true, strings more than 20 characters will
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
    *
    * @group action
    * @since 1.5.0
    */
-  def show(pretty: Boolean): Unit = show(20, pretty)
+  def show(truncate: Boolean): Unit = show(20, truncate)
 
   /**
    * Displays the [[DataFrame]] in a tabular form. For example:
@@ -387,13 +387,13 @@ class DataFrame private[sql](
    *   1984  04    0.450090        0.483521
    * }}}
    * @param numRows Number of rows to show
-   * @param pretty Whether truncate long strings. If true, strings more than 20 characters will
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
    *
    * @group action
    * @since 1.5.0
    */
-  def show(numRows: Int, pretty: Boolean): Unit = println(showString(numRows, pretty))
+  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.

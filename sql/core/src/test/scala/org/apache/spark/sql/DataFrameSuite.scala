@@ -477,7 +477,7 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
-  test("showString: pretty = [true, false]") {
+  test("showString: truncate = [true, false]") {
     val longString = Array.fill(21)("1").mkString
     val df = ctx.sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
