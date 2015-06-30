@@ -1664,6 +1664,9 @@ class DAG(object):
 
         return dag
 
+    def has_task(self, task_id):
+        return task_id in (t.task_id for t in self.tasks)
+
     def get_task(self, task_id):
         for task in self.tasks:
             if task.task_id == task_id:
