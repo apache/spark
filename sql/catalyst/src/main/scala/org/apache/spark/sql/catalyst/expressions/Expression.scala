@@ -179,9 +179,10 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   override def toString: String = s"($left $symbol $right)"
 
   override def isThreadSafe: Boolean = left.isThreadSafe && right.isThreadSafe
+
   /**
-   * Short hand for generating binary evaluation code, which depends on two sub-evaluations of
-   * the same type.  If either of the sub-expressions is null, the result of this computation
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
    * @param f accepts two variable names and returns Java code to compute the output.
@@ -190,15 +191,23 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
       f: (String, String) => String): String = {
-    // TODO: Right now some timestamp tests fail if we enforce this...
-    if (left.dataType != right.dataType) {
-      // log.warn(s"${left.dataType} != ${right.dataType}")
-    }
+    nullSafeCodeGen(ctx, ev, (result, eval1, eval2) => {
+      s"$result = ${f(eval1, eval2)};"
+    })
+  }
 
+  /**
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   */
+  protected def nullSafeCodeGen(
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.primitive, eval2.primitive)
-
+    val resultCode = f(ev.primitive, eval1.primitive, eval2.primitive)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
@@ -206,7 +215,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
       if (!${ev.isNull}) {
         ${eval2.code}
         if (!${eval2.isNull}) {
-          ${ev.primitive} = $resultCode;
+          $resultCode
         } else {
           ${ev.isNull} = true;
         }
@@ -245,13 +254,26 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode,
       f: String => String): String = {
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"$result = ${f(eval)};"
+    })
+  }
+
+  /**
+   * Called by unary expressions to generate a code block that returns null if its parent returns
+   * null, and if not not null, use `f` to generate the expression.
+   */
+  protected def nullSafeCodeGen(
+      ctx: CodeGenContext,
+      ev: GeneratedExpressionCode,
+      f: (String, String) => String): String = {
     val eval = child.gen(ctx)
-    // reuse the previous isNull
-    ev.isNull = eval.isNull
+    val resultCode = f(ev.primitive, eval.primitive)
     eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.primitive} = ${f(eval.primitive)};
+        $resultCode
       }
     """
   }

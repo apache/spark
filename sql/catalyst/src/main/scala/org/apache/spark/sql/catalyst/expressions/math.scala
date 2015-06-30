@@ -78,17 +78,14 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   def funcName: String = name.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.primitive} = java.lang.Math.${funcName}(${eval.primitive});
+    nullSafeCodeGen(ctx, ev, (result, eval) => {
+      s"""
+        ${ev.primitive} = java.lang.Math.${funcName}($eval);
         if (Double.valueOf(${ev.primitive}).isNaN()) {
           ${ev.isNull} = true;
         }
-      }
-    """
+      """
+    })
   }
 }
 

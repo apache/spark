@@ -69,10 +69,7 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-
 case class Not(child: Expression) extends UnaryExpression with Predicate with AutoCastInputTypes {
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)

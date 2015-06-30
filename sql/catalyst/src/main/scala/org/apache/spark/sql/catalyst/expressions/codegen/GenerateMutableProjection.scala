@@ -43,7 +43,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           if(${evaluationCode.isNull})
             mutableRow.setNullAt($i);
           else
-            mutableRow.${ctx.setColumn(e.dataType, i, evaluationCode.primitive)};
+            ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
         """
     }.mkString("\n")
     val code = s"""
