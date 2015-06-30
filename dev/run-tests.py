@@ -474,16 +474,16 @@ def main():
     build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
-    # detect_binary_inop_with_mima()
+    detect_binary_inop_with_mima()
 
     # run the test suites
-    # run_scala_tests(build_tool, hadoop_version, test_modules)
+    run_scala_tests(build_tool, hadoop_version, test_modules)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
-    # if any(m.should_run_r_tests for m in test_modules):
-        # run_sparkr_tests()
+    if any(m.should_run_r_tests for m in test_modules):
+        run_sparkr_tests()
 
 
 def _test():
