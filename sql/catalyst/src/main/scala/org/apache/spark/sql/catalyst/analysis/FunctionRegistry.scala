@@ -103,6 +103,7 @@ object FunctionRegistry {
     expression[Asin]("asin"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Bin]("bin"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -112,6 +113,7 @@ object FunctionRegistry {
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Hypot]("hypot"),
+    expression[Hex]("hex"),
     expression[Logarithm]("log"),
     expression[Log]("ln"),
     expression[Log10]("log10"),
@@ -131,6 +133,12 @@ object FunctionRegistry {
     expression[Tanh]("tanh"),
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
+
+    // misc functions
+    expression[Md5]("md5"),
+    expression[Sha2]("sha2"),
+    expression[Sha1]("sha1"),
+    expression[Sha1]("sha"),
 
     // aggregate functions
     expression[Average]("avg"),

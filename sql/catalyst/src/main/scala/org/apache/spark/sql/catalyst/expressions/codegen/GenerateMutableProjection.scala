@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 
 // MutableProjection is not accessible in Java
-abstract class BaseMutableProjection extends MutableProjection {}
+abstract class BaseMutableProjection extends MutableProjection
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
@@ -47,9 +47,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         """
     }.mkString("\n")
     val code = s"""
-      import org.apache.spark.sql.catalyst.InternalRow;
-
-      public SpecificProjection generate($exprType[] expr) {
+      public Object generate($exprType[] expr) {
         return new SpecificProjection(expr);
       }
 
@@ -85,10 +83,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     logDebug(s"code for ${expressions.mkString(",")}:\n$code")
 
     val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
     () => {
-      m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseMutableProjection]
+      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
     }
   }
 }

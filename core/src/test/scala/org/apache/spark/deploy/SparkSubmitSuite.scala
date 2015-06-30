@@ -325,7 +325,7 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  ignore("includes jars passed in through --jars") {
+  test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -340,7 +340,7 @@ class SparkSubmitSuite
   }
 
   // SPARK-7287
-  ignore("includes jars passed in through --packages") {
+  test("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
@@ -499,9 +499,16 @@ class SparkSubmitSuite
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-    failAfter(60 seconds) { process.waitFor() }
-    // Ensure we still kill the process in case it timed out
-    process.destroy()
+
+    try {
+      val exitCode = failAfter(60 seconds) { process.waitFor() }
+      if (exitCode != 0) {
+        fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
+      }
+    } finally {
+      // Ensure we still kill the process in case it timed out
+      process.destroy()
+    }
   }
 
   private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
@@ -541,6 +548,7 @@ object JarCreationTest extends Logging {
     if (result.nonEmpty) {
       throw new Exception("Could not load user class from jar:\n" + result(0))
     }
+    sc.stop()
   }
 }
 
@@ -566,6 +574,7 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
+    sc.stop()
   }
 }
 

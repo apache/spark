@@ -146,7 +146,8 @@ private[sql] case class InMemoryRelation(
             rowCount += 1
           }
 
-          val stats = InternalRow.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
+          val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
+                        .flatMap(_.toSeq))
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)

@@ -42,7 +42,7 @@ import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.catalyst.ParserDialect
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand}
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
@@ -158,7 +158,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     new ClientWrapper(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      config = newTemporaryConfiguration())
+      config = newTemporaryConfiguration(),
+      initClassLoader = Utils.getContextOrSparkClassLoader)
   }
   SessionState.setCurrentSessionState(executionHive.state)
 
@@ -380,7 +381,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        ExtractPythonUdfs ::
+        ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
         sources.PreInsertCastAndRename ::
         Nil
@@ -441,7 +442,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrdered,
+      TakeOrderedAndProject,
       ParquetOperations,
       InMemoryScans,
       ParquetConversion, // Must be before HiveTableScans

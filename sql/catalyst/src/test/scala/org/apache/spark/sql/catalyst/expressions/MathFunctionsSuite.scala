@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -41,16 +41,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * Used for testing unary math expressions.
    *
    * @param c expression
-   * @param f The functions in scala.math
+   * @param f The functions in scala.math or elsewhere used to generate expected results
    * @param domain The set of values to run the function with
    * @param expectNull Whether the given values should return null or not
    * @tparam T Generic type for primitives
+   * @tparam U Generic type for the output of the given function `f`
    */
-  private def testUnary[T](
+  private def testUnary[T, U](
       c: Expression => Expression,
-      f: T => T,
+      f: T => U,
       domain: Iterable[T] = (-20 to 20).map(_ * 0.1),
-      expectNull: Boolean = false): Unit = {
+      expectNull: Boolean = false,
+      evalType: DataType = DoubleType): Unit = {
     if (expectNull) {
       domain.foreach { value =>
         checkEvaluation(c(Literal(value)), null, EmptyRow)
@@ -60,7 +62,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(c(Literal(value)), f(value), EmptyRow)
       }
     }
-    checkEvaluation(c(Literal.create(null, DoubleType)), null, create_row(null))
+    checkEvaluation(c(Literal.create(null, evalType)), null, create_row(null))
   }
 
   /**
@@ -168,7 +170,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("signum") {
-    testUnary[Double](Signum, math.signum)
+    testUnary[Double, Double](Signum, math.signum)
   }
 
   test("log") {
@@ -184,6 +186,23 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("log1p") {
     testUnary(Log1p, math.log1p, (-1 to 20).map(_ * 0.1))
     testUnary(Log1p, math.log1p, (-10 to -2).map(_ * 1.0), expectNull = true)
+  }
+
+  test("bin") {
+    testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
+
+    val row = create_row(null, 12L, 123L, 1234L, -123L)
+    val l1 = 'a.long.at(0)
+    val l2 = 'a.long.at(1)
+    val l3 = 'a.long.at(2)
+    val l4 = 'a.long.at(3)
+    val l5 = 'a.long.at(4)
+
+    checkEvaluation(Bin(l1), null, row)
+    checkEvaluation(Bin(l2), java.lang.Long.toBinaryString(12), row)
+    checkEvaluation(Bin(l3), java.lang.Long.toBinaryString(123), row)
+    checkEvaluation(Bin(l4), java.lang.Long.toBinaryString(1234), row)
+    checkEvaluation(Bin(l5), java.lang.Long.toBinaryString(-123), row)
   }
 
   test("log2") {
@@ -204,6 +223,19 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+  }
+
+  test("hex") {
+    checkEvaluation(Hex(Literal(28)), "1C")
+    checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
+    checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
+    checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
+    checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
+    checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
+    // scalastyle:off
+    // Turn off scala style for non-ascii chars
+    checkEvaluation(Hex(Literal("三重的")), "E4B889E9878DE79A84")
+    // scalastyle:on
   }
 
   test("hypot") {

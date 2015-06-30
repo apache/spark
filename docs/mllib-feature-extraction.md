@@ -576,8 +576,9 @@ parsedData = data.map(lambda x: [float(t) for t in x.split(" ")])
 transformingVector = Vectors.dense([0.0, 1.0, 2.0])
 transformer = ElementwiseProduct(transformingVector)
 
-# Batch transform.
+# Batch transform
 transformedData = transformer.transform(parsedData)
+# Single-row transform
 transformedData2 = transformer.transform(parsedData.first())
 
 {% endhighlight %}

@@ -86,7 +86,8 @@ class SQLContext(object):
         >>> df.registerTempTable("allTypes")
         >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
-        [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
+        [Row(_c0=2, _c1=2.0, _c2=False, _c3=2, _c4=0, \
+            time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
@@ -176,17 +177,17 @@ class SQLContext(object):
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(c0=u'4')]
+        [Row(_c0=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(c0=4)]
+        [Row(_c0=4)]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(c0=4)]
+        [Row(_c0=4)]
         """
         func = lambda _, it: map(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
@@ -202,7 +203,37 @@ class SQLContext(object):
                                             self._sc._javaAccumulator,
                                             returnType.json())
 
+    def _inferSchemaFromList(self, data):
+        """
+        Infer schema from list of Row or tuple.
+
+        :param data: list of Row or tuple
+        :return: StructType
+        """
+        if not data:
+            raise ValueError("can not infer schema from empty dataset")
+        first = data[0]
+        if type(first) is dict:
+            warnings.warn("inferring schema from dict is deprecated,"
+                          "please use pyspark.sql.Row instead")
+        schema = _infer_schema(first)
+        if _has_nulltype(schema):
+            for r in data:
+                schema = _merge_type(schema, _infer_schema(r))
+                if not _has_nulltype(schema):
+                    break
+            else:
+                raise ValueError("Some of types cannot be determined after inferring")
+        return schema
+
     def _inferSchema(self, rdd, samplingRatio=None):
+        """
+        Infer schema from an RDD of Row or tuple.
+
+        :param rdd: an RDD of Row or tuple
+        :param samplingRatio: sampling ratio, or no sampling (default)
+        :return: StructType
+        """
         first = rdd.first()
         if not first:
             raise ValueError("The first row in RDD is empty, "
@@ -321,6 +352,8 @@ class SQLContext(object):
             data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):
+            if not isinstance(data, list):
+                data = list(data)
             try:
                 # data could be list, tuple, generator ...
                 rdd = self._sc.parallelize(data)
@@ -329,28 +362,26 @@ class SQLContext(object):
         else:
             rdd = data
 
-        if schema is None:
-            schema = self._inferSchema(rdd, samplingRatio)
+        if schema is None or isinstance(schema, (list, tuple)):
+            if isinstance(data, RDD):
+                struct = self._inferSchema(rdd, samplingRatio)
+            else:
+                struct = self._inferSchemaFromList(data)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+            schema = struct
             converter = _create_converter(schema)
             rdd = rdd.map(converter)
 
-        if isinstance(schema, (list, tuple)):
-            first = rdd.first()
-            if not isinstance(first, (list, tuple)):
-                raise TypeError("each row in `rdd` should be list or tuple, "
-                                "but got %r" % type(first))
-            row_cls = Row(*schema)
-            schema = self._inferSchema(rdd.map(lambda r: row_cls(*r)), samplingRatio)
-
-        # take the first few rows to verify schema
-        rows = rdd.take(10)
-        # Row() cannot been deserialized by Pyrolite
-        if rows and isinstance(rows[0], tuple) and rows[0].__class__.__name__ == 'Row':
-            rdd = rdd.map(tuple)
+        elif isinstance(schema, StructType):
+            # take the first few rows to verify schema
             rows = rdd.take(10)
+            for row in rows:
+                _verify_type(row, schema)
 
-        for row in rows:
-            _verify_type(row, schema)
+        else:
+            raise TypeError("schema should be StructType or list or None")
 
         # convert python objects to sql data
         converter = _python_to_sql_converter(schema)

@@ -34,7 +34,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.DateUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +55,7 @@ private[spark] case class PythonUDF(
 
   override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
@@ -69,12 +69,12 @@ private[spark] case class PythonUDF(
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
+private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
-    case plan: LogicalPlan =>
+    case plan: LogicalPlan if plan.resolved =>
       // Extract any PythonUDFs from the current operator.
       val udfs = plan.expressions.flatMap(_.collect { case udf: PythonUDF => udf })
       if (udfs.isEmpty) {
@@ -148,8 +148,8 @@ object EvaluatePython {
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
-    case (date: Int, DateType) => DateUtils.toJavaDate(date)
-    case (t: Long, TimestampType) => DateUtils.toJavaTimestamp(t)
+    case (date: Int, DateType) => DateTimeUtils.toJavaDate(date)
+    case (t: Long, TimestampType) => DateTimeUtils.toJavaTimestamp(t)
     case (s: UTF8String, StringType) => s.toString
 
     // Pyrolite can handle Timestamp and Decimal
@@ -183,17 +183,17 @@ object EvaluatePython {
     }.toMap
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
-      }): Row
+      })
 
     case (c: java.util.Calendar, DateType) =>
-      DateUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
+      DateTimeUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
 
     case (c: java.util.Calendar, TimestampType) =>
       c.getTimeInMillis * 10000L
     case (t: java.sql.Timestamp, TimestampType) =>
-      DateUtils.fromJavaTimestamp(t)
+      DateTimeUtils.fromJavaTimestamp(t)
 
     case (_, udt: UserDefinedType[_]) =>
       fromJava(obj, udt.sqlType)
