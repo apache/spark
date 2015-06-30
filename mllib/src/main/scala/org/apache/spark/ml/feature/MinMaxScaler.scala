@@ -114,6 +114,8 @@ class MinMaxScaler(override val uid: String)
 /**
  * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
+ *
+ * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Experimental
 class MinMaxScalerModel private[ml] (
