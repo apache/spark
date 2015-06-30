@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -24,19 +25,32 @@ import org.apache.spark.unsafe.types.UTF8String
  * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
  * Setting a value through a primitive function implicitly marks that column as not null.
  */
-trait MutableRow extends InternalRow {
+abstract class MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit
 
-  def update(ordinal: Int, value: Any)
+  def update(i: Int, value: Any)
 
-  def setInt(ordinal: Int, value: Int)
-  def setLong(ordinal: Int, value: Long)
-  def setDouble(ordinal: Int, value: Double)
-  def setBoolean(ordinal: Int, value: Boolean)
-  def setShort(ordinal: Int, value: Short)
-  def setByte(ordinal: Int, value: Byte)
-  def setFloat(ordinal: Int, value: Float)
-  def setString(ordinal: Int, value: String)
+  // default implementation (slow)
+  def setInt(i: Int, value: Int): Unit = { update(i, value) }
+  def setLong(i: Int, value: Long): Unit = { update(i, value) }
+  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
+  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
+  def setShort(i: Int, value: Short): Unit = { update(i, value) }
+  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
+  def setFloat(i: Int, value: Float): Unit = { update(i, value) }
+  def setString(i: Int, value: String): Unit = {
+    update(i, UTF8String.fromString(value))
+  }
+
+  override def copy(): InternalRow = {
+    val arr = new Array[Any](length)
+    var i = 0
+    while (i < length) {
+      arr(i) = get(i)
+      i += 1
+    }
+    new GenericInternalRow(arr)
+  }
 }
 
 /**
@@ -60,68 +74,57 @@ object EmptyRow extends InternalRow {
 }
 
 /**
+ * A row implementation that uses an array of objects as the underlying storage.
+ */
+trait ArrayBackedRow {
+  self: Row =>
+
+  protected val values: Array[Any]
+
+  override def toSeq: Seq[Any] = values.toSeq
+
+  def length: Int = values.length
+
+  override def apply(i: Int): Any = values(i)
+
+  def setNullAt(i: Int): Unit = { values(i) = null}
+
+  def update(i: Int, value: Any): Unit = { values(i) = value }
+}
+
+/**
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[sql] val values: Array[Any]) extends InternalRow {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row with ArrayBackedRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def toSeq: Seq[Any] = values.toSeq
-
-  override def length: Int = values.length
-
-  override def apply(i: Int): Any = values(i)
-
-  override def isNullAt(i: Int): Boolean = values(i) == null
-
-  override def getInt(i: Int): Int = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
-    values(i).asInstanceOf[Int]
+  // This is used by test or outside
+  override def equals(o: Any): Boolean = o match {
+    case other: Row if other.length == length =>
+      var i = 0
+      while (i < length) {
+        if (isNullAt(i) != other.isNullAt(i)) {
+          return false
+        }
+        val equal = (apply(i), other.apply(i)) match {
+          case (a: Array[Byte], b: Array[Byte]) => java.util.Arrays.equals(a, b)
+          case (a, b) => a == b
+        }
+        if (!equal) {
+          return false
+        }
+        i += 1
+      }
+      true
+    case _ => false
   }
 
-  override def getLong(i: Int): Long = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive long value.")
-    values(i).asInstanceOf[Long]
-  }
-
-  override def getDouble(i: Int): Double = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive double value.")
-    values(i).asInstanceOf[Double]
-  }
-
-  override def getFloat(i: Int): Float = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive float value.")
-    values(i).asInstanceOf[Float]
-  }
-
-  override def getBoolean(i: Int): Boolean = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive boolean value.")
-    values(i).asInstanceOf[Boolean]
-  }
-
-  override def getShort(i: Int): Short = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive short value.")
-    values(i).asInstanceOf[Short]
-  }
-
-  override def getByte(i: Int): Byte = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
-    values(i).asInstanceOf[Byte]
-  }
-
-  override def getString(i: Int): String = {
-    values(i) match {
-      case null => null
-      case s: String => s
-      case utf8: UTF8String => utf8.toString
-    }
-  }
-
-  override def copy(): InternalRow = this
+  override def copy(): Row = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -133,31 +136,29 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   override def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
-class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {
+/**
+ * A internal row implementation that uses an array of objects as the underlying storage.
+ * Note that, while the array is not copied, and thus could technically be mutated after creation,
+ * this is not allowed.
+ */
+class GenericInternalRow(protected[sql] val values: Array[Any])
+    extends InternalRow with ArrayBackedRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def setBoolean(ordinal: Int, value: Boolean): Unit = { values(ordinal) = value }
-  override def setByte(ordinal: Int, value: Byte): Unit = { values(ordinal) = value }
-  override def setDouble(ordinal: Int, value: Double): Unit = { values(ordinal) = value }
-  override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
-  override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
-  override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int, value: String): Unit = {
-    values(ordinal) = UTF8String.fromString(value)
-  }
-
-  override def setNullAt(i: Int): Unit = { values(i) = null }
-
-  override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
-
-  override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
-
-  override def copy(): InternalRow = new GenericRow(values.clone())
+  override def copy(): InternalRow = this
 }
 
+class GenericMutableRow(val values: Array[Any]) extends MutableRow with ArrayBackedRow {
+  /** No-arg constructor for serialization. */
+  protected def this() = this(null)
+
+  def this(size: Int) = this(new Array[Any](size))
+
+  override def copy(): InternalRow = new GenericInternalRow(values.clone())
+}
 
 class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =

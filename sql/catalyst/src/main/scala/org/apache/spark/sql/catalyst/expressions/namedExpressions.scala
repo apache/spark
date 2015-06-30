@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
@@ -113,7 +112,8 @@ case class Alias(child: Expression, name: String)(
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
-  override lazy val resolved = childrenResolved && !child.isInstanceOf[Generator]
+  override lazy val resolved =
+    childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
