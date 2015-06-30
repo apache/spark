@@ -127,8 +127,6 @@ class CodeGenContext {
     case dt: DecimalType => decimalType
     case BinaryType => "byte[]"
     case StringType => stringType
-    case DateType => JAVA_INT
-    case TimestampType => JAVA_LONG
     case _: StructType => "InternalRow"
     case _: ArrayType => s"scala.collection.Seq"
     case _: MapType => s"scala.collection.Map"
