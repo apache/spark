@@ -37,6 +37,7 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+import org.apache.spark.api.r.RUtils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -351,12 +352,11 @@ object SparkSubmit {
     // In yarn mode for an R app, add the SparkR package archive to archives
     // that can be distributed with the job
     if (args.isR && clusterManager == YARN) {
-      val sparkHome = sys.env.get("SPARK_HOME")
-      if (sparkHome.isEmpty) {
+      val rPackagePath = RUtils.localSparkRPackagePath
+      if (rPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in yarn mode.")
       }
-      val rPackagePath = Seq(sparkHome.get, "R", "lib").mkString(File.separator)
-      val rPackageFile = new File(rPackagePath, SPARKR_PACKAGE_ARCHIVE)
+      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in yarn mode.")
       }

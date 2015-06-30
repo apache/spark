@@ -17,11 +17,21 @@
 
 package org.apache.spark.api.r
 
-import java.io.{File}
+import java.io.File
 
 import org.apache.spark.SparkException
 
 private[spark] object RUtils {
+  /**
+   * Get the SparkR package path in the local spark distribution.
+   */
+  def localSparkRPackagePath: Option[String] = {
+    val sparkHome = sys.env.get("SPARK_HOME")
+    sparkHome.map(
+      Seq(_, "R", "lib").mkString(File.separator)
+    )
+  }
+
   /**
    * Get the SparkR package path in various deployment modes.
    */
@@ -29,16 +39,17 @@ private[spark] object RUtils {
     val yarnMode = sys.env.get("SPARK_YARN_MODE")
     if (!yarnMode.isEmpty && yarnMode.get == "true" &&
         !(driver && System.getProperty("spark.master") == "yarn-client")) {
-      // The SparkR package distributed as an archive resource should be pointed to
+      // For workers in YARN modes and driver in yarn cluster mode,
+      // the SparkR package distributed as an archive resource should be pointed to
       // by a symbol link "sparkr" in the current directory.
       new File("sparkr").getAbsolutePath
     } else {
       // TBD: add support for MESOS
-      val sparkHome = sys.env.get("SPARK_HOME")
-      if (sparkHome.isEmpty) {
+      val rPackagePath = localSparkRPackagePath
+      if (rPackagePath.isEmpty) {
         throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
-      }
-      Seq(sparkHome, "R", "lib").mkString(File.separator)
+      } 
+      rPackagePath.get  
     }
   }
 }

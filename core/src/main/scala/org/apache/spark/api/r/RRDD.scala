@@ -391,7 +391,7 @@ private[r] object RRDD {
   private def createRProcess(port: Int, script: String): BufferedStreamThread = {
     val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
     val rOptions = "--vanilla"
-    val rLibDir = RUtils.sparkRPackagePath(false)
+    val rLibDir = RUtils.sparkRPackagePath(driver = false)
     val rExecScript = rLibDir + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
