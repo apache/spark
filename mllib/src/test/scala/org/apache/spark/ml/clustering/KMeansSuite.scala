@@ -58,6 +58,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kmeans.getEpsilon === 1e-4)
   }
 
+  test("parameters validation") {
+    intercept[IllegalArgumentException] {
+      new KMeans().setK(1)
+    }
+  }
+
   test("fit & transform") {
     val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName)

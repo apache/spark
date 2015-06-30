@@ -40,7 +40,7 @@ private[clustering] trait KMeansParams
    * Set the number of clusters to create (k). Default: 2.
    * @group param
    */
-  val k = new Param[Int](this, "k", "number of clusters to create")
+  val k = new Param[Int](this, "k", "number of clusters to create", (x: Int) => x > 1)
 
   /** @group getParam */
   def getK: Int = $(k)
