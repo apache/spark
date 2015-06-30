@@ -354,6 +354,44 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class UnHex(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with Serializable  {
+
+  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+
+  override def dataType: DataType = BinaryType
+
+  override def eval(input: InternalRow): Any = {
+    val num = child.eval(input)
+    if (num == null) {
+      null
+    } else {
+      unhex(num.asInstanceOf[UTF8String].toString)
+    }
+  }
+  
+  private def unhex(s: String): Array[Byte] = {
+    // append a leading 0 if needed
+    val str = if (s.length % 2 == 1) {"0" + s} else {s}
+    val result = new Array[Byte](str.length / 2)
+    var i = 0
+    while (i < str.length()) {
+      try {
+        result(i / 2) = Integer.parseInt(str.substring(i, i + 2), 16).asInstanceOf[Byte]
+      } catch {
+        // invalid character present, return null
+        case _: NumberFormatException => return null
+      }
+      i += 2
+    }
+    result
+  }
+}
+
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
