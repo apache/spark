@@ -1343,7 +1343,7 @@ class QueryView(wwwutils.DataProfilingMixin, BaseView):
             models.Connection.conn_id).all()
         session.expunge_all()
         db_choices = list(
-            {(db.conn_id, db.conn_id) for db in dbs if db.get_hook()})
+            ((db.conn_id, db.conn_id) for db in dbs if db.get_hook()))
         conn_id_str = request.args.get('conn_id')
         csv = request.args.get('csv') == "true"
         sql = request.args.get('sql')

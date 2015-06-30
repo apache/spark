@@ -85,6 +85,8 @@ def run(args):
         format=settings.LOG_FORMAT)
     if not args.pickle:
         dagbag = DagBag(subdir)
+        print subdir
+        print dagbag.dags
         if args.dag_id not in dagbag.dags:
             msg = 'DAG [{0}] could not be found'.format(args.dag_id)
             logging.error(msg)
