@@ -78,7 +78,7 @@ class DataFrameStatSuite extends SparkFunSuite  {
     val rows = crosstab.collect()
     rows.foreach { row =>
       val i = row.getString(0).toInt
-      for (col <- 1 to 9) {
+      for (col <- 1 until columnNames.length) {
         val j = columnNames(col).toInt
         assert(row.getLong(col) === expected.getOrElse((i, j), 0).toLong)
       }
