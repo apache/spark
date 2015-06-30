@@ -32,7 +32,6 @@ abstract class BaseProject extends Projection {}
  * primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -157,7 +156,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${typeOf[BaseProject]} {
+    class SpecificProjection extends ${classOf[BaseProject].getName} {
       private $exprType[] expressions = null;
 
       public SpecificProjection($exprType[] expr) {
@@ -170,7 +169,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
     }
 
-    final class SpecificRow extends ${typeOf[MutableRow]} {
+    final class SpecificRow extends ${classOf[MutableRow].getName} {
 
       $columns
 
@@ -224,7 +223,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       public InternalRow copy() {
         Object[] arr = new Object[${expressions.length}];
         ${copyColumns}
-        return new ${typeOf[GenericInternalRow]}(arr);
+        return new ${classOf[GenericInternalRow].getName}(arr);
       }
     }
     """
