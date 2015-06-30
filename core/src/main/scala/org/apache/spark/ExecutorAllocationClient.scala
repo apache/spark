@@ -47,4 +47,10 @@ private[spark] trait ExecutorAllocationClient {
    * @return whether the request is acknowledged by the cluster manager.
    */
   def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
+
+  /**
+   * Request that the cluster manager kill the specified executor and expect new one
+   * @return whether the request is acknowledged by the cluster manager.
+   */
+  def expireExecutor(executorId: String): Boolean
 }
