@@ -62,10 +62,11 @@ private[worker] class Worker(
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
-  // A separated thread to clean up the workDir
-  private val cleanupThread = ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread")
-  // Used to provide the implicit parameter of `Future` methods.
-  private val cleanupThreadExecutor = ExecutionContext.fromExecutor(cleanupThread)
+
+  // A separated thread to clean up the workDir. Used to provide the implicit parameter of `Future`
+  // methods.
+  private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
@@ -201,9 +202,9 @@ private[worker] class Worker(
   }
 
   private def tryRegisterAllMasters(): Array[JFuture[_]] = {
-    for (masterAddress <- masterRpcAddresses) yield {
+    masterRpcAddresses.map { masterAddress =>
       registerMasterThreadPool.submit(new Runnable {
-        override def run(): Unit =
+        override def run(): Unit = {
           try {
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint =
@@ -212,8 +213,9 @@ private[worker] class Worker(
               workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
           } catch {
             case ie: InterruptedException => // Cancelled
-            case NonFatal(e) => logError(e.getMessage, e)
+            case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
           }
+        }
       })
     }
   }
@@ -260,7 +262,7 @@ private[worker] class Worker(
             }
             val masterAddress = masterRef.address
             registerMasterFutures = Array(registerMasterThreadPool.submit(new Runnable {
-              override def run(): Unit =
+              override def run(): Unit = {
                 try {
                   logInfo("Connecting to master " + masterAddress + "...")
                   val masterEndpoint =
@@ -269,8 +271,9 @@ private[worker] class Worker(
                     workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
                 } catch {
                   case ie: InterruptedException => // Cancelled
-                  case NonFatal(e) => logError(e.getMessage, e)
+                  case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
                 }
+              }
             }))
           case None =>
             if (registerMasterFutures != null) {
@@ -319,11 +322,13 @@ private[worker] class Worker(
         registered = false
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
-        registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
-          override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(ReregisterWithMaster)
-          }
-        }, INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
+        registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
+          new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              self.send(ReregisterWithMaster)
+            }
+          },
+          INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
           TimeUnit.SECONDS))
       case Some(_) =>
@@ -374,12 +379,12 @@ private[worker] class Worker(
           logInfo(s"Removing directory: ${dir.getPath}")
           Utils.deleteRecursively(dir)
         }
-      } (cleanupThreadExecutor)
+      }(cleanupThreadExecutor)
 
       cleanupFuture.onFailure {
         case e: Throwable =>
           logError("App dir cleanup failed: " + e.getMessage, e)
-      } (cleanupThreadExecutor)
+      }(cleanupThreadExecutor)
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
@@ -580,6 +585,10 @@ private[worker] class Worker(
     }
   }
 
+  /**
+   * Send a message to the current master. If we have not yet registered successfully with any
+   * master, the message will be dropped.
+   */
   private def sendToMaster(message: Any): Unit = {
     master match {
       case Some(masterRef) => masterRef.send(message)
@@ -594,7 +603,7 @@ private[worker] class Worker(
   }
 
   override def onStop() {
-    cleanupThread.shutdownNow()
+    cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
     forwordMessageScheduler.shutdownNow()

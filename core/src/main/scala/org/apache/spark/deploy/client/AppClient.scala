@@ -104,7 +104,7 @@ private[spark] class AppClient(
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
-            case NonFatal(e) => logError(e.getMessage, e)
+            case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
           }
         })
       }
@@ -136,6 +136,10 @@ private[spark] class AppClient(
       }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 
+    /**
+     * Send a message to the current master. If we have not yet registered successfully with any
+     * master, the message will be dropped.
+     */
     private def sendToMaster(message: Any): Unit = {
       master match {
         case Some(masterRef) => masterRef.send(message)
@@ -144,7 +148,7 @@ private[spark] class AppClient(
     }
 
     private def isPossibleMaster(remoteAddress: RpcAddress): Boolean = {
-      masterRpcAddresses.map(_.hostPort).contains(remoteAddress.hostPort)
+      masterRpcAddresses.contains(remoteAddress)
     }
 
     override def receive: PartialFunction[Any, Unit] = {

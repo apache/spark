@@ -51,7 +51,7 @@ private class ClientEndpoint(
     ExecutionContext.fromExecutor(forwardMessageThread,
       t => t match {
         case ie: InterruptedException => // Exit normally
-        case e =>
+        case e: Throwable =>
           logError(e.getMessage, e)
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
@@ -109,8 +109,7 @@ private class ClientEndpoint(
       masterEndpoint.ask[T](message).onComplete {
         case Success(v) => self.send(v)
         case Failure(e) =>
-          println(s"Error sending messages to master $masterEndpoint, exiting.")
-          logError(e.getMessage, e)
+          logWarning(s"Error sending messages to master $masterEndpoint", e)
       }(forwardMessageExecutionContext)
     }
   }
