@@ -50,7 +50,7 @@ def print_red(text):
 
 
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
-LOG_FILE_LOCK = Lock()
+FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 
@@ -63,22 +63,23 @@ def run_individual_python_test(test_name, pyspark_python):
         [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
         stderr=per_test_output, stdout=per_test_output, env=env).wait()
     duration = time.time() - start_time
-    with LOG_FILE_LOCK:
-        with open(LOG_FILE, 'ab') as log_file:
-            per_test_output.seek(0)
-            log_file.writelines(per_test_output.readlines())
-    per_test_output.close()
     # Exit on the first failure.
     if retcode != 0:
-        with open(LOG_FILE, 'r') as log_file:
-            for line in log_file:
+        with FAILURE_REPORTING_LOCK:
+            with open(LOG_FILE, 'ab') as log_file:
+                per_test_output.seek(0)
+                log_file.writelines(per_test_output.readlines())
+            per_test_output.seek(0)
+            for line in per_test_output:
                 if not re.match('[0-9]+', line):
                     print(line, end='')
-        print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
-        # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
-        # this code is invoked from a thread other than the main thread.
-        os._exit(-1)
+            per_test_output.close()
+            print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
+            # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
+            # this code is invoked from a thread other than the main thread.
+            os._exit(-1)
     else:
+        per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
