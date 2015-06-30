@@ -1445,7 +1445,7 @@ def task_instance_link(v, c, m, p):
 
 
 def duration_f(v, c, m, p):
-    if m.end_date:
+    if m.end_date and m.duration:
         return timedelta(seconds=m.duration)
 
 
