@@ -375,9 +375,8 @@ Note that if you use ``depends_on_past=True``, individual task instances
 will depend on the success of the preceding task instance, except for the
 start_date specified itself, for which this dependency is disregarded.
 
-The date range in this context is a ``start-date`` and optionally an ``end-date``,
-which are both passed to the scheduler and used to populate the run schedule 
-with task instances of this dag.
+The date range in this context is a ``start_date`` and optionally an ``end_date``,
+which are used to populate the run schedule with task instances from this dag.
 
 .. code-block:: bash
 
