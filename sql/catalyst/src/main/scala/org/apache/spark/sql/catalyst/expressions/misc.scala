@@ -175,7 +175,7 @@ case class Sha1(child: Expression) extends UnaryExpression with AutoCastInputTyp
  * For input of type [[BinaryType]]
  */
 case class Crc32(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with AutoCastInputTypes {
 
   override def dataType: DataType = LongType
 
