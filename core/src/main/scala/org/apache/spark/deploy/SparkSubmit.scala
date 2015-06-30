@@ -756,6 +756,20 @@ private[spark] object SparkSubmitUtils {
     val cr = new ChainResolver
     cr.setName("list")
 
+    val repositoryList = remoteRepos.getOrElse("")
+    // add any other remote repositories other than maven central
+    if (repositoryList.trim.nonEmpty) {
+      repositoryList.split(",").zipWithIndex.foreach { case (repo, i) =>
+        val brr: IBiblioResolver = new IBiblioResolver
+        brr.setM2compatible(true)
+        brr.setUsepoms(true)
+        brr.setRoot(repo)
+        brr.setName(s"repo-${i + 1}")
+        cr.add(brr)
+        printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
+      }
+    }
+
     val localM2 = new IBiblioResolver
     localM2.setM2compatible(true)
     localM2.setRoot(m2Path.toURI.toString)
@@ -786,20 +800,6 @@ private[spark] object SparkSubmitUtils {
     sp.setRoot("http://dl.bintray.com/spark-packages/maven")
     sp.setName("spark-packages")
     cr.add(sp)
-
-    val repositoryList = remoteRepos.getOrElse("")
-    // add any other remote repositories other than maven central
-    if (repositoryList.trim.nonEmpty) {
-      repositoryList.split(",").zipWithIndex.foreach { case (repo, i) =>
-        val brr: IBiblioResolver = new IBiblioResolver
-        brr.setM2compatible(true)
-        brr.setUsepoms(true)
-        brr.setRoot(repo)
-        brr.setName(s"repo-${i + 1}")
-        cr.add(brr)
-        printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
-      }
-    }
     cr
   }
 
@@ -922,6 +922,15 @@ private[spark] object SparkSubmitUtils {
 
         // A Module descriptor must be specified. Entries are dummy strings
         val md = getModuleDescriptor
+        // clear ivy resolution from previous launches. The resolution file is usually at
+        // ~/.ivy2/org.apache.spark-spark-submit-parent-default.xml. In between runs, this file
+        // leads to confusion with Ivy when the files can no longer be found at the repository
+        // declared in that file/
+        val mdId = md.getModuleRevisionId
+        val previousResolution = new File(ivySettings.getDefaultCache,
+          s"${mdId.getOrganisation}-${mdId.getName}-$ivyConfName.xml")
+        if (previousResolution.exists) previousResolution.delete
+
         md.setDefaultConf(ivyConfName)
 
         // Add exclusion rules for Spark and Scala Library

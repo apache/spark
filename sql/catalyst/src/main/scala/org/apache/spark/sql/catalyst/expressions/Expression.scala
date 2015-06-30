@@ -261,7 +261,7 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
  * Expressions that require a specific `DataType` as input should implement this trait
  * so that the proper type conversions can be performed in the analyzer.
  */
-trait ExpectsInputTypes {
+trait AutoCastInputTypes {
   self: Expression =>
 
   def expectedChildTypes: Seq[DataType]

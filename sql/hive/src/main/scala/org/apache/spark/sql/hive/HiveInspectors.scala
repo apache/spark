@@ -336,9 +336,8 @@ private[hive] trait HiveInspectors {
     // currently, hive doesn't provide the ConstantStructObjectInspector
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
-      new GenericRow(
-        allRefs.map(r =>
-          unwrap(si.getStructFieldData(data, r), r.getFieldObjectInspector)).toArray)
+      InternalRow.fromSeq(
+        allRefs.map(r => unwrap(si.getStructFieldData(data, r), r.getFieldObjectInspector)))
   }
 
 
