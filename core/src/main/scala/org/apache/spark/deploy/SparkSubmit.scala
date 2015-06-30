@@ -778,7 +778,9 @@ private[spark] object SparkSubmitUtils {
         brr.setRoot(repo)
         brr.setName(s"repo-${i + 1}")
         cr.add(brr)
+        // scalastyle:off println
         printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
+        // scalastyle:on println
       }
     }
 

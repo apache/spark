@@ -397,7 +397,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.5.0
    */
+  // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
