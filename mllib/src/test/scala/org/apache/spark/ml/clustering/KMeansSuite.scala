@@ -68,6 +68,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[IllegalArgumentException] {
       new KMeans().setInitializationSteps(0)
     }
+    intercept[IllegalArgumentException] {
+      new KMeans().setRuns(0)
+    }
   }
 
   test("fit & transform") {

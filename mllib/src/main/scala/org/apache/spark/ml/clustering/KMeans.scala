@@ -51,7 +51,8 @@ private[clustering] trait KMeansParams
    * return the best clustering found over any run. Default: 1.
    * @group param
    */
-  val runs = new Param[Int](this, "runs", "number of runs of the algorithm to execute in parallel")
+  val runs = new Param[Int](this, "runs", "number of runs of the algorithm to execute in parallel",
+    (value: Int) => value >= 1)
 
   /** @group getParam */
   def getRuns: Int = $(runs)
