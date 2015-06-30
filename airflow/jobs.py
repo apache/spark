@@ -343,7 +343,7 @@ class SchedulerJob(BaseJob):
                         logging.error("Queued task {} seems gone".format(ti))
                     if task:
                         ti.task = task
-                        executor.queue_task_instance(ti)
+                        executor.queue_task_instance(ti, force=True)
 
     def _execute(self):
         dag_id = self.dag_id
