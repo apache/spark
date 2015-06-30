@@ -18,11 +18,9 @@
 package org.apache.spark.deploy.rest
 
 import java.lang.Boolean
-import java.lang.Integer
-
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.json4s.jackson.JsonMethods._
 
 /**
  * Tests for the REST application submission protocol.
@@ -93,7 +91,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     // optional fields
     conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
     conf.set("spark.files", "fireball.png")
-    conf.set("spark.driver.memory", "512m")
+    conf.set("spark.driver.memory", "1g")
     conf.set("spark.driver.cores", "180")
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
     conf.set("spark.driver.extraClassPath", "food-coloring.jar")
