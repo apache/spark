@@ -19,20 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Date
 import java.text.SimpleDateFormat
-import java.util.{Calendar, TimeZone, Locale}
-
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import java.util.{Calendar, TimeZone}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
+abstract class TimeFormatExpression extends UnaryExpression with ExpectsInputTypes {
   self: Product =>
 
-  private[this] val offset: Int = TimeZone.getDefault.getRawOffset
-
   protected val format: Int
+
+  protected val cntPerInterval: Int
 
   override def expectedChildTypes: Seq[DataType] = Seq(TimestampType)
 
@@ -41,38 +38,323 @@ abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTyp
     if (valueLeft == null) {
       null
     } else {
-      val utcTime: Long = valueLeft.asInstanceOf[Long] / 10000
-      val c = Calendar.getInstance()
-      c.setTimeInMillis(utcTime)
-      c.get(format)
+      val time = valueLeft.asInstanceOf[Long] / 10000
+      val utcTime: Long = time + TimeZone.getDefault.getOffset(time)
+      ((utcTime / format) % cntPerInterval).toInt
     }
   }
 
-  override protected def defineCodeGen(
+  override def genCode(
       ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
-      f: String => String): String = {
+      ev: GeneratedExpressionCode): String = {
 
-    val cal = classOf[Calendar].getName
-    val cVar = ctx.freshName("cal")
+    val tz = classOf[TimeZone].getName
+
+    defineCodeGen(ctx, ev, (c) =>
+      s"""(${ctx.javaType(dataType)})
+            ((($c / 10000) + $tz.getDefault().getOffset($c / 10000)) / $format % $cntPerInterval)"""
+    )
+  }
+}
+
+case class Hour(child: Expression) extends TimeFormatExpression {
+
+  override protected val format: Int = 1000 * 3600
+
+  override protected val cntPerInterval: Int = 24
+
+  override def dataType: DataType = IntegerType
+
+  override def toString: String = s"Hour($child)"
+}
+
+case class Minute(child: Expression) extends TimeFormatExpression {
+
+  override protected val format: Int = 1000 * 60
+
+  override protected val cntPerInterval: Int = 60
+
+  override def dataType: DataType = IntegerType
+
+  override def toString: String = s"Minute($child)"
+}
+
+case class Second(child: Expression) extends TimeFormatExpression {
+
+  override protected val format: Int = 1000
+
+  override protected val cntPerInterval: Int = 60
+
+  override def dataType: DataType = IntegerType
+
+  override def toString: String = s"Second($child)"
+}
+
+abstract class DateFormatExpression extends UnaryExpression with ExpectsInputTypes {
+  self: Product =>
+
+  override def dataType: DataType = IntegerType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(TimestampType)
+
+  protected def defineCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String) => String): String = {
+
+    val tz = classOf[TimeZone].getName
+
+    val utcTime = ctx.freshName("utcTime")
+    val dayInYear = ctx.freshName("dayInYear")
+    val days = ctx.freshName("days")
+    val year = ctx.freshName("year")
 
     val eval = child.gen(ctx)
-    // reuse the previous isNull
     ev.isNull = eval.isNull
     eval.code + s"""
       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        $cal $cVar = $cal.getInstance();
-        $cVar.setTimeInMillis(${eval.primitive} / 10000);
-        ${ev.primitive} = ${f(s"""$cVar.get($format)""")};
+        long $utcTime = ${eval.primitive} / 10000;
+        long $days = $utcTime / 1000 / 3600 / 24;
+        int $year = (int) ($days / 365.24);
+        int $dayInYear = (int) ($days - $year * 365.24);
+        ${f(dayInYear, utcTime)}
       }
     """
   }
 
+  def eval(input: InternalRow, f: (Int, Long) => Int): Any = {
+    val valueLeft = child.eval(input)
+    if (valueLeft == null) {
+      null
+    } else {
+      val utcTime: Long = valueLeft.asInstanceOf[Long] / 10000
+      val days = utcTime / 1000 / 3600 / 24
+      val year = days / 365.24
+      val dayInYear = days - year.toInt * 365.24
+      f(dayInYear.toInt, utcTime)
+    }
+  }
+
+  override def toString: String = s"Year($child)"
 }
 
+
+case class Year(child: Expression) extends DateFormatExpression {
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+
+    val cal = classOf[Calendar].getName
+    defineCodeGen(ctx, ev, (day, utc) =>
+      s"""
+         if ($day > 1 && $day < 360) {
+           ${ev.primitive} = (int) (1970 + ($utc / 1000 / 3600 / 24 / 365.24));
+         } else {
+           $cal c = $cal.getInstance();
+           c.setTimeInMillis($utc);
+           ${ev.primitive} = c.get($cal.YEAR);
+         }
+       """)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    eval(input, (dayInYear, utcTime) =>
+      if (dayInYear > 1 && dayInYear < 360) {
+        1970 + (utcTime / 1000 / 3600 / 24 / 365.24).toInt
+      } else {
+        val c = Calendar.getInstance()
+        c.setTimeInMillis(utcTime)
+        c.get(Calendar.YEAR)
+      }
+    )
+  }
+
+  override def toString: String = s"Year($child)"
+}
+
+case class Quarter(child: Expression) extends DateFormatExpression {
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+
+    val cal = classOf[Calendar].getName
+    defineCodeGen(ctx, ev, (day, utc) =>
+      s"""
+         if ($day > 1 && $day < 90) {
+           ${ev.primitive} = 1;
+         } else if ($day > 92 && $day < 181) {
+           ${ev.primitive} = 2;
+         } else if ($day > 183 && $day < 273) {
+           ${ev.primitive} = 3;
+         } else if ($day > 275 && $day < 364) {
+           ${ev.primitive} = 4;
+         } else {
+           $cal c = $cal.getInstance();
+           c.setTimeInMillis($utc);
+           ${ev.primitive} = c.get($cal.MONTH) / 3 + 1;
+         }
+       """)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    eval(input, (dayInYear, utcTime) =>
+      dayInYear match {
+        case i: Int if i > 1 && i < 89 => 1
+        case i: Int if i > 93 && i < 180 => 2
+        case i: Int if i > 184 && i < 272 => 3
+        case i: Int if i > 276 && i < 362 => 4
+        case _ =>
+          val c = Calendar.getInstance()
+          c.setTimeInMillis(utcTime)
+          c.get(Calendar.MONTH) / 3 + 1
+      }
+    )
+  }
+
+  override def toString: String = s"Quarter($child)"
+}
+
+case class Month(child: Expression) extends DateFormatExpression {
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+
+    val cal = classOf[Calendar].getName
+    defineCodeGen(ctx, ev, (day, utc) =>
+      s"""
+         if ($day > 1 && $day < 30) {
+           ${ev.primitive} = 1;
+         } else if($day > 33 && $day < 58) {
+            ${ev.primitive} = 2;
+         } else if($day > 62 && $day < 89) {
+            ${ev.primitive} = 3;
+         } else if($day > 93 && $day < 119) {
+            ${ev.primitive} = 4;
+         } else if($day > 123 && $day < 150) {
+            ${ev.primitive} = 5;
+         } else if($day > 154 && $day < 180) {
+            ${ev.primitive} = 6;
+         } else if($day > 184 && $day < 211) {
+            ${ev.primitive} = 7;
+         } else if($day > 215 && $day < 242) {
+            ${ev.primitive} = 8;
+         } else if($day > 246 && $day < 272) {
+            ${ev.primitive} = 9;
+         } else if($day > 276 && $day < 303) {
+            ${ev.primitive} = 10;
+         } else if($day > 307 && $day < 333) {
+            ${ev.primitive} = 11;
+         } else if($day > 337 && $day < 362) {
+            ${ev.primitive} = 12;
+         } else {
+           $cal c = $cal.getInstance();
+           c.setTimeInMillis($utc);
+           ${ev.primitive} = c.get($cal.MONTH) + 1;
+         }
+       """)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    eval(input, (dayInYear, utcTime) =>
+      dayInYear match {
+        case i: Int if i > 1 && i < 30 => 1
+        case i: Int if i > 33 && i < 58 => 2
+        case i: Int if i > 62 && i < 89 => 3
+        case i: Int if i > 93 && i < 119 => 4
+        case i: Int if i > 123 && i < 150 => 5
+        case i: Int if i > 154 && i < 180 => 6
+        case i: Int if i > 184 && i < 211 => 7
+        case i: Int if i > 215 && i < 242 => 8
+        case i: Int if i > 246 && i < 272 => 9
+        case i: Int if i > 276 && i < 303 => 10
+        case i: Int if i > 307 && i < 333 => 11
+        case i: Int if i > 337 && i < 362 => 12
+        case _ =>
+          val c = Calendar.getInstance()
+          c.setTimeInMillis(utcTime)
+          c.get(Calendar.MONTH) + 1
+      }
+    )
+  }
+
+  override def toString: String = s"Month($child)"
+}
+
+case class Day(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = IntegerType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(TimestampType)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+
+    val cal = classOf[Calendar].getName
+    val c = ctx.freshName("cal")
+
+    ev.isNull = eval.isNull
+    eval.code + s"""
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        $cal $c = $cal.getInstance();
+        $c.setTimeInMillis(${eval.primitive} / 10000);
+        ${ev.primitive} = $c.get($cal.DAY_OF_MONTH);
+      }
+    """
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val c = Calendar.getInstance()
+      c.setTimeInMillis(child.eval(input).asInstanceOf[Long] / 10000)
+      c.get(Calendar.DAY_OF_MONTH)
+    }
+  }
+
+  override def toString: String = s"Day($child)"
+}
+
+case class WeekOfYear(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = IntegerType
+
+  override def expectedChildTypes: Seq[DataType] = Seq(TimestampType)
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+
+    val cal = classOf[Calendar].getName
+    val c = ctx.freshName("cal")
+
+    ev.isNull = eval.isNull
+    eval.code + s"""
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        $cal $c = $cal.getInstance();
+        $c.setTimeInMillis(${eval.primitive} / 10000);
+        ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
+      }
+    """
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val c = Calendar.getInstance()
+      c.setTimeInMillis(child.eval(input).asInstanceOf[Long] / 10000)
+      c.get(Calendar.WEEK_OF_YEAR)
+    }
+  }
+
+  override def toString: String = s"WeekOfYear($child)"
+}
+
+
 case class DateFormatClass(left: Expression, right: Expression) extends BinaryExpression
-    with ExpectsInputTypes {
+  with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -102,126 +384,4 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
           .format(new java.sql.Date($x / 10000)))"""
     })
   }
-}
-
-case class Year(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.YEAR
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    super.eval(input)
-  }
-
-  override def toString: String = s"Year($child)"
-}
-
-case class Quarter(child: Expression) extends DateFormatExpression {
-
-  override protected val format: Int = Calendar.MONTH
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c / 3 + 1")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    super.eval(input) match {
-      case null => null
-      case i: Int => i / 3 + 1
-    }
-  }
-
-  override def toString: String = s"Quarter($child)"
-}
-
-case class Month(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.MONTH
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c + 1)")
-  }
-
-  override def eval(input: InternalRow): Any = {
-    super.eval(input) match {
-      case null => null
-      case i: Int => i + 1
-    }
-  }
-
-  override def toString: String = s"Month($child)"
-}
-
-case class Day(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.DAY_OF_MONTH
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def toString: String = s"Day($child)"
-}
-
-case class Hour(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.HOUR_OF_DAY
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def toString: String = s"Hour($child)"
-}
-
-case class Minute(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.MINUTE
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def toString: String = s"Minute($child)"
-}
-
-case class Second(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.SECOND
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def toString: String = s"Second($child)"
-}
-
-case class WeekOfYear(child: Expression) extends DateFormatExpression with ExpectsInputTypes {
-
-  override protected val format: Int = Calendar.WEEK_OF_YEAR
-
-  override def dataType: DataType = IntegerType
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"$c")
-  }
-
-  override def toString: String = s"WeekOfYear($child)"
 }
