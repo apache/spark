@@ -200,4 +200,26 @@ class HiveTypeCoercionSuite extends PlanTest {
       Literal(true)
     )
   }
+
+  /**
+   * There are rules that need to not fire before child expressions get resolved.
+   * We use this test to make sure those rules do not fire early.
+   */
+  // TODO: Add other rules.
+  test("make sure rules do not fire early") {
+    // InConversion
+    val inConversion = new HiveTypeCoercion {}.InConversion
+    ruleTest(inConversion,
+      In(UnresolvedAttribute("a"), Seq(Literal(1))),
+      In(UnresolvedAttribute("a"), Seq(Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
+      In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
+    )
+    ruleTest(inConversion,
+      In(Literal("a"), Seq(Literal(1), Literal("b"))),
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+    )
+  }
 }
