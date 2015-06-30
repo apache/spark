@@ -64,6 +64,11 @@ case class GeneratedAggregate(
       }
     }
 
+  // even with empty input iterator, if this group-by operator is for
+  // global(groupingExpression.isEmpty) and final(partial=false),
+  // we still need to make a row from empty buffer.
+  def needEmptyBufferForwarded: Boolean = groupingExpressions.isEmpty && !partial
+
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -270,8 +275,7 @@ case class GeneratedAggregate(
 
       val joinedRow = new JoinedRow3
 
-      if (!iter.hasNext && (partial || groupingExpressions.nonEmpty)) {
-        // even with empty input, final-global groupby should forward value of empty buffer
+      if (!iter.hasNext && !needEmptyBufferForwarded) {
         Iterator[InternalRow]()
       } else if (groupingExpressions.isEmpty) {
         // TODO: Codegening anything other than the updateProjection is probably over kill.
