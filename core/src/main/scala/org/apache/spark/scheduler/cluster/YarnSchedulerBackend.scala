@@ -53,7 +53,10 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      return yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
+    }
+    false
   }
 
   /**
