@@ -336,7 +336,8 @@ class SparkHadoopUtil extends Logging {
   private[spark] def stopExecutorDelegationTokenRenewer() {}
 
   /**
-   * Disable the hadoop fs cache mechanism, otherwise DFSClient will use old token to connect nn.
+   * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
+   * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
    */
   private[spark]
   def getConfBypassingFSCache(hadoopConf: Configuration, path: Path): Configuration = {
