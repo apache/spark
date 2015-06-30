@@ -704,7 +704,7 @@ class DataFrameSuite extends QueryTest {
     assert(res11.count == 0)
   }
 
-  test("SPARK-8207: Better Exception for Duplicate Columns") {
+  test("SPARK-8072: Better Exception for Duplicate Columns") {
 
     // only one duplicate column present
     val e = intercept[org.apache.spark.sql.AnalysisException] {
