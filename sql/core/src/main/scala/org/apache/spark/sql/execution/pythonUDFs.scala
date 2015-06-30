@@ -139,7 +139,7 @@ object EvaluatePython {
       case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
     }.asJava
 
-    case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
+    case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
 
     case (date: Int, DateType) => DateTimeUtils.toJavaDate(date)
     case (t: Long, TimestampType) => DateTimeUtils.toJavaTimestamp(t)
