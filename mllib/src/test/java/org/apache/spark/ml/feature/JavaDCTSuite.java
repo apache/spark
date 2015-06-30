@@ -37,13 +37,13 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaDiscreteCosineTransformerSuite {
+public class JavaDCTSuite {
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaDiscreteCosineTransformerSuite");
+    jsc = new JavaSparkContext("local", "JavaDCTSuite");
     jsql = new SQLContext(jsc);
   }
 
@@ -66,7 +66,7 @@ public class JavaDiscreteCosineTransformerSuite {
     double[] expectedResult = input.clone();
     (new DoubleDCT_1D(input.length)).forward(expectedResult, true);
 
-    DiscreteCosineTransformer DCT = new DiscreteCosineTransformer()
+    DCT DCT = new DCT()
       .setInputCol("vec")
       .setOutputCol("resultVec");
 

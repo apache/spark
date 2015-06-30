@@ -36,8 +36,8 @@ import org.apache.spark.sql.types.DataType
  * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
  */
 @Experimental
-class DiscreteCosineTransformer(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, DiscreteCosineTransformer] {
+class DCT(override val uid: String)
+  extends UnaryTransformer[Vector, Vector, DCT] {
 
   def this() = this(Identifiable.randomUID("dct"))
 
