@@ -26,7 +26,7 @@ def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
             return f(*a, **kw)
-        except py4j.protocol.Py4JJavaError, e:
+        except py4j.protocol.Py4JJavaError as e:
             cls, msg = e.java_exception.toString().split(': ', 1)
             if cls == 'org.apache.spark.sql.AnalysisException':
                 raise AnalysisException(msg)
