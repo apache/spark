@@ -285,13 +285,13 @@ private[spark] abstract class ExternalSorter[K, V, C](
    * This interface abstracts away aggregator dependence
    */
   protected def merge(spills: Seq[SpilledFile], inMemory: Iterator[((Int, K), C)])
-  : Iterator[(Int, Iterator[Product2[K, C]])]
+      : Iterator[(Int, Iterator[Product2[K, C]])]
 
   /**
    * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
    */
   protected def mergeSort(iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
-  : Iterator[Product2[K, C]] =
+     : Iterator[Product2[K, C]] =
   {
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
@@ -327,8 +327,7 @@ private[spark] abstract class ExternalSorter[K, V, C](
     iterators: Seq[Iterator[Product2[K, C]]],
     mergeCombiners: (C, C) => C,
     comparator: Comparator[K],
-    totalOrder: Boolean)
-  : Iterator[Product2[K, C]] =
+    totalOrder: Boolean): Iterator[Product2[K, C]] =
   {
     if (!totalOrder) {
       // We only have a partial ordering, e.g. comparing the keys by hash code, which means that
@@ -464,7 +463,7 @@ private[spark] abstract class ExternalSorter[K, V, C](
      */
     private def skipToNextPartition() {
       while (partitionId < numPartitions &&
-        indexInPartition == spill.elementsPerPartition(partitionId)) {
+          indexInPartition == spill.elementsPerPartition(partitionId)) {
         partitionId += 1
         indexInPartition = 0L
       }
@@ -654,7 +653,7 @@ private[spark] abstract class ExternalSorter[K, V, C](
    * @param data an iterator of elements, assumed to already be sorted by partition ID
    */
   protected def groupByPartition(data: Iterator[((Int, K), C)])
-  : Iterator[(Int, Iterator[Product2[K, C]])] =
+      : Iterator[(Int, Iterator[Product2[K, C]])] =
   {
     val buffered = data.buffered
     (0 until numPartitions).iterator.map(p => (p, new IteratorForPartition(p, buffered)))
