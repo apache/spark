@@ -91,6 +91,7 @@ private[spark] class TaskSetManager(
 
   var weight = 1
   var minShare = 0
+  val maxRunning = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
   var name = "TaskSet_" + taskSet.stageId.toString

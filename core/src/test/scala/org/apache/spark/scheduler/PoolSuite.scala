@@ -192,15 +192,15 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0, 3)
 
-    val taskSetManager000 = createTaskSetManager(0, 2, taskScheduler)
-    val taskSetManager001 = createTaskSetManager(1, 2, taskScheduler)
-    rootPool.addSchedulable(taskSetManager000)
-    rootPool.addSchedulable(taskSetManager001)
+    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
+    val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
+    val taskSetManager3 = createTaskSetManager(3, 2, taskScheduler)
 
-    val taskSetManager010 = createTaskSetManager(2, 2, taskScheduler)
-    val taskSetManager011 = createTaskSetManager(3, 2, taskScheduler)
-    rootPool.addSchedulable(taskSetManager010)
-    rootPool.addSchedulable(taskSetManager011)
+    rootPool.addSchedulable(taskSetManager0)
+    rootPool.addSchedulable(taskSetManager1)
+    rootPool.addSchedulable(taskSetManager2)
+    rootPool.addSchedulable(taskSetManager3)
 
     scheduleTaskAndVerifyId(0, rootPool, 0)
     scheduleTaskAndVerifyId(1, rootPool, 1)
@@ -208,6 +208,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(3, rootPool, 0)
     scheduleTaskAndVerifyId(4, rootPool, 1)
     scheduleTaskAndVerifyId(5, rootPool, 2)
+
     verifyNoRemainedTask(rootPool)
   }
 }
