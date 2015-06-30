@@ -89,10 +89,14 @@ class MatrixFactorizationModel(
    */
   def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] = {
     val users = userFeatures.join(usersProducts).map {
-      case (user, (uFeatures, product)) => (product, (user, uFeatures))
+      case (user, (uFeatures, product)) => ((user, product), uFeatures)
     }
-    users.join(productFeatures).map {
-      case (product, ((user, uFeatures), pFeatures)) =>
+    val productUsers = usersProducts.map(up => (up._2, up._1))
+    val products = productFeatures.join(productUsers).map {
+      case (product, (pFeatures, user)) => ((user, product), pFeatures)
+    }
+    users.join(products).map {
+      case ((user, product), (uFeatures, pFeatures)) =>
         Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
     }
   }
