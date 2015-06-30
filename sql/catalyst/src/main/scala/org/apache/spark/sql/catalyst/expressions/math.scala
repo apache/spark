@@ -359,7 +359,7 @@ case class Pow(left: Expression, right: Expression)
  * Resulting characters are returned as a byte array.
  */
 case class UnHex(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with Serializable  {
+  extends UnaryExpression with AutoCastInputTypes with Serializable  {
 
   override def expectedChildTypes: Seq[DataType] = Seq(StringType)
 
