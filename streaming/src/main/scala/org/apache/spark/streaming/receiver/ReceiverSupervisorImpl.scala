@@ -30,7 +30,7 @@ import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.RpcUtils
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 
 /**
@@ -164,7 +164,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override protected def onReceiverStart() {
     val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), endpoint)
+      streamId, receiver.getClass.getSimpleName, host, endpoint)
     trackerEndpoint.askWithRetry[Boolean](msg)
   }
 
@@ -181,5 +181,9 @@ private[streaming] class ReceiverSupervisorImpl(
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
     logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
+  }
+
+  override def rescheduleReceiver(): Seq[String] = {
+    trackerEndpoint.askWithRetry[Seq[String]](ScheduleReceiver(streamId))
   }
 }

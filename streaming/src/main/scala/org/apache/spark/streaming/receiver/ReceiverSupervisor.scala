@@ -25,7 +25,7 @@ import scala.concurrent._
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{Utils, ThreadUtils}
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -63,6 +63,8 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** State of the receiver */
   @volatile private[streaming] var receiverState = Initialized
+
+  val host = Utils.localHostName()
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
@@ -161,11 +163,18 @@ private[streaming] abstract class ReceiverSupervisor(
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
-      logInfo("Starting receiver again")
-      startReceiver()
-      logInfo("Receiver started again")
+      if (rescheduleReceiver().contains(host)) {
+        logInfo("Starting receiver again")
+        startReceiver()
+        logInfo("Receiver started again")
+      } else {
+        stop("Receiver is scheduled to another executor", None)
+      }
     }(futureExecutionContext)
   }
+
+  /** Reschedule this receiver and return a candidate executor list */
+  def rescheduleReceiver(): Seq[String]
 
   /** Check if receiver has been marked for stopping */
   def isReceiverStarted(): Boolean = {
