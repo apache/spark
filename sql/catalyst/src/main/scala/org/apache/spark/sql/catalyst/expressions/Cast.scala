@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
-import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -122,9 +121,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.toString(d)))
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampToString(DateTimeUtils.toJavaTimestamp(t))))
+      t => UTF8String.fromString(DateTimeUtils.timestampToString(t)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -183,7 +182,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => DateTimeUtils.toMillisSinceEpoch(d) * 10000)
+      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 10000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -214,18 +213,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // converting 100ns to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / 10000000.0
-  }
-
-  // Converts Timestamp to string according to Hive TimestampWritable convention
-  private[this] def timestampToString(ts: Timestamp): String = {
-    val timestampString = ts.toString
-    val formatted = Cast.threadLocalTimestampFormat.get.format(ts)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
-      formatted
-    }
   }
 
   // DateConverter
@@ -449,11 +436,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
           s"""${ctx.stringType}.fromString(
-                org.apache.spark.sql.catalyst.util.DateTimeUtils.toString($c))""")
-      // Special handling required for timestamps in hive test cases since the toString function
-      // does not match the expected output.
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
       case (TimestampType, StringType) =>
-        super.genCode(ctx, ev)
+        defineCodeGen(ctx, ev, c =>
+          s"""${ctx.stringType}.fromString(
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
       case (_, StringType) =>
         defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
 
@@ -474,22 +461,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case other =>
         super.genCode(ctx, ev)
-    }
-  }
-}
-
-object Cast {
-  // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-    }
-  }
-
-  // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd")
     }
   }
 }

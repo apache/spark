@@ -116,7 +116,7 @@ trait HiveTypeCoercion {
     IfCoercion ::
     Division ::
     PropagateTypes ::
-    ExpectedInputConversion ::
+    AddCastForAutoCastInputTypes ::
     Nil
 
   /**
@@ -131,20 +131,22 @@ trait HiveTypeCoercion {
       // Don't propagate types from unresolved children.
       case q: LogicalPlan if !q.childrenResolved => q
 
-      case q: LogicalPlan => q transformExpressions {
-        case a: AttributeReference =>
-          q.inputSet.find(_.exprId == a.exprId) match {
-            // This can happen when a Attribute reference is born in a non-leaf node, for example
-            // due to a call to an external script like in the Transform operator.
-            // TODO: Perhaps those should actually be aliases?
-            case None => a
-            // Leave the same if the dataTypes match.
-            case Some(newType) if a.dataType == newType.dataType => a
-            case Some(newType) =>
-              logDebug(s"Promoting $a to $newType in ${q.simpleString}}")
-              newType
-          }
-      }
+      case q: LogicalPlan =>
+        val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap
+        q transformExpressions {
+          case a: AttributeReference =>
+            inputMap.get(a.exprId) match {
+              // This can happen when a Attribute reference is born in a non-leaf node, for example
+              // due to a call to an external script like in the Transform operator.
+              // TODO: Perhaps those should actually be aliases?
+              case None => a
+              // Leave the same if the dataTypes match.
+              case Some(newType) if a.dataType == newType.dataType => a
+              case Some(newType) =>
+                logDebug(s"Promoting $a to $newType in ${q.simpleString}}")
+                newType
+            }
+        }
     }
   }
 
@@ -709,15 +711,15 @@ trait HiveTypeCoercion {
 
   /**
    * Casts types according to the expected input types for Expressions that have the trait
-   * `ExpectsInputTypes`.
+   * [[AutoCastInputTypes]].
    */
-  object ExpectedInputConversion extends Rule[LogicalPlan] {
+  object AddCastForAutoCastInputTypes extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: ExpectsInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
+      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
         val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
           case (child, actual, expected) =>
             if (actual == expected) child else Cast(child, expected)
