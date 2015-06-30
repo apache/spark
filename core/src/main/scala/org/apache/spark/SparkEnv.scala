@@ -22,7 +22,6 @@ import java.net.Socket
 
 import akka.actor.ActorSystem
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
@@ -44,8 +43,6 @@ import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
-
-import scala.util.control.NonFatal
 
 /**
  * :: DeveloperApi ::
@@ -95,8 +92,7 @@ class SparkEnv (
 
     if (!isStopped) {
       isStopped = true
-
-      pythonWorkers.foreach { case (key, worker) => worker.stop()}
+      pythonWorkers.values.foreach(_.stop())
       Option(httpFileServer).foreach(_.stop())
       mapOutputTracker.stop()
       shuffleManager.stop()
@@ -106,7 +102,6 @@ class SparkEnv (
       metricsSystem.stop()
       outputCommitCoordinator.stop()
       rpcEnv.shutdown()
-
 
       // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
       // down, but let's call it anyway in case it gets fixed in a later release
