@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -43,7 +44,6 @@ object SparkSqlExample {
     people.registerTempTable("people")
     val teenagers = sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
     val teenagerNames = teenagers.map(t => "Name: " + t(0)).collect()
-    // scalastyle:off println
     teenagerNames.foreach(println)
 
     def test(f: => Boolean, failureMsg: String) = {
@@ -55,7 +55,7 @@ object SparkSqlExample {
     
     test(teenagerNames.size == 7, "Unexpected number of selected elements: " + teenagerNames)
     println("Test succeeded")
-    // scalastyle:on println
     sc.stop()
   }
 }
+// scalastyle:on println

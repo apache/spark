@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.util.Try
@@ -27,7 +28,6 @@ object SimpleApp {
     // Regression test for SPARK-1167: Remove metrics-ganglia from default build due to LGPL issue
     val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
     val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
-    // scalastyle:off println
     if (!foundConsole) {
       println("Console sink not loaded via spark-core")
       System.exit(-1)
@@ -36,6 +36,6 @@ object SimpleApp {
       println("Ganglia sink not loaded via spark-ganglia-lgpl")
       System.exit(-1)
     }
-    // scalastyle:on println
   }
 }
+// scalastyle:on println

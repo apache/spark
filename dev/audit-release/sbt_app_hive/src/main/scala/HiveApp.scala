@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -41,7 +42,6 @@ object SparkSqlExample {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
     val results = sql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
-    // scalastyle:off println
     results.foreach(println)
     
     def test(f: => Boolean, failureMsg: String) = {
@@ -53,7 +53,7 @@ object SparkSqlExample {
     
     test(results.size == 5, "Unexpected number of selected elements: " + results)
     println("Test succeeded")
-    // scalastyle:on println
     sc.stop()
   }
 }
+// scalastyle:on println

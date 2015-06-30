@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.util.Try
@@ -34,7 +35,6 @@ object SimpleApp {
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
-    // scalastyle:off println
     if (numAs != 2 || numBs != 2) {
       println("Failed to parse log files with Spark")
       System.exit(-1)
@@ -58,6 +58,6 @@ object SimpleApp {
       println("Kinesis was loaded via spark-core")
       System.exit(-1)
     }
-    // scalastyle:on println
   }
 }
+// scalastyle:on println
