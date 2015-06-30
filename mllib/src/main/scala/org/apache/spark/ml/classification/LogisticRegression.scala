@@ -166,7 +166,6 @@ class LogisticRegression(override val uid: String)
     } else {
       def regParamL1Fun = (index: Int) => {
         // Remove the L1 penalization on the intercept
-        // that the data is standardized, which is why we are performing this reverse standardization for this
         if (index == numFeatures) 0.0 else {
           if ($(standardization)) {
             regParamL1
