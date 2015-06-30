@@ -394,6 +394,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
+   * Request that the cluster manager kill the specified executor without adjusting the
+   * application resource requirements.
+   *
+   * The effect is that a new executor will be launched in place of the one killed by
+   * this request. This assumes the cluster manager will automatically and eventually
+   * fulfill all missing application resource requests.
+   *
+   * Return whether the request is received.
+   */
+  def killAndReplaceExecutor(executorId: String): Boolean = synchronized {
+    logInfo(s"Requesting to replace executor $executorId")
+    if (executorDataMap.contains(executorId)) {
+      executorsPendingToRemove += executorId
+      doKillExecutors(Seq(executorId))
+    } else {
+      logWarning(s"Executor to replace $executorId does not exist!")
+      false
+    }
+  }
+
+  /**
    * Kill the given list of executors through the cluster manager.
    * Return whether the kill request is acknowledged.
    */
