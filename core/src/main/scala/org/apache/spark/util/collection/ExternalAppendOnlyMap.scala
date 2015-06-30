@@ -234,7 +234,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * spill contents of memory map to disk and release its memory
    */
-  override def forceSpill(): Long  = {
+  override def forceSpill(): Long = {
     var freeMemory = 0L
     if (memoryOrDiskIter.isDefined) {
       _spillCount += 1
@@ -255,7 +255,7 @@ class ExternalAppendOnlyMap[K, V, C](
    * An iterator that read elements from in-memory iterator or disk iterator when in-memory
    * iterator have spilled to disk.
    */
-  case class MemoryOrDiskIterator(memIter: Iterator[(K,C)]) extends Iterator[(K,C)] {
+  case class MemoryOrDiskIterator(memIter: Iterator[(K, C)]) extends Iterator[(K, C)] {
 
     var currentIter = memIter
 
@@ -263,12 +263,12 @@ class ExternalAppendOnlyMap[K, V, C](
 
     override def next(): (K, C) = currentIter.next()
 
-    def spill() = {
+    private[spark] def spill() = {
       if (hasNext) {
         currentIter = spillMemoryToDisk(currentIter)
       } else {
-        //in-memory iterator is already drained, release it by giving an empty iterator
-        currentIter = new Iterator[(K,C)]{
+        // in-memory iterator is already drained, release it by giving an empty iterator
+        currentIter = new Iterator[(K, C)]{
           override def hasNext: Boolean = false
           override def next(): (K, C) = null
         }

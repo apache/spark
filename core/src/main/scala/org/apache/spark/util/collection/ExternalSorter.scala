@@ -651,11 +651,11 @@ private[spark] class ExternalSorter[K, V, C](
 
     override def next(): ((Int, K), C) = currentIter.next()
 
-    def spill() = {
+    private[spark] def spill() = {
       if (hasNext) {
         currentIter = spillMemoryToDisk(currentIter)
       } else {
-        //in-memory iterator is already drained, release it by giving an empty iterator
+        // in-memory iterator is already drained, release it by giving an empty iterator
         currentIter = new Iterator[((Int, K), C)]{
           override def hasNext: Boolean = false
           override def next(): ((Int, K), C) = null
@@ -671,7 +671,7 @@ private[spark] class ExternalSorter[K, V, C](
   override def forceSpill(): Long = {
     var freeMemory = 0L
     if (memoryOrDiskIter.isDefined) {
-      //has memory buffer that can be spilled
+      // has memory buffer that can be spilled
       _spillCount += 1
 
       val shouldCombine = aggregator.isDefined

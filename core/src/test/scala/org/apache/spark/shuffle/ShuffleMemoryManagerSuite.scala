@@ -326,7 +326,6 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     val manager = new ShuffleMemoryManager(1000L)
 
     val spill1 = new FakeSpillable()
-    val spill2 = new FakeSpillable()
 
     spill1.addMemory(manager.tryToAcquire(700L))
     spill1.addMemory(manager.tryToAcquire(300L))
