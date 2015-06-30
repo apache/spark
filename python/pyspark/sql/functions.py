@@ -39,12 +39,15 @@ __all__ = [
     'coalesce',
     'countDistinct',
     'explode',
+    'log2',
+    'md5',
     'monotonicallyIncreasingId',
     'rand',
     'randn',
     'sha1',
     'sha2',
     'sparkPartitionId',
+    'strlen',
     'struct',
     'udf',
     'when']
@@ -320,6 +323,19 @@ def explode(col):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def md5(col):
+    """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
+    [Row(hash=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.md5(_to_java_column(col))
+    return Column(jc)
+
+
 @since(1.4)
 def monotonicallyIncreasingId():
     """A column that generates monotonically increasing 64-bit integers.
@@ -367,6 +383,19 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
+def sha1(col):
+    """Returns the hex string result of SHA-1.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
@@ -383,19 +412,6 @@ def sha2(col, numBits):
     return Column(jc)
 
 
-@ignore_unicode_prefix
-@since(1.5)
-def sha1(col):
-    """Returns the hex string result of SHA-1.
-
-    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
-    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.sha1(_to_java_column(col))
-    return Column(jc)
-
-
 @since(1.4)
 def sparkPartitionId():
     """A column for partition ID of the Spark task.
@@ -407,6 +423,18 @@ def sparkPartitionId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sparkPartitionId())
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def strlen(col):
+    """Calculates the length of a string expression.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('length')).collect()
+    [Row(length=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.strlen(_to_java_column(col)))
 
 
 @ignore_unicode_prefix
@@ -469,6 +497,17 @@ def log(arg1, arg2=None):
     else:
         jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
+
+
+@since(1.5)
+def log2(col):
+    """Returns the base-2 logarithm of the argument.
+
+    >>> sqlContext.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
+    [Row(log2=2.0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
 @since(1.4)
