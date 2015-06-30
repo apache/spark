@@ -111,14 +111,6 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   def intersect(other: AttributeSet): AttributeSet =
     new AttributeSet(baseSet.intersect(other.baseSet))
 
-  /**
-   * Returns a new [[AttributeMap]] that uses [[Attribute.exprId]] as key. The value of this map is
-   * [[(Attribute, A)]] where type [[A]] is given by the parameter function [[f]].
-   */
-  def toAttributeMap[A](f: (Attribute) => A): AttributeMap[A] = {
-    AttributeMap(this.toSeq.map(a => (a, f(a))))
-  }
-
   override def foreach[U](f: (Attribute) => U): Unit = baseSet.map(_.a).foreach(f)
 
   // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all

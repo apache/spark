@@ -132,10 +132,10 @@ trait HiveTypeCoercion {
       case q: LogicalPlan if !q.childrenResolved => q
 
       case q: LogicalPlan =>
-        val inputMap = q.inputSet.toAttributeMap(a => a)
+        val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap
         q transformExpressions {
           case a: AttributeReference =>
-            inputMap.get(a) match {
+            inputMap.get(a.exprId) match {
               // This can happen when a Attribute reference is born in a non-leaf node, for example
               // due to a call to an external script like in the Transform operator.
               // TODO: Perhaps those should actually be aliases?
