@@ -38,8 +38,11 @@ __all__ = [
     'bin',
     'coalesce',
     'countDistinct',
+    'e',
     'explode',
+    'md5'
     'monotonicallyIncreasingId',
+    'pi'
     'rand',
     'randn',
     'sha1',
@@ -96,6 +99,7 @@ _functions = {
 
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
+    'length': 'Calculates the length of a string expression.',
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
@@ -299,6 +303,15 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+@since(1.5)
+def e():
+    """Returns a new row for each element in the given array or map.
+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.e(_to_java_column(col))
+    return Column(jc)
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -317,6 +330,19 @@ def explode(col):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.explode(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def md5(col):
+    """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
 
@@ -469,6 +495,15 @@ def log(arg1, arg2=None):
     else:
         jc = sc._jvm.functions.log(arg1, _to_java_column(arg2))
     return Column(jc)
+
+
+@since(1.5)
+def log2(col):
+    """Returns the base-2 logarithm of the argument
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
 @since(1.4)
