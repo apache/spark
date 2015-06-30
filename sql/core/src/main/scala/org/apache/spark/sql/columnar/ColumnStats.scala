@@ -132,6 +132,24 @@ private[sql] class ShortColumnStats extends ColumnStats {
     InternalRow(lower, upper, nullCount, count, sizeInBytes)
 }
 
+private[sql] class IntColumnStats extends ColumnStats {
+  protected var upper = Int.MinValue
+  protected var lower = Int.MaxValue
+
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      val value = row.getInt(ordinal)
+      if (value > upper) upper = value
+      if (value < lower) lower = value
+      sizeInBytes += INT.defaultSize
+    }
+  }
+
+  override def collectedStatistics: InternalRow =
+    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+}
+
 private[sql] class LongColumnStats extends ColumnStats {
   protected var upper = Long.MinValue
   protected var lower = Long.MaxValue
@@ -143,24 +161,6 @@ private[sql] class LongColumnStats extends ColumnStats {
       if (value > upper) upper = value
       if (value < lower) lower = value
       sizeInBytes += LONG.defaultSize
-    }
-  }
-
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
-}
-
-private[sql] class DoubleColumnStats extends ColumnStats {
-  protected var upper = Double.MinValue
-  protected var lower = Double.MaxValue
-
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getDouble(ordinal)
-      if (value > upper) upper = value
-      if (value < lower) lower = value
-      sizeInBytes += DOUBLE.defaultSize
     }
   }
 
@@ -186,35 +186,17 @@ private[sql] class FloatColumnStats extends ColumnStats {
     InternalRow(lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[sql] class FixedDecimalColumnStats extends ColumnStats {
-  protected var upper: Decimal = null
-  protected var lower: Decimal = null
+private[sql] class DoubleColumnStats extends ColumnStats {
+  protected var upper = Double.MinValue
+  protected var lower = Double.MaxValue
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[Decimal]
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += FIXED_DECIMAL.defaultSize
-    }
-  }
-
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
-}
-
-private[sql] class IntColumnStats extends ColumnStats {
-  protected var upper = Int.MinValue
-  protected var lower = Int.MaxValue
-
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getInt(ordinal)
+      val value = row.getDouble(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-      sizeInBytes += INT.defaultSize
+      sizeInBytes += DOUBLE.defaultSize
     }
   }
 
@@ -240,10 +222,6 @@ private[sql] class StringColumnStats extends ColumnStats {
     InternalRow(lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[sql] class DateColumnStats extends IntColumnStats
-
-private[sql] class TimestampColumnStats extends LongColumnStats
-
 private[sql] class BinaryColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
@@ -254,6 +232,24 @@ private[sql] class BinaryColumnStats extends ColumnStats {
 
   override def collectedStatistics: InternalRow =
     InternalRow(null, null, nullCount, count, sizeInBytes)
+}
+
+private[sql] class FixedDecimalColumnStats extends ColumnStats {
+  protected var upper: Decimal = null
+  protected var lower: Decimal = null
+
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      val value = row(ordinal).asInstanceOf[Decimal]
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
+      sizeInBytes += FIXED_DECIMAL.defaultSize
+    }
+  }
+
+  override def collectedStatistics: InternalRow =
+    InternalRow(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class GenericColumnStats extends ColumnStats {
@@ -267,3 +263,7 @@ private[sql] class GenericColumnStats extends ColumnStats {
   override def collectedStatistics: InternalRow =
     InternalRow(null, null, nullCount, count, sizeInBytes)
 }
+
+private[sql] class DateColumnStats extends IntColumnStats
+
+private[sql] class TimestampColumnStats extends LongColumnStats

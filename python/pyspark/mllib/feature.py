@@ -549,7 +549,7 @@ class Word2Vec(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
-        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+        jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
                                int(self.minCount))

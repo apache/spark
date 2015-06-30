@@ -48,6 +48,7 @@ trait CheckAnalysis {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
@@ -121,6 +122,17 @@ trait CheckAnalysis {
 
           case _ => // Analysis successful!
         }
+
+      // Special handling for cases when self-join introduce duplicate expression ids.
+      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+        failAnalysis(
+          s"""
+             |Failure when resolving conflicting references in Join:
+             |$plan
+             |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+             |""".stripMargin)
+
     }
     extendedCheckRules.foreach(_(plan))
   }
