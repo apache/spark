@@ -478,6 +478,20 @@ class TaskInstance(Base):
             "&execution_date={iso}"
         ).format(**locals())
 
+    @property
+    def mark_success_url(self):
+        iso = self.execution_date.isoformat()
+        BASE_URL = conf.get('webserver', 'BASE_URL')
+        return BASE_URL + (
+            "/admin/airflow/action"
+            "?action=success"
+            "&task_id={self.task_id}"
+            "&dag_id={self.dag_id}"
+            "&execution_date={iso}"
+            "&upstream=false"
+            "&downstream=false"
+        ).format(**locals())
+
     def current_state(self, main_session=None):
         """
         Get the very latest state from the database, if a session is passed,
@@ -923,6 +937,7 @@ class TaskInstance(Base):
             "Log: <a href='{self.log_url}'>Link</a><br>"
             "Host: {self.hostname}<br>"
             "Log file: {self.log_filepath}<br>"
+            "Mark success: <a href='{self.mark_success_url}'>Link</a><br>"
         ).format(**locals())
         utils.send_email(task.email, title, body)
 
