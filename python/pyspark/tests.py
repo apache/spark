@@ -878,10 +878,14 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertRaises(Py4JJavaError, rdd.pipe('cc').collect)
+            self.assertEqual([], rdd.pipe('cc').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('cc', mode='strict').collect)
         result = rdd.pipe('cat').collect()
         result.sort()
         [self.assertEqual(x, y) for x, y in zip(data, result)]
+        self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', mode='strict').collect)
+        self.assertEqual([], rdd.pipe('grep 4').collect())
+        self.assertEqual([], rdd.pipe('grep 4', mode='grep').collect())
 
 
 class ProfilerTests(PySparkTestCase):
