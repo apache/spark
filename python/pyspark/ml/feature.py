@@ -21,7 +21,7 @@ from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'Normalizer', 'OneHotEncoder',
+__all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
            'Word2Vec', 'Word2VecModel']
@@ -263,6 +263,75 @@ class IDFModel(JavaModel):
     """
     Model fitted by IDF.
     """
+
+
+@inherit_doc
+@ignore_unicode_prefix
+class NGram(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    A feature transformer that converts the input array of strings into an array of n-grams. Null
+    values in the input array are ignored.
+    It returns an array of n-grams where each n-gram is represented by a space-separated string of
+    words.
+    When the input is empty, an empty array is returned.
+    When the input array length is less than n (number of elements per n-gram), no n-grams are
+    returned.
+
+    >>> df = sqlContext.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
+    >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
+    >>> ngram.transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
+    >>> # Change n-gram length
+    >>> ngram.setParams(n=4).transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    >>> # Temporarily modify output column.
+    >>> ngram.transform(df, {ngram.outputCol: "output"}).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], output=[u'a b c d', u'b c d e'])
+    >>> ngram.transform(df).head()
+    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    >>> # Must use keyword arguments to specify params.
+    >>> ngram.setParams("text")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    n = Param(Params._dummy(), "n", "number of elements per n-gram (>=1)")
+
+    @keyword_only
+    def __init__(self, n=2, inputCol=None, outputCol=None):
+        """
+        __init__(self, n=2, inputCol=None, outputCol=None)
+        """
+        super(NGram, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
+        self.n = Param(self, "n", "number of elements per n-gram (>=1)")
+        self._setDefault(n=2)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, n=2, inputCol=None, outputCol=None):
+        """
+        setParams(self, n=2, inputCol=None, outputCol=None)
+        Sets params for this NGram.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setN(self, value):
+        """
+        Sets the value of :py:attr:`n`.
+        """
+        self._paramMap[self.n] = value
+        return self
+
+    def getN(self):
+        """
+        Gets the value of n or its default value.
+        """
+        return self.getOrDefault(self.n)
 
 
 @inherit_doc
