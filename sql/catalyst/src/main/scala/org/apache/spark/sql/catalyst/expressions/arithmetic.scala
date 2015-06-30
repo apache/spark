@@ -216,23 +216,32 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val test = if (left.dataType.isInstanceOf[DecimalType]) {
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
       s"${eval2.primitive}.isZero()"
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
-    val javaType = ctx.javaType(left.dataType)
-    eval1.code + eval2.code +
-      s"""
+    val javaType = ctx.javaType(dataType)
+    val divide = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $divide;
+        }
       }
-      """
+    """
   }
 }
 
@@ -273,23 +282,32 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val test = if (left.dataType.isInstanceOf[DecimalType]) {
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
       s"${eval2.primitive}.isZero()"
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
-    val javaType = ctx.javaType(left.dataType)
-    eval1.code + eval2.code +
-      s"""
+    val javaType = ctx.javaType(dataType)
+    val remainder = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $remainder;
+        }
       }
-      """
+    """
   }
 }
 
