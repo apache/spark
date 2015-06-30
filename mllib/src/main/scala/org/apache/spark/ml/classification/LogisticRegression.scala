@@ -99,7 +99,7 @@ class LogisticRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /**
-   * whether to standardize the training features prior to fitting the model sequence.
+   * Whether to standardize the training features prior to fitting the model sequence.
    * Note that the coefficients of models are always returned on the original scale.
    * Default is true.
    * @group setParam
