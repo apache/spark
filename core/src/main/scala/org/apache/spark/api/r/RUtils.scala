@@ -48,8 +48,8 @@ private[spark] object RUtils {
       val rPackagePath = localSparkRPackagePath
       if (rPackagePath.isEmpty) {
         throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
-      } 
-      rPackagePath.get  
+      }
+      rPackagePath.get
     }
   }
 }
