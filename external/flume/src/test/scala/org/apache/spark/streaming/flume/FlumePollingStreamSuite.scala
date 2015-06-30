@@ -101,7 +101,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     val addresses = sinkPorts.map(port => new InetSocketAddress("localhost", port))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
-        utils.getEventsPerBatch, 5)
+        utils.eventsPerBatch, 5)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
