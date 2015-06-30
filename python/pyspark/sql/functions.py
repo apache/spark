@@ -40,9 +40,9 @@ __all__ = [
     'countDistinct',
     'e',
     'explode',
-    'md5'
+    'md5',
     'monotonicallyIncreasingId',
-    'pi'
+    'pi',
     'rand',
     'randn',
     'sha1',
@@ -99,7 +99,6 @@ _functions = {
 
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
-    'length': 'Calculates the length of a string expression.',
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
@@ -305,12 +304,17 @@ def countDistinct(col, *cols):
 
 @since(1.5)
 def e():
-    """Returns a new row for each element in the given array or map.
+    """
+    Returns the float value that is closer than any other to e, the base of the natural
+    logarithms.
 
+    >>> sqlContext.createDataFrame([(1,)], ['a']).select((e()).alias('e')).collect()
+    [Row(e=2.718281828459045)]
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.e(_to_java_column(col))
+    jc = sc._jvm.functions.e()
     return Column(jc)
+
 
 @since(1.4)
 def explode(col):
@@ -339,7 +343,7 @@ def md5(col):
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
     >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
-
+    [Row(hash=u'902fbdd2b1df0c4f70b4a5d23525e932')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.md5(_to_java_column(col))
@@ -365,6 +369,20 @@ def monotonicallyIncreasingId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.monotonicallyIncreasingId())
+
+
+@since(1.5)
+def pi():
+    """
+    Returns the float value that is closer than any other to pi, the ratio of the circumference
+    of a circle to its diameter.
+
+    >>> sqlContext.createDataFrame([(1,)], ['a']).select((pi()).alias('pi')).collect()
+    [Row(pi=3.141592653589793)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.pi()
+    return Column(jc)
 
 
 @since(1.4)
@@ -393,6 +411,19 @@ def randn(seed=None):
 
 @ignore_unicode_prefix
 @since(1.5)
+def sha1(col):
+    """Returns the hex string result of SHA-1.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.sha1(_to_java_column(col))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
@@ -409,19 +440,6 @@ def sha2(col, numBits):
     return Column(jc)
 
 
-@ignore_unicode_prefix
-@since(1.5)
-def sha1(col):
-    """Returns the hex string result of SHA-1.
-
-    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
-    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.sha1(_to_java_column(col))
-    return Column(jc)
-
-
 @since(1.4)
 def sparkPartitionId():
     """A column for partition ID of the Spark task.
@@ -433,6 +451,18 @@ def sparkPartitionId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sparkPartitionId())
+
+
+@ignore_unicode_prefix
+@since(1.5)
+def strlen(col):
+    """Calculates the length of a string expression.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('e')).collect()
+    [Row(e=3)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.strlen(col))
 
 
 @ignore_unicode_prefix
@@ -499,8 +529,10 @@ def log(arg1, arg2=None):
 
 @since(1.5)
 def log2(col):
-    """Returns the base-2 logarithm of the argument
+    """Returns the base-2 logarithm of the argument.
 
+    >>> sqlContext.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
+    [Row(log2=2.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.log2(_to_java_column(col)))
