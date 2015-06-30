@@ -70,8 +70,9 @@ def get_json(url):
         return json.load(urllib2.urlopen(request))
     except urllib2.HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == '0':
-            print "Exceeded the GitHub rate limit; see the instructions in dev/run-tests.py to " + \
-                  "order to configure an OAuth token for making authenticated GitHub requests."
+            print "Exceeded the GitHub API rate limit; see the instructions in " + \
+                  "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " + \
+                  "GitHub requests."
         else:
             print "Unable to fetch URL, exiting: %s" % url
         sys.exit(-1)
