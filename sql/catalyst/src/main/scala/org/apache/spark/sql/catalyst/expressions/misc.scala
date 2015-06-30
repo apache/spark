@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * For input of type [[BinaryType]]
  */
 case class Md5(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with AutoCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -61,7 +61,7 @@ case class Md5(child: Expression)
  * the hash length is not one of the permitted values, the return value is NULL.
  */
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ExpectsInputTypes {
+  extends BinaryExpression with Serializable with AutoCastInputTypes {
 
   override def dataType: DataType = StringType
 
@@ -146,7 +146,7 @@ case class Sha2(left: Expression, right: Expression)
  * A function that calculates a sha1 hash value and returns it as a hex string
  * For input of type [[BinaryType]] or [[StringType]]
  */
-case class Sha1(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Sha1(child: Expression) extends UnaryExpression with AutoCastInputTypes {
 
   override def dataType: DataType = StringType
 
