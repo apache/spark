@@ -167,7 +167,6 @@ class KMeans private (
    */
   def setInitialModel(model: KMeansModel): this.type = {
     require(model.k == k, "mismatched cluster count")
-    this.setRuns(1)
     logWarning("Ignoring runs; one run is allowed when initialModel is given.")
     initialModel = Some(model)
     this
