@@ -699,10 +699,10 @@ class RDD(object):
                 return False
         elif mode == 'strict':
             def fail_condition(x):
-                return x == 0
+                return x != 0
         elif mode == 'grep':
             def fail_condition(x):
-                return x == 0 or x == 1
+                return x != 0 and x != 1
         else:
             raise ValueError("mode must be one of 'permissive', 'strict' or 'grep'.")
 
