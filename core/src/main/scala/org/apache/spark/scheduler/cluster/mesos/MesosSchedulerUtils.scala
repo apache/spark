@@ -17,17 +17,17 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.concurrent.CountDownLatch
 import java.util.{List => JList}
-
-import com.google.common.base.Splitter
-import org.apache.mesos.Protos._
-import org.apache.mesos.protobuf.GeneratedMessage
-import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkContext}
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConversions._
+
+import com.google.common.base.Splitter
+import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
+import org.apache.mesos.Protos._
+import org.apache.mesos.protobuf.GeneratedMessage
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.util.Utils
 
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper

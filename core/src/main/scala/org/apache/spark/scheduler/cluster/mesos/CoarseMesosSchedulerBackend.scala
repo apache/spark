@@ -20,16 +20,16 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{List => JList}
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{HashMap, HashSet}
+
 import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, HashSet}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
