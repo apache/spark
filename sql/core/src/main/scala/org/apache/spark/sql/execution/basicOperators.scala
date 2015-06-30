@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.collection.ExternalSorterNoAgg
 import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
@@ -232,7 +232,8 @@ case class ExternalSort(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
-      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
+      val sorter =
+        new ExternalSorterNoAgg[InternalRow, Null, InternalRow](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy, null)))
       val baseIterator = sorter.iterator.map(_._1)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
