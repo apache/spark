@@ -38,11 +38,9 @@ __all__ = [
     'bin',
     'coalesce',
     'countDistinct',
-    'e',
     'explode',
     'md5',
     'monotonicallyIncreasingId',
-    'pi',
     'rand',
     'randn',
     'sha1',
@@ -302,22 +300,6 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
-@since(1.5)
-def e():
-    """
-    Returns the float value that is closer than any other to e, the base of the natural
-    logarithms.
-
-    >>> e = sqlContext.createDataFrame([(1,)], ['a']).select((e()).alias('e')).collect()
-
-    >>> round(e[0][0], 10)
-    2.7182818285
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.e()
-    return Column(jc)
-
-
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -371,22 +353,6 @@ def monotonicallyIncreasingId():
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.monotonicallyIncreasingId())
-
-
-@since(1.5)
-def pi():
-    """
-    Returns the float value that is closer than any other to pi, the ratio of the circumference
-    of a circle to its diameter.
-
-    >>> pi = sqlContext.createDataFrame([(1,)], ['a']).select((pi()).alias('pi')).collect()
-
-    >>> round(pi[0][0], 10)
-    3.1415926536
-    """
-    sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.pi()
-    return Column(jc)
 
 
 @since(1.4)
@@ -462,11 +428,11 @@ def sparkPartitionId():
 def strlen(col):
     """Calculates the length of a string expression.
 
-    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('e')).collect()
-    [Row(e=3)]
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(strlen('a').alias('length')).collect()
+    [Row(length=3)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.strlen(col))
+    return Column(sc._jvm.functions.strlen(_to_java_column(col)))
 
 
 @ignore_unicode_prefix
