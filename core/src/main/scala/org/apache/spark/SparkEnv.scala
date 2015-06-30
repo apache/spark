@@ -22,7 +22,6 @@ import java.net.Socket
 
 import akka.actor.ActorSystem
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
@@ -90,39 +89,42 @@ class SparkEnv (
   private var driverTmpDirToDelete: Option[String] = None
 
   private[spark] def stop() {
-    isStopped = true
-    pythonWorkers.foreach { case(key, worker) => worker.stop() }
-    Option(httpFileServer).foreach(_.stop())
-    mapOutputTracker.stop()
-    shuffleManager.stop()
-    broadcastManager.stop()
-    blockManager.stop()
-    blockManager.master.stop()
-    metricsSystem.stop()
-    outputCommitCoordinator.stop()
-    rpcEnv.shutdown()
 
-    // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
-    // down, but let's call it anyway in case it gets fixed in a later release
-    // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
-    // actorSystem.awaitTermination()
+    if (!isStopped) {
+      isStopped = true
+      pythonWorkers.values.foreach(_.stop())
+      Option(httpFileServer).foreach(_.stop())
+      mapOutputTracker.stop()
+      shuffleManager.stop()
+      broadcastManager.stop()
+      blockManager.stop()
+      blockManager.master.stop()
+      metricsSystem.stop()
+      outputCommitCoordinator.stop()
+      rpcEnv.shutdown()
 
-    // Note that blockTransferService is stopped by BlockManager since it is started by it.
+      // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
+      // down, but let's call it anyway in case it gets fixed in a later release
+      // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
+      // actorSystem.awaitTermination()
 
-    // If we only stop sc, but the driver process still run as a services then we need to delete
-    // the tmp dir, if not, it will create too many tmp dirs.
-    // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
-    // current working dir in executor which we do not need to delete.
-    driverTmpDirToDelete match {
-      case Some(path) => {
-        try {
-          Utils.deleteRecursively(new File(path))
-        } catch {
-          case e: Exception =>
-            logWarning(s"Exception while deleting Spark temp dir: $path", e)
+      // Note that blockTransferService is stopped by BlockManager since it is started by it.
+
+      // If we only stop sc, but the driver process still run as a services then we need to delete
+      // the tmp dir, if not, it will create too many tmp dirs.
+      // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
+      // current working dir in executor which we do not need to delete.
+      driverTmpDirToDelete match {
+        case Some(path) => {
+          try {
+            Utils.deleteRecursively(new File(path))
+          } catch {
+            case e: Exception =>
+              logWarning(s"Exception while deleting Spark temp dir: $path", e)
+          }
         }
+        case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
-      case None => // We just need to delete tmp dir created by driver, so do nothing on executor
     }
   }
 

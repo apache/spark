@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -638,7 +640,7 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-5203 union with different decimal precision") {
     Seq.empty[(Decimal, Decimal)]
       .toDF("d1", "d2")
-      .select($"d1".cast(DecimalType(10, 15)).as("d"))
+      .select($"d1".cast(DecimalType(10, 5)).as("d"))
       .registerTempTable("dn")
 
     sql("select d from dn union all select d * 2 from dn")
@@ -961,5 +963,32 @@ class SQLQuerySuite extends QueryTest {
         fail("CREATE TEMPORARY FUNCTION should not fail.", throwable)
       case None => // OK
     }
+  }
+
+  test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
+    checkAnswer(
+      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+      Row(false))
+  }
+
+  test("SPARK-6785: HiveQuerySuite - Date cast") {
+    // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
+    checkAnswer(
+      sql(
+        """
+          | SELECT
+          | CAST(CAST(0 AS timestamp) AS date),
+          | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+          | CAST(0 AS timestamp),
+          | CAST(CAST(0 AS timestamp) AS string),
+          | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+          | FROM src LIMIT 1
+        """.stripMargin),
+      Row(
+        Date.valueOf("1969-12-31"),
+        String.valueOf("1969-12-31"),
+        Timestamp.valueOf("1969-12-31 16:00:00"),
+        String.valueOf("1969-12-31 16:00:00"),
+        Timestamp.valueOf("1970-01-01 00:00:00")))
   }
 }

@@ -32,7 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.{MultiAlias, ResolvedStar, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -169,8 +169,9 @@ class DataFrame private[sql](
   /**
    * Internal API for Python
    * @param _numRows Number of rows to show
+   * @param truncate Whether truncate long strings and align cells right
    */
-  private[sql] def showString(_numRows: Int): String = {
+  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val sb = new StringBuilder
     val takeResult = take(numRows + 1)
@@ -188,7 +189,7 @@ class DataFrame private[sql](
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString
         }
-        if (str.length > 20) str.substring(0, 17) + "..." else str
+        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
       }: Seq[String]
     }
 
@@ -207,7 +208,11 @@ class DataFrame private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      StringUtils.leftPad(cell, colWidths(i))
+      if (truncate) {
+        StringUtils.leftPad(cell, colWidths(i))
+      } else {
+        StringUtils.rightPad(cell, colWidths(i))
+      }
     }.addString(sb, "|", "|", "|\n")
 
     sb.append(sep)
@@ -215,7 +220,11 @@ class DataFrame private[sql](
     // data
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
-        StringUtils.leftPad(cell.toString, colWidths(i))
+        if (truncate) {
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        } else {
+          StringUtils.rightPad(cell.toString, colWidths(i))
+        }
       }.addString(sb, "|", "|", "|\n")
     }
 
@@ -331,7 +340,8 @@ class DataFrame private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
-   * Displays the [[DataFrame]] in a tabular form. For example:
+   * Displays the [[DataFrame]] in a tabular form. Strings more than 20 characters will be
+   * truncated, and all cells will be aligned right. For example:
    * {{{
    *   year  month AVG('Adj Close) MAX('Adj Close)
    *   1980  12    0.503218        0.595103
@@ -345,14 +355,45 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def show(numRows: Int): Unit = println(showString(numRows))
+  def show(numRows: Int): Unit = show(numRows, true)
 
   /**
-   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right.
    * @group action
    * @since 1.3.0
    */
   def show(): Unit = show(20)
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   *
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @group action
+   * @since 1.5.0
+   */
+  def show(truncate: Boolean): Unit = show(20, truncate)
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   * @param numRows Number of rows to show
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @group action
+   * @since 1.5.0
+   */
+  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
@@ -629,6 +670,10 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = {
     val namedExpressions = cols.map {
+      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+      // make it a NamedExpression.
+      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
       // Leave an unaliased explode with an empty list of names since the analzyer will generate the
       // correct defaults after the nested expression's type has been resolved.
@@ -678,7 +723,6 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -703,12 +747,23 @@ class DataFrame private[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
    * }}}
    * @group dfops
    * @since 1.3.0
    */
   def where(condition: Column): DataFrame = filter(condition)
+
+  /**
+   * Filters rows using the given SQL expression.
+   * {{{
+   *   peopleDf.where("age > 15")
+   * }}}
+   * @group dfops
+   * @since 1.5.0
+   */
+  def where(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
+  }
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -1045,7 +1100,7 @@ class DataFrame private[sql](
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
    * {{{
-   *   df.explode("words", "word")(words: String => words.split(" "))
+   *   df.explode("words", "word"){words: String => words.split(" ")}
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -1414,11 +1469,13 @@ class DataFrame private[sql](
   lazy val rdd: RDD[Row] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
-    queryExecution.executedPlan.execute().mapPartitions { rows =>
+    internalRowRdd.mapPartitions { rows =>
       val converter = CatalystTypeConverters.createToScalaConverter(schema)
       rows.map(converter(_).asInstanceOf[Row])
     }
   }
+
+  private[sql] def internalRowRdd = queryExecution.executedPlan.execute()
 
   /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.

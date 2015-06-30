@@ -14,26 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.util
 
-package org.apache.spark.sql.catalyst.util
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import java.sql.Timestamp
+import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.Utils
 
-class DateUtilsSuite extends SparkFunSuite {
+private[spark]
+class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    out.defaultWriteObject()
+    value.write(out)
+  }
 
-  test("timestamp") {
-    val now = new Timestamp(System.currentTimeMillis())
-    now.setNanos(100)
-    val ns = DateUtils.fromJavaTimestamp(now)
-    assert(ns % 10000000L == 1)
-    assert(DateUtils.toJavaTimestamp(ns) == now)
-
-    List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
-      val ts = DateUtils.toJavaTimestamp(t)
-      assert(DateUtils.fromJavaTimestamp(ts) == t)
-      assert(DateUtils.toJavaTimestamp(DateUtils.fromJavaTimestamp(ts)) == ts)
-    }
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    value = new Configuration(false)
+    value.readFields(in)
   }
 }

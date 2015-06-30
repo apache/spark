@@ -44,7 +44,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{NextIterator, Utils}
+import org.apache.spark.util.{SerializableConfiguration, NextIterator, Utils}
 import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
 import org.apache.spark.storage.StorageLevel
 
@@ -100,7 +100,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 @DeveloperApi
 class HadoopRDD[K, V](
     @transient sc: SparkContext,
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    broadcastedConf: Broadcast[SerializableConfiguration],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
@@ -121,8 +121,8 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      sc.broadcast(new SerializableWritable(conf))
-        .asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
+      sc.broadcast(new SerializableConfiguration(conf))
+        .asInstanceOf[Broadcast[SerializableConfiguration]],
       None /* initLocalJobConfFuncOpt */,
       inputFormatClass,
       keyClass,
