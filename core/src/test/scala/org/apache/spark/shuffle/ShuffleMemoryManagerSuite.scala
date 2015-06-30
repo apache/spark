@@ -29,7 +29,7 @@ private[this] class FakeSpillable extends Spillable {
 
   var myMemoryThreshold: Long = 0L
 
-  def addMemory(currentMemory: Long) = {
+  private[spark] def addMemory(currentMemory: Long) = {
     myMemoryThreshold += currentMemory
   }
 
