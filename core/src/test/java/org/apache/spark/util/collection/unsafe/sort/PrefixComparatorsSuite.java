@@ -17,13 +17,29 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import org.apache.spark.annotation.Private;
+import org.junit.Test;
+import static org.junit.Assert.*;
 
-/**
- * Compares 8-byte key prefixes in prefix sort. Subclasses may implement type-specific
- * comparisons, such as lexicographic comparison for strings.
- */
-@Private
-public abstract class PrefixComparator {
-  public abstract int compare(long prefix1, long prefix2);
+public class PrefixComparatorsSuite {
+
+  private static int genericComparison(Comparable a, Comparable b) {
+    return a.compareTo(b);
+  }
+
+  @Test
+  public void intPrefixComparator() {
+    int[] testData = new int[] { 0, Integer.MIN_VALUE, Integer.MAX_VALUE, 0, 1, 2, -1, -2, 1024};
+    for (int a : testData) {
+      for (int b : testData) {
+        long aPrefix = PrefixComparators.INTEGER.computePrefix(a);
+        long bPrefix = PrefixComparators.INTEGER.computePrefix(b);
+        assertEquals(
+          "Wrong prefix comparison results for a=" + a + " b=" + b,
+          genericComparison(a, b),
+          PrefixComparators.INTEGER.compare(aPrefix, bPrefix));
+
+      }
+    }
+  }
+
 }
