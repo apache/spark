@@ -83,7 +83,8 @@ private[clustering] trait KMeansParams
    * setting -- the default of 5 is almost always enough. Default: 5.
    * @group param
    */
-  val initSteps = new Param[Int](this, "initSteps", "number of steps for k-means||")
+  val initSteps = new Param[Int](this, "initSteps", "number of steps for k-means||",
+    (value: Int) => value > 0)
 
   /** @group getParam */
   def getInitializationSteps: Int = $(initSteps)
@@ -161,10 +162,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setInitializationMode(value: String): this.type = set(initMode, value)
 
   /** @group setParam */
-  def setInitializationSteps(value: Int): this.type = {
-    require(value > 0, "Number of initialization steps must be positive")
-    set(initSteps, value)
-  }
+  def setInitializationSteps(value: Int): this.type = set(initSteps, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
