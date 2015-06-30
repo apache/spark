@@ -1436,12 +1436,21 @@ def task_instance_link(v, c, m, p):
         execution_date=m.execution_date.isoformat())
     return Markup(
         """
+        <span style="white-space: nowrap;">
         <a href="{url}">{m.task_id}</a>
         <a href="{url_root}" title="Filter on this task and upstream">
         <span class="glyphicon glyphicon-filter" style="margin-left: 0px;"
             aria-hidden="true"></span>
         </a>
+        </span>
         """.format(**locals()))
+
+
+def state_f(v, c, m, p):
+    color = State.color(m.state)
+    return Markup(
+        '<span class="label" style="background-color:{color};">'
+        '{m.state}</span>'.format(**locals()))
 
 
 def duration_f(v, c, m, p):
@@ -1480,12 +1489,13 @@ admin.add_view(mv)
 
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = (
-        'dag_id', 'task_id', 'state', 'execution_date', 'hostname',
+        'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
         'queue', 'pool')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
         hostname=nobr_f,
+        state=state_f,
         execution_date=datetime_f,
         start_date=datetime_f,
         end_date=datetime_f,
@@ -1493,8 +1503,8 @@ class TaskInstanceModelView(ModelViewOnly):
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_default_sort = ('start_date', True)
     column_list = (
-        'dag_id', 'task_id', 'execution_date',
-        'start_date', 'end_date', 'duration', 'state', 'job_id', 'hostname',
+        'state', 'dag_id', 'task_id', 'execution_date',
+        'start_date', 'end_date', 'duration', 'job_id', 'hostname',
         'unixname', 'priority_weight', 'log')
     can_delete = True
     page_size = 100
