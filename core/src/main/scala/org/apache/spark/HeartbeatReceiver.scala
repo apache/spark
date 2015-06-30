@@ -132,7 +132,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext)
           // Asynchronously kill the executor to avoid blocking the current thread
           killExecutorThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
-              sc.killExecutor(executorId)
+              sc.expireExecutor(executorId)
             }
           })
         }
