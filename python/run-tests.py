@@ -58,22 +58,33 @@ def run_individual_python_test(test_name, pyspark_python):
     env = {'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python)}
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
-    per_test_output = tempfile.TemporaryFile()
-    retcode = subprocess.Popen(
-        [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
-        stderr=per_test_output, stdout=per_test_output, env=env).wait()
+    try:
+        per_test_output = tempfile.TemporaryFile()
+        retcode = subprocess.Popen(
+            [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
+            stderr=per_test_output, stdout=per_test_output, env=env).wait()
+    except:
+        LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
+        # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
+        # this code is invoked from a thread other than the main thread.
+        os._exit(1)
     duration = time.time() - start_time
     # Exit on the first failure.
     if retcode != 0:
-        with FAILURE_REPORTING_LOCK:
-            with open(LOG_FILE, 'ab') as log_file:
+        try:
+            with FAILURE_REPORTING_LOCK:
+                with open(LOG_FILE, 'ab') as log_file:
+                    per_test_output.seek(0)
+                    log_file.writelines(per_test_output)
                 per_test_output.seek(0)
-                log_file.writelines(per_test_output.readlines())
-            per_test_output.seek(0)
-            for line in per_test_output:
-                if not re.match('[0-9]+', line):
-                    print(line, end='')
-            per_test_output.close()
+                for line in per_test_output:
+                    decoded_line = line.decode()
+                    if not re.match('[0-9]+', decoded_line):
+                        print(decoded_line, end='')
+                per_test_output.close()
+        except:
+            LOGGER.exception("Got an exception while trying to print failed test output")
+        finally:
             print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
             # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
             # this code is invoked from a thread other than the main thread.
