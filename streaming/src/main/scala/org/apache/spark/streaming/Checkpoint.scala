@@ -44,7 +44,10 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val sparkConfPairs = ssc.conf.getAll
 
   def createSparkConf(): SparkConf = {
-    val reloadConfs = List(
+
+    // Reload properties for the checkpoint application since user wants to set a reload property
+    // or spark had changed its value and user wants to set it back.
+    val propertiesToReload = List(
       "spark.master",
       "spark.yarn.keytab",
       "spark.yarn.principal")
@@ -53,9 +56,10 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
     val newReloadConf = new SparkConf(loadDefaults = true)
-    reloadConfs.foreach { conf =>
-      newReloadConf.getOption(conf)
-        .foreach(confValue => newSparkConf.set(conf, confValue))
+    propertiesToReload.foreach { prop  =>
+      newReloadConf.getOption(prop).foreach { value =>
+        newSparkConf.set(prop, value)
+      }
     }
     newSparkConf
   }
