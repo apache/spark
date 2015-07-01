@@ -323,6 +323,8 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        if not isinstance(name, str):
+            name = name.encode('utf-8')
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
