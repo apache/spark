@@ -21,11 +21,19 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.SharedSQLContext
 
-
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
+
+  case class TestData2(a: Int, b: Int)
+  val testData2 = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => TestData2(t._1, t._2))
+      .toDF()
+    df.registerTempTable("testData2")
+    df
+  }
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
@@ -53,11 +61,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(operators.size === 1)
-    if (operators(0).getClass() != c) {
+    if (operators(0).getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
     }
   }
 
+  case class TestData(key: Int, value: String)
+  val testData = {
+    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    df.registerTempTable("testData")
+    df
+  }
   test("join operator selection") {
     ctx.cacheManager.clearCache()
 
@@ -171,6 +185,20 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
+  case class UpperCaseData(N: Int, L: String)
+  val upperCaseData = {
+    val df = ((1 to 6) zip ('A' to 'F'))
+      .map(t => UpperCaseData(t._1, t._2.toString))
+      .toDF()
+    df.registerTempTable("upperCaseData")
+    df
+  }
+
+  case class LowerCaseData(n: Int, l: String)
+  val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
+    .map(t => LowerCaseData(t._1, t._2.toString))
+    .toDF()
+
   test("inner join where, one match per row") {
     checkAnswer(
       upperCaseData.join(lowerCaseData).where('n === 'N),
@@ -223,13 +251,22 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  test("cartisian product join") {
+  case class TestData3(a: Int, b: Option[Int])
+  test("cartesian product join") {
+    val testData3 = Seq(TestData3(1, None), TestData3(2, Some(2))).toDF()
     checkAnswer(
       testData3.join(testData3),
       Row(1, null, 1, null) ::
         Row(1, null, 2, 2) ::
         Row(2, 2, 1, null) ::
         Row(2, 2, 2, 2) :: Nil)
+  }
+
+  case class NullInts(a: Integer)
+  val allNulls = {
+    val df = (1 to 4).map(_ => NullInts(null)).toDF()
+    df.registerTempTable("allNulls")
+    df
   }
 
   test("left outer join") {
