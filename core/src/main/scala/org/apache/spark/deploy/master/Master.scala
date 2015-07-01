@@ -518,12 +518,9 @@ private[master] class Master(
   }
 
   private def completeRecovery() {
-    // TODO Why synchronized
     // Ensure "only-once" recovery semantics using a short synchronization period.
-    synchronized {
-      if (state != RecoveryState.RECOVERING) { return }
-      state = RecoveryState.COMPLETING_RECOVERY
-    }
+    if (state != RecoveryState.RECOVERING) { return }
+    state = RecoveryState.COMPLETING_RECOVERY
 
     // Kill off any workers and apps that didn't respond to us.
     workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
