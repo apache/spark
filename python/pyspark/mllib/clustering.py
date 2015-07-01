@@ -288,16 +288,12 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model = PowerIterationClustering.train(rdd, 2, 100)
     >>> model.k
     2
-    >>> sorted(model.assignments().collect())
-    [Assignment(id=0, cluster=1), Assignment(id=1, cluster=0), ...
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = PowerIterationClusteringModel.load(sc, path)
     >>> sameModel.k
     2
-    >>> sorted(sameModel.assignments().collect())
-    [Assignment(id=0, cluster=1), Assignment(id=1, cluster=0), ...
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
