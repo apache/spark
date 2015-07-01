@@ -66,7 +66,7 @@ private[yarn] class AMDelegationTokenRenewer(
   private val numFilesToKeep =
     sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
   private val freshHadoopConf =
-    hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile))
+    hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab

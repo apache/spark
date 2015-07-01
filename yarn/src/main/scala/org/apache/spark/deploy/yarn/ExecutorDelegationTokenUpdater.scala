@@ -36,7 +36,8 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
   private val freshHadoopConf =
-    SparkHadoopUtil.get.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile))
+    SparkHadoopUtil.get.getConfBypassingFSCache(
+      hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
   private val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
