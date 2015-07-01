@@ -137,8 +137,6 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
 
   override def dataType: DataType = left.dataType
 
-  override def symbol: String = "++="
-
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input).asInstanceOf[OpenHashSet[Any]]
     if(leftEval != null) {
