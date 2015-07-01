@@ -33,6 +33,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
+  val sliceMemorySize =
+    blockManager.conf.getSizeAsBytes("spark.storage.sliceMemoryThreshold", "64m")
+
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
   }
@@ -45,8 +48,11 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val channel = new FileOutputStream(file).getChannel
+
     Utils.tryWithSafeFinally {
-      while (bytes.remaining > 0) {
+      val capacity = bytes.limit()
+      while (bytes.position() < capacity) {
+        bytes.limit(Math.min(capacity, bytes.position + sliceMemorySize.toInt))
         channel.write(bytes)
       }
     } {
@@ -108,12 +114,15 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
+
     Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map
       if (length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(length.toInt)
         channel.position(offset)
-        while (buf.remaining() != 0) {
+        val capacity = buf.limit()
+        while (buf.position < capacity) {
+          buf.limit(Math.min(buf.position + sliceMemorySize.toInt, capacity))
           if (channel.read(buf) == -1) {
             throw new IOException("Reached EOF before filling buffer\n" +
               s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
