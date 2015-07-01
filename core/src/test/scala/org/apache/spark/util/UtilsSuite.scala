@@ -486,6 +486,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   // Test for using the util function to change our log levels.
   test("log4j log level change") {
+    val current = org.apache.log4j.Logger.getRootLogger().getLevel()
     try {
       Utils.setLogLevel(org.apache.log4j.Level.ALL)
       assert(log.isInfoEnabled())
@@ -493,9 +494,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(!log.isInfoEnabled())
       assert(log.isErrorEnabled())
     } finally {
-      // Best effort at undoing changes this test made. Level should be synchronized with the
-      // log4j.properties file used for testing.
-      Utils.setLogLevel(org.apache.log4j.Level.INFO)
+      // Best effort at undoing changes this test made.
+      Utils.setLogLevel(current)
     }
   }
 
