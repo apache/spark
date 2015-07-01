@@ -162,7 +162,7 @@ private[sql] class ParquetRelation2(
     }
   }
 
-  /** Constraints on schema of dataframe to be stored **/
+  /** Constraints on schema of dataframe to be stored. */
   private def checkConstraints(schema: StructType): Unit = {
     if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
       val duplicateColumns = schema.fieldNames.groupBy(identity).collect {

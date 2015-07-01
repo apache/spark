@@ -37,7 +37,7 @@ private[sql] class DefaultSource
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
   }
 
-  /** Constraints to be imposed on dataframe to be stored **/
+  /** Constraints to be imposed on dataframe to be stored. */
   private def checkConstraints(data: DataFrame): Unit = {
     if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
       val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
@@ -145,7 +145,7 @@ private[sql] class JSONRelation(
       samplingRatio,
       userSpecifiedSchema)(sqlContext)
 
-  /** Constraints to be imposed on datframe to be stored **/
+  /** Constraints to be imposed on dataframe to be stored. */
   private def checkConstraints(data: DataFrame): Unit = {
     if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
       val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
