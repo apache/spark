@@ -21,9 +21,9 @@ import java.io.{FileOutputStream, PrintStream, File}
 import java.net.URI
 import java.util.jar.JarFile
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{RedirectThread, Utils}
 
-import scala.sys.process._
+import scala.collection.JavaConversions._
 
 private[deploy] object RPackageUtils {
 
@@ -61,7 +61,19 @@ private[deploy] object RPackageUtils {
     if (verbose) {
       printStream.println(s"Building R package with the command: $installCmd")
     }
-    (installCmd #> printStream).! == 0
+    try {
+      val builder = new ProcessBuilder(installCmd)
+      builder.redirectErrorStream(true)
+      val env = builder.environment()
+      env.clear()
+      val process = builder.start()
+      new RedirectThread(process.getInputStream, printStream, "redirect R output").start()
+      process.waitFor() == 0
+    } catch {
+      case e: Throwable =>
+        printStream.println(e.getMessage + "\n" + e.getStackTrace)
+        false
+    }
   }
 
   /**
@@ -109,8 +121,12 @@ private[deploy] object RPackageUtils {
         if (checkManifestForR(jar)) {
           printStream.println(s"$file contains R source code. Now installing package.")
           val rSource = extractRFolder(jar, printStream, verbose)
-          if (!rPackageBuilder(rSource, printStream, verbose)) {
-            printStream.println(s"ERROR: Failed to build R package in $file.")
+          try {
+            if (!rPackageBuilder(rSource, printStream, verbose)) {
+              printStream.println(s"ERROR: Failed to build R package in $file.")
+            }
+          } finally {
+            rSource.delete() // clean up
           }
         } else {
           if (verbose) {
