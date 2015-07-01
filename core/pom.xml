@@ -373,6 +373,10 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-test</artifactId>
+    </dependency>
+    <dependency>
       <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.4</version>
