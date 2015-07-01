@@ -831,7 +831,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
-   *
+   * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
+   *       in a directory rather than `.../path/` or `.../path`
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def wholeTextFiles(
@@ -878,9 +879,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @param minPartitions A suggestion value of the minimal splitting number for input data.
-   *
    * @note Small files are preferred; very large files may cause bad performance.
+   * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
+   *       in a directory rather than `.../path/` or `.../path`
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   @Experimental
   def binaryFiles(

@@ -135,8 +135,6 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
  */
 case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
 
-  override def nullable: Boolean = left.nullable || right.nullable
-
   override def dataType: DataType = left.dataType
 
   override def symbol: String = "++="
@@ -184,8 +182,6 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
  * we don't need to do type check for it.
  */
 case class CountSet(child: Expression) extends UnaryExpression {
-
-  override def nullable: Boolean = child.nullable
 
   override def dataType: DataType = LongType
 
