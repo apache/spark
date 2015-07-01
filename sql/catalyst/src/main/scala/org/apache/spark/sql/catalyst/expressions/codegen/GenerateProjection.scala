@@ -148,7 +148,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }.mkString("\n")
 
     val copyColumns = expressions.zipWithIndex.map { case (e, i) =>
-        s"""arr[$i] = c$i;"""
+        s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n      ")
 
     val code = s"""
