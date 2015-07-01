@@ -148,7 +148,9 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    monitorThread.interrupt()
+    if (monitorThread != null) {
+      monitorThread.interrupt()
+    }
     super.stop()
     client.stop()
     logInfo("Stopped")
