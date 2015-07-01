@@ -342,7 +342,7 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
-        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
         [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):
