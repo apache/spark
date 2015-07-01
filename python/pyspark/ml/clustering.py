@@ -61,18 +61,21 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     """
 
     @keyword_only
-    def __init__(self, k=2):
+    def __init__(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initStep=5):
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        self.k = Param(self, "k", "number of clusters you want")
-        self.epsilon = Param(self, "epsilon", "distance threshold to have coveraged")
-        self.runs = Param(self, "runs", "number runs of the algorithm to execute in parallel")
+        self.k = Param(self, "k", "number of clusters to create")
+        self.epsilon = Param(self, "epsilon",
+                             "distance threshold within which " +
+                             "we've consider centers to have converged")
+        self.runs = Param(self, "runs", "number of runs of the algorithm to execute in parallel")
         self.seed = Param(self, "seed", "random seed")
-        self.initializationMode = Param(self, "initializationMode", "initialization algorithm")
-        self.initializationSteps = Param(self, "initializationSteps",
-                                         "steps for k-means initialization mode")
-        self._setDefault(k=2, maxIter=20, runs=1, epsilon=1e-4,
-                         initializationMode="k-means||", initializationSteps=5)
+        self.initMode = Param(self, "initMode",
+                              "the initialization algorithm. This can be either \"random\" to " +
+                              "choose random points as initial cluster centers, or \"k-means||\" " +
+                              "to use a parallel variant of k-means++")
+        self.initSteps = Param(self, "initSteps", "steps for k-means initialization mode")
+        self._setDefault(k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -80,10 +83,9 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         return KMeansModel(java_model)
 
     @keyword_only
-    def setParams(self, k=2, maxIter=20, runs=1, epsilon=1e-4,
-                  initializationMode="k-means||", initializationSteps=5):
+    def setParams(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5):
         """
-        setParams(self, k=2, maxIter=20, runs=1, initializationMode="k-means||"):
+        setParams(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5):
 
         Sets params for KMeans.
         """
@@ -143,7 +145,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
 
     def setInitializationMode(self, value):
         """
-        Sets the value of :py:attr:`initializationMode`.
+        Sets the value of :py:attr:`initMode`.
 
         >>> algo = KMeans()
         >>> algo.getInitializationMode()
@@ -152,31 +154,31 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         >>> algo.getInitializationMode()
         'random'
         """
-        self._paramMap[self.initializationMode] = value
+        self._paramMap[self.initMode] = value
         return self
 
     def getInitializationMode(self):
         """
-        Gets the value of `initializationMode`
+        Gets the value of `initMode`
         """
-        return self.getOrDefault(self.initializationMode)
+        return self.getOrDefault(self.initMode)
 
     def setInitializationSteps(self, value):
         """
-        Sets the value of :py:attr:`initializationSteps`.
+        Sets the value of :py:attr:`initSteps`.
 
         >>> algo = KMeans().setInitializationSteps(10)
         >>> algo.getInitializationSteps()
         10
         """
-        self._paramMap[self.initializationSteps] = value
+        self._paramMap[self.initSteps] = value
         return self
 
     def getInitializationSteps(self):
         """
-        Gets the value of `initializationSteps`
+        Gets the value of `initSteps`
         """
-        return self.getOrDefault(self.initializationSteps)
+        return self.getOrDefault(self.initSteps)
 
 
 if __name__ == "__main__":
