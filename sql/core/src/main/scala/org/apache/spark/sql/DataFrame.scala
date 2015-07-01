@@ -1550,7 +1550,7 @@ class DataFrame private[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
-    val jrdd = internalRowRdd.map(EvaluatePython.toJava(_, structType)).toJavaRDD()
+    val jrdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
   }
 
