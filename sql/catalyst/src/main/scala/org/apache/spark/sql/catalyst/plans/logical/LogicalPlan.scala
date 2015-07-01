@@ -146,32 +146,40 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
     var inBacktick = false
-    var i = 0
-    while (i < name.length) {
-      val char = name(i)
-      if (inBacktick) {
-        if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+    if (name.length == 0) {
+      tmp += '\0'
+    }
+    else {
+      var i = 0
+      while (i < name.length) {
+        val char = name(i)
+        if (inBacktick) {
+          if (char == '`') {
+            inBacktick = false
+            if (name(i - 1) == '`') tmp += '\0'
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          } else {
+            tmp += char
+          }
         } else {
-          tmp += char
+          if (char == '`') {
+            if (tmp.nonEmpty) throw e
+            inBacktick = true
+          } else if (char == '.') {
+            if (tmp.isEmpty) throw e
+            if (tmp == scala.collection.mutable.ArrayBuffer('\0')) nameParts += ""
+            else nameParts += tmp.mkString
+            tmp.clear()
+          } else {
+            tmp += char
+          }
         }
-      } else {
-        if (char == '`') {
-          if (tmp.nonEmpty) throw e
-          inBacktick = true
-        } else if (char == '.') {
-          if (tmp.isEmpty) throw e
-          nameParts += tmp.mkString
-          tmp.clear()
-        } else {
-          tmp += char
-        }
+        i += 1
       }
-      i += 1
     }
     if (tmp.isEmpty || inBacktick) throw e
-    nameParts += tmp.mkString
+    if (tmp == scala.collection.mutable.ArrayBuffer('\0')) nameParts += ""
+    else nameParts += tmp.mkString
     nameParts.toSeq
   }
 
