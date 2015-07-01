@@ -93,7 +93,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     // optional fields
     conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
     conf.set("spark.files", "fireball.png")
-    conf.set("spark.driver.memory", Utils.DEFAULT_DRIVER_MEM_MB + "m")
+    conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     conf.set("spark.driver.cores", "180")
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
     conf.set("spark.driver.extraClassPath", "food-coloring.jar")
@@ -126,7 +126,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     assert(newMessage.sparkProperties("spark.app.name") === "SparkPie")
     assert(newMessage.sparkProperties("spark.jars") === "mayonnaise.jar,ketchup.jar")
     assert(newMessage.sparkProperties("spark.files") === "fireball.png")
-    assert(newMessage.sparkProperties("spark.driver.memory") === "512m")
+    assert(newMessage.sparkProperties("spark.driver.memory") === s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     assert(newMessage.sparkProperties("spark.driver.cores") === "180")
     assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") ===
       " -Dslices=5 -Dcolor=mostly_red")
