@@ -160,6 +160,12 @@ class DataFrameSuite extends QueryTest {
       testData.collect().filter(_.getInt(0) > 90).toSeq)
   }
 
+  test("filterExpr using where") {
+    checkAnswer(
+      testData.where("key > 50"),
+      testData.collect().filter(_.getInt(0) > 50).toSeq)
+  }
+
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
@@ -301,12 +307,21 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("call udf in SQLContext") {
+  test("deprecated callUdf in SQLContext") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     val sqlctx = df.sqlContext
     sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
     checkAnswer(
       df.select($"id", callUdf("simpleUdf", $"value")),
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
+
+  test("callUDF in SQLContext") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    val sqlctx = df.sqlContext
+    sqlctx.udf.register("simpleUDF", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUDF("simpleUDF", $"value")),
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
@@ -475,6 +490,27 @@ class DataFrameSuite extends QueryTest {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
     testData.select($"*").show(1000)
+  }
+
+  test("showString: truncate = [true, false]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = ctx.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+---------------------+
+                                   ||_1                   |
+                                   |+---------------------+
+                                   ||1                    |
+                                   ||111111111111111111111|
+                                   |+---------------------+
+                                   |""".stripMargin
+    assert(df.showString(10, false) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+--------------------+
+                                  ||                  _1|
+                                  |+--------------------+
+                                  ||                   1|
+                                  ||11111111111111111...|
+                                  |+--------------------+
+                                  |""".stripMargin
+    assert(df.showString(10, true) === expectedAnswerForTrue)
   }
 
   test("showString(negative)") {

@@ -17,23 +17,41 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.sql.Timestamp
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 
-class DateUtilsSuite extends SparkFunSuite {
+class ObjectPoolSuite extends SparkFunSuite with Matchers {
 
-  test("timestamp") {
-    val now = new Timestamp(System.currentTimeMillis())
-    now.setNanos(100)
-    val ns = DateUtils.fromJavaTimestamp(now)
-    assert(ns % 10000000L == 1)
-    assert(DateUtils.toJavaTimestamp(ns) == now)
+  test("pool") {
+    val pool = new ObjectPool(1)
+    assert(pool.put(1) === 0)
+    assert(pool.put("hello") === 1)
+    assert(pool.put(false) === 2)
 
-    List(-111111111111L, -1L, 0, 1L, 111111111111L).foreach { t =>
-      val ts = DateUtils.toJavaTimestamp(t)
-      assert(DateUtils.fromJavaTimestamp(ts) == t)
-      assert(DateUtils.toJavaTimestamp(DateUtils.fromJavaTimestamp(ts)) == ts)
+    assert(pool.get(0) === 1)
+    assert(pool.get(1) === "hello")
+    assert(pool.get(2) === false)
+    assert(pool.size() === 3)
+
+    pool.replace(1, "world")
+    assert(pool.get(1) === "world")
+    assert(pool.size() === 3)
+  }
+
+  test("unique pool") {
+    val pool = new UniqueObjectPool(1)
+    assert(pool.put(1) === 0)
+    assert(pool.put("hello") === 1)
+    assert(pool.put(1) === 0)
+    assert(pool.put("hello") === 1)
+
+    assert(pool.get(0) === 1)
+    assert(pool.get(1) === "hello")
+    assert(pool.size() === 2)
+
+    intercept[UnsupportedOperationException] {
+      pool.replace(1, "world")
     }
   }
 }

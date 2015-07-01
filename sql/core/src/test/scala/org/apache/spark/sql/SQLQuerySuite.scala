@@ -137,13 +137,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-7158 collect and take return different results") {
     import java.util.UUID
-    import org.apache.spark.sql.types._
 
     val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
     // we except the id is materialized once
-    def id: () => String = () => { UUID.randomUUID().toString() }
+    val idUDF = udf(() => UUID.randomUUID().toString)
 
-    val dfWithId = df.withColumn("id", callUDF(id, StringType))
+    val dfWithId = df.withColumn("id", idUDF())
     // Make a new DataFrame (actually the same reference to the old one)
     val cached = dfWithId.cache()
     // Trigger the cache
@@ -1367,9 +1366,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-6145: special cases") {
     sqlContext.read.json(sqlContext.sparkContext.makeRDD(
-      """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
-    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
-    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
+      """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
+    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
+    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
   }
 
   test("SPARK-6898: complete support for special chars in column names") {

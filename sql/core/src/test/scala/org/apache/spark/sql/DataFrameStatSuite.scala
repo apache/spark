@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Random
+
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
@@ -65,22 +67,22 @@ class DataFrameStatSuite extends SparkFunSuite  {
   }
 
   test("crosstab") {
-    val df = Seq((0, 0), (2, 1), (1, 0), (2, 0), (0, 0), (2, 0)).toDF("a", "b")
+    val rng = new Random()
+    val data = Seq.tabulate(25)(i => (rng.nextInt(5), rng.nextInt(10)))
+    val df = data.toDF("a", "b")
     val crosstab = df.stat.crosstab("a", "b")
     val columnNames = crosstab.schema.fieldNames
     assert(columnNames(0) === "a_b")
-    assert(columnNames(1) === "0")
-    assert(columnNames(2) === "1")
-    val rows: Array[Row] = crosstab.collect().sortBy(_.getString(0))
-    assert(rows(0).get(0).toString === "0")
-    assert(rows(0).getLong(1) === 2L)
-    assert(rows(0).get(2) === 0L)
-    assert(rows(1).get(0).toString === "1")
-    assert(rows(1).getLong(1) === 1L)
-    assert(rows(1).get(2) === 0L)
-    assert(rows(2).get(0).toString === "2")
-    assert(rows(2).getLong(1) === 2L)
-    assert(rows(2).getLong(2) === 1L)
+    // reduce by key
+    val expected = data.map(t => (t, 1)).groupBy(_._1).mapValues(_.length)
+    val rows = crosstab.collect()
+    rows.foreach { row =>
+      val i = row.getString(0).toInt
+      for (col <- 1 until columnNames.length) {
+        val j = columnNames(col).toInt
+        assert(row.getLong(col) === expected.getOrElse((i, j), 0).toLong)
+      }
+    }
   }
 
   test("Frequent Items") {
