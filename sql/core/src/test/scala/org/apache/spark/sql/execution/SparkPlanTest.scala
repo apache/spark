@@ -99,9 +99,9 @@ class SparkPlanTest extends SparkFunSuite {
    * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
    */
   protected def checkAnswer[A <: Product : TypeTag](
-    input: DataFrame,
-    planFunction: SparkPlan => SparkPlan,
-    expectedAnswer: Seq[A]): Unit = {
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedAnswer: Seq[A]): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
     checkAnswer(input, planFunction, expectedRows)
   }
@@ -115,10 +115,10 @@ class SparkPlanTest extends SparkFunSuite {
    * @param expectedAnswer the expected result in a [[Seq]] of [[Product]]s.
    */
   protected def checkAnswer[A <: Product : TypeTag](
-    left: DataFrame,
-    right: DataFrame,
-    planFunction: (SparkPlan, SparkPlan) => SparkPlan,
-    expectedAnswer: Seq[A]): Unit = {
+      left: DataFrame,
+      right: DataFrame,
+      planFunction: (SparkPlan, SparkPlan) => SparkPlan,
+      expectedAnswer: Seq[A]): Unit = {
     val expectedRows = expectedAnswer.map(Row.fromTuple)
     checkAnswer(left, right, planFunction, expectedRows)
   }
