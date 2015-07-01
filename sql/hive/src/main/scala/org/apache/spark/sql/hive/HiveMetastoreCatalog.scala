@@ -737,7 +737,7 @@ private[hive] case class MetastoreRelation
           val partParams = Option(refPart.getParameters)
           // If any of the parameters of referred partitions is not defined, skip BroadCastJoin
           if (partParams.isEmpty) {
-            return sqlContext.conf.defaultSizeInBytes  
+            return sqlContext.conf.defaultSizeInBytes
           }
           val partSize =
             Option(partParams.get.get(StatsSetupConst.TOTAL_SIZE))
