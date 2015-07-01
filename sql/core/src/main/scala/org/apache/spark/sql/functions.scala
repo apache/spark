@@ -1831,7 +1831,7 @@ object functions {
   def callUdf(udfName: String, cols: Column*): Column = {
     // Note: we avoid using closures here because on file systems that are case-insensitive, the
     // compiled class file for the closure here will conflict with the one in callUDF (upper case).
-    val exprs = new scala.collection.mutable.ArrayBuffer[Expression](cols.size)
+    val exprs = new Array[Expression](cols.size)
     var i = 0
     while (i < cols.size) {
       exprs(i) = cols(i).expr
