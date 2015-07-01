@@ -309,13 +309,15 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
+        [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
         if has_pandas and isinstance(data, pandas.DataFrame):
             if schema is None:
-                schema = list(data.columns)
+                schema = [str(x) for x in data.columns]
             data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):
