@@ -58,6 +58,10 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> kmeans.setParams("features")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
     """
 
     @keyword_only
