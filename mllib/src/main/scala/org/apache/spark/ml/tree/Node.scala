@@ -133,7 +133,7 @@ final class LeafNode private[ml] (
  * @param split  Information about the test used to split to the left or right child.
  */
 @DeveloperApi
-final class InternalNode private[ml] (
+class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     val gain: Double,
@@ -210,6 +210,17 @@ private object InternalNode {
   }
 }
 
+/**
+ * For now, we extend nodes with ids.  These will be kept internal since we hope to remove node IDs
+ * in the future, or at least change the indexing (so that we can support much deeper trees).
+ *
+ * This node can either be:
+ *  - a leaf node, with leftChild, rightChild, split set to null, or
+ *  - an internal node, with all values set
+ *
+ * @param id  We currently use the same indexing as the spark.mllib implementation,
+ *            but this will change later.
+ */
 private[tree] class LearningNode(
     prediction: Double,
     impurity: Double,
@@ -217,14 +228,76 @@ private[tree] class LearningNode(
     leftChild: Node,
     rightChild: Node,
     split: Split,
-    val id: Int) extends InternalNode(prediction, impurity, gain, leftChild, rightChild, split) {
+    val id: Int,
+    val isLeaf: Boolean)
+  extends InternalNode(prediction, impurity, gain, leftChild, rightChild, split) {
 
 }
 
 private[tree] object LearningNode {
 
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(Double.NaN, Double.NaN, Double.NaN, null, null, null, nodeIndex)
+    new LearningNode(Double.NaN, Double.NaN, Double.NaN, null, null, null, nodeIndex, false)
+  }
+
+  /**
+   * Return the index of the left child of this node.
+   */
+  def leftChildIndex(nodeIndex: Int): Int = nodeIndex << 1
+
+  /**
+   * Return the index of the right child of this node.
+   */
+  def rightChildIndex(nodeIndex: Int): Int = (nodeIndex << 1) + 1
+
+  /**
+   * Get the parent index of the given node, or 0 if it is the root.
+   */
+  def parentIndex(nodeIndex: Int): Int = nodeIndex >> 1
+
+  /**
+   * Return the level of a tree which the given node is in.
+   */
+  def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
+    throw new IllegalArgumentException(s"0 is not a valid node index.")
+  } else {
+    java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
+  }
+
+  /**
+   * Returns true if this is a left child.
+   * Note: Returns false for the root.
+   */
+  def isLeftChild(nodeIndex: Int): Boolean = nodeIndex > 1 && nodeIndex % 2 == 0
+
+  /**
+   * Return the maximum number of nodes which can be in the given level of the tree.
+   * @param level  Level of tree (0 = root).
+   */
+  def maxNodesInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Return the index of the first node in the given level.
+   * @param level  Level of tree (0 = root).
+   */
+  def startIndexInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Traces down from a root node to get the node with the given node index.
+   * This assumes the node exists.
+   */
+  def getNode(nodeIndex: Int, rootNode: LearningNode): LearningNode = {
+    var tmpNode: LearningNode = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    while (levelsToGo > 0) {
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftChild.asInstanceOf[LearningNode]
+      } else {
+        tmpNode = tmpNode.rightChild.asInstanceOf[LearningNode]
+      }
+      levelsToGo -= 1
+    }
+    tmpNode
   }
 
 }

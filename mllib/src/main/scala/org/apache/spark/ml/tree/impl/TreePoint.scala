@@ -150,14 +150,12 @@ private[spark] object TreePoint {
       } else {
         val insertPos = -idx - 1
         if (insertPos == 0 || insertPos == splits.length) {
-          throw new SparkException(s"Feature value $feature out of Bucketizer bounds" +
-            s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
-            s"the lower/upper bound constraints.")
+          throw new SparkException(s"Unexpected error in preparing tree data:" +
+            s"Feature value $feature out of Bucketizer bounds [${splits.head}, ${splits.last}].")
         } else {
           insertPos - 1
         }
       }
     }
-    -1
   }
 }
