@@ -47,6 +47,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
         isValid = "ParamValidators.inRange(0, 1)"),
+      ParamDesc[Array[Double]]("thresholds",
+        "thresholds in multi-class classification prediction, must be array with size of classes."),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
