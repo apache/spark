@@ -128,6 +128,7 @@ case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
+  override def toString: String = s"MAX($child)"
 
   override def asPartial: SplitEvaluation = {
     val partialMax = Alias(Max(child), "PartialMax")()
@@ -161,6 +162,7 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
 
   override def nullable: Boolean = false
   override def dataType: LongType.type = LongType
+  override def toString: String = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
     val partialCount = Alias(Count(child), "PartialCount")()
@@ -399,6 +401,8 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
       DoubleType
   }
 
+  override def toString: String = s"AVG($child)"
+
   override def asPartial: SplitEvaluation = {
     child.dataType match {
       case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
@@ -489,6 +493,8 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
     case _ =>
       child.dataType
   }
+
+  override def toString: String = s"SUM($child)"
 
   override def asPartial: SplitEvaluation = {
     child.dataType match {
