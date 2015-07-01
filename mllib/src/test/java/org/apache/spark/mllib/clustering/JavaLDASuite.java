@@ -33,7 +33,8 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
-
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaLDASuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -110,7 +111,18 @@ public class JavaLDASuite implements Serializable {
 
     // Check: topic distributions
     JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
-    assertEquals(topicDistributions.count(), corpus.count());
+    // SPARK-5562. since the topicDistribution returns the distribution of docsI over topics .
+    // for empty docs, since the distribution of topic won't sum to 1 (and hence it is not a pdf)
+    // So the output will not contain the empty docs and hence we modify the unittest to
+    // compare against nonEmptyCorpus
+    JavaPairRDD<Long, Vector> nonEmptyCorpus = corpus.filter(
+            new Function<Tuple2<Long, Vector>, Boolean>() {
+              public Boolean call(Tuple2<Long, Vector> tuple2) {
+                return Vectors.norm(tuple2._2(), 1.0) != 0.0;
+              }
+
+    });
+    assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
   }
 
   @Test
