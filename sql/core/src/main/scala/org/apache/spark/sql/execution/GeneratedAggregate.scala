@@ -224,7 +224,7 @@ case class GeneratedAggregate(
       case e: Expression if resultMap.contains(new TreeNodeRef(e)) => resultMap(new TreeNodeRef(e))
       case e: Expression =>
         namedGroups.collectFirst {
-          case (expr, attr) if expr semanticEquals e => attr
+          case (expr, attr) if expr == e => attr
         }.getOrElse(e)
     })
 

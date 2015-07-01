@@ -154,7 +154,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = f(arg.asInstanceOf[BaseType])
-        if (newChild fastEquals arg) {
+        if (newChild eq arg) {
           arg
         } else {
           changed = true
@@ -181,7 +181,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = remainingNewChildren.remove(0)
           val oldChild = remainingOldChildren.remove(0)
-          if (newChild fastEquals oldChild) {
+          if (newChild eq oldChild) {
             oldChild
           } else {
             changed = true
@@ -193,7 +193,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
-        if (newChild fastEquals oldChild) {
+        if (newChild eq oldChild) {
           oldChild
         } else {
           changed = true
@@ -228,7 +228,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     }
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
-    if (this fastEquals afterRule) {
+    if (this eq afterRule) {
       transformChildrenDown(rule)
     } else {
       afterRule.transformChildrenDown(rule)
@@ -245,7 +245,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
-        if (!(newChild fastEquals arg)) {
+        if (newChild ne arg) {
           changed = true
           newChild
         } else {
@@ -253,7 +253,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         }
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
-        if (!(newChild fastEquals arg)) {
+        if (newChild ne arg) {
           changed = true
           Some(newChild)
         } else {
@@ -264,7 +264,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
-          if (!(newChild fastEquals arg)) {
+          if (newChild ne arg) {
             changed = true
             newChild
           } else {
@@ -286,7 +286,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = transformChildrenUp(rule)
-    if (this fastEquals afterRuleOnChildren) {
+    if (this eq afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
       }
@@ -302,7 +302,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-        if (!(newChild fastEquals arg)) {
+        if (newChild ne arg) {
           changed = true
           newChild
         } else {
@@ -310,7 +310,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         }
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-        if (!(newChild fastEquals arg)) {
+        if (newChild ne arg) {
           changed = true
           Some(newChild)
         } else {
@@ -321,7 +321,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-          if (!(newChild fastEquals arg)) {
+          if (newChild ne arg) {
             changed = true
             newChild
           } else {
