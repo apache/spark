@@ -23,6 +23,7 @@ import java.util.concurrent.RejectedExecutionException
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkException, SparkConf, Logging}
 import org.apache.spark.io.CompressionCodec
@@ -290,6 +291,7 @@ object CheckpointReader extends Logging {
       conf: SparkConf,
       hadoopConf: Configuration,
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
+    loginUserIfConfExsis(conf)
     val checkpointPath = new Path(checkpointDir)
 
     // TODO(rxin): Why is this a def?!
@@ -323,6 +325,17 @@ object CheckpointReader extends Logging {
       throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
     }
     None
+  }
+
+  /**
+   * If using the keytab to login user in security mode, this checkpoint application has to login
+   * before reading files from hdfs.
+   */
+  private def loginUserIfConfExsis(conf: SparkConf): Unit = {
+    for(principal <- conf.getOption("spark.yarn.principal");
+      keytab <- conf.getOption("spark.yarn.keytab")) {
+      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+    }
   }
 }
 
