@@ -1890,7 +1890,7 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
   <tr>
     <td><code>spark.sql.codegen</code></td>
-    <td>false</td>
+    <td>true</td>
     <td>
       When true, code will be dynamically generated at runtime for expression evaluation in a specific
       query.  For some queries with complicated expression this option can lead to significant speed-ups.
