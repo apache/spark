@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 
@@ -53,7 +52,13 @@ class DataFrameJoinSuite extends QueryTest {
       Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
   }
 
+  case class TestData(key: Int, value: String)
   test("join - self join") {
+    val testData = {
+      val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+      df.registerTempTable("testData")
+      df
+    }
     val df1 = testData.select(testData("key")).as('df1)
     val df2 = testData.select(testData("key")).as('df2)
 
