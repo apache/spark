@@ -45,10 +45,10 @@ test_that("serializeToBytes on RDD", {
   writeLines(mockFile, fileName)
 
   text.rdd <- textFile(sc, fileName)
-  expect_true(getSerializedMode(text.rdd) == "string")
+  expect_equal(getSerializedMode(text.rdd), "string")
   ser.rdd <- serializeToBytes(text.rdd)
   expect_equal(collect(ser.rdd), as.list(mockFile))
-  expect_true(getSerializedMode(ser.rdd) == "byte")
+  expect_equal(getSerializedMode(ser.rdd), "byte")
 
   unlink(fileName)
 })
