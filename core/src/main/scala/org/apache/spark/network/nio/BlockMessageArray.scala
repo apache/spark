@@ -80,7 +80,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage])
   }
 }
 
-private[nio] object BlockMessageArray {
+private[nio] object BlockMessageArray extends Logging {
 
   def fromBufferMessage(bufferMessage: BufferMessage): BlockMessageArray = {
     val newBlockMessageArray = new BlockMessageArray()
@@ -101,11 +101,10 @@ private[nio] object BlockMessageArray {
         }
       }
     val blockMessageArray = new BlockMessageArray(blockMessages)
-    // scalastyle:off println
-    println("Block message array created")
+    logDebug("Block message array created")
 
     val bufferMessage = blockMessageArray.toBufferMessage
-    println("Converted to buffer message")
+    logDebug("Converted to buffer message")
 
     val totalSize = bufferMessage.size
     val newBuffer = ByteBuffer.allocate(totalSize)
@@ -117,10 +116,11 @@ private[nio] object BlockMessageArray {
     })
     newBuffer.flip
     val newBufferMessage = Message.createBufferMessage(newBuffer)
-    println("Copied to new buffer message, size = " + newBufferMessage.size)
+    logDebug("Copied to new buffer message, size = " + newBufferMessage.size)
 
     val newBlockMessageArray = BlockMessageArray.fromBufferMessage(newBufferMessage)
-    println("Converted back to block message array")
+    logDebug("Converted back to block message array")
+    // scalastyle:off println
     newBlockMessageArray.foreach(blockMessage => {
       blockMessage.getType match {
         case BlockMessage.TYPE_PUT_BLOCK => {

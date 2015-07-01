@@ -118,40 +118,37 @@ private class ClientEndpoint(
   def pollAndReportStatus(driverId: String) {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
-    // scalastyle:off println
-    println("... waiting before polling master for driver state")
+    logInfo("... waiting before polling master for driver state")
     Thread.sleep(5000)
-    println("... polling master for driver state")
+    logInfo("... polling master for driver state")
     val statusResponse =
       activeMasterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
     statusResponse.found match {
       case false =>
-        println(s"ERROR: Cluster master did not recognize $driverId")
+        logError(s"ERROR: Cluster master did not recognize $driverId")
         System.exit(-1)
       case true =>
-        println(s"State of $driverId is ${statusResponse.state.get}")
+        logInfo(s"State of $driverId is ${statusResponse.state.get}")
         // Worker node, if present
         (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
           case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            println(s"Driver running on $hostPort ($id)")
+            logInfo(s"Driver running on $hostPort ($id)")
           case _ =>
         }
         // Exception, if present
         statusResponse.exception.map { e =>
-          println(s"Exception from cluster was: $e")
+          logError(s"Exception from cluster was: $e")
           e.printStackTrace()
           System.exit(-1)
         }
         System.exit(0)
     }
-    // scalastyle:on println
   }
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    // scalastyle:off println
     case SubmitDriverResponse(master, success, driverId, message) =>
-      println(message)
+      logInfo(message)
       if (success) {
         activeMasterEndpoint = master
         pollAndReportStatus(driverId.get)
@@ -161,50 +158,43 @@ private class ClientEndpoint(
 
 
     case KillDriverResponse(master, driverId, success, message) =>
-      println(message)
+      logInfo(message)
       if (success) {
         activeMasterEndpoint = master
         pollAndReportStatus(driverId)
       } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
       }
-    // scalastyle:on println
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    // scalastyle:off println
     if (!lostMasters.contains(remoteAddress)) {
-      println(s"Error connecting to master $remoteAddress.")
+      logError(s"Error connecting to master $remoteAddress.")
       lostMasters += remoteAddress
       // Note that this heuristic does not account for the fact that a Master can recover within
       // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
       // is not currently a concern, however, because this client does not retry submissions.
       if (lostMasters.size >= masterEndpoints.size) {
-        println("No master is available, exiting.")
+        logError("No master is available, exiting.")
         System.exit(-1)
       }
     }
-    // scalastyle:on println
   }
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-    // scalastyle:off println
     if (!lostMasters.contains(remoteAddress)) {
-      println(s"Error connecting to master ($remoteAddress).")
-      println(s"Cause was: $cause")
+      logError(s"Error connecting to master ($remoteAddress).")
+      logError(s"Cause was: $cause")
       lostMasters += remoteAddress
       if (lostMasters.size >= masterEndpoints.size) {
-        println("No master is available, exiting.")
+        logError("No master is available, exiting.")
         System.exit(-1)
       }
     }
-    // scalastyle:on println
   }
 
   override def onError(cause: Throwable): Unit = {
-    // scalastyle:off println
-    println(s"Error processing messages, exiting.")
-    // scalastyle:on println
+    logError(s"Error processing messages, exiting.")
     cause.printStackTrace()
     System.exit(-1)
   }
