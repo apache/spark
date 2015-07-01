@@ -145,8 +145,10 @@ class LinearRegression(override val uid: String)
       if (handlePersistence) instances.unpersist()
       val weights = Vectors.sparse(numFeatures, Seq())
       val intercept = yMean
-      val summary = generateTrainingResults(instances, Array(), weights, intercept)
-      return new LinearRegressionModel(uid, weights, intercept, summary)
+
+      val model = new LinearRegressionModel(uid, weights, intercept)
+      val trainingResults = new LinearRegressionTrainingResults(model, dataset, Array())
+      return model.setTrainingResults(trainingResults)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -199,32 +201,10 @@ class LinearRegression(override val uid: String)
     val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
     if (handlePersistence) instances.unpersist()
 
-    val summary = generateTrainingResults(instances, lossHistory.result(), weights, intercept)
-
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
-    copyValues(new LinearRegressionModel(uid, weights.compressed, intercept, summary))
-  }
-
-  private def generateTrainingResults(
-      instances: RDD[(Double, Vector)],
-      objectiveTrace: Array[Double],
-      weights: Vector,
-      intercept: Double): LinearRegressionTrainingResults = {
-
-    // Generate training results summary
-    val predictionAndObservations = instances.map {
-      case (label, feature) => (predict(weights, intercept)(feature), label)
-    }
-
-    new LinearRegressionTrainingResults(
-      predictionAndObservations,
-      objectiveTrace.length,
-      objectiveTrace
-    )
-  }
-
-  private def predict(weights: Vector, intercept: Double)(features: Vector): Double = {
-    dot(features, weights) + intercept
+    val model = new LinearRegressionModel(uid, weights.compressed, intercept)
+    val trainingResults = new LinearRegressionTrainingResults(model, dataset, lossHistory.result())
+    copyValues(model.setTrainingResults(trainingResults))
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
@@ -239,10 +219,18 @@ class LinearRegression(override val uid: String)
 class LinearRegressionModel private[ml] (
     override val uid: String,
     val weights: Vector,
-    val intercept: Double,
-    val trainingSummary: LinearRegressionTrainingResults)
+    val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
+
+  private var trainingResults: Option[LinearRegressionTrainingResults] = None
+
+  def getTrainingResults: Option[LinearRegressionTrainingResults] = trainingResults
+
+  def setTrainingResults(trainingResults: LinearRegressionTrainingResults): this.type = {
+    this.trainingResults = Some(trainingResults)
+    this
+  }
 
   /**
    * Evaluates the model on a test-set.
@@ -262,7 +250,9 @@ class LinearRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
-    copyValues(new LinearRegressionModel(uid, weights, intercept, trainingSummary), extra)
+    val newModel = new LinearRegressionModel(uid, weights, intercept)
+    if (trainingResults.isDefined) newModel.setTrainingResults(trainingResults.get)
+    copyValues(newModel, extra)
   }
 }
 
@@ -270,15 +260,30 @@ class LinearRegressionModel private[ml] (
  * :: Experimental ::
  * Linear regression training results.
  * @param predictionAndObservations dataframe with columns predictions (0) and observations(0).
- * @param totalIterations total number of training iterations.
  * @param objectiveTrace objective function value at each iteration.
  */
 @Experimental
-class LinearRegressionTrainingResults(
-    @transient predictionAndObservations: RDD[(Double, Double)],
-    val totalIterations: Int,
+class LinearRegressionTrainingResults private[ml] (
+    predictionAndObservations: RDD[(Double, Double)],
     val objectiveTrace: Array[Double])
-  extends LinearRegressionResults(predictionAndObservations)
+  extends LinearRegressionResults(predictionAndObservations) {
+
+  /** Number of training iterations until termination */
+  val totalIterations = objectiveTrace.length
+
+  def this(
+      model: LinearRegressionModel,
+      dataset: DataFrame,
+      objectiveTrace: Array[Double]) {
+
+    this(
+      model.transform(dataset).select(model.getPredictionCol, model.getLabelCol).map {
+        case Row(pred: Double, label: Double) => (pred, label)
+      },
+      objectiveTrace
+    )
+  }
+}
 
 /**
  * :: Experimental ::
@@ -286,8 +291,41 @@ class LinearRegressionTrainingResults(
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
  */
 @Experimental
-class LinearRegressionResults(@transient val predictionAndObservations: RDD[(Double, Double)])
-  extends RegressionMetrics(predictionAndObservations) {
+class LinearRegressionResults private[ml] (
+    @transient val predictionAndObservations: RDD[(Double, Double)]) extends Serializable {
+
+  private val metrics = new RegressionMetrics(predictionAndObservations)
+
+  /**
+   * Returns the explained variance regression score.
+   * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   */
+  def explainedVariance: Double = metrics.explainedVariance
+
+  /**
+   * Returns the mean absolute error, which is a risk function corresponding to the
+   * expected value of the absolute error loss or l1-norm loss.
+   */
+  def meanAbsoluteError: Double = metrics.meanAbsoluteError
+
+  /**
+   * Returns the mean squared error, which is a risk function corresponding to the
+   * expected value of the squared error loss or quadratic loss.
+   */
+  def meanSquaredError: Double = metrics.meanSquaredError
+
+  /**
+   * Returns the root mean squared error, which is defined as the square root of
+   * the mean squared error.
+   */
+  def rootMeanSquaredError: Double = metrics.rootMeanSquaredError
+
+  /**
+   * Returns R^2^, the coefficient of determination.
+   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   */
+  def r2: Double = metrics.r2
 
   /** Get residuals */
   def residuals: RDD[Double] = predictionAndObservations.map(r => r._1 - r._2)

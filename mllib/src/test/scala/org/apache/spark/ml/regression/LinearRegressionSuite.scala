@@ -87,13 +87,16 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(prediction1 ~== prediction2 relTol 1E-5)
     }
 
+    // Training results for the model should be available
+    assert(model.getTrainingResults.isDefined)
+
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
     dataset.select("features", "label").map {
       case Row(features: DenseVector, label: Double) =>
         val prediction =
           features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
         prediction - label
-    }.zip(model.trainingSummary.residuals)
+    }.zip(model.getTrainingResults.get.residuals)
       .collect()
       .foreach {
       case (manualResidual: Double, resultResidual: Double) =>
@@ -113,12 +116,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
                [,1]
        s0 0.9998749
      */
-    assert(model.trainingSummary.meanSquaredError ~== 0.00972035 relTol 1E-5)
-    assert(model.trainingSummary.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
-    assert(model.trainingSummary.r2 ~== 0.9998749 relTol 1E-5)
+    assert(model.getTrainingResults.get.meanSquaredError ~== 0.00972035 relTol 1E-5)
+    assert(model.getTrainingResults.get.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
+    assert(model.getTrainingResults.get.r2 ~== 0.9998749 relTol 1E-5)
 
     // Objective function should be monotonically decreasing for linear regression
-    assert(model.trainingSummary.objectiveTrace.sliding(2).forall(x => x(0) >= x(1)))
+    assert(model.getTrainingResults.get.objectiveTrace.sliding(2).forall(x => x(0) >= x(1)))
   }
 
   test("linear regression without intercept without regularization") {
