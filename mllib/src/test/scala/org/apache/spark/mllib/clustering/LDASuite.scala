@@ -248,7 +248,7 @@ private[clustering] object LDASuite {
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
   assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
-  def getNonEmptyDoc(corpus:Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
+  def getNonEmptyDoc(corpus: Array[(Long, Vector)]): Array[(Long, Vector)] = corpus.filter {
     case (_, wc: Vector) => Vectors.norm(wc, p = 1.0) != 0.0
   }
 }
