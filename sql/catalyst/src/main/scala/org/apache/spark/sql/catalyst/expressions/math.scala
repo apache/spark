@@ -358,8 +358,7 @@ case class Pow(left: Expression, right: Expression)
  * Performs the inverse operation of HEX.
  * Resulting characters are returned as a byte array.
  */
-case class UnHex(child: Expression)
-  extends UnaryExpression with Serializable  {
+case class UnHex(child: Expression) extends UnaryExpression with Serializable {
 
   override def dataType: DataType = BinaryType
 
@@ -367,35 +366,52 @@ case class UnHex(child: Expression)
     if (child.dataType.isInstanceOf[StringType] || child.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$unHex accepts String type, not ${child.dataType}")
+      TypeCheckResult.TypeCheckFailure(s"unHex accepts String type, not ${child.dataType}")
     }
   }
-
 
   override def eval(input: InternalRow): Any = {
     val num = child.eval(input)
     if (num == null) {
       null
     } else {
-      unhex(num.asInstanceOf[UTF8String].toString)
+      unhex(num.asInstanceOf[UTF8String].getBytes)
     }
   }
 
-  private def unhex(s: String): Array[Byte] = {
-    // append a leading 0 if needed
-    val str = if (s.length % 2 == 1) {"0" + s} else {s}
-    val result = new Array[Byte](str.length / 2)
+  private val hexDigits = {
+    val array = Array.fill[Byte](128)(-1)
+    (0 to 9).foreach(i => array('0' + i) = i.toByte)
+    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
+    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
+    array
+  }
+
+  private def toDigit(b: Byte): Byte = {
+    val digit = hexDigits(b)
+    if (digit == -1) {
+      throw new NumberFormatException(s"invalid hex number $b")
+    }
+    digit
+  }
+
+  private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
+    var bytes = inputBytes
+    if ((bytes.length & 0x01) != 0) {
+      bytes = 48.toByte +: bytes // padding with '0'
+    }
+    val out = new Array[Byte](bytes.length >> 1)
+    // two characters form the hex value.
     var i = 0
-    while (i < str.length()) {
+    while (i < bytes.length) {
       try {
-        result(i / 2) = Integer.parseInt(str.substring(i, i + 2), 16).asInstanceOf[Byte]
+        out(i / 2) = ((toDigit(bytes(i)) << 4) | toDigit(bytes(i + 1)) & 0xFF).toByte
+        i += 2
       } catch {
-        // invalid character present, return null
         case _: NumberFormatException => return null
       }
-      i += 2
     }
-    result
+    out
   }
 }
 
