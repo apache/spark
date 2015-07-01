@@ -19,23 +19,25 @@ package org.apache.spark.mllib.feature
 
 import java.lang.{Iterable => JavaIterable}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuilder
+
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.apache.spark.{Logging, SparkContext}
+
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuilder
 
 /**
  *  Entry in vocabulary
