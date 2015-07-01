@@ -114,8 +114,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
   }
 
-  override def foldable: Boolean = child.foldable
-
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
 
   override def toString: String = s"CAST($child, $dataType)"
@@ -426,10 +424,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
-  override def eval(input: InternalRow): Any = {
-    val evaluated = child.eval(input)
-    if (evaluated == null) null else cast(evaluated)
-  }
+  protected override def nullSafeEval(input: Any): Any = cast(input)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     // TODO: Add support for more data types.
