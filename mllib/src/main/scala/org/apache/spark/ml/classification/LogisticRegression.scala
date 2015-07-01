@@ -209,7 +209,7 @@ class LogisticRegression(override val uid: String)
       Vectors.dense(rawWeights)
     }
 
-    if (handlePersistence) instances.unpersist()
+    if (handlePersistence) instances.unpersist(blocking = false)
 
     val (weights, intercept) = if ($(fitIntercept)) {
       (Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),

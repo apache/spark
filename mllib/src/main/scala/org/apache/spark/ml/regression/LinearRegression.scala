@@ -139,7 +139,7 @@ class LinearRegression(override val uid: String)
     if (yStd == 0.0) {
       logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
         s"and the intercept will be the mean of the label; as a result, training is not needed.")
-      if (handlePersistence) instances.unpersist()
+      if (handlePersistence) instances.unpersist(blocking = false)
       return new LinearRegressionModel(uid, Vectors.sparse(numFeatures, Seq()), yMean)
     }
 
@@ -191,7 +191,7 @@ class LinearRegression(override val uid: String)
     // converged. See the following discussion for detail.
     // http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
     val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
-    if (handlePersistence) instances.unpersist()
+    if (handlePersistence) instances.unpersist(blocking = false)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     copyValues(new LinearRegressionModel(uid, weights.compressed, intercept))

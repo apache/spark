@@ -118,7 +118,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
-      trainingDataset.unpersist()
+      trainingDataset.unpersist(blocking = false)
       var i = 0
       while (i < numModels) {
         // TODO: duplicate evaluator to take extra params from input
@@ -127,7 +127,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
         metrics(i) += metric
         i += 1
       }
-      validationDataset.unpersist()
+      validationDataset.unpersist(blocking = false)
     }
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")

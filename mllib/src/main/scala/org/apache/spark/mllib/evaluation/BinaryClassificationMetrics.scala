@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.DataFrame
@@ -63,7 +62,7 @@ class BinaryClassificationMetrics(
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {
-    cumulativeCounts.unpersist()
+    cumulativeCounts.unpersist(blocking = false)
   }
 
   /** Returns thresholds in descending order. */

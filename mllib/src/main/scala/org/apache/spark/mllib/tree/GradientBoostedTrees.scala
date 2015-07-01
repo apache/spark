@@ -269,7 +269,7 @@ object GradientBoostedTrees extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    if (persistedInput) input.unpersist()
+    if (persistedInput) input.unpersist(blocking = false)
 
     if (validate) {
       new GradientBoostedTreesModel(

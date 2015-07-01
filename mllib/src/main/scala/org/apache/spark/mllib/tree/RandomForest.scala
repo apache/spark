@@ -237,7 +237,7 @@ private class RandomForest (
       timer.stop("findBestSplits")
     }
 
-    baggedInput.unpersist()
+    baggedInput.unpersist(blocking = false)
 
     timer.stop("total")
 
