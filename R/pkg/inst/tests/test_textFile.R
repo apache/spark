@@ -27,7 +27,7 @@ test_that("textFile() on a local file returns an RDD", {
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
-  expect_true(inherits(rdd, "RDD"))
+  expect_is(rdd, "RDD")
   expect_true(count(rdd) > 0)
   expect_equal(count(rdd), 2)
 
