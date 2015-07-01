@@ -484,13 +484,12 @@ class DataFrame(object):
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
-    @ignore_unicode_prefix
     @since(1.3)
     def columns(self):
         """Returns all column names as a list.
 
         >>> df.columns
-        [u'age', u'name']
+        ['age', 'name']
         """
         return [f.name for f in self.schema.fields]
 
