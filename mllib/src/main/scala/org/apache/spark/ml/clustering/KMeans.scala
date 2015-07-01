@@ -178,13 +178,16 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setSeed(value: Long): this.type = set(seed, value)
 
   override def fit(dataset: DataFrame): KMeansModel = {
-    val map = this.extractParamMap()
-    val rdd = dataset.select(col(map(featuresCol))).map { case Row(point: Vector) => point}
+    val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
 
     val algo = new MLlibKMeans()
-        .setK(map(k))
-        .setMaxIterations(map(maxIter))
-        .setSeed(map(seed))
+      .setK($(k))
+      .setInitializationMode($(initMode))
+      .setInitializationSteps($(initSteps))
+      .setMaxIterations($(maxIter))
+      .setSeed($(seed))
+      .setEpsilon($(epsilon))
+      .setRuns($(runs))
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
     copyValues(model)
