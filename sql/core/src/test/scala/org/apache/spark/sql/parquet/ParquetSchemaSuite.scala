@@ -161,6 +161,14 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true)
 
+  testSchemaInference[Tuple1[String]](
+    "binary enum as string",
+    """
+      |message root {
+      |  optional binary _1 (ENUM);
+      |}
+    """.stripMargin)
+
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - non-standard",
     """

@@ -82,7 +82,7 @@ private[sql] object StatFunctions extends Logging {
         s"with dataType ${data.get.dataType} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
-    df.select(columns: _*).internalRowRdd.aggregate(new CovarianceCounter)(
+    df.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
       seqOp = (counter, row) => {
         counter.add(row.getDouble(0), row.getDouble(1))
       },

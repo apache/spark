@@ -139,6 +139,7 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[Sha1]("sha1"),
     expression[Sha1]("sha"),
+    expression[Crc32]("crc32"),
 
     // aggregate functions
     expression[Average]("avg"),

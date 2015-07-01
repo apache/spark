@@ -116,7 +116,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(2000 millis), interval(20 millis)) {
+      eventually(timeout(30 seconds), interval(20 millis)) {
         collector.startedReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds(0) should equal (0)
         collector.stoppedReceiverStreamIds should have size 1

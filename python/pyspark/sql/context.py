@@ -33,6 +33,7 @@ from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.utils import install_exception_handler
 
 try:
     import pandas
@@ -96,6 +97,7 @@ class SQLContext(object):
         self._jvm = self._sc._jvm
         self._scala_SQLContext = sqlContext
         _monkey_patch_RDD(self)
+        install_exception_handler()
 
     @property
     def _ssql_ctx(self):
@@ -342,13 +344,15 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
+        [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
         if has_pandas and isinstance(data, pandas.DataFrame):
             if schema is None:
-                schema = list(data.columns)
+                schema = [str(x) for x in data.columns]
             data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):

@@ -492,6 +492,27 @@ class DataFrameSuite extends QueryTest {
     testData.select($"*").show(1000)
   }
 
+  test("showString: truncate = [true, false]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = ctx.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+---------------------+
+                                   ||_1                   |
+                                   |+---------------------+
+                                   ||1                    |
+                                   ||111111111111111111111|
+                                   |+---------------------+
+                                   |""".stripMargin
+    assert(df.showString(10, false) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+--------------------+
+                                  ||                  _1|
+                                  |+--------------------+
+                                  ||                   1|
+                                  ||11111111111111111...|
+                                  |+--------------------+
+                                  |""".stripMargin
+    assert(df.showString(10, true) === expectedAnswerForTrue)
+  }
+
   test("showString(negative)") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -708,5 +729,12 @@ class DataFrameSuite extends QueryTest {
 
     val res11 = ctx.range(-1).select("id")
     assert(res11.count == 0)
+  }
+
+  test("SPARK-8621: support empty string column name") {
+    val df = Seq(Tuple1(1)).toDF("").as("t")
+    // We should allow empty string as column name
+    df.col("")
+    df.col("t.``")
   }
 }
