@@ -37,6 +37,17 @@ private[sql] class DefaultSource
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
   }
 
+  /** Constraints to be imposed on dataframe to be stored **/
+  private def checkConstraints(data: DataFrame): Unit = {
+    if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
+      val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new IOException(s"Duplicate column(s) : $duplicateColumns found, " +
+        s"cannot save to JSON format")
+    }
+  }
+
   /** Returns a new base relation with the parameters. */
   override def createRelation(
       sqlContext: SQLContext,
@@ -63,6 +74,10 @@ private[sql] class DefaultSource
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    // check if dataframe satisfies the constraints
+    // before moving forward
+    checkConstraints(data)
+
     val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -130,6 +145,17 @@ private[sql] class JSONRelation(
       samplingRatio,
       userSpecifiedSchema)(sqlContext)
 
+  /** Constraints to be imposed on datframe to be stored **/
+  private def checkConstraints(data: DataFrame): Unit = {
+    if (data.schema.fieldNames.length != data.schema.fieldNames.distinct.length) {
+      val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new IOException(s"Duplicate column(s) : $duplicateColumns found, " +
+        s"cannot save to JSON format")
+    }
+  }
+
   private val useJacksonStreamingAPI: Boolean = sqlContext.conf.useJacksonStreamingAPI
 
   override val needConversion: Boolean = false
@@ -178,6 +204,10 @@ private[sql] class JSONRelation(
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    // check if dataframe satisfies constraints
+    // before moving forward
+    checkConstraints(data)
+
     val filesystemPath = path match {
       case Some(p) => new Path(p)
       case None =>
