@@ -331,33 +331,49 @@ private[sql] class ParquetRelation2(
     // Schema of the whole table, including partition columns.
     var schema: StructType = _
 
+    // Cached leaf statuses
+    var localCachedLeafStatuses: Set[FileStatus] = _
+
+    // Cached leaves
+    var cachedLeaves: Array[FileStatus] = _
+
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
+      // Check if cachedLeafStatuses is changed or not
+      val leafStatusesChanged = localCachedLeafStatuses != cachedLeafStatuses()
+
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
-      val leaves = cachedLeafStatuses().filter { f =>
-        isSummaryFile(f.getPath) ||
-          !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-      }.toArray
+      val leaves = if (leafStatusesChanged) {
+        localCachedLeafStatuses = cachedLeafStatuses()
+        cachedLeaves = cachedLeafStatuses().filter { f =>
+          isSummaryFile(f.getPath) ||
+            !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+        }.toArray
+        cachedLeaves
+      } else {
+        cachedLeaves
+      }
 
       dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
       metadataStatuses = leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
       commonMetadataStatuses =
         leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
 
-      footers = {
-        val conf = SparkHadoopUtil.get.conf
-        val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
-        val rawFooters = if (shouldMergeSchemas) {
-          ParquetFileReader.readAllFootersInParallel(
-            conf, seqAsJavaList(leaves), taskSideMetaData)
-        } else {
-          ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
-            conf, seqAsJavaList(leaves), taskSideMetaData)
+      if (leafStatusesChanged) {
+        footers = {
+          val conf = SparkHadoopUtil.get.conf
+          val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
+          val rawFooters = if (shouldMergeSchemas) {
+            ParquetFileReader.readAllFootersInParallel(
+              conf, seqAsJavaList(leaves), taskSideMetaData)
+          } else {
+            ParquetFileReader.readAllFootersInParallelUsingSummaryFiles(
+              conf, seqAsJavaList(leaves), taskSideMetaData)
+          }
+          rawFooters.map(footer => footer.getFile -> footer).toMap
         }
-
-        rawFooters.map(footer => footer.getFile -> footer).toMap
       }
 
       // If we already get the schema, don't need to re-compute it since the schema merging is
