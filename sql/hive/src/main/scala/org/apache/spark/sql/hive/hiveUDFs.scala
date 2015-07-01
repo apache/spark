@@ -59,16 +59,16 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
       val functionClassName = functionInfo.getFunctionClass.getName
 
       if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveSimpleUdf(new HiveFunctionWrapper(functionClassName), children)
+        HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
       } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUdf(new HiveFunctionWrapper(functionClassName), children)
+        HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
       } else if (
         classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUdaf(new HiveFunctionWrapper(functionClassName), children)
+        HiveGenericUDAF(new HiveFunctionWrapper(functionClassName), children)
       } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveUdaf(new HiveFunctionWrapper(functionClassName), children)
+        HiveUDAF(new HiveFunctionWrapper(functionClassName), children)
       } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-        HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), children)
+        HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children)
       } else {
         sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
       }
@@ -79,7 +79,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
     throw new UnsupportedOperationException
 }
 
-private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
 
   type UDFType = UDF
@@ -120,8 +120,6 @@ private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, childre
   @transient
   protected lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
-  override def isThreadSafe: Boolean = false
-
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
     unwrap(
@@ -146,7 +144,7 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
   override def get(): AnyRef = wrap(func(), oi)
 }
 
-private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
 
@@ -179,8 +177,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
   lazy val dataType: DataType = inspectorToDataType(returnInspector)
-
-  override def isThreadSafe: Boolean = false
 
   override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.
@@ -413,7 +409,7 @@ private[hive] case class HiveWindowFunction(
     new HiveWindowFunction(funcWrapper, pivotResult, isUDAFBridgeRequired, children)
 }
 
-private[hive] case class HiveGenericUdaf(
+private[hive] case class HiveGenericUDAF(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors {
@@ -441,11 +437,11 @@ private[hive] case class HiveGenericUdaf(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  def newInstance(): HiveUdafFunction = new HiveUdafFunction(funcWrapper, children, this)
+  def newInstance(): HiveUDAFFunction = new HiveUDAFFunction(funcWrapper, children, this)
 }
 
 /** It is used as a wrapper for the hive functions which uses UDAF interface */
-private[hive] case class HiveUdaf(
+private[hive] case class HiveUDAF(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors {
@@ -474,7 +470,7 @@ private[hive] case class HiveUdaf(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  def newInstance(): HiveUdafFunction = new HiveUdafFunction(funcWrapper, children, this, true)
+  def newInstance(): HiveUDAFFunction = new HiveUDAFFunction(funcWrapper, children, this, true)
 }
 
 /**
@@ -488,7 +484,7 @@ private[hive] case class HiveUdaf(
  * Operators that require maintaining state in between input rows should instead be implemented as
  * user defined aggregations, which have clean semantics even in a partitioned execution.
  */
-private[hive] case class HiveGenericUdtf(
+private[hive] case class HiveGenericUDTF(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression])
   extends Generator with HiveInspectors {
@@ -553,7 +549,7 @@ private[hive] case class HiveGenericUdtf(
   }
 }
 
-private[hive] case class HiveUdafFunction(
+private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     exprs: Seq[Expression],
     base: AggregateExpression,
