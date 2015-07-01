@@ -76,7 +76,7 @@ class BinaryClassificationEvaluator(override val uid: String)
       case other =>
         throw new IllegalArgumentException(s"Does not support metric $other.")
     }
-    metrics.unpersist(blocking = false)
+    metrics.unpersist()
     metric
   }
 
