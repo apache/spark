@@ -180,7 +180,7 @@ private[spark] class ExternalSorter[K, V, C](
   // Information about a spilled file. Includes sizes in bytes of "batches" written by the
   // serializer as we periodically reset its stream, as well as number of elements in each
   // partition, used to efficiently keep track of partitions when merging.
-  private[this] case class SpilledFile(
+  private[spark] case class SpilledFile(
     file: File,
     blockId: BlockId,
     serializerBatchSizes: Array[Long],
@@ -667,7 +667,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    def cleanup(): Unit = {
+    private[spark] def cleanup(): Unit = {
       spillFile.foreach(_.file.delete())
     }
   }
