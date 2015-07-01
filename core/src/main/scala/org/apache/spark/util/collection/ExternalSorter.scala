@@ -591,7 +591,7 @@ private[spark] abstract class ExternalSorter[K, V, C](
    *
    * This interface abstracts away aggregator dependence.
    */
-  override def writePartitionedFile(
+  def writePartitionedFile(
       blockId: BlockId,
       context: TaskContext,
       outputFile: File): Array[Long]

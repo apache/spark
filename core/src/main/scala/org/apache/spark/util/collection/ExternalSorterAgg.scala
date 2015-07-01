@@ -86,7 +86,7 @@ private[spark] class ExternalSorterAgg[K, V, C](
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
     serializer: Option[Serializer] = None)
-  extends ExternalSorter[K, V, C]
+  extends ExternalSorter[K, V, C](partitioner, ordering, serializer)
   with Spillable[WritablePartitionedPairCollection[K, C]]
   with SortShuffleFileWriter[K, V] {
 

@@ -151,8 +151,7 @@ private[spark] class ExternalSorterNoAgg[K, V, C](
    */
   @VisibleForTesting
   override def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
-    val collection: WritablePartitionedPairCollection[K, C] = buffer
-    partitionedIterator(collection)
+    partitionedIterator(buffer)
   }
 
   /**
@@ -167,7 +166,6 @@ private[spark] class ExternalSorterNoAgg[K, V, C](
       blockId: BlockId,
       context: TaskContext,
       outputFile: File): Array[Long] = {
-
     writePartitionedFile(blockId, context, outputFile, buffer)
   }
 }
