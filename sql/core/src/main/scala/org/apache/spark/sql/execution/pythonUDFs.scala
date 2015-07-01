@@ -55,7 +55,7 @@ private[spark] case class PythonUDF(
 
   override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
-  def nullable: Boolean = true
+  override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
@@ -69,7 +69,7 @@ private[spark] case class PythonUDF(
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
+private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
@@ -183,9 +183,9 @@ object EvaluatePython {
     }.toMap
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
-      }): Row
+      })
 
     case (c: java.util.Calendar, DateType) =>
       DateTimeUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))

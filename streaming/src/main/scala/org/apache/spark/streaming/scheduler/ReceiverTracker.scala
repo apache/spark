@@ -17,8 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable.{HashMap, SynchronizedMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedMap}
 import scala.language.existentials
+import scala.math.max
+import org.apache.spark.rdd._
 
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{Logging, SparkEnv, SparkException}
@@ -273,6 +275,41 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /**
+     * Get the list of executors excluding driver
+     */
+    private def getExecutors(ssc: StreamingContext): List[String] = {
+      val executors = ssc.sparkContext.getExecutorMemoryStatus.map(_._1.split(":")(0)).toList
+      val driver = ssc.sparkContext.getConf.get("spark.driver.host")
+      executors.diff(List(driver))
+    }
+
+    /** Set host location(s) for each receiver so as to distribute them over
+     * executors in a round-robin fashion taking into account preferredLocation if set
+     */
+    private[streaming] def scheduleReceivers(receivers: Seq[Receiver[_]],
+      executors: List[String]): Array[ArrayBuffer[String]] = {
+      val locations = new Array[ArrayBuffer[String]](receivers.length)
+      var i = 0
+      for (i <- 0 until receivers.length) {
+        locations(i) = new ArrayBuffer[String]()
+        if (receivers(i).preferredLocation.isDefined) {
+          locations(i) += receivers(i).preferredLocation.get
+        }
+      }
+      var count = 0
+      for (i <- 0 until max(receivers.length, executors.length)) {
+        if (!receivers(i % receivers.length).preferredLocation.isDefined) {
+          locations(i % receivers.length) += executors(count)
+          count += 1
+          if (count == executors.length) {
+            count = 0
+          }
+        }
+      }
+      locations
+    }
+
+    /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
@@ -282,18 +319,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         rcvr.setReceiverId(nis.id)
         rcvr
       })
-
-      // Right now, we only honor preferences if all receivers have them
-      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
-
-      // Create the parallel collection of receivers to distributed them on the worker nodes
-      val tempRDD =
-        if (hasLocationPreferences) {
-          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
-          ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        } else {
-          ssc.sc.makeRDD(receivers, receivers.size)
-        }
 
       val checkpointDirOption = Option(ssc.checkpointDir)
       val serializableHadoopConf =
@@ -311,11 +336,24 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         supervisor.start()
         supervisor.awaitTermination()
       }
+
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
       if (!ssc.sparkContext.isLocal) {
         ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
       }
+
+      // Get the list of executors and schedule receivers
+      val executors = getExecutors(ssc)
+      val tempRDD =
+        if (!executors.isEmpty) {
+          val locations = scheduleReceivers(receivers, executors)
+          val roundRobinReceivers = (0 until receivers.length).map(i =>
+            (receivers(i), locations(i)))
+          ssc.sc.makeRDD[Receiver[_]](roundRobinReceivers)
+        } else {
+          ssc.sc.makeRDD(receivers, receivers.size)
+        }
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")

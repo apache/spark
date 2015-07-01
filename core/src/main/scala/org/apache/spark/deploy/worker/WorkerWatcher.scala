@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.DeployMessages.SendHeartbeat
 import org.apache.spark.rpc._
 
 /**
@@ -29,10 +28,9 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   extends RpcEndpoint with Logging {
 
   logInfo(s"Connecting to worker $workerUrl")
-  // workerUrl is wrong now. https://github.com/apache/spark/pull/5392 will fix it.
-  // if (!isTesting) {
-  //   rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
-  // }
+  if (!isTesting) {
+    rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
+  }
 
   // Used to avoid shutting down JVM during tests
   // In the normal case, exitNonZero will call `System.exit(-1)` to shutdown the JVM. In the unit

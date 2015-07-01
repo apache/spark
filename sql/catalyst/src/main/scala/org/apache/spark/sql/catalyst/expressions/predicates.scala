@@ -69,10 +69,7 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-
-case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
+case class Not(child: Expression) extends UnaryExpression with Predicate with AutoCastInputTypes {
   override def toString: String = s"NOT $child"
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
@@ -123,7 +120,7 @@ case class InSet(value: Expression, hset: Set[Any])
 }
 
 case class And(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
+  extends BinaryExpression with Predicate with AutoCastInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -172,7 +169,7 @@ case class And(left: Expression, right: Expression)
 }
 
 case class Or(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
+  extends BinaryExpression with Predicate with AutoCastInputTypes {
 
   override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 

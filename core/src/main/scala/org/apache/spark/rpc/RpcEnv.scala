@@ -161,6 +161,8 @@ private[spark] case class RpcAddress(host: String, port: Int) {
   val hostPort: String = host + ":" + port
 
   override val toString: String = hostPort
+
+  def toSparkURL: String = "spark://" + hostPort
 }
 
 
