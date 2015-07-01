@@ -55,7 +55,7 @@ class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
       SparkEnv.get.shuffleManager.shuffleBlockResolver.asInstanceOf[FileShuffleBlockResolver]
 
     val shuffle1 = shuffleBlockResolver.forMapTask(ShuffleIdAndAttempt(1, 0), 1, 1,
-      new JavaSerializer(conf),new ShuffleWriteMetrics)
+      new JavaSerializer(conf), new ShuffleWriteMetrics)
     for (writer <- shuffle1.writers) {
       writer.write("test1", "value")
       writer.write("test2", "value")
