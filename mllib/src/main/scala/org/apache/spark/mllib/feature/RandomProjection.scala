@@ -119,7 +119,7 @@ class RandomProjection(intrinsicDimension: Int) {
     val density = getDensity
     val rows = computeRPRows(origDimensions, density)
     val rdd = sparkContext.parallelize(rows)
-    new CoordinateMatrix(rdd, origDimensions -1, intrinsicDimension -1).toBlockMatrix()
+    new CoordinateMatrix(rdd, origDimensions, intrinsicDimension).toBlockMatrix()
   }
 
   /**
