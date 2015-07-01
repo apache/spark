@@ -36,21 +36,26 @@ object DefaultOptimizer extends Optimizer {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
-    Batch("Operator Reordering", FixedPoint(100),
-      UnionPushdown,
-      CombineFilters,
-      PushPredicateThroughProject,
+    Batch("Distinct", FixedPoint(100),
+      ReplaceDistinctWithAggregate) ::
+    Batch("Operator Optimizations", FixedPoint(100),
+      // Operator push down
+      UnionPushDown,
       PushPredicateThroughJoin,
+      PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       ColumnPruning,
+      // Operator combine
       ProjectCollapsing,
-      CombineLimits) ::
-    Batch("ConstantFolding", FixedPoint(100),
+      CombineFilters,
+      CombineLimits,
+      // Constant folding
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -61,25 +66,25 @@ object DefaultOptimizer extends Optimizer {
 }
 
 /**
-  *  Pushes operations to either side of a Union.
-  */
-object UnionPushdown extends Rule[LogicalPlan] {
+ * Pushes operations to either side of a Union.
+ */
+object UnionPushDown extends Rule[LogicalPlan] {
 
   /**
-    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
-    */
-  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+   * Maps Attributes from the left side to the corresponding Attribute on the right side.
+   */
+  private def buildRewrites(union: Union): AttributeMap[Attribute] = {
     assert(union.left.output.size == union.right.output.size)
 
     AttributeMap(union.left.output.zip(union.right.output))
   }
 
   /**
-    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
-    *  This method relies on the fact that the output attributes of a union are always equal
-    *  to the left child's output.
-    */
-  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+   * Rewrites an expression so that it can be pushed to the right side of a Union operator.
+   * This method relies on the fact that the output attributes of a union are always equal
+   * to the left child's output.
+   */
+  private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
     }
@@ -106,7 +111,6 @@ object UnionPushdown extends Rule[LogicalPlan] {
   }
 }
 
-
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
  * transformations:
@@ -115,10 +119,13 @@ object UnionPushdown extends Rule[LogicalPlan] {
  *   - Aggregate
  *   - Project <- Join
  *   - LeftSemiJoin
- *  - Performing alias substitution.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(_, groupByExprs, _, child))
+      if (child.outputSet -- AttributeSet(groupByExprs) -- a.references).nonEmpty =>
+      a.copy(child = e.copy(child = prunedChild(child, AttributeSet(groupByExprs) ++ a.references)))
+
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
@@ -153,10 +160,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
+    // Push down project through limit, so that we may have chance to push it further.
     case Project(projectList, Limit(exp, child)) =>
       Limit(exp, Project(projectList, child))
 
-    // push down project if possible when the child is sort
+    // Push down project if possible when the child is sort
     case p @ Project(projectList, s @ Sort(_, _, grandChild))
       if s.references.subsetOf(p.outputSet) =>
       s.copy(child = Project(projectList, grandChild))
@@ -175,8 +183,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Project]] operators into one, merging the
- * expressions into one single expression.
+ * Combines two adjacent [[Project]] operators into one and perform alias substitution,
+ * merging the expressions into one single expression.
  */
 object ProjectCollapsing extends Rule[LogicalPlan] {
 
@@ -216,10 +224,10 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 object LikeSimplification extends Rule[LogicalPlan] {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  val startsWith = "([^_%]+)%".r
-  val endsWith = "%([^_%]+)".r
-  val contains = "%([^_%]+)%".r
-  val equalTo = "([^_%]*)".r
+  private val startsWith = "([^_%]+)%".r
+  private val endsWith = "%([^_%]+)".r
+  private val contains = "%([^_%]+)%".r
+  private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(l, Literal(utf, StringType)) =>
@@ -264,7 +272,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         if (newChildren.length == 0) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
-          newChildren(0)
+          newChildren.head
         } else {
           Coalesce(newChildren)
         }
@@ -273,22 +281,23 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
 
+      // MaxOf and MinOf can't do null propagation
+      case e: MaxOf => e
+      case e: MinOf => e
+
       // Put exceptional cases above if any
-      case e: BinaryArithmetic => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
-      case e: BinaryComparison => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
+      case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ BinaryArithmetic(_, Literal(null, _)) => Literal.create(null, e.dataType)
+
+      case e @ BinaryComparison(Literal(null, _), _) => Literal.create(null, e.dataType)
+      case e @ BinaryComparison(_, Literal(null, _)) => Literal.create(null, e.dataType)
+
       case e: StringRegexExpression => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
+
       case e: StringComparison => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
@@ -490,7 +499,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
         grandChild))
   }
 
-  def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
+  private def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]) = {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
@@ -631,6 +640,15 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes [[UnaryPositive]] identify function
+ */
+object RemovePositive extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case UnaryPositive(child) => child
+  }
+}
+
+/**
  * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
  */
@@ -666,7 +684,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
-  val MAX_DOUBLE_DIGITS = 15
+  private val MAX_DOUBLE_DIGITS = 15
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
@@ -690,5 +708,17 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Project(projectList, LocalRelation(output, data)) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+  }
+}
+
+/**
+ * Replaces logical [[Distinct]] operator with an [[Aggregate]] operator.
+ * {{{
+ *   SELECT DISTINCT f1, f2 FROM t  ==>  SELECT f1, f2 FROM t GROUP BY f1, f2
+ * }}}
+ */
+object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Distinct(child) => Aggregate(child.output, child.output, child)
   }
 }

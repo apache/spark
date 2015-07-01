@@ -34,6 +34,48 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.5") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in 1.3.
+            excludePackage("org.spark-project.jetty"),
+            MimaBuild.excludeSparkPackage("unused"),
+            // JavaRDDLike is not meant to be extended by user programs
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.partitioner"),
+            // Modification of private static method
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaUtils.org$apache$spark$streaming$kafka$KafkaUtils$$leadersForRanges"),
+            // Mima false positive (was a private[spark] class)
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.util.collection.PairIterator"),
+            // Removing a testing method from a private class
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaTestUtils.waitUntilLeaderOffset"),
+            // While private MiMa is still not happy about the changes,
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresAggregator.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+            // SQL execution is considered private.
+            excludePackage("org.apache.spark.sql.execution"),
+            // NanoTime and CatalystTimestampConverter is only used inside catalyst,
+            // not needed anymore
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime"),
+              ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.timestamp.NanoTime$"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.CatalystTimestampConverter$"),
+            // SPARK-6777 Implements backwards compatibility rules in CatalystSchemaConverter
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTypeInfo"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
+          )
         case v if v.startsWith("1.4") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

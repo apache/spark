@@ -88,6 +88,21 @@ private[r] class RBackendHandler(server: RBackend)
     ctx.close()
   }
 
+  // Looks up a class given a class name. This function first checks the
+  // current class loader and if a class is not found, it looks up the class
+  // in the context class loader. Address [SPARK-5185]
+  def getStaticClass(objId: String): Class[_] = {
+    try {
+      val clsCurrent = Class.forName(objId)
+      clsCurrent
+    } catch {
+      // Use contextLoader if we can't find the JAR in the system class loader
+      case e: ClassNotFoundException =>
+        val clsContext = Class.forName(objId, true, Thread.currentThread().getContextClassLoader)
+        clsContext
+      }
+    }
+
   def handleMethodCall(
       isStatic: Boolean,
       objId: String,
@@ -98,7 +113,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        getStaticClass(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)

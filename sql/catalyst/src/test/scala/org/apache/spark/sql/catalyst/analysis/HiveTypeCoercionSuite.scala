@@ -28,11 +28,11 @@ class HiveTypeCoercionSuite extends PlanTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = HiveTypeCoercion.findTightestCommonType(t1, t2)
+      var found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
       // Test both directions to make sure the widening is symmetric.
-      found = HiveTypeCoercion.findTightestCommonType(t2, t1)
+      found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t2, t1)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
@@ -113,8 +113,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("coalesce casts") {
-    val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
-    ruleTest(fac,
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
         :: Literal(1)
         :: Literal.create(1.0, FloatType)
@@ -123,7 +122,7 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), DoubleType)
         :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
-    ruleTest(fac,
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1L)
         :: Literal(1)
         :: Literal(new java.math.BigDecimal("1000000000000000000000"))
@@ -134,23 +133,33 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("type coercion for If") {
+    val rule = HiveTypeCoercion.IfCoercion
+    ruleTest(rule,
+      If(Literal(true), Literal(1), Literal(1L)),
+      If(Literal(true), Cast(Literal(1), LongType), Literal(1L))
+    )
+
+    ruleTest(rule,
+      If(Literal.create(null, NullType), Literal(1), Literal(1)),
+      If(Literal.create(null, BooleanType), Literal(1), Literal(1))
+    )
+  }
+
   test("type coercion for CaseKeyWhen") {
-    val cwc = new HiveTypeCoercion {}.CaseWhenCoercion
-    ruleTest(cwc,
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
-    // Will remove exception expectation in PR#6405
-    intercept[RuntimeException] {
-      ruleTest(cwc,
-        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
-        CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
-      )
-    }
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+      CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
+      CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
+    )
   }
 
   test("type coercion simplification for equal to") {
-    val be = new HiveTypeCoercion {}.BooleanEqualization
+    val be = HiveTypeCoercion.BooleanEquality
+
     ruleTest(be,
       EqualTo(Literal(true), Literal(1)),
       Literal(true)
@@ -166,6 +175,27 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(be,
       EqualNullSafe(Literal(true), Literal(0)),
       And(IsNotNull(Literal(true)), Not(Literal(true)))
+    )
+
+    ruleTest(be,
+      EqualTo(Literal(true), Literal(1L)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(new java.math.BigDecimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal(BigDecimal(0)), Literal(true)),
+      Not(Literal(true))
+    )
+    ruleTest(be,
+      EqualTo(Literal(Decimal(1)), Literal(true)),
+      Literal(true)
+    )
+    ruleTest(be,
+      EqualTo(Literal.create(Decimal(1), DecimalType(8, 0)), Literal(true)),
+      Literal(true)
     )
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -41,7 +41,7 @@ class ElementwiseProduct(override val uid: String)
     * the vector to multiply with input vectors
     * @group param
     */
-  val scalingVec: Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
+  val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)

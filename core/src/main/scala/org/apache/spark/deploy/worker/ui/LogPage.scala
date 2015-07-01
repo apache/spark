@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.worker.ui
 
+import java.io.File
+import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -135,6 +137,13 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       return ("Error: Log type must be one of " + supportedLogTypes.mkString(", "), 0, 0, 0)
     }
 
+    // Verify that the normalized path of the log directory is in the working directory
+    val normalizedUri = new URI(logDirectory).normalize()
+    val normalizedLogDir = new File(normalizedUri.getPath)
+    if (!Utils.isInDirectory(workDir, normalizedLogDir)) {
+      return ("Error: invalid log directory " + logDirectory, 0, 0, 0)
+    }
+
     try {
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
@@ -150,7 +159,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
           offset
         }
       }
-      val endIndex = math.min(startIndex + totalLength, totalLength)
+      val endIndex = math.min(startIndex + byteLength, totalLength)
       logDebug(s"Getting log from $startIndex to $endIndex")
       val logText = Utils.offsetBytes(files, startIndex, endIndex)
       logDebug(s"Got log of length ${logText.length} bytes")

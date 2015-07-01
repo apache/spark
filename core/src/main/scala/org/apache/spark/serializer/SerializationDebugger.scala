@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{NotSerializableException, ObjectOutput, ObjectStreamClass, ObjectStreamField}
+import java.io._
 import java.lang.reflect.{Field, Method}
 import java.security.AccessController
 
@@ -62,7 +62,7 @@ private[spark] object SerializationDebugger extends Logging {
    *
    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
    */
-  def find(obj: Any): List[String] = {
+  private[serializer] def find(obj: Any): List[String] = {
     new SerializationDebugger().visit(obj, List.empty)
   }
 
@@ -125,6 +125,12 @@ private[spark] object SerializationDebugger extends Logging {
       return List.empty
     }
 
+    /**
+     * Visit an externalizable object.
+     * Since writeExternal() can choose to add arbitrary objects at the time of serialization,
+     * the only way to capture all the objects it will serialize is by using a
+     * dummy ObjectOutput that collects all the relevant objects for further testing.
+     */
     private def visitExternalizable(o: java.io.Externalizable, stack: List[String]): List[String] =
     {
       val fieldList = new ListObjectOutput
@@ -145,17 +151,50 @@ private[spark] object SerializationDebugger extends Logging {
       // An object contains multiple slots in serialization.
       // Get the slots and visit fields in all of them.
       val (finalObj, desc) = findObjectAndDescriptor(o)
+
+      // If the object has been replaced using writeReplace(),
+      // then call visit() on it again to test its type again.
+      if (!finalObj.eq(o)) {
+        return visit(finalObj, s"writeReplace data (class: ${finalObj.getClass.getName})" :: stack)
+      }
+
+      // Every class is associated with one or more "slots", each slot refers to the parent
+      // classes of this class. These slots are used by the ObjectOutputStream
+      // serialization code to recursively serialize the fields of an object and
+      // its parent classes. For example, if there are the following classes.
+      //
+      //     class ParentClass(parentField: Int)
+      //     class ChildClass(childField: Int) extends ParentClass(1)
+      //
+      // Then serializing the an object Obj of type ChildClass requires first serializing the fields
+      // of ParentClass (that is, parentField), and then serializing the fields of ChildClass
+      // (that is, childField). Correspondingly, there will be two slots related to this object:
+      //
+      // 1. ParentClass slot, which will be used to serialize parentField of Obj
+      // 2. ChildClass slot, which will be used to serialize childField fields of Obj
+      //
+      // The following code uses the description of each slot to find the fields in the
+      // corresponding object to visit.
+      //
       val slotDescs = desc.getSlotDescs
       var i = 0
       while (i < slotDescs.length) {
         val slotDesc = slotDescs(i)
         if (slotDesc.hasWriteObjectMethod) {
-          // TODO: Handle classes that specify writeObject method.
+          // If the class type corresponding to current slot has writeObject() defined,
+          // then its not obvious which fields of the class will be serialized as the writeObject()
+          // can choose arbitrary fields for serialization. This case is handled separately.
+          val elem = s"writeObject data (class: ${slotDesc.getName})"
+          val childStack = visitSerializableWithWriteObjectMethod(finalObj, elem :: stack)
+          if (childStack.nonEmpty) {
+            return childStack
+          }
         } else {
+          // Visit all the fields objects of the class corresponding to the current slot.
           val fields: Array[ObjectStreamField] = slotDesc.getFields
           val objFieldValues: Array[Object] = new Array[Object](slotDesc.getNumObjFields)
           val numPrims = fields.length - objFieldValues.length
-          desc.getObjFieldValues(finalObj, objFieldValues)
+          slotDesc.getObjFieldValues(finalObj, objFieldValues)
 
           var j = 0
           while (j < objFieldValues.length) {
@@ -169,9 +208,45 @@ private[spark] object SerializationDebugger extends Logging {
             }
             j += 1
           }
-
         }
         i += 1
+      }
+      return List.empty
+    }
+
+    /**
+     * Visit a serializable object which has the writeObject() defined.
+     * Since writeObject() can choose to add arbitrary objects at the time of serialization,
+     * the only way to capture all the objects it will serialize is by using a
+     * dummy ObjectOutputStream that collects all the relevant fields for further testing.
+     * This is similar to how externalizable objects are visited.
+     */
+    private def visitSerializableWithWriteObjectMethod(
+        o: Object, stack: List[String]): List[String] = {
+      val innerObjectsCatcher = new ListObjectOutputStream
+      var notSerializableFound = false
+      try {
+        innerObjectsCatcher.writeObject(o)
+      } catch {
+        case io: IOException =>
+          notSerializableFound = true
+      }
+
+      // If something was not serializable, then visit the captured objects.
+      // Otherwise, all the captured objects are safely serializable, so no need to visit them.
+      // As an optimization, just added them to the visited list.
+      if (notSerializableFound) {
+        val innerObjects = innerObjectsCatcher.outputArray
+        var k = 0
+        while (k < innerObjects.length) {
+          val childStack = visit(innerObjects(k), stack)
+          if (childStack.nonEmpty) {
+            return childStack
+          }
+          k += 1
+        }
+      } else {
+        visited ++= innerObjectsCatcher.outputArray
       }
       return List.empty
     }
@@ -180,7 +255,7 @@ private[spark] object SerializationDebugger extends Logging {
   /**
    * Find the object to serialize and the associated [[ObjectStreamClass]]. This method handles
    * writeReplace in Serializable. It starts with the object itself, and keeps calling the
-   * writeReplace method until there is no more
+   * writeReplace method until there is no more.
    */
   @tailrec
   private def findObjectAndDescriptor(o: Object): (Object, ObjectStreamClass) = {
@@ -218,6 +293,31 @@ private[spark] object SerializationDebugger extends Logging {
     override def writeChar(i: Int): Unit = {}
     override def writeLong(l: Long): Unit = {}
     override def writeByte(i: Int): Unit = {}
+  }
+
+  /** An output stream that emulates /dev/null */
+  private class NullOutputStream extends OutputStream {
+    override def write(b: Int) { }
+  }
+
+  /**
+   * A dummy [[ObjectOutputStream]] that saves the list of objects written to it and returns
+   * them through `outputArray`. This works by using the [[ObjectOutputStream]]'s `replaceObject()`
+   * method which gets called on every object, only if replacing is enabled. So this subclass
+   * of [[ObjectOutputStream]] enabled replacing, and uses replaceObject to get the objects that
+   * are being serializabled. The serialized bytes are ignored by sending them to a
+   * [[NullOutputStream]], which acts like a /dev/null.
+   */
+  private class ListObjectOutputStream extends ObjectOutputStream(new NullOutputStream) {
+    private val output = new mutable.ArrayBuffer[Any]
+    this.enableReplaceObject(true)
+
+    def outputArray: Array[Any] = output.toArray
+
+    override def replaceObject(obj: Object): Object = {
+      output += obj
+      obj
+    }
   }
 
   /** An implicit class that allows us to call private methods of ObjectStreamClass. */

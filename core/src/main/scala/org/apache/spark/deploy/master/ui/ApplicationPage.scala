@@ -19,10 +19,7 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.concurrent.Await
 import scala.xml.Node
-
-import akka.pattern.ask
 
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
@@ -32,14 +29,12 @@ import org.apache.spark.util.Utils
 
 private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
-  private val master = parent.masterActorRef
-  private val timeout = parent.timeout
+  private val master = parent.masterEndpointRef
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, timeout)
+    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
