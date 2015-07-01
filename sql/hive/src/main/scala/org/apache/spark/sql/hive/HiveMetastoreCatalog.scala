@@ -740,7 +740,7 @@ private[hive] case class MetastoreRelation
             return sqlContext.conf.defaultSizeInBytes  
           }
           val partSize =
-            Option(partParams.get.get(HiveShim.getStatsSetupConstTotalSize))
+            Option(partParams.get.get(StatsSetupConst.TOTAL_SIZE))
               .map(_.toLong)
               .getOrElse(0L)
 
