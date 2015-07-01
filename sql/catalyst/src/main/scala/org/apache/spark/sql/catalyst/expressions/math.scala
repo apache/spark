@@ -59,7 +59,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with AutoCastInputTypes {
   self: Product =>
 
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
+  override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
@@ -98,7 +98,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with AutoCastInputTypes { self: Product =>
 
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
   override def toString: String = s"$name($left, $right)"
 
@@ -210,7 +210,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 case class Bin(child: Expression)
   extends UnaryExpression with Serializable with AutoCastInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+  override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
   override def eval(input: InternalRow): Any = {

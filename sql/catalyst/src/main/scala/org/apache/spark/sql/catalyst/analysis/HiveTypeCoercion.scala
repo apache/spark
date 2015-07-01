@@ -45,7 +45,7 @@ object HiveTypeCoercion {
       IfCoercion ::
       Division ::
       PropagateTypes ::
-      AddCastForAutoCastInputTypes ::
+      ImplicitTypeCasts ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -705,13 +705,13 @@ object HiveTypeCoercion {
    * Casts types according to the expected input types for Expressions that have the trait
    * [[AutoCastInputTypes]].
    */
-  object AddCastForAutoCastInputTypes extends Rule[LogicalPlan] {
+  object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
+      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.inputTypes =>
+        val newC = (e.children, e.children.map(_.dataType), e.inputTypes).zipped.map {
           case (child, actual, expected) =>
             if (actual == expected) child else Cast(child, expected)
         }
