@@ -851,58 +851,58 @@ test_that("dropna() on a DataFrame", {
 
   expected <- rows[!is.na(rows$name),]
   actual <- collect(dropna(df, cols = "name"))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age),]
   actual <- collect(dropna(df, cols = "age"))
   row.names(expected) <- row.names(actual)
   # identical on two dataframes does not work here. Don't know why.
   # use identical on all columns as a workaround.
-  expect_true(identical(expected$age, actual$age))
-  expect_true(identical(expected$height, actual$height))
-  expect_true(identical(expected$name, actual$name))
+  expect_identical(expected$age, actual$age)
+  expect_identical(expected$height, actual$height)
+  expect_identical(expected$name, actual$name)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, cols = c("age", "height")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   # drop with how
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
   actual <- collect(dropna(df, "all"))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df, "any"))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, "any", cols = c("age", "height")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   # drop with threshold
 
   expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
                    as.integer(!is.na(rows$name)) >= 3,]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 })
 
 test_that("fillna() on a DataFrame", {
@@ -915,22 +915,22 @@ test_that("fillna() on a DataFrame", {
   expected$age[is.na(expected$age)] <- 50
   expected$height[is.na(expected$height)] <- 50.6
   actual <- collect(fillna(df, 50.6))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, "unknown"))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows
   expected$age[is.na(expected$age)] <- 50
   actual <- collect(fillna(df, 50.6, "age"))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   expected <- rows
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, "unknown", c("age", "name")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 
   # fill with named list
 
@@ -939,7 +939,7 @@ test_that("fillna() on a DataFrame", {
   expected$height[is.na(expected$height)] <- 50.6
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
-  expect_true(identical(expected, actual))
+  expect_identical(expected, actual)
 })
 
 unlink(parquetPath)
