@@ -105,6 +105,22 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("a") :: Nil)
   }
 
+  case class TestData(key: Int, value: String)
+  val testData = {
+    val df = (1 to 100).map(i => TestData(i, i.toString)).toDF()
+    df.registerTempTable("testData")
+    df
+  }
+
+  case class TestData2(a: Int, b: Int)
+  val testData2 = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => TestData2(t._1, t._2))
+      .toDF()
+    df.registerTempTable("testData2")
+    df
+  }
+
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
@@ -190,7 +206,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("star qualified by data frame object") {
-    val df = testData.toDF
+    val df = testData
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -259,15 +275,27 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.collect().toSeq.map(r => Row(-r.getInt(0))))
   }
 
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("unary !") {
+    val complexData = {
+      val df = Seq(
+        ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+        ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
+      ).toDF()
+      df.registerTempTable("complexData")
+      df
+    }
     checkAnswer(
       complexData.select(!$"b"),
       complexData.collect().toSeq.map(r => Row(!r.getBoolean(3))))
   }
 
+  case class NullStrings(n: Int, s: String)
+  val nullStrings = Seq(NullStrings(1, "abc"), NullStrings(2, "ABC"), NullStrings(3, null)).toDF()
+
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
@@ -277,7 +305,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
@@ -512,7 +540,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  case class LowerCaseData(n: Int, l: String)
   test("upper") {
+    val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
+      .map(t => LowerCaseData(t._1, t._2.toString))
+      .toDF()
+
     checkAnswer(
       lowerCaseData.select(upper('l)),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase))
@@ -533,7 +566,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("AB", "CDE"))
   }
 
+  case class UpperCaseData(N: Int, L: String)
   test("lower") {
+    val upperCaseData = ((1 to 6) zip ('A' to 'F'))
+      .map(t => UpperCaseData(t._1, t._2.toString))
+      .toDF()
+
     checkAnswer(
       upperCaseData.select(lower('L)),
       ('A' to 'F').map(c => Row(c.toString.toLowerCase))
