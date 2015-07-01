@@ -46,6 +46,7 @@ class UnsafeShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
     // unsafe shuffle has a few different code paths, based on various configs.  We want to
     // make sure we stress multiple attempts under all variants
     val kryoAndNoSpillMove = conf.clone()
+      .set("spark.shuffle.manager", "tungsten-sort")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.shuffle.unsafe.testing.allowSpillMove", "false")
     val noCompressionFileMerge = kryoAndNoSpillMove.clone()

@@ -367,7 +367,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, File outputFile) throws IOException {
-    assert (spills.length >= 2);
+    assert (spills.length >= 2 || !allowSpillMove);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
