@@ -333,7 +333,9 @@ Let's run a few commands to validate this script further.
 
 Testing
 '''''''
-Let's test by running the actual task instances on a specific date.
+Let's test by running the actual task instances on a specific date. The 
+date specified in this context is an ``execution_date``, which simulates the 
+scheduler running your task or dag at a specific date + time:
 
 .. code-block:: bash
 
@@ -372,6 +374,9 @@ are interested in tracking the progress visually as your backfill progresses.
 Note that if you use ``depends_on_past=True``, individual task instances
 will depend on the success of the preceding task instance, except for the
 start_date specified itself, for which this dependency is disregarded.
+
+The date range in this context is a ``start_date`` and optionally an ``end_date``,
+which are used to populate the run schedule with task instances from this dag.
 
 .. code-block:: bash
 
