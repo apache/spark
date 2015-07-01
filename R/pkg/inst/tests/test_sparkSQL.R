@@ -366,7 +366,7 @@ test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
   expect_is(testRDD, "RDD")
   collected <- collect(testRDD)
   expect_equal(collected[[1]]$name, "Michael")
-  expect_equal(collected[[2]]$newCol, "35")
+  expect_equal(collected[[2]]$newCol, 35)
 })
 
 test_that("collect() returns a data.frame", {

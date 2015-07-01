@@ -33,5 +33,5 @@ test_that("sparkJars tag in SparkContext", {
   helloTest <- testOutput[1]
   expect_equal(helloTest, "Hello, Dave")
   basicFunction <- testOutput[2]
-  expect_equal(basicFunction, 4L)
+  expect_equal(basicFunction, "4")
 })
