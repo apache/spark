@@ -29,7 +29,7 @@ object KMeansSuite {
   def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = sql.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
-        .map(v => new TestRow(v))
+      .map(v => new TestRow(v))
     sql.createDataFrame(rdd)
   }
 }
@@ -105,7 +105,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val transformed = model.transform(dataset)
     assert(transformed.columns === Array("features", predictionColName))
     val clusters = transformed.select(predictionColName)
-        .map(row => row.apply(0)).distinct().collect().toSet
+      .map(row => row.apply(0)).distinct().collect().toSet
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
   }
