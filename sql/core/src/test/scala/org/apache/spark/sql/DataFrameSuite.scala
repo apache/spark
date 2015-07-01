@@ -638,4 +638,11 @@ class DataFrameSuite extends QueryTest {
     val res11 = TestSQLContext.range(-1).select("id")
     assert(res11.count == 0)
   }
+
+  test("SPARK-8621: support empty string column name") {
+    val df = Seq(Tuple1(1)).toDF("").as("t")
+    // We should allow empty string as column name
+    df.col("")
+    df.col("t.``")
+  }
 }

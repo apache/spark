@@ -163,7 +163,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           if (tmp.nonEmpty) throw e
           inBacktick = true
         } else if (char == '.') {
-          if (tmp.isEmpty) throw e
+          if (name(i - 1) == '.' || i == name.length - 1) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {
@@ -172,7 +172,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       }
       i += 1
     }
-    if (tmp.isEmpty || inBacktick) throw e
+    if (inBacktick) throw e
     nameParts += tmp.mkString
     nameParts.toSeq
   }
