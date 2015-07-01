@@ -59,7 +59,7 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, stageAttemptId: Int)
     extends BlockId {
   override def name: String = {
-    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId
+    s"shuffle_${shuffleId}_${mapId}_${reduceId}_$stageAttemptId"
   }
 }
 
@@ -67,7 +67,7 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, stageAttemp
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, stageAttemptId: Int, reduceId: Int)
     extends BlockId {
   override def name: String = {
-    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId + ".data"
+    s"shuffle_${shuffleId}_${mapId}_${reduceId}_$stageAttemptId.data"
   }
 }
 
@@ -75,7 +75,7 @@ case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, stageAttemptId: Int, r
 case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, stageAttemptId: Int, reduceId: Int)
     extends BlockId {
   override def name: String = {
-    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + stageAttemptId + ".index"
+    s"shuffle_${shuffleId}_${mapId}_${reduceId}_$stageAttemptId.index"
   }
 }
 

@@ -43,7 +43,10 @@ private[spark] trait ShuffleManager {
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
+  /** Get a writer for a given partition. Called on executors by map tasks.
+    * Implementations should call [[addShuffleAttempt]] to update internal state, so we can track
+    * all attempts for each shuffle.
+    * */
   def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,
@@ -101,13 +104,11 @@ private[spark] trait ShuffleManager {
   }
 
   /**
-   * Get all stage attempts a shuffle, so they can all be cleaned up.
-   *
-   * Calling this also cleans up internal state which tracks attempts for each shuffle, so calling
-   * this again for the same shuffleId will always yield an empty Iterable.
+   * Clear internal state which tracks attempts for each shuffle, and return the set of attempts
+   * so implementations can perform extra cleanup on each attempt (eg., delete shuffle files)
    */
   @VisibleForTesting
-  private[shuffle] def stageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
+  private[shuffle] def clearStageAttemptsForShuffle(shuffleId: Int): Iterable[Int] = {
     val attempts = shuffleToAttempts.remove(shuffleId)
     if (attempts == null) {
       Iterable[Int]()
