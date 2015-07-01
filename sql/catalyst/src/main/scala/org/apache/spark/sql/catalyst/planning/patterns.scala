@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.DataType
 
 /**
  * A pattern that matches any number of filter operations on top of another relational operator.
@@ -230,4 +231,49 @@ object Unions {
     case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case other => other :: Nil
   }
+}
+
+/**
+ * A pattern that finds joins with range conditions that can be evaluated using a range join.
+ *
+ * TODO support partial range joins.
+ */
+object ExtractRangeJoinKeys extends PredicateHelper {
+  type ReturnType = (LogicalPlan, LogicalPlan, Seq[Expression], Seq[Expression], Seq[Boolean])
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case Join(left, right, Inner, Some(And(RangePredicate(d1, l1, h1, equi1),
+         RangePredicate(d2, l2, h2, equi2)))) if d1 == d2 => {
+      // L.Low < R.High && R.Low < L.High
+      if (evaluateOrder(l1, h1, l2, h2, left, right)) {
+        Some(left, right, Seq(l1, h2), Seq(l2, h1), Seq(equi1, equi2))
+      }
+      // R.Low < L.High && L.Low < R.High
+      else if (evaluateOrder(l1, h1, l2, h2, right, left)) {
+        Some(left, right, Seq(l2, h1), Seq(l1, h2), Seq(equi2, equi1))
+      }
+      else None
+    }
+    case _ => None
+  }
+
+  def evaluateOrder(low1: Expression, high1: Expression,
+                    low2: Expression, high2: Expression,
+                    left: LogicalPlan, right: LogicalPlan): Boolean = {
+    canEvaluate(low1, left) && canEvaluate(high1, right) &&
+      canEvaluate(low2, right) && canEvaluate(high2, left)
+  }
+}
+
+/**
+ * A pattern that normalizes all range expressions.
+ */
+object RangePredicate {
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] =
+    expression match {
+      case LessThan(low, high) => Some(expression.dataType, low, high, false)
+      case LessThanOrEqual(low, high) => Some(expression.dataType, low, high, true)
+      case GreaterThan(high, low) => Some(expression.dataType, low, high, false)
+      case GreaterThanOrEqual(high, low) => Some(expression.dataType, low, high, true)
+      case _ => None
+    }
 }

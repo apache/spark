@@ -868,6 +868,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       InMemoryScans ::
       ParquetOperations ::
       BasicOperators ::
+      BroadcastRangeJoin ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil)
 
