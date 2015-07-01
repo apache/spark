@@ -20,6 +20,7 @@ package org.apache.spark.deploy.rest
 import java.lang.Boolean
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.util.Utils
 import org.json4s.jackson.JsonMethods._
 
 /**
@@ -91,7 +92,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     // optional fields
     conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
     conf.set("spark.files", "fireball.png")
-    conf.set("spark.driver.memory", "1g")
+    conf.set("spark.driver.memory", Utils.DEFAULT_DRIVER_MEM_MB + "m")
     conf.set("spark.driver.cores", "180")
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
     conf.set("spark.driver.extraClassPath", "food-coloring.jar")

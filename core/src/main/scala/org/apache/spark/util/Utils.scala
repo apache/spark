@@ -80,6 +80,12 @@ private[spark] object Utils extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
+  /**
+   * Define a default value for driver memory here since this value is referenced across the code
+   * base and nearly all files already use Utils.scala
+   */
+  val DEFAULT_DRIVER_MEM_MB = 1024
+
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
