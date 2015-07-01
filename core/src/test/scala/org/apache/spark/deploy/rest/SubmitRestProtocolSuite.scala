@@ -230,7 +230,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     """.stripMargin
 
   private val submitDriverRequestJson =
-    """
+    s"""
       |{
       |  "action" : "CreateSubmissionRequest",
       |  "appArgs" : [ "two slices", "a hint of cinnamon" ],
@@ -246,7 +246,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |    "spark.driver.supervise" : "false",
       |    "spark.app.name" : "SparkPie",
       |    "spark.cores.max" : "10000",
-      |    "spark.driver.memory" : "512m",
+      |    "spark.driver.memory" : s"${Utils.DEFAULT_DRIVER_MEM_MB}m",
       |    "spark.files" : "fireball.png",
       |    "spark.driver.cores" : "180",
       |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
