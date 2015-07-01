@@ -1829,7 +1829,15 @@ object functions {
    */
   @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
-     UnresolvedFunction(udfName, cols.map(_.expr))
+    // Note: we avoid using closures here because on file systems that are case-insensitive, the
+    // compiled class file for the closure here will conflict with the one in callUDF (upper case).
+    val exprs = new Array[Expression](cols.size)
+    var i = 0
+    while (i < cols.size) {
+      exprs(i) = cols(i).expr
+      i += 1
+    }
+    UnresolvedFunction(udfName, exprs)
   }
 
 }
