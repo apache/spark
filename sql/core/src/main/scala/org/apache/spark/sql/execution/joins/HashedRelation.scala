@@ -32,6 +32,13 @@ import org.apache.spark.util.collection.CompactBuffer
 private[joins] sealed trait HashedRelation {
   def get(key: InternalRow): CompactBuffer[InternalRow]
 
+  def getOrElse(
+      key: InternalRow,
+      default: CompactBuffer[InternalRow]): CompactBuffer[InternalRow] = {
+    val v = get(key)
+    if (v eq null) default else v
+  }
+
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
   protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {

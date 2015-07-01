@@ -118,8 +118,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        joins.HashOuterJoin(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+        joinType match {
+          case LeftOuter if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+            joins.BroadcastHashOuterJoin(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          case RightOuter if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+            left.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
+            joins.BroadcastHashOuterJoin(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          case _ =>
+            joins.ShuffledHashOuterJoin(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+        }
 
       case _ => Nil
     }
