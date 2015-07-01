@@ -76,7 +76,7 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   // TODO Remove actorSystem
-  @deprecated("Actor system is no longer supported as of 1.4")
+  @deprecated("Actor system is no longer supported as of 1.4", "1.4")
   val actorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
