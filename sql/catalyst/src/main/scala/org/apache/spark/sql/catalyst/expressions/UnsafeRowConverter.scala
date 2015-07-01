@@ -103,19 +103,6 @@ class UnsafeRowConverter(fieldTypes: Array[DataType]) {
 
 }
 
-object UnsafeRowConverter {
-  def supportsSchema(schema: StructType): Boolean = {
-    schema.forall { field =>
-      try {
-        UnsafeColumnWriter.forType(field.dataType)
-        true
-      } catch {
-        case e: UnsupportedOperationException => false
-      }
-    }
-  }
-}
-
 /**
  * Function for writing a column into an UnsafeRow.
  */

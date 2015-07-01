@@ -30,9 +30,12 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.ObjectUnsafeColumnWriter;
+import org.apache.spark.sql.catalyst.expressions.UnsafeColumnWriter;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRowConverter;
 import org.apache.spark.sql.catalyst.util.ObjectPool;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
@@ -162,6 +165,18 @@ final class UnsafeExternalRowSorter {
         insertRow(inputIterator.next());
       }
       return sort();
+  }
+
+  /**
+   * Return true if UnsafeExternalRowSorter can sort rows with the given schema, false otherwise.
+   */
+  public static boolean supportsSchema(StructType schema) {
+    for (StructField field : schema.fields()) {
+      if (UnsafeColumnWriter.forType(field.dataType()) instanceof ObjectUnsafeColumnWriter) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static final class RowComparator extends RecordComparator {

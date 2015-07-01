@@ -286,6 +286,16 @@ case class UnsafeExternalSort(
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
+@DeveloperApi
+object UnsafeExternalSort {
+  /**
+   * Return true if UnsafeExternalSort can sort rows with the given schema, false otherwise.
+   */
+  def supportsSchema(schema: StructType): Boolean = {
+    UnsafeExternalRowSorter.supportsSchema(schema)
+  }
+}
+
 
 /**
  * :: DeveloperApi ::
