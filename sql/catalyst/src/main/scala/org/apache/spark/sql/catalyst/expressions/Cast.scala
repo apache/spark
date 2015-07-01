@@ -177,7 +177,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => (if (b) 1L else 0))
+      buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
@@ -393,7 +393,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericMutableRow(from.fields.size)
+    val newRow = new GenericMutableRow(from.fields.length)
     buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.length) {
@@ -432,20 +432,23 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    // TODO(cg): Add support for more data types.
+    // TODO: Add support for more data types.
     (child.dataType, dataType) match {
 
       case (BinaryType, StringType) =>
         defineCodeGen (ctx, ev, c =>
           s"${ctx.stringType}.fromBytes($c)")
+
       case (DateType, StringType) =>
         defineCodeGen(ctx, ev, c =>
           s"""${ctx.stringType}.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c))""")
+
       case (TimestampType, StringType) =>
         defineCodeGen(ctx, ev, c =>
           s"""${ctx.stringType}.fromString(
                 org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c))""")
+
       case (_, StringType) =>
         defineCodeGen(ctx, ev, c => s"${ctx.stringType}.fromString(String.valueOf($c))")
 
@@ -455,12 +458,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
       case (BooleanType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c ? 1 : 0)")
+
       case (dt: DecimalType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"!$c.isZero()")
+
       case (dt: NumericType, BooleanType) =>
         defineCodeGen(ctx, ev, c => s"$c != 0")
+
       case (_: DecimalType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"($c).to${ctx.primitiveTypeName(dt)}()")
+
       case (_: NumericType, dt: NumericType) =>
         defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})($c)")
 
