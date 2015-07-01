@@ -112,6 +112,11 @@ final class UnsafeExternalRowSorter {
   Iterator<InternalRow> sort() throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
+      if (!sortedIterator.hasNext()) {
+        // Since we won't ever call next() on an empty iterator, we need to clean up resources
+        // here in order to prevent memory leaks.
+        cleanupResources();
+      }
       return new AbstractScalaRowIterator() {
 
         private final int numFields = schema.length();
@@ -141,7 +146,7 @@ final class UnsafeExternalRowSorter {
               );
               row.backingArray = rowDataCopy;
               row.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, objPool);
-              sorter.freeMemory();
+              cleanupResources();
               return row;
             }
           } catch (IOException e) {
