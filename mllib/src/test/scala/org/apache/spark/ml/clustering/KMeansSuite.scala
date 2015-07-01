@@ -98,7 +98,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("fit & transform") {
     val predictionColName = "kmeans_prediction"
-    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName)
+    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
