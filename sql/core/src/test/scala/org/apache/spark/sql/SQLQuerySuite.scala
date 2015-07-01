@@ -58,6 +58,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .map(t => UpperCaseData(t._1, t._2.toString))
       .toDF()
     df.registerTempTable("upperCaseData")
+    df
   }
 
   case class LowerCaseData(n: Int, l: String)
