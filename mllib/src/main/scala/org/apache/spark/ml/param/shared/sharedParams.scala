@@ -154,6 +154,21 @@ private[ml] trait HasThreshold extends Params {
 }
 
 /**
+ * Trait for shared param thresholds.
+ */
+private[ml] trait HasThresholds extends Params {
+
+  /**
+   * Param for thresholds in multi-class classification prediction, must be array with size of classes..
+   * @group param
+   */
+  final val thresholds: Param[Array[Double]] = new Param[Array[Double]](this, "thresholds", "thresholds in multi-class classification prediction, must be array with size of classes.")
+
+  /** @group getParam */
+  final def getThresholds: Array[Double] = $(thresholds)
+}
+
+/**
  * Trait for shared param inputCol.
  */
 private[ml] trait HasInputCol extends Params {
