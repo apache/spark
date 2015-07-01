@@ -1906,7 +1906,7 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
   <tr>
     <td><code>spark.sql.planner.externalSort</code></td>
-    <td>false</td>
+    <td>true</td>
     <td>
       When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
     </td>
