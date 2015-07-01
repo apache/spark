@@ -43,7 +43,7 @@ class Analyzer(
     registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
-  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion with CheckAnalysis {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
@@ -76,7 +76,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      typeCoercionRules ++
+      HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*)
   )
 
@@ -309,8 +309,8 @@ class Analyzer(
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
         }
-          // Only handle first case, others will be fixed on the next pass.
-          .headOption match {
+        // Only handle first case, others will be fixed on the next pass.
+        .headOption match {
           case None =>
             /*
              * No result implies that there is a logical plan node that produces new references
@@ -587,8 +587,8 @@ class Analyzer(
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) => Some(g, names)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
       }
     }

@@ -38,7 +38,6 @@ class BaseOrdering extends Ordering[InternalRow] {
  */
 object GenerateOrdering
     extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
@@ -47,8 +46,6 @@ object GenerateOrdering
     in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
-    val a = newTermName("a")
-    val b = newTermName("b")
     val ctx = newCodeGenContext()
 
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
@@ -56,9 +53,9 @@ object GenerateOrdering
       val evalB = order.child.gen(ctx)
       val asc = order.direction == Ascending
       s"""
-          i = $a;
+          i = a;
           ${evalA.code}
-          i = $b;
+          i = b;
           ${evalB.code}
           if (${evalA.isNull} && ${evalB.isNull}) {
             // Nothing
@@ -80,7 +77,7 @@ object GenerateOrdering
         return new SpecificOrdering(expr);
       }
 
-      class SpecificOrdering extends ${typeOf[BaseOrdering]} {
+      class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
         private $exprType[] expressions = null;
 

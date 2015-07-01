@@ -46,6 +46,7 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.window import Window
+from pyspark.sql.utils import AnalysisException
 
 
 class UTC(datetime.tzinfo):
@@ -516,6 +517,35 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
                          df.filter(df.a.between(df.b, df.c)).collect())
 
+    def test_struct_type(self):
+        from pyspark.sql.types import StructType, StringType, StructField
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        struct2 = StructType([StructField("f1", StringType(), True),
+                              StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1, struct2)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1, struct2)
+
+        struct1 = (StructType().add(StructField("f1", StringType(), True))
+                   .add(StructField("f2", StringType(), True, None)))
+        struct2 = StructType([StructField("f1", StringType(), True),
+                              StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1, struct2)
+
+        struct1 = (StructType().add(StructField("f1", StringType(), True))
+                   .add(StructField("f2", StringType(), True, None)))
+        struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1, struct2)
+
+        # Catch exception raised during improper construction
+        try:
+            struct1 = StructType().add("name")
+            self.assertEqual(1, 0)
+        except ValueError:
+            self.assertEqual(1, 1)
+
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()
@@ -564,6 +594,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
         df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
+                .option("noUse", "this option will not be used in save.")\
                 .format("json").save(path=tmpPath)
         actual =\
             self.sqlCtx.read.format("json")\
@@ -816,6 +847,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.name, u'Alice')
         self.assertEqual(row.age, 10)
         self.assertEqual(row.height, None)
+
+    def test_capture_analysis_exception(self):
+        self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("select abc"))
+        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+        # RuntimeException should not be captured
+        self.assertRaises(py4j.protocol.Py4JJavaError, lambda: self.sqlCtx.sql("abc"))
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

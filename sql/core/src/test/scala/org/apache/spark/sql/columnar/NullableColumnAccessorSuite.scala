@@ -42,9 +42,9 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(
-    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, FIXED_DECIMAL(15, 10), BINARY, GENERIC,
-    DATE, TIMESTAMP
-  ).foreach {
+    BOOLEAN, BYTE, SHORT, INT, DATE, LONG, TIMESTAMP, FLOAT, DOUBLE,
+    STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC)
+    .foreach {
     testNullableColumnAccessor(_)
   }
 
