@@ -42,7 +42,7 @@ public class JavaKMeansSuite implements Serializable {
     sc = new JavaSparkContext("local", "JavaKMeansSuite");
     sql = new SQLContext(sc);
 
-    dataset = KMeansSuite.generateKMeansData(sql, 1000, 3, k);
+    dataset = KMeansSuite.generateKMeansData(sql, 50, 3, k);
   }
 
   @After
