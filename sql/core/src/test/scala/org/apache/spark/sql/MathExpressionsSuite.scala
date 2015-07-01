@@ -232,7 +232,6 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
     checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
     checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
-
   }
 
   test("hypot") {

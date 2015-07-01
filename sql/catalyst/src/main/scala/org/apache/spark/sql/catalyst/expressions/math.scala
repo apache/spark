@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Long => JLong}
+import java.nio.charset.{StandardCharsets, Charset}
 import java.util.Arrays
 
+import org.apache.commons.codec.DecoderException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -370,25 +372,16 @@ case class UnHex(child: Expression)
     if (num == null) {
       null
     } else {
-      unhex(num.asInstanceOf[UTF8String].toString)
+      unhex(num.asInstanceOf[UTF8String])
     }
   }
 
-  private def unhex(s: String): Array[Byte] = {
-    // append a leading 0 if needed
-    val str = if (s.length % 2 == 1) {"0" + s} else {s}
-    val result = new Array[Byte](str.length / 2)
-    var i = 0
-    while (i < str.length()) {
-      try {
-        result(i / 2) = Integer.parseInt(str.substring(i, i + 2), 16).asInstanceOf[Byte]
-      } catch {
-        // invalid character present, return null
-        case _: NumberFormatException => return null
-      }
-      i += 2
+  private def unhex(utf8Str: UTF8String): Array[Byte] = {
+    try {
+      new org.apache.commons.codec.binary.Hex(StandardCharsets.UTF_8).decode(utf8Str.getBytes)
+    } catch {
+      case _: DecoderException => null
     }
-    result
   }
 }
 
