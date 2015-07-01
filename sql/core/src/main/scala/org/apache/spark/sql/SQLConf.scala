@@ -227,6 +227,13 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val PARQUET_MERGE_SCHEMA_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
+    defaultValue = Some(true),
+    doc = "Turn on the schema merge feature of parquet datasource API. " +
+          "Enable it will merge different schema of parquet" +
+          "Disable it will spped up the parquet schema loading time if all your parquet " +
+          "schema is the same" )
+
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),
     doc = "Some other Parquet-producing systems, in particular Impala and older versions of " +
