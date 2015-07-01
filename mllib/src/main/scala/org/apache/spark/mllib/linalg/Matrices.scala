@@ -333,15 +333,7 @@ class DenseMatrix(
     }
   }
 
-  override def numNonzeros: Int = {
-    var nnz = 0
-    values.foreach { value =>
-      if (value != 0) {
-        nnz += 1
-      }
-    }
-    nnz
-  }
+  override def numNonzeros: Int = values.count(_ != 0)
 
   override def numActives: Int = values.length
 
@@ -615,15 +607,7 @@ class SparseMatrix(
     new DenseMatrix(numRows, numCols, toArray)
   }
 
-  override def numNonzeros: Int = {
-    var nnz = 0
-    values.foreach { value =>
-      if (value != 0) {
-        nnz += 1
-      }
-    }
-    nnz
-  }
+  override def numNonzeros: Int = values.count(_ != 0)
 
   override def numActives: Int = values.length
 
