@@ -140,13 +140,12 @@ class DagBag(object):
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
         mod_name = 'unusual_prefix_' + mod_name
 
-        if safe_mode:
+        if safe_mode and os.path.isfile(filepath):
             # Skip file if no obvious references to airflow or DAG are found.
-            f = open(filepath, 'r')
-            content = f.read()
-            f.close()
-            if not all([s in content for s in ('DAG', 'airflow')]):
-                return
+            with open(filepath, 'r') as f:
+                content = f.read()
+                if not all([s in content for s in ('DAG', 'airflow')]):
+                    return
 
         if (
                 not only_if_updated or
