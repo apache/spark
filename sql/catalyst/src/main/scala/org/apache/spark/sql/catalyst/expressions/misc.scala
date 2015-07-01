@@ -36,7 +36,7 @@ case class Md5(child: Expression)
 
   override def dataType: DataType = StringType
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
@@ -68,7 +68,7 @@ case class Sha2(left: Expression, right: Expression)
 
   override def toString: String = s"SHA2($left, $right)"
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val evalE1 = left.eval(input)
@@ -151,7 +151,7 @@ case class Sha1(child: Expression) extends UnaryExpression with AutoCastInputTyp
 
   override def dataType: DataType = StringType
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
@@ -179,7 +179,7 @@ case class Crc32(child: Expression)
 
   override def dataType: DataType = LongType
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
