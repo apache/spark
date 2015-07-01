@@ -106,12 +106,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleId: Int, mapId: Int, stageAttemptId: Int, numBuckets: Int,
+  def forMapTask(shuffleAndAttempt: ShuffleIdAndAttempt, mapId: Int, numBuckets: Int,
       serializer: Serializer, writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(
-        ShuffleIdAndAttempt(shuffleId, stageAttemptId), new ShuffleState(numBuckets))
-      private val shuffleState = shuffleStates(ShuffleIdAndAttempt(shuffleId, stageAttemptId))
+      shuffleStates.putIfAbsent(shuffleAndAttempt, new ShuffleState(numBuckets))
+      private val shuffleState = shuffleStates(shuffleAndAttempt)
       private var fileGroup: ShuffleFileGroup = null
 
       val openStartTime = System.nanoTime
@@ -119,13 +118,15 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       val writers: Array[BlockObjectWriter] = if (consolidateShuffleFiles) {
         fileGroup = getUnusedFileGroup()
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId, stageAttemptId)
+          val blockId = ShuffleBlockId(shuffleAndAttempt.shuffleId, mapId, bucketId,
+            shuffleAndAttempt.stageAttemptId)
           blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
             writeMetrics)
         }
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId, stageAttemptId)
+          val blockId = ShuffleBlockId(shuffleAndAttempt.shuffleId, mapId, bucketId,
+            shuffleAndAttempt.stageAttemptId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
@@ -165,10 +166,10 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       private def newFileGroup(): ShuffleFileGroup = {
         val fileId = shuffleState.nextFileId.getAndIncrement()
         val files = Array.tabulate[File](numBuckets) { bucketId =>
-          val filename = physicalFileName(shuffleId, bucketId, fileId)
+          val filename = physicalFileName(shuffleAndAttempt.shuffleId, bucketId, fileId)
           blockManager.diskBlockManager.getFile(filename)
         }
-        val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
+        val fileGroup = new ShuffleFileGroup(shuffleAndAttempt.shuffleId, fileId, files)
         shuffleState.allFileGroups.add(fileGroup)
         fileGroup
       }
@@ -201,11 +202,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   }
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */
-  def removeShuffle(shuffleId: ShuffleIdAndAttempt): Boolean = {
+  def removeShuffle(shuffleAndAttempt: ShuffleIdAndAttempt): Boolean = {
     // Do not change the ordering of this, if shuffleStates should be removed only
     // after the corresponding shuffle blocks have been removed
-    val cleaned = removeShuffleBlocks(shuffleId)
-    shuffleStates.remove(shuffleId)
+    val cleaned = removeShuffleBlocks(shuffleAndAttempt)
+    shuffleStates.remove(shuffleAndAttempt)
     cleaned
   }
 
@@ -215,8 +216,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   }
 
   /** Remove all the blocks / files related to a particular shuffle. */
-  private def removeShuffleBlocks(shuffleId: ShuffleIdAndAttempt): Boolean = {
-    shuffleStates.get(shuffleId) match {
+  private def removeShuffleBlocks(shuffleAndAttempt: ShuffleIdAndAttempt): Boolean = {
+    shuffleStates.get(shuffleAndAttempt) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
           for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
@@ -224,15 +225,15 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
           }
         } else {
           for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
-            val blockId = new ShuffleBlockId(shuffleId.shuffleId, mapId, reduceId,
-              shuffleId.stageAttemptId)
+            val blockId = new ShuffleBlockId(shuffleAndAttempt.shuffleId, mapId, reduceId,
+              shuffleAndAttempt.stageAttemptId)
             blockManager.diskBlockManager.getFile(blockId).delete()
           }
         }
-        logInfo("Deleted all files for shuffle " + shuffleId)
+        logInfo("Deleted all files for shuffle " + shuffleAndAttempt)
         true
       case None =>
-        logInfo("Could not find files for shuffle " + shuffleId + " for deleting")
+        logInfo("Could not find files for shuffle " + shuffleAndAttempt + " for deleting")
         false
     }
   }
