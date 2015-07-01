@@ -949,6 +949,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_trim",
     "udf_ucase",
     "udf_unix_timestamp",
+    "udf_unhex",
     "udf_upper",
     "udf_var_pop",
     "udf_var_samp",
