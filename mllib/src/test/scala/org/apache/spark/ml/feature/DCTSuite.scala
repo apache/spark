@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 @BeanInfo
 case class DCTTestData(vec: Vector, wantedVec: Vector)
 
-class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class DCTSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("forward transform of discrete cosine matches jTransforms result") {
     val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
@@ -58,7 +58,7 @@ class DiscreteCosineTransformerSuite extends SparkFunSuite with MLlibTestSparkCo
       DCTTestData(data, expectedResult)
     ))
 
-    val transformer = new DiscreteCosineTransformer()
+    val transformer = new DCT()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(inverse)
