@@ -1315,7 +1315,6 @@ class Airflow(BaseView):
         try:
             if request.method == 'POST':
                 data = request.json
-                print data
                 if data:
                     session = settings.Session()
                     var = models.Variable(key=form, val=json.dumps(data))
