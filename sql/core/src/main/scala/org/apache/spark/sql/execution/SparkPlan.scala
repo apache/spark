@@ -156,7 +156,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled && expressions.forall(_.isThreadSafe)) {
+    if (codegenEnabled) {
       GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
@@ -168,7 +168,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if(codegenEnabled && expressions.forall(_.isThreadSafe)) {
+    if(codegenEnabled) {
       GenerateMutableProjection.generate(expressions, inputSchema)
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
@@ -178,7 +178,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    if (codegenEnabled && expression.isThreadSafe) {
+    if (codegenEnabled) {
       GeneratePredicate.generate(expression, inputSchema)
     } else {
       InterpretedPredicate.create(expression, inputSchema)
