@@ -163,11 +163,14 @@ private[spark] class TaskSchedulerImpl(
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
-      val taskSetsPerStage = activeTaskSets.values.filterNot(_.isZombie).groupBy(_.stageId)
-      taskSetsPerStage.foreach { case (stage, taskSets) =>
-        if (taskSets.size > 1) {
-          throw new SparkIllegalStateException("more than one active taskSet for stage " + stage)
-        }
+      val stage = taskSet.stageId
+      val conflictingTaskSet = activeTaskSets.exists { case (id, ts) =>
+        // if the id matches, it really should be the same taskSet, but in some unit tests
+        // we add new taskSets with the same id
+        id != taskSet.id && !ts.isZombie && ts.stageId == stage
+      }
+      if (conflictingTaskSet) {
+        throw new SparkIllegalStateException(s"more than one active taskSet for stage $stage")
       }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 

@@ -554,8 +554,10 @@ class DAGSchedulerSuite
     assert(sparkListener.failedStages.size == 1)
   }
 
-  /** This tests the case where another FetchFailed comes in while the map stage is getting
-    * re-run. */
+  /**
+   * This tests the case where another FetchFailed comes in while the map stage is getting
+   * re-run.
+   */
   test("late fetch failures don't cause multiple concurrent attempts for the same map stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -607,15 +609,15 @@ class DAGSchedulerSuite
       createFakeTaskInfo(),
       null))
 
-    // Another ResubmitFailedStages event should not result result in another attempt for the map
+    // Another ResubmitFailedStages event should not result in another attempt for the map
     // stage being run concurrently.
+    // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't
+    // effect anything -- our calling it just makes *SURE* it gets called between the desired event
+    // and our check.
     runEvent(ResubmitFailedStages)
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
 
-    // NOTE: the actual ResubmitFailedStages may get called at any time during this, shouldn't
-    // effect anything -- our calling it just makes *SURE* it gets called between the desired event
-    // and our check.
   }
 
   /** This tests the case where a late FetchFailed comes in after the map stage has finished getting
