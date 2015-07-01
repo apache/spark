@@ -122,7 +122,8 @@ object RandomForestClassifier {
 @Experimental
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
-    private val _trees: Array[DecisionTreeClassificationModel])
+    private val _trees: Array[DecisionTreeClassificationModel],
+    private val _threshold: Option[Array[Double]]=None)
   extends PredictionModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
