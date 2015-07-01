@@ -32,7 +32,7 @@ trait StringRegexExpression extends AutoCastInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
@@ -117,7 +117,7 @@ trait CaseConversionExpression extends AutoCastInputTypes {
   def convert(v: UTF8String): UTF8String
 
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
@@ -165,7 +165,7 @@ trait StringComparison extends AutoCastInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
@@ -238,7 +238,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
@@ -297,7 +297,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
  */
 case class StringLength(child: Expression) extends UnaryExpression with AutoCastInputTypes {
   override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)

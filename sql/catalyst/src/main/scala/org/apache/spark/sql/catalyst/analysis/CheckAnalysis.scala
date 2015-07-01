@@ -26,7 +26,6 @@ import org.apache.spark.sql.types._
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis {
-  self: Analyzer =>
 
   /**
    * Override to provide additional checks for correct analysis.

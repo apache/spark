@@ -990,15 +990,6 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * Returns the double value that is closer than any other to e, the base of the natural
-   * logarithms.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def e(): Column = EulerNumber()
-
-  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1190,15 +1181,6 @@ object functions {
    * @since 1.4.0
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
-
-  /**
-   * Returns the double value that is closer than any other to pi, the ratio of the circumference
-   * of a circle to its diameter.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def pi(): Column = Pi()
 
   /**
    * Computes the logarithm of the given column in base 2.
@@ -1847,7 +1829,15 @@ object functions {
    */
   @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
-     UnresolvedFunction(udfName, cols.map(_.expr))
+    // Note: we avoid using closures here because on file systems that are case-insensitive, the
+    // compiled class file for the closure here will conflict with the one in callUDF (upper case).
+    val exprs = new Array[Expression](cols.size)
+    var i = 0
+    while (i < cols.size) {
+      exprs(i) = cols(i).expr
+      i += 1
+    }
+    UnresolvedFunction(udfName, exprs)
   }
 
 }

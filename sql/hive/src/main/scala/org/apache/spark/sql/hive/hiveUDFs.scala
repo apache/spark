@@ -120,8 +120,6 @@ private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, childre
   @transient
   protected lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
-  override def isThreadSafe: Boolean = false
-
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
     unwrap(
@@ -179,8 +177,6 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
   lazy val dataType: DataType = inspectorToDataType(returnInspector)
-
-  override def isThreadSafe: Boolean = false
 
   override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.

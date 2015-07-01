@@ -154,7 +154,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.internalRowRdd, writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -220,7 +220,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     writerContainer.driverSideSetup()
 
     try {
-      df.sqlContext.sparkContext.runJob(df.internalRowRdd, writeRows _)
+      df.sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writeRows _)
       writerContainer.commitJob()
       relation.refresh()
     } catch { case cause: Throwable =>
@@ -270,7 +270,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       inputSchema: Seq[Attribute]): Projection = {
     log.debug(
       s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled && expressions.forall(_.isThreadSafe)) {
+    if (codegenEnabled) {
       GenerateProjection.generate(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)

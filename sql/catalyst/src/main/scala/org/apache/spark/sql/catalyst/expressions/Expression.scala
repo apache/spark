@@ -61,14 +61,6 @@ abstract class Expression extends TreeNode[Expression] {
   def eval(input: InternalRow = null): Any
 
   /**
-   * Return true if this expression is thread-safe, which means it could be used by multiple
-   * threads in the same time.
-   *
-   * An expression that is not thread-safe can not be cached and re-used, especially for codegen.
-   */
-  def isThreadSafe: Boolean = true
-
-  /**
    * Returns an [[GeneratedExpressionCode]], which contains Java source code that
    * can be used to generate the result of evaluating the expression on an input row.
    *
@@ -76,9 +68,6 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[GeneratedExpressionCode]]
    */
   def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
-    if (!isThreadSafe) {
-      throw new Exception(s"$this is not thread-safe, can not be used in codegen")
-    }
     val isNull = ctx.freshName("isNull")
     val primitive = ctx.freshName("primitive")
     val ve = GeneratedExpressionCode("", isNull, primitive)
@@ -178,8 +167,6 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   override def toString: String = s"($left $symbol $right)"
 
-  override def isThreadSafe: Boolean = left.isThreadSafe && right.isThreadSafe
-
   /**
    * Short hand for generating binary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
@@ -237,7 +224,6 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
-  override def isThreadSafe: Boolean = child.isThreadSafe
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -280,16 +266,37 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 }
 
 /**
+ * An trait that gets mixin to define the expected input types of an expression.
+ */
+trait ExpectsInputTypes { self: Expression =>
+
+  /**
+   * Expected input types from child expressions. The i-th position in the returned seq indicates
+   * the type requirement for the i-th child.
+   *
+   * The possible values at each position are:
+   * 1. a specific data type, e.g. LongType, StringType.
+   * 2. a non-leaf data type, e.g. NumericType, IntegralType, FractionalType.
+   * 3. a list of specific data types, e.g. Seq(StringType, BinaryType).
+   */
+  def inputTypes: Seq[Any]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // We will do the type checking in `HiveTypeCoercion`, so always returning success here.
+    TypeCheckResult.TypeCheckSuccess
+  }
+}
+
+/**
  * Expressions that require a specific `DataType` as input should implement this trait
  * so that the proper type conversions can be performed in the analyzer.
  */
-trait AutoCastInputTypes {
-  self: Expression =>
+trait AutoCastInputTypes { self: Expression =>
 
-  def expectedChildTypes: Seq[DataType]
+  def inputTypes: Seq[DataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // We will always do type casting for `ExpectsInputTypes` in `HiveTypeCoercion`,
+    // We will always do type casting for `AutoCastInputTypes` in `HiveTypeCoercion`,
     // so type mismatch error won't be reported here, but for underling `Cast`s.
     TypeCheckResult.TypeCheckSuccess
   }
