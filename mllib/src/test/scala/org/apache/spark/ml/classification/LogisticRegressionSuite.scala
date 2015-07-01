@@ -45,9 +45,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        val weights = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
        val xMean = Array(5.843, 3.057, 3.758, 1.199)
        val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
-       val data = sc.parallelize(LogisticRegressionSuite.generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42), 1)
-       data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1) + ", " + x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
-
+       val data = sc.parallelize(LogisticRegressionSuite.generateMultinomialLogisticInput(
+         weights, xMean, xVariance, true, nPoints, 42), 1)
+       data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1) + ", "
+         + x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
      */
     binaryDataset = {
       val nPoints = 10000
@@ -249,7 +250,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0, intercept=FALSE))
+       weights =
+           coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0, intercept=FALSE))
        weights
 
        5 x 1 sparse Matrix of class "dgCMatrix"
@@ -315,7 +317,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12, intercept=FALSE))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+           intercept=FALSE))
        weights
 
        5 x 1 sparse Matrix of class "dgCMatrix"
@@ -381,7 +384,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37, intercept=FALSE))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+           intercept=FALSE))
        weights
 
        5 x 1 sparse Matrix of class "dgCMatrix"
@@ -447,7 +451,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21, intercept=FALSE))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+           intercept=FALSE))
        weights
 
        5 x 1 sparse Matrix of class "dgCMatrix"
