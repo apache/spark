@@ -159,12 +159,44 @@ object EvaluatePython {
     row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
 
-  // Converts value to the type specified by the data type.
-  // Because Python does not have data types for TimestampType, FloatType, ShortType, and
-  // ByteType, we need to explicitly convert values in columns of these data types to the desired
-  // JVM data types.
+  /**
+   * Converts `obj` to the type specified by the data type, or returns null if the type of obj is
+   * unexpected. Because Python doesn't enforce the type.
+   */
   def fromJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null
+
+    case (c: Boolean, BooleanType) => c
+
+    case (c: Int, ByteType) => c.toByte
+    case (c: Long, ByteType) => c.toByte
+
+    case (c: Int, ShortType) => c.toShort
+    case (c: Long, ShortType) => c.toShort
+
+    case (c: Int, IntegerType) => c
+    case (c: Long, IntegerType) => c.toInt
+
+    case (c: Int, LongType) => c.toLong
+    case (c: Long, LongType) => c
+
+    case (c: Double, FloatType) => c.toFloat
+
+    case (c: Double, DoubleType) => c
+
+    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c)
+
+    case (c: Int, DateType) => c
+
+    case (c: Long, TimestampType) => c
+
+    case (c: String, StringType) => UTF8String.fromString(c)
+    case (c, StringType) =>
+      // If we get here, c is not a string. Call toString on it.
+      UTF8String.fromString(c.toString)
+
+    case (c: String, BinaryType) => c.getBytes("utf-8")
+    case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
       c.map { e => fromJava(e, elementType)}.toSeq
@@ -181,33 +213,11 @@ object EvaluatePython {
         case (e, f) => fromJava(e, f.dataType)
       })
 
-    case (c: java.util.Calendar, DateType) =>
-      DateTimeUtils.fromJavaDate(new java.sql.Date(c.getTimeInMillis))
+    case (_, udt: UserDefinedType[_]) => fromJava(obj, udt.sqlType)
 
-    case (c: java.util.Calendar, TimestampType) =>
-      c.getTimeInMillis * 10000L
-    case (t: java.sql.Timestamp, TimestampType) =>
-      DateTimeUtils.fromJavaTimestamp(t)
-
-    case (d: java.math.BigDecimal, dt: DecimalType) =>
-      Decimal(d)
-
-    case (_, udt: UserDefinedType[_]) =>
-      fromJava(obj, udt.sqlType)
-
-    case (c: Int, ByteType) => c.toByte
-    case (c: Long, ByteType) => c.toByte
-    case (c: Int, ShortType) => c.toShort
-    case (c: Long, ShortType) => c.toShort
-    case (c: Long, IntegerType) => c.toInt
-    case (c: Int, LongType) => c.toLong
-    case (c: Double, FloatType) => c.toFloat
-    case (c: String, StringType) => UTF8String.fromString(c)
-    case (c, StringType) =>
-      // If we get here, c is not a string. Call toString on it.
-      UTF8String.fromString(c.toString)
-
-    case (c, _) => c
+    // all other unexpected type should be null, or we will have runtime exception
+    // TODO(davies): we could improve this by try to cast the object to expected type
+    case (c, _) => null
   }
 }
 
