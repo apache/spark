@@ -302,7 +302,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (l == null || r == null) {
       false
     } else {
-      l == r
+      if (left.dataType != BinaryType) l == r
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 
