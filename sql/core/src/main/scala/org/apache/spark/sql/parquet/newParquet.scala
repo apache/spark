@@ -113,9 +113,11 @@ private[sql] class ParquetRelation2(
   }
 
   // Should we merge schemas from all Parquet part-files?
-  private val shouldMergeSchemas = parameters
-    .getOrElse(ParquetRelation2.MERGE_SCHEMA,
-      sqlContext.conf.getConf(SQLConf.PARQUET_MERGE_SCHEMA_ENABLED).toString).toBoolean
+  private val shouldMergeSchemas =
+    parameters
+      .get(ParquetRelation2.MERGE_SCHEMA)
+      .map(_.toBoolean)
+      .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation2.METASTORE_SCHEMA)
