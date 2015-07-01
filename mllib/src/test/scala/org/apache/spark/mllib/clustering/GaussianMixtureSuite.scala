@@ -39,7 +39,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val seeds = Array(314589, 29032897, 50181, 494821, 4660)
     seeds.foreach { seed =>
-      val gmm = new GaussianMixture().setK(1).setSeed(seed).run(data)
+      val gmm = new GaussianMixture().setK(1).setSeed(seed).setDistributeGaussians(false).run(data)
       assert(gmm.weights(0) ~== Ew absTol 1E-5)
       assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
       assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
@@ -66,7 +66,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     val gmm = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)
-      .run(data)
+      .setDistributeGaussians(false).run(data)
 
     assert(gmm.weights(0) ~== Ew(0) absTol 1E-3)
     assert(gmm.weights(1) ~== Ew(1) absTol 1E-3)
@@ -91,7 +91,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val seeds = Array(42, 1994, 27, 11, 0)
     seeds.foreach { seed =>
-      val gmm = new GaussianMixture().setK(1).setSeed(seed).run(data)
+      val gmm = new GaussianMixture().setK(1).setSeed(seed).setDistributeGaussians(false).run(data)
       assert(gmm.weights(0) ~== Ew absTol 1E-5)
       assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
       assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
@@ -106,7 +106,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(0.5, 0.5),
       Array(
         new MultivariateGaussian(Vectors.dense(-1.0), Matrices.dense(1, 1, Array(1.0))),
-        new MultivariateGaussian(Vectors.dense(1.0), Matrices.dense(1, 1, Array(1.0)))
+        new MultivariateGaussian(Vectors.dense(2.0), Matrices.dense(1, 1, Array(1.0)))
       )
     )
     val Ew = Array(1.0 / 3.0, 2.0 / 3.0)
@@ -116,7 +116,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sparseGMM = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)
-      .run(data)
+      .setDistributeGaussians(false).run(data)
 
     assert(sparseGMM.weights(0) ~== Ew(0) absTol 1E-3)
     assert(sparseGMM.weights(1) ~== Ew(1) absTol 1E-3)
@@ -126,10 +126,32 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(sparseGMM.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
   }
 
+  test("single cluster with distributed gaussians") {
+    val data = sc.parallelize(Array(
+      Vectors.sparse(3, Array(0, 2), Array(4.0, 2.0)),
+      Vectors.sparse(3, Array(0, 2), Array(2.0, 4.0)),
+      Vectors.sparse(3, Array(1), Array(6.0))
+    ))
+
+    val Ew = 1.0
+    val Emu = Vectors.dense(2.0, 2.0, 2.0)
+    val Esigma = Matrices.dense(3, 3,
+      Array(8.0 / 3.0, -4.0, 4.0 / 3.0, -4.0, 8.0, -4.0, 4.0 / 3.0, -4.0, 8.0 / 3.0)
+    )
+
+    val seeds = Array(42, 1994, 27, 11, 0)
+    seeds.foreach { seed =>
+      val gmm = new GaussianMixture().setK(1).setSeed(seed).setDistributeGaussians(true).run(data)
+      assert(gmm.weights(0) ~== Ew absTol 1E-5)
+      assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
+      assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
+    }
+  }
+
   test("model save / load") {
     val data = sc.parallelize(GaussianTestData.data)
 
-    val gmm = new GaussianMixture().setK(2).setSeed(0).run(data)
+    val gmm = new GaussianMixture().setK(2).setSeed(0).setDistributeGaussians(false).run(data)
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 

@@ -51,19 +51,22 @@ import org.apache.spark.util.Utils
  * @param convergenceTol The maximum change in log-likelihood at which convergence
  * is considered to have occurred.
  * @param maxIterations The maximum number of iterations to perform
+ * @param distributeGaussians Indicates whether to distribute computation of Gaussian mixture
+ *                            components on driver or executors.
  */
 @Experimental
 class GaussianMixture private (
     private var k: Int,
     private var convergenceTol: Double,
     private var maxIterations: Int,
+    private var distributeGaussians: Boolean,
     private var seed: Long) extends Serializable {
 
   /**
    * Constructs a default instance. The default parameters are {k: 2, convergenceTol: 0.01,
-   * maxIterations: 100, seed: random}.
+   * maxIterations: 100, distributeGaussians: false, seed: random}.
    */
-  def this() = this(2, 0.01, 100, Utils.random.nextLong())
+  def this() = this(2, 0.01, 100, false, Utils.random.nextLong())
 
   // number of samples per cluster to use when initializing Gaussians
   private val nSamples = 5
@@ -121,6 +124,17 @@ class GaussianMixture private (
    */
   def getConvergenceTol: Double = convergenceTol
 
+  /**
+   * Sets indicator for computing Gaussians on driver or executors
+   */
+  def setDistributeGaussians(distributeGaussians: Boolean): this.type = {
+    this.distributeGaussians = distributeGaussians
+    this
+  }
+
+  /** Return indicator for distributing computation of Gaussians */
+  def getDistributeGaussians: Boolean = distributeGaussians
+
   /** Set the random seed */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
@@ -139,9 +153,6 @@ class GaussianMixture private (
 
     // Get length of the input vectors
     val d = breezeData.first().length
-
-    // indicate whether to update mixture components on driver or distribute the computation
-    val distributeComputation = true
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -175,7 +186,7 @@ class GaussianMixture private (
       // (often referred to as the "M" step in literature)
       val sumWeights = sums.weights.sum
 
-      if (distributeComputation) {
+      if (distributeGaussians) {
         val (ws, gs) = sc.parallelize(0 until k).map { i =>
           val mu = sums.means(i) / sums.weights(i)
           BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
