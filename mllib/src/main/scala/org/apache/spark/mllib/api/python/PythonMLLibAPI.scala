@@ -503,6 +503,26 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib LDA.run()
+   */
+  def trainLDAModel(
+    data: JavaRDD[LabeledPoint],
+    k: Int,
+    seed: java.lang.Long): LDAModel = {
+    val algo = new LDA()
+        .setK(k)
+
+    if (seed != null) algo.setSeed(seed)
+
+    try {
+      algo.run(data.rdd.map(x => (x.label.toLong, x.features)))
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+
+  /**
    * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
    * needs to be taken in the Python code to ensure it gets freed on exit; see

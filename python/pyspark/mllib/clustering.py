@@ -31,13 +31,15 @@ from pyspark import SparkContext
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
+from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
            'PowerIterationClusteringModel', 'PowerIterationClustering',
-           'StreamingKMeans', 'StreamingKMeansModel']
+           'StreamingKMeans', 'StreamingKMeansModel',
+           'LDA', 'LDAModel']
 
 
 @inherit_doc
@@ -572,6 +574,60 @@ def _test():
     globs['sc'].stop()
     if failure_count:
         exit(-1)
+
+
+class LDAModel(JavaModelWrapper):
+
+    """ A clustering model derived from the LDA method.
+
+    Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
+    Terminologyu
+    - "word" = "term": an element of the vocabulary
+    - "token": instance of a term appearing in a document
+    - "topic": multinomial distribution over words representing some concept
+    References:
+    - Original LDA paper (journal version):
+    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> from collections import namedtuple
+    >>> from numpy.testing import assert_almost_equal
+    >>> data = [
+    ...     LabeledPoint(1, [0.0, 1.0]),
+    ...     LabeledPoint(2, [1.0, 0.0]),
+    ... ]
+    >>> rdd =  sc.parallelize(data)
+    >>> model = LDA.train(rdd, 2)
+    >>> model.vocabSize()
+    2
+    >>> topics = model.topicsMatrix()
+    >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
+    >>> assert_almost_equal(topics, topics_expect, 1)
+    """
+
+    def topicsMatrix(self):
+        """Inferred topics, where each topic is represented by a distribution over terms."""
+        return self.call("topicsMatrix").toArray()
+
+    def vocabSize(self):
+        """Vocabulary size (number of terms or terms in the vocabulary)"""
+        return self.call("vocabSize")
+
+    def describeTopics(self, maxTermsPerTopic=None):
+        """Return the topics described by weighted terms.
+
+        TODO:
+        Implementing this method is a little hard. Since Scala's return value consistes of tuples.
+        """
+        raise NotImplementedError("LDAModel.describeTopics() in Python must be implemented.")
+
+
+class LDA():
+
+    @classmethod
+    def train(cls, rdd, k, seed=None):
+        model = callMLlibFunc("trainLDAModel", rdd, k, seed)
+        return LDAModel(model)
 
 
 if __name__ == "__main__":
