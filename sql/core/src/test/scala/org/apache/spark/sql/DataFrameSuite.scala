@@ -739,13 +739,13 @@ class DataFrameSuite extends QueryTest {
     df.col("t.``")
   }
 
-  test("SPARK-XXXX: sort by float column containing NaN") {
+  test("SPARK-8797: sort by float column containing NaN") {
     val inputData = Seq.fill(10)(Tuple1(Float.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toFloat))
     val df = Random.shuffle(inputData).toDF("a")
     df.orderBy("a").collect()
   }
 
-  test("SPARK-XXXX: sort by double column containing NaN") {
+  test("SPARK-8797: sort by double column containing NaN") {
     val inputData = Seq.fill(10)(Tuple1(Double.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toDouble))
     val df = Random.shuffle(inputData).toDF("a")
     df.orderBy("a").collect()
