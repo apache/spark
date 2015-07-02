@@ -25,6 +25,8 @@ public class PrefixComparators {
 
   public static final IntPrefixComparator INTEGER = new IntPrefixComparator();
   public static final LongPrefixComparator LONG = new LongPrefixComparator();
+  public static final FloatPrefixComparator FLOAT = new FloatPrefixComparator();
+  public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
 
   public static final class IntPrefixComparator extends PrefixComparator {
     @Override
@@ -43,6 +45,32 @@ public class PrefixComparators {
     @Override
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
+    }
+  }
+
+  public static final class FloatPrefixComparator extends PrefixComparator {
+    @Override
+    public int compare(long aPrefix, long bPrefix) {
+      float a = Float.intBitsToFloat((int) aPrefix);
+      float b = Float.intBitsToFloat((int) bPrefix);
+      return (a < b) ? -1 : (a > b) ? 1 : 0;
+    }
+
+    public long computePrefix(float value) {
+      return Float.floatToIntBits(value) & 0xffffffffL;
+    }
+  }
+
+  public static final class DoublePrefixComparator extends PrefixComparator {
+    @Override
+    public int compare(long aPrefix, long bPrefix) {
+      double a = Double.longBitsToDouble(aPrefix);
+      double b = Double.longBitsToDouble(bPrefix);
+      return (a < b) ? -1 : (a > b) ? 1 : 0;
+    }
+
+    public long computePrefix(double value) {
+      return Double.doubleToLongBits(value);
     }
   }
 }

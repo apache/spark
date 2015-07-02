@@ -26,6 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
  */
 class CodeGenerationSuite extends SparkFunSuite {
 
+  test("generate expression") {
+    GenerateExpression.generate(Add(Literal(1), Literal(1)))
+  }
+
   test("multithreaded eval") {
     import scala.concurrent._
     import ExecutionContext.Implicits.global
