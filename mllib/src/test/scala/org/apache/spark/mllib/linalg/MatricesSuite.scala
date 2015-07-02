@@ -455,4 +455,43 @@ class MatricesSuite extends SparkFunSuite {
     lines = mat.toString(5, 100).lines.toArray
     assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
+
+  test("equals") {
+    // A == (A.T).T
+    val dm = new DenseMatrix(2, 2, Array(0.0, 1.4, 0.3, 3.5))
+    val dm2 = new DenseMatrix(2, 3, Array(0.0, 1.4, 2.9, 0.0, 0.0, 0.0))
+    val dmt = new DenseMatrix(2, 2, Array(0.0, 0.3, 1.4, 3.5)).transpose
+    val dmt2 = new DenseMatrix(3, 2, Array(0.0, 2.9, 0.0, 1.4, 0.0, 0.0)).transpose
+    assert(dm == dmt)
+    assert(dm2 == dmt2)
+    assert(dm != dmt2)
+    assert(dm2 != dmt)
+
+    // Check that dense matrix == corresponding sparse matrix.
+    val sm = new SparseMatrix(2, 2, Array(0, 1, 3), Array(1, 0, 1), Array(1.4, 0.3, 3.5))
+    val sm2 = new SparseMatrix(2, 3, Array(0, 1, 2, 2), Array(1, 0), Array(1.4, 2.9))
+    val sm3 = new SparseMatrix(2, 2, Array(0, 1, 3), Array(1, 0, 1), Array(1.4, 0.9, 3.5))
+    val sm4 = new SparseMatrix(2, 3, Array(0, 1, 2, 2), Array(1, 0), Array(1.4, 2.2))
+    assert(dm == sm)
+    assert(dm2 == sm2)
+    assert(dm != sm3)
+    assert(dm2 != sm4)
+
+    // Check that dense matrix == corresponding CSC matrix.
+    val csr = new SparseMatrix(2, 2, Array(0, 1, 3), Array(1, 0, 1), Array(0.3, 1.4, 3.5))
+    val csr2 = new SparseMatrix(3, 2, Array(0, 1, 2), Array(1, 0), Array(2.9, 1.4))
+    assert(dm == csr.transpose)
+    assert(dm2 == csr2.transpose)
+    assert(dm != csr2.transpose)
+    assert(dm2 != csr.transpose)
+
+    // Check equality between csr and csc matrices
+    assert(sm == csr.transpose)
+    assert(sm2 == csr2.transpose)
+    assert(sm != csr2.transpose)
+    assert(sm2 != csr.transpose)
+
+    Seq(dm, dm2, sm, sm2).foreach{mat => assert(mat == mat.asInstanceOf[Matrix])}
+
+  }
 }
