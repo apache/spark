@@ -239,9 +239,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("unhex") {
-    checkEvaluation(UnHex(Literal("737472696E67")), "string".getBytes)
-    checkEvaluation(UnHex(Literal("")), new Array[Byte](0))
-    checkEvaluation(UnHex(Literal("0")), Array[Byte](0))
+    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(Unhex(Literal("")), new Array[Byte](0))
+    checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
+    checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
   }
 
   test("hypot") {
