@@ -576,19 +576,14 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("ask a message timeout on Future using RpcTimeout") {
-    case class SleepyReply(msg: String)
+    case class NeverReply(msg: String)
 
     val rpcEndpointRef = env.setupEndpoint("ask-future", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => {
-          context.reply(msg)
-        }
-        case sr: SleepyReply => {
-          Thread.sleep(50)
-          context.reply(sr.msg)
-        }
+        case msg: String => context.reply(msg)
+        case _: NeverReply =>
       }
     })
 
@@ -601,7 +596,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert("hello" === reply1)
 
     // Ask with a delayed response and wait for response immediately that should timeout
-    val fut2 = rpcEndpointRef.ask[String](SleepyReply("doh"), shortTimeout)
+    val fut2 = rpcEndpointRef.ask[String](NeverReply("doh"), shortTimeout)
     val reply2 =
       intercept[RpcTimeoutException] {
         shortTimeout.awaitResult(fut2)
@@ -611,7 +606,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(reply2.contains(shortTimeout.timeoutProp))
 
     // Ask with delayed response and allow the Future to timeout before Await.result
-    val fut3 = rpcEndpointRef.ask[String](SleepyReply("goodbye"), shortTimeout)
+    val fut3 = rpcEndpointRef.ask[String](NeverReply("goodbye"), shortTimeout)
 
     // Allow future to complete with failure using plain Await.result, this will return
     // once the future is complete to verify addMessageIfTimeout was invoked
