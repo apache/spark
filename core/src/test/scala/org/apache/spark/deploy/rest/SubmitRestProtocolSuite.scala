@@ -246,7 +246,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |    "spark.driver.supervise" : "false",
       |    "spark.app.name" : "SparkPie",
       |    "spark.cores.max" : "10000",
-      |    "spark.driver.memory" : ${Utils.DEFAULT_DRIVER_MEM_MB}m",
+      |    "spark.driver.memory" : "${Utils.DEFAULT_DRIVER_MEM_MB}m",
       |    "spark.files" : "fireball.png",
       |    "spark.driver.cores" : "180",
       |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
