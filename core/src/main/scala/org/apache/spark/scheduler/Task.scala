@@ -58,7 +58,6 @@ private[spark] abstract class Task[T](
   final def run(taskAttemptId: Long, attemptNumber: Int): T = {
     context = new TaskContextImpl(
       stageId = stageId,
-      stageAttemptId = stageAttemptId,
       partitionId = partitionId,
       taskAttemptId = taskAttemptId,
       attemptNumber = attemptNumber,
