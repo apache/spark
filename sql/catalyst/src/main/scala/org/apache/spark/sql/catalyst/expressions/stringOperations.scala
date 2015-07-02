@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -217,6 +217,16 @@ case class EndsWith(left: Expression, right: Expression)
  */
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ExpectsInputTypes {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) | (NullType, _) | (StringType, StringType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        TypeCheckResult.TypeCheckFailure(s"FindInSet expects two strings as argument, not " +
+          s"(${left.dataType}, ${right.dataType})")
+    }
+  }
 
   override def inputTypes: Seq[Any] = Seq(StringType, StringType)
 
