@@ -1061,7 +1061,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def unhex(column: Column): Column = Unhex(column.expr)
+  def unhex(column: Column): Column = UnHex(column.expr)
 
   /**
    * Inverse of hex. Interprets each pair of characters as a hexadecimal number

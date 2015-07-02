@@ -160,7 +160,7 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[Upper]("ucase"),
-    expression[Unhex]("unhex"),
+    expression[UnHex]("unhex"),
     expression[Upper]("upper")
   )
 
