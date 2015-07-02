@@ -101,10 +101,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val topicDistributions = model.topicDistributions.collect()
 
     //  Ensure all documents are covered.
-    // SPARK-5562. since the topicDistribution returns the distribution of docsI over topics .
-    // for empty docs, since the distribution of topic won't sum to 1 (and hence it is not a pdf)
-    // So the output will not contain the empty docs and hence we modify the unittest to
-    // compare against nonEmptyTinyCorpus
+    // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
+    // over topics. Compare it against nonEmptyTinyCorpus instead of tinyCorpus
     val nonEmptyTinyCorpus = getNonEmptyDoc(tinyCorpus)
     assert(topicDistributions.length === nonEmptyTinyCorpus.length)
     assert(nonEmptyTinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)

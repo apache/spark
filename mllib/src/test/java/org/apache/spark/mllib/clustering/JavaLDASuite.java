@@ -111,10 +111,8 @@ public class JavaLDASuite implements Serializable {
 
     // Check: topic distributions
     JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
-    // SPARK-5562. since the topicDistribution returns the distribution of docsI over topics .
-    // for empty docs, since the distribution of topic won't sum to 1 (and hence it is not a pdf)
-    // So the output will not contain the empty docs and hence we modify the unittest to
-    // compare against nonEmptyCorpus
+    // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
+    // over topics. Compare it against nonEmptyCorpus instead of corpus
     JavaPairRDD<Long, Vector> nonEmptyCorpus = corpus.filter(
             new Function<Tuple2<Long, Vector>, Boolean>() {
               public Boolean call(Tuple2<Long, Vector> tuple2) {

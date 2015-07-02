@@ -28,7 +28,6 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{Matrices, SparseVector, DenseVector, Vector}
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.rdd.RDD
 
 /**
@@ -120,14 +119,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
       }
     }
 
-    // create term vertices for empty docs
-    val emptyDocTermVertices: RDD[(VertexId, TopicCounts)] =
-      docs.filter { case (_, termCounts: Vector) =>
-        Vectors.norm(termCounts, p = 1.0) == 0.0 // empty docs has all zero termCounts
-      }.mapValues { case(termCounts: Vector) =>
-        Vectors.zeros(termCounts.size).toBreeze.asInstanceOf[TopicCounts]
-      }
-
     // Create vertices.
     // Initially, we use random soft assignments of tokens to topics (random gamma).
     val docTermVertices: RDD[(VertexId, TopicCounts)] = {
@@ -143,8 +134,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
       verticesTMP.reduceByKey(_ + _)
     }
 
-    // doc vertices are non empty docs and empty docs
-    val docAllTermVertices = docTermVertices.union(emptyDocTermVertices)
+    val docAllTermVertices = docTermVertices
     // Partition such that edges are grouped by document
     this.graph = Graph(docAllTermVertices, edges).partitionBy(PartitionStrategy.EdgePartition1D)
     this.k = k
