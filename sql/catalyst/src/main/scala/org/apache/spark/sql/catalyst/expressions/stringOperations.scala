@@ -211,6 +211,67 @@ case class EndsWith(left: Expression, right: Expression)
 }
 
 /**
+ * A function that returns the index (1-based) of the given string (left) in the comma-
+ * delimited list (right). Returns -1, if the string wasn't found and 0 if the given
+ * string (left) contains a comma.
+ */
+case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
+    with ExpectsInputTypes {
+
+  override def inputTypes: Seq[Any] = Seq(StringType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val strLeft = valueLeft.asInstanceOf[UTF8String]
+      if (!strLeft.contains(UTF8String.fromString(","))) {
+        val valueRight = right.eval(input)
+        if (valueRight != null) {
+          val splits = valueRight.asInstanceOf[UTF8String].toString.split(",")
+          var i = 0
+          while (i < splits.length) {
+            if (splits(i).equals(strLeft.toString)) {
+              return i + 1 // index is 1 based
+            }
+            i += 1
+          }
+          -1 // not found
+        } else {
+          null
+        }
+      } else {
+        0
+      }
+    } else {
+      null
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (res, left, right) => {
+      val splits = ctx.freshName("splits")
+      val i = ctx.freshName("i")
+
+      s"""
+          $res = -1;
+          if (!$left.contains(${ctx.stringType}.fromString(","))) {
+            String[] $splits = $right.toString().split(",");
+            for (int $i = 0; $i < $splits.length; $i++) {
+              if ($splits[$i].equals($left.toString())) {
+                $res = $i + 1; // index is 1 based
+                break;
+              }
+            }
+          } else {
+            $res = 0;
+          }"""
+    })
+  }
+
+  override def dataType: DataType = IntegerType
+}
+
+/**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
  */

@@ -151,6 +151,7 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[FindInSet]("findinset"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),

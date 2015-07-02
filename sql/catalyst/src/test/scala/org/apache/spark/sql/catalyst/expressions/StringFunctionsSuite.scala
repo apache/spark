@@ -224,4 +224,14 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLength(regEx), null, create_row(null))
     checkEvaluation(StringLength(Literal.create(null, StringType)), null, create_row("abdef"))
   }
+
+  test("find in set") {
+    checkEvaluation(
+      FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)
+    checkEvaluation(FindInSet(Literal("ab"), Literal.create(null, StringType)), null)
+    checkEvaluation(FindInSet(Literal.create(null, StringType), Literal("abc,b,ab,c,def")), null)
+    checkEvaluation(FindInSet(Literal("ab"), Literal("abc,b,ab,c,def")), 3)
+    checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), -1)
+    checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
+  }
 }
