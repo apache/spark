@@ -62,6 +62,11 @@ class MyDialect extends DefaultParserDialect
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+
+  def dropTable(table: String): Unit = {
+    sql(s"DROP TABLE IF EXISTS $table")
+  }
+
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.registerTempTable("table1")
@@ -196,6 +201,7 @@ class SQLQuerySuite extends QueryTest {
     val originalConf = convertCTAS
 
     setConf(HiveContext.CONVERT_CTAS, true)
+    dropTable("ctas1")
 
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -270,6 +276,11 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("CTAS with serde") {
+    dropTable("ctas1")
+    dropTable("ctas2")
+    dropTable("ctas3")
+    dropTable("ctas4")
+    dropTable("ctas5")
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
     sql(
       """CREATE TABLE ctas2
@@ -363,6 +374,8 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("specifying the column list for CTAS") {
+    dropTable("gen__tmp")
+    dropTable("mytable1")
     Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
 
     sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
@@ -434,6 +447,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("test CTAS") {
+    dropTable("test_ctas_123")
     checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
@@ -441,6 +455,8 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SPARK-4825 save join to table") {
+    dropTable("test1")
+    dropTable("test2")
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
     testData.write.mode(SaveMode.Append).insertInto("test1")
@@ -528,6 +544,7 @@ class SQLQuerySuite extends QueryTest {
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
     TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    dropTable("nullValuesInInnerComplexTypes")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -607,6 +624,7 @@ class SQLQuerySuite extends QueryTest {
     read.json(rdd).registerTempTable("data")
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
+    sql("DROP TABLE IF EXISTS explodeTest")
 
     sql("CREATE TABLE explodeTest (key bigInt)")
     table("explodeTest").queryExecution.analyzed match {
@@ -629,11 +647,14 @@ class SQLQuerySuite extends QueryTest {
   test("sanity test for SPARK-6618") {
     (1 to 100).par.map { i =>
       val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(Seq(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
+      try {
+        sql(s"CREATE TABLE $tableName (col1 string)")
+        catalog.lookupRelation(Seq(tableName))
+        table(tableName)
+        tables()
+      } finally {
+        sql(s"DROP TABLE  IF EXISTS $tableName")
+      }
     }
   }
 
