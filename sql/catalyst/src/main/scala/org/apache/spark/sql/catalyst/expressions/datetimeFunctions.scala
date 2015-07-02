@@ -17,37 +17,52 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
- * Adds a number of days to startdate: date_add('2008-12-31', 1) = '2009-01-01'.
+ * Returns the current date at the start of query evaluation.
+ * All calls of current_date within the same query return the same value.
  */
-case class CurrentTimestamp() extends Expression {
-  override def children: Seq[Expression] = Nil
-
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = TimestampType
-
-  override def eval(input: InternalRow): Any = {
-    (new java.util.Date()).getTime * 10000L
-  }
-}
-
-/**
- * Subtracts a number of days to startdate: date_sub('2008-12-31', 1) = '2008-12-30'.
- */
-case class CurrentDate() extends Expression {
-  override def children: Seq[Expression] = Nil
-
+case class CurrentDate() extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
   override def dataType: DataType = DateType
 
   override def eval(input: InternalRow): Any = {
-    DateTimeUtils.millisToDays((new java.util.Date()).getTime)
+    DateTimeUtils.millisToDays(System.currentTimeMillis())
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val datetimeUtils = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
+    s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.primitive} =
+        $datetimeUtils.millisToDays(System.currentTimeMillis());
+    """
+  }
+}
+
+/**
+ * Returns the current timestamp at the start of query evaluation.
+ * All calls of current_timestamp within the same query return the same value.
+ */
+case class CurrentTimestamp() extends LeafExpression {
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = TimestampType
+
+  override def eval(input: InternalRow): Any = {
+    System.currentTimeMillis() * 10000L
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    s"""
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.primitive} = System.currentTimeMillis() * 10000L;
+    """
   }
 }
