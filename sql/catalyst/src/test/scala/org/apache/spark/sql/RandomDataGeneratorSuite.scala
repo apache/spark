@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.scalacheck.Prop.{exists, forAll, secure}
+import org.scalatest.prop.Checkers
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types._
@@ -24,7 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * Tests of [[RandomDataGenerator]].
  */
-class RandomDataGeneratorSuite extends SparkFunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite with Checkers {
 
   /**
    * Tests random data generation for the given type by using it to generate random values then
@@ -32,31 +35,50 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
     val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    RandomDataGenerator.forType(dataType, nullable, Some(42L)).foreach { generator =>
-      for (_ <- 1 to 10) {
-        val generatedValue = generator()
-        val convertedValue = toCatalyst(generatedValue)
-        if (!nullable) {
-          assert(convertedValue !== null)
-        }
-      }
+    val generator = RandomDataGenerator.forType(dataType, nullable).getOrElse {
+      fail(s"Random data generator was not defined for $dataType")
     }
-
+    if (nullable) {
+      check(exists(generator) { _ == null })
+    }
+    if (!nullable) {
+      check(forAll(generator) { _ != null })
+    }
+    check(secure(forAll(generator) { v => { toCatalyst(v); true } }))
   }
 
   // Basic types:
-
-  (DataTypeTestUtils.atomicTypes ++ DataTypeTestUtils.atomicArrayTypes).foreach { dataType =>
-    test(s"$dataType") {
+  for (
+    dataType <- DataTypeTestUtils.atomicTypes;
+    nullable <- Seq(true, false)
+    if !dataType.isInstanceOf[DecimalType] ||
+      dataType.asInstanceOf[DecimalType].precisionInfo.isEmpty
+  ) {
+    test(s"$dataType (nullable=$nullable)") {
       testRandomDataGeneration(dataType)
     }
   }
 
-  // Complex types:
-
   for (
-    keyType <- DataTypeTestUtils.atomicTypes;
-    valueType <- DataTypeTestUtils.atomicTypes
+    arrayType <- DataTypeTestUtils.atomicArrayTypes
+    if RandomDataGenerator.forType(arrayType.elementType, arrayType.containsNull).isDefined
+  ) {
+    test(s"$arrayType") {
+      testRandomDataGeneration(arrayType)
+    }
+  }
+
+  val atomicTypesWithDataGenerators =
+    DataTypeTestUtils.atomicTypes.filter(RandomDataGenerator.forType(_).isDefined)
+
+  // Complex types:
+  for (
+    keyType <- atomicTypesWithDataGenerators;
+    valueType <- atomicTypesWithDataGenerators
+    // Scala's BigDecimal.hashCode can lead to OutOfMemoryError on Scala 2.10 (see SI-6173) and
+    // Spark can hit NumberFormatException errors when converting certain BigDecimals (SPARK-8802).
+    // For these reasons, we don't support generation of maps with decimal keys.
+    if !keyType.isInstanceOf[DecimalType]
   ) {
     val mapType = MapType(keyType, valueType)
     test(s"$mapType") {
@@ -65,8 +87,8 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   }
 
   for (
-    colOneType <- DataTypeTestUtils.atomicTypes;
-    colTwoType <- DataTypeTestUtils.atomicTypes
+    colOneType <- atomicTypesWithDataGenerators;
+    colTwoType <- atomicTypesWithDataGenerators
   ) {
     val structType = StructType(StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
     test(s"$structType") {
