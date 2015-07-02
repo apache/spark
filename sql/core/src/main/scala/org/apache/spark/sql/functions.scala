@@ -1054,6 +1054,24 @@ object functions {
   def hex(colName: String): Column = hex(Column(colName))
 
   /**
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
+   * and converts to the byte representation of number.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def unhex(column: Column): Column = UnHex(column.expr)
+
+  /**
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
+   * and converts to the byte representation of number.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def unhex(colName: String): Column = unhex(Column(colName))
+
+  /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group math_funcs
