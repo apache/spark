@@ -300,7 +300,7 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
  * Resulting characters are returned as a byte array.
  */
 case class Unhex(child: Expression)
-  extends UnaryExpression with AutoCastInputTypes with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with Serializable {
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
