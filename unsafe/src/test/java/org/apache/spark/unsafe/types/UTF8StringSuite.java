@@ -25,21 +25,30 @@ import org.junit.Test;
 public class UTF8StringSuite {
 
   private void checkBasic(String str, int len) throws UnsupportedEncodingException {
-    Assert.assertEquals(UTF8String.fromString(str).length(), len);
-    Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")).length(), len);
+    UTF8String s1 = UTF8String.fromString(str);
+    UTF8String s2 = UTF8String.fromBytes(str.getBytes("utf8"));
+    Assert.assertEquals(s1.length(), len);
+    Assert.assertEquals(s2.length(), len);
 
-    Assert.assertEquals(UTF8String.fromString(str).toString(), str);
-    Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")).toString(), str);
-    Assert.assertEquals(UTF8String.fromBytes(str.getBytes("utf8")), UTF8String.fromString(str));
+    Assert.assertEquals(s1.toString(), str);
+    Assert.assertEquals(s2.toString(), str);
+    Assert.assertEquals(s1, s2);
 
-    Assert.assertEquals(UTF8String.fromString(str).hashCode(),
-      UTF8String.fromBytes(str.getBytes("utf8")).hashCode());
+    Assert.assertEquals(s1.hashCode(), s2.hashCode());
+
+    Assert.assertEquals(s1.compare(s2), 0);
+    Assert.assertEquals(s1.compareTo(s2), 0);
+
+    Assert.assertEquals(s1.contains(s2), true);
+    Assert.assertEquals(s2.contains(s1), true);
+    Assert.assertEquals(s1.startsWith(s1), true);
+    Assert.assertEquals(s1.endsWith(s1), true);
   }
 
   @Test
   public void basicTest() throws UnsupportedEncodingException {
     checkBasic("hello", 5);
-    checkBasic("世 界", 3);
+    checkBasic("大 千 世 界", 7);
   }
 
   @Test

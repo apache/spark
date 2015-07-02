@@ -263,17 +263,17 @@ public final class UnsafeRow extends MutableRow {
       boolean isString = (v >> (OFFSET_BITS * 2)) > 0;
       int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
       int size = (int) (v & Integer.MAX_VALUE);
-      final byte[] bytes = new byte[size];
-      PlatformDependent.copyMemory(
-        baseObject,
-        baseOffset + offset,
-        bytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        size
-      );
       if (isString) {
-        return UTF8String.fromBytes(bytes);
+        return new UTF8String(baseObject, baseOffset + offset, size);
       } else {
+        final byte[] bytes = new byte[size];
+        PlatformDependent.copyMemory(
+                baseObject,
+                baseOffset + offset,
+                bytes,
+                PlatformDependent.BYTE_ARRAY_OFFSET,
+                size
+        );
         return bytes;
       }
     }
