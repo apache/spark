@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.Logging
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -236,7 +237,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeShort(row.getShort(i))
               }
 
-            case IntegerType =>
+            case IntegerType | DateType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
               } else {
@@ -244,7 +245,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeInt(row.getInt(i))
               }
 
-            case LongType =>
+            case LongType | TimestampType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
               } else {
@@ -268,37 +269,6 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeDouble(row.getDouble(i))
               }
 
-            case decimal: DecimalType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                val value = row.apply(i).asInstanceOf[Decimal]
-                val javaBigDecimal = value.toJavaBigDecimal
-                // First, write out the unscaled value.
-                val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray
-                out.writeInt(bytes.length)
-                out.write(bytes)
-                // Then, write out the scale.
-                out.writeInt(javaBigDecimal.scale())
-              }
-
-            case DateType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                out.writeInt(row.getAs[Int](i))
-              }
-
-            case TimestampType =>
-              if (row.isNullAt(i)) {
-                out.writeByte(NULL)
-              } else {
-                out.writeByte(NOT_NULL)
-                out.writeLong(row.getAs[Long](i))
-              }
-
             case StringType =>
               if (row.isNullAt(i)) {
                 out.writeByte(NULL)
@@ -318,6 +288,21 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
+
+            case decimal: DecimalType =>
+              if (row.isNullAt(i)) {
+                out.writeByte(NULL)
+              } else {
+                out.writeByte(NOT_NULL)
+                val value = row.apply(i).asInstanceOf[Decimal]
+                val javaBigDecimal = value.toJavaBigDecimal
+                // First, write out the unscaled value.
+                val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray
+                out.writeInt(bytes.length)
+                out.write(bytes)
+                // Then, write out the scale.
+                out.writeInt(javaBigDecimal.scale())
+              }
           }
           i += 1
         }
@@ -329,7 +314,7 @@ private[sql] object SparkSqlSerializer2 {
    */
   def createDeserializationFunction(
       schema: Array[DataType],
-      in: DataInputStream): (MutableRow) => Row = {
+      in: DataInputStream): (MutableRow) => InternalRow = {
     if (schema == null) {
       (mutableRow: MutableRow) => null
     } else {
@@ -363,14 +348,14 @@ private[sql] object SparkSqlSerializer2 {
                 mutableRow.setShort(i, in.readShort())
               }
 
-            case IntegerType =>
+            case IntegerType | DateType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
                 mutableRow.setInt(i, in.readInt())
               }
 
-            case LongType =>
+            case LongType | TimestampType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
               } else {
@@ -391,35 +376,6 @@ private[sql] object SparkSqlSerializer2 {
                 mutableRow.setDouble(i, in.readDouble())
               }
 
-            case decimal: DecimalType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                // First, read in the unscaled value.
-                val length = in.readInt()
-                val bytes = new Array[Byte](length)
-                in.readFully(bytes)
-                val unscaledVal = new BigInteger(bytes)
-                // Then, read the scale.
-                val scale = in.readInt()
-                // Finally, create the Decimal object and set it in the row.
-                mutableRow.update(i, Decimal(new BigDecimal(unscaledVal, scale)))
-              }
-
-            case DateType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow.update(i, in.readInt())
-              }
-
-            case TimestampType =>
-              if (in.readByte() == NULL) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow.update(i, in.readLong())
-              }
-
             case StringType =>
               if (in.readByte() == NULL) {
                 mutableRow.setNullAt(i)
@@ -438,6 +394,21 @@ private[sql] object SparkSqlSerializer2 {
                 val bytes = new Array[Byte](length)
                 in.readFully(bytes)
                 mutableRow.update(i, bytes)
+              }
+
+            case decimal: DecimalType =>
+              if (in.readByte() == NULL) {
+                mutableRow.setNullAt(i)
+              } else {
+                // First, read in the unscaled value.
+                val length = in.readInt()
+                val bytes = new Array[Byte](length)
+                in.readFully(bytes)
+                val unscaledVal = new BigInteger(bytes)
+                // Then, read the scale.
+                val scale = in.readInt()
+                // Finally, create the Decimal object and set it in the row.
+                mutableRow.update(i, Decimal(new BigDecimal(unscaledVal, scale)))
               }
           }
           i += 1

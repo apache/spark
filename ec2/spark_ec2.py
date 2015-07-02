@@ -290,6 +290,10 @@ def parse_args():
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
     parser.add_option(
+        "--additional-tags", type="string", default="",
+        help="Additional tags to set on the machines; tags are comma-separated, while name and " +
+             "value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
+    parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
@@ -302,6 +306,13 @@ def parse_args():
         "--private-ips", action="store_true", default=False,
         help="Use private IPs for instances rather than public if VPC/subnet " +
              "requires that.")
+    parser.add_option(
+        "--instance-initiated-shutdown-behavior", default="stop",
+        choices=["stop", "terminate"],
+        help="Whether instances should terminate when shut down or just stop")
+    parser.add_option(
+        "--instance-profile-name", default=None,
+        help="IAM profile name to launch instances under")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -358,7 +369,7 @@ def get_validate_spark_version(version, repo):
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
-# Last Updated: 2015-05-08
+# Last Updated: 2015-06-19
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 EC2_INSTANCE_TYPES = {
     "c1.medium":   "pvm",
@@ -400,6 +411,11 @@ EC2_INSTANCE_TYPES = {
     "m3.large":    "hvm",
     "m3.xlarge":   "hvm",
     "m3.2xlarge":  "hvm",
+    "m4.large":    "hvm",
+    "m4.xlarge":   "hvm",
+    "m4.2xlarge":  "hvm",
+    "m4.4xlarge":  "hvm",
+    "m4.10xlarge": "hvm",
     "r3.large":    "hvm",
     "r3.xlarge":   "hvm",
     "r3.2xlarge":  "hvm",
@@ -409,6 +425,7 @@ EC2_INSTANCE_TYPES = {
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
     "t2.medium":   "hvm",
+    "t2.large":    "hvm",
 }
 
 
@@ -488,6 +505,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('tcp', 50070, 50070, authorized_address)
         master_group.authorize('tcp', 60070, 60070, authorized_address)
         master_group.authorize('tcp', 4040, 4045, authorized_address)
+        # Rstudio (GUI for R) needs port 8787 for web access
+        master_group.authorize('tcp', 8787, 8787, authorized_address)
         # HDFS NFS gateway requires 111,2049,4242 for tcp & udp
         master_group.authorize('tcp', 111, 111, authorized_address)
         master_group.authorize('udp', 111, 111, authorized_address)
@@ -592,7 +611,8 @@ def launch_cluster(conn, opts, cluster_name):
                 block_device_map=block_map,
                 subnet_id=opts.subnet_id,
                 placement_group=opts.placement_group,
-                user_data=user_data_content)
+                user_data=user_data_content,
+                instance_profile_name=opts.instance_profile_name)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -637,16 +657,19 @@ def launch_cluster(conn, opts, cluster_name):
         for zone in zones:
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
-                slave_res = image.run(key_name=opts.key_pair,
-                                      security_group_ids=[slave_group.id] + additional_group_ids,
-                                      instance_type=opts.instance_type,
-                                      placement=zone,
-                                      min_count=num_slaves_this_zone,
-                                      max_count=num_slaves_this_zone,
-                                      block_device_map=block_map,
-                                      subnet_id=opts.subnet_id,
-                                      placement_group=opts.placement_group,
-                                      user_data=user_data_content)
+                slave_res = image.run(
+                    key_name=opts.key_pair,
+                    security_group_ids=[slave_group.id] + additional_group_ids,
+                    instance_type=opts.instance_type,
+                    placement=zone,
+                    min_count=num_slaves_this_zone,
+                    max_count=num_slaves_this_zone,
+                    block_device_map=block_map,
+                    subnet_id=opts.subnet_id,
+                    placement_group=opts.placement_group,
+                    user_data=user_data_content,
+                    instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+                    instance_profile_name=opts.instance_profile_name)
                 slave_nodes += slave_res.instances
                 print("Launched {s} slave{plural_s} in {z}, regid = {r}".format(
                       s=num_slaves_this_zone,
@@ -668,32 +691,43 @@ def launch_cluster(conn, opts, cluster_name):
             master_type = opts.instance_type
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
-        master_res = image.run(key_name=opts.key_pair,
-                               security_group_ids=[master_group.id] + additional_group_ids,
-                               instance_type=master_type,
-                               placement=opts.zone,
-                               min_count=1,
-                               max_count=1,
-                               block_device_map=block_map,
-                               subnet_id=opts.subnet_id,
-                               placement_group=opts.placement_group,
-                               user_data=user_data_content)
+        master_res = image.run(
+            key_name=opts.key_pair,
+            security_group_ids=[master_group.id] + additional_group_ids,
+            instance_type=master_type,
+            placement=opts.zone,
+            min_count=1,
+            max_count=1,
+            block_device_map=block_map,
+            subnet_id=opts.subnet_id,
+            placement_group=opts.placement_group,
+            user_data=user_data_content,
+            instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+            instance_profile_name=opts.instance_profile_name)
 
         master_nodes = master_res.instances
         print("Launched master in %s, regid = %s" % (zone, master_res.id))
 
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
-    time.sleep(5)
-    # Give the instances descriptive names
+    time.sleep(15)
+
+    # Give the instances descriptive names and set additional tags
+    additional_tags = {}
+    if opts.additional_tags.strip():
+        additional_tags = dict(
+            map(str.strip, tag.split(':', 1)) for tag in opts.additional_tags.split(',')
+        )
+
     for master in master_nodes:
-        master.add_tag(
-            key='Name',
-            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        master.add_tags(
+            dict(additional_tags, Name='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        )
+
     for slave in slave_nodes:
-        slave.add_tag(
-            key='Name',
-            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        slave.add_tags(
+            dict(additional_tags, Name='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        )
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -911,7 +945,7 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Last Updated: 2015-05-08
+    # Last Updated: 2015-06-19
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
@@ -953,6 +987,11 @@ def get_num_disks(instance_type):
         "m3.large":    1,
         "m3.xlarge":   2,
         "m3.2xlarge":  2,
+        "m4.large":    0,
+        "m4.xlarge":   0,
+        "m4.2xlarge":  0,
+        "m4.4xlarge":  0,
+        "m4.10xlarge": 0,
         "r3.large":    1,
         "r3.xlarge":   1,
         "r3.2xlarge":  1,
@@ -962,6 +1001,7 @@ def get_num_disks(instance_type):
         "t2.micro":    0,
         "t2.small":    0,
         "t2.medium":   0,
+        "t2.large":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]

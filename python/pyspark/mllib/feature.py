@@ -111,6 +111,15 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     """
 
     def transform(self, vector):
+        """
+        Applies transformation on a vector or an RDD[Vector].
+
+        Note: In Python, transform cannot currently be used within
+              an RDD transformation or action.
+              Call transform directly on the RDD instead.
+
+        :param vector: Vector or RDD of Vector to be transformed.
+        """
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
@@ -191,7 +200,7 @@ class StandardScaler(object):
         Computes the mean and variance and stores as a model to be used
         for later scaling.
 
-        :param data: The data used to compute the mean and variance
+        :param dataset: The data used to compute the mean and variance
                      to build the transformation model.
         :return: a StandardScalarModel
         """
@@ -250,6 +259,41 @@ class ChiSqSelector(object):
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.numTopFeatures, data)
         return ChiSqSelectorModel(jmodel)
+
+
+class PCAModel(JavaVectorTransformer):
+    """
+    Model fitted by [[PCA]] that can project vectors to a low-dimensional space using PCA.
+    """
+
+
+class PCA(object):
+    """
+    A feature transformer that projects vectors to a low-dimensional space using PCA.
+
+    >>> data = [Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),
+    ...     Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),
+    ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
+    >>> model = PCA(2).fit(sc.parallelize(data))
+    >>> pcArray = model.transform(Vectors.sparse(5, [(1, 1.0), (3, 7.0)])).toArray()
+    >>> pcArray[0]
+    1.648...
+    >>> pcArray[1]
+    -4.013...
+    """
+    def __init__(self, k):
+        """
+        :param k: number of principal components.
+        """
+        self.k = int(k)
+
+    def fit(self, data):
+        """
+        Computes a [[PCAModel]] that contains the principal components of the input vectors.
+        :param data: source vectors
+        """
+        jmodel = callMLlibFunc("fitPCA", self.k, data)
+        return PCAModel(jmodel)
 
 
 class HashingTF(object):
@@ -311,10 +355,6 @@ class IDFModel(JavaVectorTransformer):
                   vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        if isinstance(x, RDD):
-            return JavaVectorTransformer.transform(self, x)
-
-        x = _convert_to_vector(x)
         return JavaVectorTransformer.transform(self, x)
 
     def idf(self):
@@ -514,7 +554,7 @@ class Word2Vec(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
-        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+        jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
                                int(self.minCount))
