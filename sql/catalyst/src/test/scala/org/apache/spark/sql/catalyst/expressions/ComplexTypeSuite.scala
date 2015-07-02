@@ -102,38 +102,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(getStructField(nullStruct, "a").nullable === true)
   }
 
-  test("complex type") {
-    val row = create_row(
-      "^Ba*n", // 0
-      null.asInstanceOf[UTF8String], // 1
-      create_row("aa", "bb"), // 2
-      Map("aa" -> "bb"), // 3
-      Seq("aa", "bb") // 4
-    )
-
-    val typeS = StructType(
-      StructField("a", StringType, true) :: StructField("b", StringType, true) :: Nil
-    )
-    val typeMap = MapType(StringType, StringType)
-    val typeArray = ArrayType(StringType)
-
-    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
-      Literal("aa")), "bb", row)
-    checkEvaluation(GetMapValue(Literal.create(null, typeMap), Literal("aa")), null, row)
-    checkEvaluation(
-      GetMapValue(Literal.create(null, typeMap), Literal.create(null, StringType)), null, row)
-    checkEvaluation(GetMapValue(BoundReference(3, typeMap, true),
-      Literal.create(null, StringType)), null, row)
-
-    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
-      Literal(1)), "bb", row)
-    checkEvaluation(GetArrayItem(Literal.create(null, typeArray), Literal(1)), null, row)
-    checkEvaluation(
-      GetArrayItem(Literal.create(null, typeArray), Literal.create(null, IntegerType)), null, row)
-    checkEvaluation(GetArrayItem(BoundReference(4, typeArray, true),
-      Literal.create(null, IntegerType)), null, row)
-  }
-
   test("GetArrayStructFields") {
     val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val arrayStruct = Literal.create(Seq(create_row(1)), typeAS)
