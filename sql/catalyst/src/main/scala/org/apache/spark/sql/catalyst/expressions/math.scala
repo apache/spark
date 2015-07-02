@@ -398,8 +398,6 @@ case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpressi
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left << $right;")
   }
-
-  override def toString: String = s"ShiftLeft($left, $right)"
 }
 
 case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
@@ -449,8 +447,6 @@ case class ShiftRight(left: Expression, right: Expression) extends BinaryExpress
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >> $right;")
   }
-
-  override def toString: String = s"ShiftRight($left, $right)"
 }
 
 /**

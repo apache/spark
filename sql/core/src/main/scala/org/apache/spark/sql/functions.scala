@@ -1299,8 +1299,8 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
-   * Shift the the given value numBits left. Returns int for tinyint, smallint and int and
-   * bigint for bigint a.
+   * Shift the the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1308,8 +1308,8 @@ object functions {
   def shiftLeft(e: Column, numBits: Integer): Column = ShiftLeft(e.expr, lit(numBits).expr)
 
   /**
-   * Shift the the given value numBits left. Returns int for tinyint, smallint and int and
-   * bigint for bigint a.
+   * Shift the the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1318,8 +1318,8 @@ object functions {
     shiftLeft(Column(columnName), numBits)
 
   /**
-   * Shift the the given value numBits right. Returns int for tinyint, smallint and int and
-   * bigint for bigint a.
+   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1327,8 +1327,8 @@ object functions {
   def shiftRight(e: Column, numBits: Integer): Column = ShiftRight(e.expr, lit(numBits).expr)
 
   /**
-   * Shift the the given value numBits right. Returns int for tinyint, smallint and int and
-   * bigint for bigint a.
+   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0

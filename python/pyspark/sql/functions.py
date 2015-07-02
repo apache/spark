@@ -414,8 +414,7 @@ def sha2(col, numBits):
 
 @since(1.5)
 def shiftLeft(col, numBits):
-    """Shift the the given value numBits left. Returns int for tinyint, smallint and int and
-    bigint for bigint a.
+    """Shift the the given value numBits left.
 
     >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
     [Row(r=42)]
@@ -427,8 +426,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the the given value numBits right. Returns int for tinyint, smallint and int and
-    bigint for bigint a.
+    """Shift the the given value numBits right.
 
     >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
