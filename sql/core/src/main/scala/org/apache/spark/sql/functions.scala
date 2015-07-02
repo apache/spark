@@ -1300,7 +1300,7 @@ object functions {
     shiftLeft(Column(columnName), numBits)
 
   /**
-   * Bitwise right shift of the given value. Returns int for tinyint, smallint and int and
+   * Shift the the given value numBits right. Returns int for tinyint, smallint and int and
    * bigint for bigint a.
    *
    * @group math_funcs
