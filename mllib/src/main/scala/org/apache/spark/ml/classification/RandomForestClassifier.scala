@@ -123,7 +123,7 @@ object RandomForestClassifier {
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
-    private val _threshold: Option[Array[Double]]=None)
+    private val _thresholds: Option[Array[Double]]=None)
   extends PredictionModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
@@ -146,7 +146,12 @@ final class RandomForestClassificationModel private[ml] (
       val prediction = tree.rootNode.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
     }
-    votes.maxBy(_._2)._1
+    // Apply thresholding, or use votes if no thresholding
+    val scores = _thresholds.map{thresholds =>
+      votes.map{case (index, count) =>
+        (index, count/thresholds(index))
+      }}.getOrElse(votes)
+    scores.maxBy(_._2)._1
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
