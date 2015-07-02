@@ -26,6 +26,31 @@ import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends PlanTest {
 
+  test("implicit type cast") {
+    def shouldCast(from: DataType, to: AbstractDataType): Unit = {
+      val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+      assert(got.dataType === to.defaultConcreteType)
+    }
+
+    // TODO: write the entire implicit cast table out for test cases.
+    shouldCast(ByteType, IntegerType)
+    shouldCast(IntegerType, IntegerType)
+    shouldCast(IntegerType, LongType)
+    shouldCast(IntegerType, DecimalType.Unlimited)
+    shouldCast(LongType, IntegerType)
+    shouldCast(LongType, DecimalType.Unlimited)
+
+    shouldCast(DateType, TimestampType)
+    shouldCast(TimestampType, DateType)
+
+    shouldCast(StringType, IntegerType)
+    shouldCast(StringType, DateType)
+    shouldCast(StringType, TimestampType)
+    shouldCast(IntegerType, StringType)
+    shouldCast(DateType, StringType)
+    shouldCast(TimestampType, StringType)
+  }
+
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
       var found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2)

@@ -704,19 +704,48 @@ object HiveTypeCoercion {
 
   /**
    * Casts types according to the expected input types for Expressions that have the trait
-   * [[AutoCastInputTypes]].
+   * [[ExpectsInputTypes]].
    */
   object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.inputTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.inputTypes).zipped.map {
-          case (child, actual, expected) =>
-            if (actual == expected) child else Cast(child, expected)
+      case e: ExpectsInputTypes =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          implicitCast(in, expected)
         }
-        e.withNewChildren(newC)
+        e.withNewChildren(children)
+    }
+
+    /**
+     * If needed, cast the expression into the expected type.
+     * If the implicit cast is not allowed, return the expression itself.
+     */
+    def implicitCast(e: Expression, expectedType: AbstractDataType): Expression = {
+      val inType = e.dataType
+      (inType, expectedType) match {
+        // Cast null type (usually from null literals) into target types
+        case (NullType, target: DataType) => Cast(e, target.defaultConcreteType)
+
+        // Implicit cast among numeric types
+        case (_: NumericType, target: NumericType) if e.dataType != target => Cast(e, target)
+
+        // Implicit cast between date time types
+        case (DateType, TimestampType) => Cast(e, TimestampType)
+        case (TimestampType, DateType) => Cast(e, DateType)
+
+        // Implicit cast from/to string
+        case (StringType, NumericType) => Cast(e, DoubleType)
+        case (StringType, target: NumericType) => Cast(e, target)
+        case (StringType, DateType) => Cast(e, DateType)
+        case (StringType, TimestampType) => Cast(e, TimestampType)
+        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (any, StringType) if any != StringType => Cast(e, StringType)
+
+        // Else, just return the same input expression
+        case _ => e
+      }
     }
   }
 }
