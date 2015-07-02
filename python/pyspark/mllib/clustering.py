@@ -291,10 +291,10 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.k
     2
     >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
-    >>> sum([x.cluster != result[3].cluster for x in result if x.id < 3])
-    0
-    >>> sum([x.cluster != result[4].cluster for x in result if x.id > 4])
-    0
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
@@ -302,10 +302,10 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> sameModel.k
     2
     >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
-    >>> sum([x.cluster != result[3].cluster for x in result if x.id < 3])
-    0
-    >>> sum([x.cluster != result[4].cluster for x in result if x.id > 4])
-    0
+    >>> result[0].cluster == result[1].cluster == result[2].cluster == result[3].cluster
+    True
+    >>> result[4].cluster == result[5].cluster == result[6].cluster == result[7].cluster
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
