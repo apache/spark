@@ -739,8 +739,11 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
-   * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
-   * a derived column expression that is named (i.e. aliased).
+   * Creates a new struct column.
+   * If the input column is a column in a [[DataFrame]], or a derived column expression
+   * that is named (i.e. aliased), its name would be remained as the StructField's name,
+   * otherwise, the newly generated StructField's name would be auto generated as col${index + 1},
+   * i.e. col1, col2, col3, ...
    *
    * @group normal_funcs
    * @since 1.4.0
