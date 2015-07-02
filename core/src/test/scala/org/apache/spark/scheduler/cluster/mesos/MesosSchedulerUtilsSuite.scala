@@ -37,22 +37,18 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   test("use at-least minimum overhead") {
     val f = fixture
-    // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(512)
     utils.calculateTotalMemory(f.sc) shouldBe 896
   }
 
   test("use overhead if it is greater than minimum value") {
     val f = fixture
-    // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(4096)
     utils.calculateTotalMemory(f.sc) shouldBe 4505
   }
 
   test("use spark.mesos.executor.memoryOverhead (if set)") {
     val f = fixture
-    val utils = new MesosSchedulerUtils { }
-    // 384 > sc.executorMemory * 0.1 => 512 + 384 = 896
     when(f.sc.executorMemory).thenReturn(1024)
     f.sparkConf.set("spark.mesos.executor.memoryOverhead", "512")
     utils.calculateTotalMemory(f.sc) shouldBe 1536
@@ -67,7 +63,6 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   }
 
   test("parse an empty constraint string correctly") {
-    val utils = new MesosSchedulerUtils { }
     utils.parseConstraintString("") shouldBe Map()
   }
 

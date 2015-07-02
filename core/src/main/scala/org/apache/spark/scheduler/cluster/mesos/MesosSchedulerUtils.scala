@@ -21,6 +21,7 @@ import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConversions._
+import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler}
@@ -96,11 +97,13 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */
-  def getAttribute(attr: Attribute): (String, Set[String]) =
+  protected def getAttribute(attr: Attribute): (String, Set[String]) = {
     (attr.getName, attr.getText.getValue.split(',').toSet)
+  }
+
 
   /** Build a Mesos resource protobuf object */
-  def createResource(resourceName: String, quantity: Double): Protos.Resource = {
+  protected def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
       .setName(resourceName)
       .setType(Value.Type.SCALAR)
@@ -114,7 +117,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @param offerAttributes
    * @return
    */
-  def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] =
+  protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
     offerAttributes.map(attr => {
       val attrValue = attr.getType match {
         case Value.Type.SCALAR => attr.getScalar
@@ -124,16 +127,18 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       }
       (attr.getName, attrValue)
     }).toMap
+  }
+
 
   /**
    * Match the requirements (if any) to the offer attributes.
    * if attribute requirements are not specified - return true
-   * else if attribute is defined and no values are given, simple attribute presence is preformed
+   * else if attribute is defined and no values are given, simple attribute presence is performed
    * else if attribute name and value is specified, subset match is performed on slave attributes
    */
   def matchesAttributeRequirements(
       slaveOfferConstraints: Map[String, Set[String]],
-      offerAttributes: Map[String, GeneratedMessage]): Boolean =
+      offerAttributes: Map[String, GeneratedMessage]): Boolean = {
     slaveOfferConstraints.forall {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
@@ -158,6 +163,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
             // we succeed if any of them match.
             requiredValues.contains(textValue.getValue)
         }
+    }
   }
 
   /**
@@ -206,7 +212,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
             }
         }
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
       }
     }
@@ -216,6 +222,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   private val MEMORY_OVERHEAD_FRACTION = 0.10
   private val MEMORY_OVERHEAD_MINIMUM = 384
 
+  /**
+   * Return the amount of memory to allocate to each executor, taking into account container overheads.
+   * @param sc SparkContext to use to get `spark.mesos.executor.memoryOverhead` value
+   * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM (whichever is larger)
+   */
   def calculateTotalMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +

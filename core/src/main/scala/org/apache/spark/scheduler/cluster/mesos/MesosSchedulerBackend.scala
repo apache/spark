@@ -75,8 +75,8 @@ private[spark] class MesosSchedulerBackend(
     val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
       .getOrElse {
-        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
-      }
+      throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+    }
     val environment = Environment.newBuilder()
     sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
       environment.addVariables(
@@ -119,7 +119,7 @@ private[spark] class MesosSchedulerBackend(
       .setName("cpus")
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder()
-        .setValue(mesosExecutorCores).build())
+      .setValue(mesosExecutorCores).build())
       .build()
     val memory = Resource.newBuilder()
       .setName("mem")
@@ -201,15 +201,15 @@ private[spark] class MesosSchedulerBackend(
         //  1. Attribute constraints
         //  2. Memory requirements
         //  3. CPU requirements - need at least 1 for executor, 1 for task
-        val meetsConstrains = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
 
-        val meetsRequirements = (meetsConstrains && meetsMemoryRequirements && meetsCPURequirements) ||
+        val meetsRequirements = (meetsConstraints && meetsMemoryRequirements && meetsCPURequirements) ||
           (slaveIdsWithExecutors.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
 
         // add some debug messaging
-        val debugStatement = if(meetsRequirements) "Accepting" else "Declining"
+        val debugStatement = if (meetsRequirements) "Accepting" else "Declining"
         val id = o.getId.getValue
         logDebug(s"$debugStatement offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
 
@@ -244,15 +244,15 @@ private[spark] class MesosSchedulerBackend(
       val acceptedOffers = scheduler.resourceOffers(workerOffers).filter(!_.isEmpty)
       acceptedOffers
         .foreach { offer =>
-          offer.foreach { taskDesc =>
-            val slaveId = taskDesc.executorId
-            slaveIdsWithExecutors += slaveId
-            slavesIdsOfAcceptedOffers += slaveId
-            taskIdToSlaveId(taskDesc.taskId) = slaveId
-            mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
-              .add(createMesosTask(taskDesc, slaveId))
-          }
+        offer.foreach { taskDesc =>
+          val slaveId = taskDesc.executorId
+          slaveIdsWithExecutors += slaveId
+          slavesIdsOfAcceptedOffers += slaveId
+          taskIdToSlaveId(taskDesc.taskId) = slaveId
+          mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+            .add(createMesosTask(taskDesc, slaveId))
         }
+      }
 
       // Reply to the offers
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
