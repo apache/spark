@@ -109,7 +109,7 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "512m")
+  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows

@@ -739,17 +739,18 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
-   * Creates a new struct column. The input column must be a column in a [[DataFrame]], or
-   * a derived column expression that is named (i.e. aliased).
+   * Creates a new struct column.
+   * If the input column is a column in a [[DataFrame]], or a derived column expression
+   * that is named (i.e. aliased), its name would be remained as the StructField's name,
+   * otherwise, the newly generated StructField's name would be auto generated as col${index + 1},
+   * i.e. col1, col2, col3, ...
    *
    * @group normal_funcs
    * @since 1.4.0
    */
   @scala.annotation.varargs
   def struct(cols: Column*): Column = {
-    require(cols.forall(_.expr.isInstanceOf[NamedExpression]),
-      s"struct input columns must all be named or aliased ($cols)")
-    CreateStruct(cols.map(_.expr.asInstanceOf[NamedExpression]))
+    CreateStruct(cols.map(_.expr))
   }
 
   /**
@@ -1297,6 +1298,44 @@ object functions {
    * @since 1.4.0
    */
   def rint(columnName: String): Column = rint(Column(columnName))
+
+  /**
+   * Shift the the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftLeft(e: Column, numBits: Int): Column = ShiftLeft(e.expr, lit(numBits).expr)
+
+  /**
+   * Shift the the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftLeft(columnName: String, numBits: Int): Column =
+    shiftLeft(Column(columnName), numBits)
+
+  /**
+   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRight(e: Column, numBits: Int): Column = ShiftRight(e.expr, lit(numBits).expr)
+
+  /**
+   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRight(columnName: String, numBits: Int): Column =
+    shiftRight(Column(columnName), numBits)
 
   /**
    * Computes the signum of the given value.

@@ -225,6 +225,32 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
   }
 
+  test("shift left") {
+    checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toByte), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toShort), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
+
+    checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+  }
+
+  test("shift right") {
+    checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toByte), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toShort), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
+
+    checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+  }
+
   test("hex") {
     checkEvaluation(Hex(Literal.create(null, IntegerType)), null)
     checkEvaluation(Hex(Literal(28)), "1C")
