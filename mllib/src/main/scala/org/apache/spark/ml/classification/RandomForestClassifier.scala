@@ -182,12 +182,7 @@ final class RandomForestClassificationModel private[ml] (
         throw new RuntimeException("Unexpected error in RandomForestClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
-    // Apply thresholding, or use votes if no thresholding
-    val scores = _thresholds.map{thresholds =>
-      votes.map{case (index, count) =>
-        (index, count/thresholds(index))
-      }}.getOrElse(votes)
-    scores.maxBy(_._2)._1
+    Vectors.dense(votes)
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
