@@ -24,8 +24,9 @@ public class PrefixComparators {
   private PrefixComparators() {}
 
   public static final IntPrefixComparator INTEGER = new IntPrefixComparator();
+  public static final LongPrefixComparator LONG = new LongPrefixComparator();
 
-  static final class IntPrefixComparator extends PrefixComparator {
+  public static final class IntPrefixComparator extends PrefixComparator {
     @Override
     public int compare(long aPrefix, long bPrefix) {
       int a = (int) aPrefix;
@@ -38,7 +39,7 @@ public class PrefixComparators {
     }
   }
 
-  static final class LongPrefixComparator extends PrefixComparator {
+  public static final class LongPrefixComparator extends PrefixComparator {
     @Override
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
