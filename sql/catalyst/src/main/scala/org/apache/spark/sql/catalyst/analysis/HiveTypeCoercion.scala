@@ -150,7 +150,6 @@ object HiveTypeCoercion {
    * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to
    * the appropriate numeric equivalent.
    */
-  // TODO: remove this rule and make Cast handle Nan.
   object ConvertNaNs extends Rule[LogicalPlan] {
     private val StringNaN = Literal("NaN")
 
@@ -160,19 +159,19 @@ object HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         /* Double Conversions */
-        case b @ BinaryOperator(StringNaN, right @ DoubleType()) =>
+        case b @ BinaryExpression(StringNaN, right @ DoubleType()) =>
           b.makeCopy(Array(Literal(Double.NaN), right))
-        case b @ BinaryOperator(left @ DoubleType(), StringNaN) =>
+        case b @ BinaryExpression(left @ DoubleType(), StringNaN) =>
           b.makeCopy(Array(left, Literal(Double.NaN)))
 
         /* Float Conversions */
-        case b @ BinaryOperator(StringNaN, right @ FloatType()) =>
+        case b @ BinaryExpression(StringNaN, right @ FloatType()) =>
           b.makeCopy(Array(Literal(Float.NaN), right))
-        case b @ BinaryOperator(left @ FloatType(), StringNaN) =>
+        case b @ BinaryExpression(left @ FloatType(), StringNaN) =>
           b.makeCopy(Array(left, Literal(Float.NaN)))
 
         /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryOperator(left @ StringNaN, StringNaN) =>
+        case b @ BinaryExpression(left @ StringNaN, StringNaN) =>
           b.makeCopy(Array(left, Literal(Float.NaN)))
       }
     }
@@ -246,12 +245,12 @@ object HiveTypeCoercion {
 
         Union(newLeft, newRight)
 
-      // Also widen types for BinaryOperator.
+      // Also widen types for BinaryExpressions.
       case q: LogicalPlan => q transformExpressions {
         // Skip nodes who's children have not been resolved yet.
         case e if !e.childrenResolved => e
 
-        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
           findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
             val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
             val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
@@ -479,7 +478,7 @@ object HiveTypeCoercion {
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
           (left.dataType, right.dataType) match {
             case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
               b.makeCopy(Array(Cast(left, intTypeToFixed(t)), right))

@@ -57,7 +57,7 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 }
 
 case class UnaryPositive(child: Expression) extends UnaryArithmetic {
-  override def prettyName: String = "positive"
+  override def toString: String = s"positive($child)"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
@@ -69,6 +69,8 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
  * A function that get the absolute value of the numeric value.
  */
 case class Abs(child: Expression) extends UnaryArithmetic {
+  override def toString: String = s"Abs($child)"
+
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function abs")
 
@@ -77,8 +79,9 @@ case class Abs(child: Expression) extends UnaryArithmetic {
   protected override def evalInternal(evalE: Any) = numeric.abs(evalE)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator {
+abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
+
 
   override def dataType: DataType = left.dataType
 
@@ -357,9 +360,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
       }
     """
   }
-
-  override def symbol: String = "max"
-  override def prettyName: String = symbol
+  override def toString: String = s"MaxOf($left, $right)"
 }
 
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -412,6 +413,5 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
     """
   }
 
-  override def symbol: String = "min"
-  override def prettyName: String = symbol
+  override def toString: String = s"MinOf($left, $right)"
 }

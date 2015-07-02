@@ -120,7 +120,7 @@ case class InSet(value: Expression, hset: Set[Any])
 }
 
 case class And(left: Expression, right: Expression)
-  extends BinaryOperator with Predicate with AutoCastInputTypes {
+  extends BinaryExpression with Predicate with AutoCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -169,7 +169,7 @@ case class And(left: Expression, right: Expression)
 }
 
 case class Or(left: Expression, right: Expression)
-  extends BinaryOperator with Predicate with AutoCastInputTypes {
+  extends BinaryExpression with Predicate with AutoCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -217,7 +217,7 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
-abstract class BinaryComparison extends BinaryOperator with Predicate {
+abstract class BinaryComparison extends BinaryExpression with Predicate {
   self: Product =>
 
   override def checkInputDataTypes(): TypeCheckResult = {
