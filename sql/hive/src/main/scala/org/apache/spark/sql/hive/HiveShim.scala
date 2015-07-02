@@ -30,7 +30,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.exec.{UDF}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
@@ -136,12 +136,12 @@ private[hive] object HiveShim {
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
+      deserializeObjectByKryo(ThreadKryoSerializer.get(), is, clazz)
         .asInstanceOf[UDFType]
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
+      serializeObjectByKryo(ThreadKryoSerializer.get(), function, out)
     }
 
     private var instance: AnyRef = null
