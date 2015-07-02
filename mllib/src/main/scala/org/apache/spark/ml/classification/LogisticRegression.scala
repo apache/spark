@@ -99,7 +99,7 @@ class LogisticRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /**
-   * Whether to standardize the training features prior to fitting the model sequence.
+   * Whether to standardize the training features prior to fitting the model.
    * Note that the coefficients of models are always returned on the original scale.
    * Default is true.
    * @group setParam
@@ -166,18 +166,18 @@ class LogisticRegression(override val uid: String)
     } else {
       def regParamL1Fun = (index: Int) => {
         // Remove the L1 penalization on the intercept
-        if (index == numFeatures) 0.0 else {
+        if (index == numFeatures) {
+          0.0
+        } else {
           if ($(standardization)) {
             regParamL1
           } else {
-            if (featuresStd(index) != 0.0) {
-              // If `standardization` is false, we still standardize the data
-              // to improve the rate of convergence; as a result, we have to
-              // perform this reverse standardization by penalizing each component
-              // differently to get effectively the same objective function when
-              // the training dataset is not standardized.
-              regParamL1 / featuresStd(index)
-            } else 0.0
+            // If `standardization` is false, we still standardize the data
+            // to improve the rate of convergence; as a result, we have to
+            // perform this reverse standardization by penalizing each component
+            // differently to get effectively the same objective function when
+            // the training dataset is not standardized.
+            if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else 0.0
           }
         }
       }
@@ -583,7 +583,9 @@ private class LogisticCostFun(
                 val temp = value / (featuresStd(index) * featuresStd(index))
                 totalGradientArray(index) += regParamL2 * temp
                 value * temp
-              } else 0.0
+              } else {
+                0.0
+              }
             }
           }
         }

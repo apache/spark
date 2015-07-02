@@ -329,23 +329,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 1E-2)
     assert(model1.weights(3) ~== weightsR1(3) relTol 2E-2)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
-     *     standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)  0.3722152
-     * data.V2       .
-     * data.V3       .
-     * data.V4     -0.1665453
-     * data.V5       .
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+           standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+       (Intercept)  0.3722152
+       data.V2       .
+       data.V3       .
+       data.V4     -0.1665453
+       data.V5       .
      */
     val interceptR2 = 0.3722152
     val weightsR2 = Array(0.0, 0.0, -0.1665453, 0.0)
@@ -394,23 +395,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 1E-2)
     assert(model1.weights(3) ~== weightsR1(3) relTol 1E-2)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
-     *     intercept=FALSE, standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)   .
-     * data.V2       .
-     * data.V3       .
-     * data.V4     -0.08420782
-     * data.V5       .
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+           intercept=FALSE, standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+       (Intercept)   .
+       data.V2       .
+       data.V3       .
+       data.V4     -0.08420782
+       data.V5       .
      */
     val interceptR2 = 0.0
     val weightsR2 = Array(0.0, 0.0, -0.08420782, 0.0)
@@ -458,23 +460,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 1E-3)
     assert(model1.weights(3) ~== weightsR1(3) relTol 1E-3)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
-     *     standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)  0.48657516
-     * data.V2     -0.05155371
-     * data.V3      0.02301057
-     * data.V4     -0.11482896
-     * data.V5     -0.06266838
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+           standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+       (Intercept)  0.48657516
+       data.V2     -0.05155371
+       data.V3      0.02301057
+       data.V4     -0.11482896
+       data.V5     -0.06266838
      */
     val interceptR2 = 0.48657516
     val weightsR2 = Array(-0.05155371, 0.02301057, -0.11482896, -0.06266838)
@@ -523,23 +526,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 1E-3)
     assert(model1.weights(3) ~== weightsR1(3) relTol 1E-3)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
-     *     intercept=FALSE, standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)   .
-     * data.V2     -0.005679651
-     * data.V3      0.048967094
-     * data.V4     -0.093714016
-     * data.V5     -0.053314311
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+           intercept=FALSE, standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                             s0
+       (Intercept)   .
+       data.V2     -0.005679651
+       data.V3      0.048967094
+       data.V4     -0.093714016
+       data.V5     -0.053314311
      */
     val interceptR2 = 0.0
     val weightsR2 = Array(-0.005679651, 0.048967094, -0.093714016, -0.053314311)
@@ -587,23 +591,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 5E-3)
     assert(model1.weights(3) ~== weightsR1(3) relTol 1E-3)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
-     *     standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)  0.51555993
-     * data.V2       .
-     * data.V3       .
-     * data.V4     -0.18807395
-     * data.V5     -0.05350074
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+           standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+       (Intercept)  0.51555993
+       data.V2       .
+       data.V3       .
+       data.V4     -0.18807395
+       data.V5     -0.05350074
      */
     val interceptR2 = 0.51555993
     val weightsR2 = Array(0.0, 0.0, -0.18807395, -0.05350074)
@@ -652,23 +657,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1.weights(2) ~== weightsR1(2) relTol 1E-3)
     assert(model1.weights(3) ~== weightsR1(3) relTol 1E-2)
 
-    /**
-     * Using the following R code to load the data and train the model using glmnet package.
-     *
-     * > library("glmnet")
-     * > data <- read.csv("path", header=FALSE)
-     * > label = factor(data$V1)
-     * > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     * > weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
-     *     intercept=FALSE, standardize=FALSE))
-     * > weights
-     * 5 x 1 sparse Matrix of class "dgCMatrix"
-     *                      s0
-     * (Intercept)   .
-     * data.V2       .
-     * data.V3      0.03345223
-     * data.V4     -0.11304532
-     * data.V5       .
+    /*
+       Using the following R code to load the data and train the model using glmnet package.
+
+       library("glmnet")
+       data <- read.csv("path", header=FALSE)
+       label = factor(data$V1)
+       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+           intercept=FALSE, standardize=FALSE))
+       weights
+
+       5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+       (Intercept)   .
+       data.V2       .
+       data.V3      0.03345223
+       data.V4     -0.11304532
+       data.V5       .
      */
     val interceptR2 = 0.0
     val weightsR2 = Array(0.0, 0.03345223, -0.11304532, 0.0)
