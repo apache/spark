@@ -27,8 +27,8 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
-import org.apache.spark.SparkContext
 
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
