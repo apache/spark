@@ -120,7 +120,7 @@ case class InSet(value: Expression, hset: Set[Any])
 }
 
 case class And(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with AutoCastInputTypes {
+  extends BinaryOperator with Predicate with AutoCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -169,7 +169,7 @@ case class And(left: Expression, right: Expression)
 }
 
 case class Or(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with AutoCastInputTypes {
+  extends BinaryOperator with Predicate with AutoCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -217,7 +217,7 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
-abstract class BinaryComparison extends BinaryExpression with Predicate {
+abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -302,7 +302,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (l == null || r == null) {
       false
     } else {
-      l == r
+      if (left.dataType != BinaryType) l == r
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 
