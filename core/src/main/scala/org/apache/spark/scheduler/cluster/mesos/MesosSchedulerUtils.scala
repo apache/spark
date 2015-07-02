@@ -223,9 +223,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   private val MEMORY_OVERHEAD_MINIMUM = 384
 
   /**
-   * Return the amount of memory to allocate to each executor, taking into account container overheads.
+   * Return the amount of memory to allocate to each executor, taking into account
+   * container overheads.
    * @param sc SparkContext to use to get `spark.mesos.executor.memoryOverhead` value
-   * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM (whichever is larger)
+   * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
+   *         (whichever is larger)
    */
   def calculateTotalMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
