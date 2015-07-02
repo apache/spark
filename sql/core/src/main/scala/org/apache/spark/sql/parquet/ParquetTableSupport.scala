@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.{ByteOrder, ByteBuffer}
 import java.util.{HashMap => JHashMap}
 
@@ -214,7 +215,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
           if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
           }
-          writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
+          writeDecimal(convertDecimal(value), d.precisionInfo.get.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -322,6 +323,12 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
     buf.putInt(julianDay)
     writer.addBinary(Binary.fromByteArray(int96buf))
   }
+
+  private[parquet] def convertDecimal(maybeDecimal: Any) = maybeDecimal match {
+    case jbd: JavaBigDecimal => Decimal(jbd)
+    case bd: BigDecimal => Decimal(bd)
+    case d: Decimal => d
+  }
 }
 
 // Optimized for non-nested rows
@@ -368,7 +375,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")
         }
-        writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
+        writeDecimal(convertDecimal(record(index)), d.precisionInfo.get.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }
