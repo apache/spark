@@ -60,7 +60,7 @@ trait SparkHadoopMapReduceUtil {
         val taskTypeClass = Class.forName("org.apache.hadoop.mapreduce.TaskType")
           .asInstanceOf[Class[Enum[_]]]
         val taskType = taskTypeClass.getMethod("valueOf", classOf[String]).invoke(
-          taskTypeClass, if(isMap) "MAP" else "REDUCE")
+          taskTypeClass, if (isMap) "MAP" else "REDUCE")
         val ctor = klass.getDeclaredConstructor(classOf[String], classOf[Int], taskTypeClass,
           classOf[Int], classOf[Int])
         ctor.newInstance(jtIdentifier, new JInteger(jobId), taskType, new JInteger(taskId),

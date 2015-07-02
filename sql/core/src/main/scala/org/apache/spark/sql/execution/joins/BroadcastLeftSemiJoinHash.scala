@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -38,10 +38,10 @@ case class BroadcastLeftSemiJoinHash(
 
   override def output: Seq[Attribute] = left.output
 
-  protected override def doExecute(): RDD[Row] = {
-    val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
-    val hashSet = new java.util.HashSet[Row]()
-    var currentRow: Row = null
+  protected override def doExecute(): RDD[InternalRow] = {
+    val buildIter = buildPlan.execute().map(_.copy()).collect().toIterator
+    val hashSet = new java.util.HashSet[InternalRow]()
+    var currentRow: InternalRow = null
 
     // Create a Hash set of buildKeys
     while (buildIter.hasNext) {
@@ -50,7 +50,8 @@ case class BroadcastLeftSemiJoinHash(
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
         if (!keyExists) {
-          hashSet.add(rowKey)
+          // rowKey may be not serializable (from codegen)
+          hashSet.add(rowKey.copy())
         }
       }
     }

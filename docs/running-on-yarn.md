@@ -148,9 +148,22 @@ If you need a reference to the proper location to put log files in the YARN so t
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
-  <td>5000</td>
+  <td>3000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
+    The value is capped at half the value of YARN's configuration for the expiry interval
+    (<code>yarn.am.liveness-monitor.expiry-interval-ms</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.scheduler.initial-allocation.interval</code></td>
+  <td>200ms</td>
+  <td>
+    The initial interval in which the Spark application master eagerly heartbeats to the YARN ResourceManager
+    when there are pending container allocation requests. It should be no larger than
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will doubled on
+    successive eager heartbeats if pending containers still exist, until
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
 </tr>
 <tr>
@@ -295,6 +308,57 @@ If you need a reference to the proper location to put log files in the YARN so t
   In YARN cluster mode, controls whether the client waits to exit until the application completes.
   If set to true, the client process will stay alive reporting the application's status.
   Otherwise, the client process will exit after submission.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above.
+  This keytab will be copied to the node running the Application Master via the Secure Distributed Cache,
+  for renewing the login tickets and the delegation tokens periodically.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure HDFS.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.config.gatewayPath</code></td>
+  <td>(none)</td>
+  <td>
+  A path that is valid on the gateway host (the host where a Spark application is started) but may
+  differ for paths for the same resource in other nodes in the cluster. Coupled with
+  <code>spark.yarn.config.replacementPath</code>, this is used to support clusters with
+  heterogeneous configurations, so that Spark can correctly launch remote processes.
+  <p/>
+  The replacement path normally will contain a reference to some environment variable exported by
+  YARN (and, thus, visible to Spark containers).
+  <p/>
+  For example, if the gateway node has Hadoop libraries installed on <code>/disk1/hadoop</code>, and
+  the location of the Hadoop install is exported by YARN as the  <code>HADOOP_HOME</code>
+  environment variable, setting this value to <code>/disk1/hadoop</code> and the replacement path to
+  <code>$HADOOP_HOME</code> will make sure that paths used to launch remote processes properly
+  reference the local YARN configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.config.replacementPath</code></td>
+  <td>(none)</td>
+  <td>
+  See <code>spark.yarn.config.gatewayPath</code>.
   </td>
 </tr>
 </table>

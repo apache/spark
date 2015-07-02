@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
@@ -101,15 +102,20 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     var outputData = dataset
     var numColsOutput = 0
     if (getRawPredictionCol != "") {
-      outputData = outputData.withColumn(getRawPredictionCol,
-        callUDF(predictRaw _, new VectorUDT, col(getFeaturesCol)))
+      val predictRawUDF = udf { (features: Any) =>
+        predictRaw(features.asInstanceOf[FeaturesType])
+      }
+      outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)))
       numColsOutput += 1
     }
     if (getPredictionCol != "") {
       val predUDF = if (getRawPredictionCol != "") {
-        callUDF(raw2prediction _, DoubleType, col(getRawPredictionCol))
+        udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
-        callUDF(predict _, DoubleType, col(getFeaturesCol))
+        val predictUDF = udf { (features: Any) =>
+          predict(features.asInstanceOf[FeaturesType])
+        }
+        predictUDF(col(getFeaturesCol))
       }
       outputData = outputData.withColumn(getPredictionCol, predUDF)
       numColsOutput += 1

@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{NumericType, DataType}
+import org.apache.spark.sql.types.{DataType, NumericType}
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -66,17 +65,16 @@ case class WindowSpecDefinition(
     }
   }
 
-  type EvaluatedType = Any
-
-  override def children: Seq[Expression]  = partitionSpec ++ orderSpec
+  override def children: Seq[Expression] = partitionSpec ++ orderSpec
 
   override lazy val resolved: Boolean =
-    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+    childrenResolved && checkInputDataTypes().isSuccess &&
+      frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
 
   override def toString: String = simpleString
 
-  override def eval(input: Row): EvaluatedType = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
@@ -261,7 +259,7 @@ trait WindowFunction extends Expression {
 
   def reset(): Unit
 
-  def prepareInputParameters(input: Row): AnyRef
+  def prepareInputParameters(input: InternalRow): AnyRef
 
   def update(input: AnyRef): Unit
 
@@ -288,7 +286,7 @@ case class UnresolvedWindowFunction(
     throw new UnresolvedException(this, "init")
   override def reset(): Unit =
     throw new UnresolvedException(this, "reset")
-  override def prepareInputParameters(input: Row): AnyRef =
+  override def prepareInputParameters(input: InternalRow): AnyRef =
     throw new UnresolvedException(this, "prepareInputParameters")
   override def update(input: AnyRef): Unit =
     throw new UnresolvedException(this, "update")
@@ -299,7 +297,7 @@ case class UnresolvedWindowFunction(
   override def get(index: Int): Any =
     throw new UnresolvedException(this, "get")
   // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: Row = null): EvaluatedType =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"'$name(${children.mkString(",")})"
@@ -311,25 +309,25 @@ case class UnresolvedWindowFunction(
 case class UnresolvedWindowExpression(
     child: UnresolvedWindowFunction,
     windowSpec: WindowSpecReference) extends UnaryExpression {
+
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
   // Unresolved functions are transient at compile time and don't get evaluated during execution.
-  override def eval(input: Row = null): EvaluatedType =
+  override def eval(input: InternalRow = null): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 case class WindowExpression(
     windowFunction: WindowFunction,
     windowSpec: WindowSpecDefinition) extends Expression {
-  override type EvaluatedType = Any
 
   override def children: Seq[Expression] =
     windowFunction :: windowSpec :: Nil
 
-  override def eval(input: Row): EvaluatedType =
+  override def eval(input: InternalRow): Any =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def dataType: DataType = windowFunction.dataType

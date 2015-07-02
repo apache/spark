@@ -110,7 +110,7 @@ object KMeansModel extends Loader[KMeansModel] {
       val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
         Cluster(id, point)
       }.toDF()
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
@@ -120,7 +120,7 @@ object KMeansModel extends Loader[KMeansModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
-      val centriods = sqlContext.parquetFile(Loader.dataPath(path))
+      val centriods = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centriods.schema)
       val localCentriods = centriods.map(Cluster.apply).collect()
       assert(k == localCentriods.size)

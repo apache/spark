@@ -19,14 +19,18 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.URL
-import java.sql.{Date, DriverManager, Statement}
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.{Await, Promise, future}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
@@ -35,10 +39,10 @@ import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
 object TestData {
@@ -54,7 +58,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
-    // Transport creation logics below mimics HiveConnection.createBinaryTransport
+    // Transport creation logic below mimics HiveConnection.createBinaryTransport
     val rawTransport = new TSocket("localhost", serverPort)
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
@@ -109,7 +113,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 
@@ -233,7 +238,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       // first session, we get the default value of the session status
       { statement =>
 
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
         defaultV1 = rs1.getString(1)
         assert(defaultV1 != "200")
@@ -251,19 +256,21 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       { statement =>
 
         val queries = Seq(
-            s"SET ${SQLConf.SHUFFLE_PARTITIONS}=291",
+            s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
             "SET hive.cli.print.header=true"
             )
 
         queries.map(statement.execute)
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
-        assert("spark.sql.shuffle.partitions=291" === rs1.getString(1))
+        assert("spark.sql.shuffle.partitions" === rs1.getString(1))
+        assert("291" === rs1.getString(2))
         rs1.close()
 
         val rs2 = statement.executeQuery("SET hive.cli.print.header")
         rs2.next()
-        assert("hive.cli.print.header=true" === rs2.getString(1))
+        assert("hive.cli.print.header" === rs2.getString(1))
+        assert("true" === rs2.getString(2))
         rs2.close()
       },
 
@@ -271,7 +278,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       // default value
       { statement =>
 
-        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+        val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
         rs1.next()
         assert(defaultV1 === rs1.getString(1))
         rs1.close()
@@ -335,6 +342,42 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
     )
   }
+
+  test("test jdbc cancel") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
+
+      queries.foreach(statement.execute)
+
+      val largeJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(10)("join test_map").mkString(" ")
+      val f = future { Thread.sleep(100); statement.cancel(); }
+      val e = intercept[SQLException] {
+        statement.executeQuery(largeJoin)
+      }
+      assert(e.getMessage contains "cancelled")
+      Await.result(f, 3.minute)
+
+      // cancel is a noop
+      statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
+      val sf = future { Thread.sleep(100); statement.cancel(); }
+      val smallJoin = "SELECT COUNT(*) FROM test_map " +
+        List.fill(4)("join test_map").mkString(" ")
+      val rs1 = statement.executeQuery(smallJoin)
+      Await.result(sf, 3.minute)
+      rs1.next()
+      assert(rs1.getInt(1) === math.pow(5, 5))
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SELECT COUNT(*) FROM test_map")
+      rs2.next()
+      assert(rs2.getInt(1) === 5)
+      rs2.close()
+    }
+  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
@@ -363,7 +406,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     withJdbcStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
     }
   }
 }
@@ -391,10 +435,10 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     val statements = connections.map(_.createStatement())
 
     try {
-      statements.zip(fs).map { case (s, f) => f(s) }
+      statements.zip(fs).foreach { case (s, f) => f(s) }
     } finally {
-      statements.map(_.close())
-      connections.map(_.close())
+      statements.foreach(_.close())
+      connections.foreach(_.close())
     }
   }
 
@@ -403,7 +447,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
   }
 }
 
-abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
@@ -433,15 +477,33 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
     }
 
+    val driverClassPath = {
+      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // overrides all other potential log4j configurations contained in other dependency jar files.
+      val tempLog4jConf = Utils.createTempDir().getCanonicalPath
+
+      Files.write(
+        """log4j.rootCategory=INFO, console
+          |log4j.appender.console=org.apache.log4j.ConsoleAppender
+          |log4j.appender.console.target=System.err
+          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """.stripMargin,
+        new File(s"$tempLog4jConf/log4j.properties"),
+        UTF_8)
+
+      tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
+    }
+
     s"""$startScript
        |  --master local
-       |  --hiveconf hive.root.logger=INFO,console
        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf $portConf=$port
-       |  --driver-class-path ${sys.props("java.class.path")}
+       |  --driver-class-path $driverClassPath
+       |  --driver-java-options -Dlog4j.debug
        |  --conf spark.ui.enabled=false
      """.stripMargin.split("\\s+").toSeq
   }

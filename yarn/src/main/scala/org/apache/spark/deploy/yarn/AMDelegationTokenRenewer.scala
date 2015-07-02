@@ -60,8 +60,11 @@ private[yarn] class AMDelegationTokenRenewer(
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
 
-  private val daysToKeepFiles = sparkConf.getInt("spark.yarn.credentials.file.retention.days", 5)
-  private val numFilesToKeep = sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
+  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val daysToKeepFiles =
+    sparkConf.getInt("spark.yarn.credentials.file.retention.days", 5)
+  private val numFilesToKeep =
+    sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -121,7 +124,7 @@ private[yarn] class AMDelegationTokenRenewer(
     import scala.concurrent.duration._
     try {
       val remoteFs = FileSystem.get(hadoopConf)
-      val credentialsPath = new Path(sparkConf.get("spark.yarn.credentials.file"))
+      val credentialsPath = new Path(credentialsFile)
       val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles days).toMillis
       hadoopUtil.listFilesSorted(
         remoteFs, credentialsPath.getParent,
@@ -160,7 +163,7 @@ private[yarn] class AMDelegationTokenRenewer(
     val keytabLoggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
     logInfo("Successfully logged into KDC.")
     val tempCreds = keytabLoggedInUGI.getCredentials
-    val credentialsPath = new Path(sparkConf.get("spark.yarn.credentials.file"))
+    val credentialsPath = new Path(credentialsFile)
     val dst = credentialsPath.getParent
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
@@ -186,8 +189,7 @@ private[yarn] class AMDelegationTokenRenewer(
     }
     val nextSuffix = lastCredentialsFileSuffix + 1
     val tokenPathStr =
-      sparkConf.get("spark.yarn.credentials.file") +
-        SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM + nextSuffix
+      credentialsFile + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM + nextSuffix
     val tokenPath = new Path(tokenPathStr)
     val tempTokenPath = new Path(tokenPathStr + SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
     logInfo("Writing out delegation tokens to " + tempTokenPath.toString)
