@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-trait StringRegexExpression extends AutoCastInputTypes {
+trait StringRegexExpression extends ExpectsInputTypes {
   self: BinaryExpression =>
 
   def escape(v: String): String
@@ -111,7 +111,7 @@ case class RLike(left: Expression, right: Expression)
   override def toString: String = s"$left RLIKE $right"
 }
 
-trait CaseConversionExpression extends AutoCastInputTypes {
+trait CaseConversionExpression extends ExpectsInputTypes {
   self: UnaryExpression =>
 
   def convert(v: UTF8String): UTF8String
@@ -154,7 +154,7 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-trait StringComparison extends AutoCastInputTypes {
+trait StringComparison extends ExpectsInputTypes {
   self: BinaryExpression =>
 
   def compare(l: UTF8String, r: UTF8String): Boolean
@@ -215,7 +215,7 @@ case class EndsWith(left: Expression, right: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with AutoCastInputTypes {
+  extends Expression with ExpectsInputTypes {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
@@ -283,7 +283,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 /**
  * A function that return the length of the given string expression.
  */
-case class StringLength(child: Expression) extends UnaryExpression with AutoCastInputTypes {
+case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
 

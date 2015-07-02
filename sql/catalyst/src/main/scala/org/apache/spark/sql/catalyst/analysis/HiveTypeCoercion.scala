@@ -704,19 +704,46 @@ object HiveTypeCoercion {
 
   /**
    * Casts types according to the expected input types for Expressions that have the trait
-   * [[AutoCastInputTypes]].
+   * [[ExpectsInputTypes]].
    */
   object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.inputTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.inputTypes).zipped.map {
-          case (child, actual, expected) =>
-            if (actual == expected) child else Cast(child, expected)
+      case e: ExpectsInputTypes =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          implicitCast(in, expected)
         }
-        e.withNewChildren(newC)
+        e.withNewChildren(children)
+    }
+
+    /**
+     * If needed, cast the expression into the expected type.
+     * If the implicit cast is not allowed, return the expression itself.
+     */
+    def implicitCast(e: Expression, expectedType: AbstractDataType): Expression = {
+      (e, expectedType) match {
+        // Cast null type (usually from null literals) into target types
+        case (in @ NullType(), target: DataType) => Cast(in, target.defaultConcreteType)
+
+        // Implicit cast among numeric types
+        case (in @ NumericType(), target: NumericType) if in.dataType != target =>
+          Cast(in, target)
+
+        // Implicit cast between date time types
+        case (in @ DateType(), TimestampType) => Cast(in, TimestampType)
+        case (in @ TimestampType(), DateType) => Cast(in, DateType)
+
+        // Implicit from string to atomic types, and vice versa
+        case (in @ StringType(), target: AtomicType) if target != StringType =>
+          Cast(in, target.defaultConcreteType)
+        case (in, StringType) if in.dataType != StringType =>
+          Cast(in, StringType)
+
+        // Else, just return the same input expression
+        case (in, _) => in
+      }
     }
   }
 }
