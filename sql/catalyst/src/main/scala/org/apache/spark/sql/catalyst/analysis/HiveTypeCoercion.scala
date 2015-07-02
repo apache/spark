@@ -22,7 +22,32 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
+
+/**
+ * A collection of [[Rule Rules]] that can be used to coerce differing types that
+ * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
+ * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
+ * Catalyst until we have a more standard set of coercions.
+ */
 object HiveTypeCoercion {
+
+  val typeCoercionRules =
+    PropagateTypes ::
+      ConvertNaNs ::
+      InConversion ::
+      WidenTypes ::
+      PromoteStrings ::
+      DecimalPrecision ::
+      BooleanEquality ::
+      StringToIntegralCasts ::
+      FunctionArgumentConversion ::
+      CaseWhenCoercion ::
+      IfCoercion ::
+      Division ::
+      PropagateTypes ::
+      ImplicitTypeCasts ::
+      Nil
+
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
   private val numericPrecedence =
@@ -79,7 +104,6 @@ object HiveTypeCoercion {
     })
   }
 
-
   /**
    * Find the tightest common type of a set of types by continuously applying
    * `findTightestCommonTypeOfTwo` on these types.
@@ -90,34 +114,6 @@ object HiveTypeCoercion {
       case Some(d) => findTightestCommonTypeOfTwo(d, c)
     })
   }
-}
-
-/**
- * A collection of [[Rule Rules]] that can be used to coerce differing types that
- * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
- * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
- * Catalyst until we have a more standard set of coercions.
- */
-trait HiveTypeCoercion {
-
-  import HiveTypeCoercion._
-
-  val typeCoercionRules =
-    PropagateTypes ::
-    ConvertNaNs ::
-    InConversion ::
-    WidenTypes ::
-    PromoteStrings ::
-    DecimalPrecision ::
-    BooleanEquality ::
-    StringToIntegralCasts ::
-    FunctionArgumentConversion ::
-    CaseWhenCoercion ::
-    IfCoercion ::
-    Division ::
-    PropagateTypes ::
-    AddCastForAutoCastInputTypes ::
-    Nil
 
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by other rules to
@@ -154,6 +150,7 @@ trait HiveTypeCoercion {
    * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to
    * the appropriate numeric equivalent.
    */
+  // TODO: remove this rule and make Cast handle Nan.
   object ConvertNaNs extends Rule[LogicalPlan] {
     private val StringNaN = Literal("NaN")
 
@@ -163,19 +160,19 @@ trait HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         /* Double Conversions */
-        case b @ BinaryExpression(StringNaN, right @ DoubleType()) =>
+        case b @ BinaryOperator(StringNaN, right @ DoubleType()) =>
           b.makeCopy(Array(Literal(Double.NaN), right))
-        case b @ BinaryExpression(left @ DoubleType(), StringNaN) =>
+        case b @ BinaryOperator(left @ DoubleType(), StringNaN) =>
           b.makeCopy(Array(left, Literal(Double.NaN)))
 
         /* Float Conversions */
-        case b @ BinaryExpression(StringNaN, right @ FloatType()) =>
+        case b @ BinaryOperator(StringNaN, right @ FloatType()) =>
           b.makeCopy(Array(Literal(Float.NaN), right))
-        case b @ BinaryExpression(left @ FloatType(), StringNaN) =>
+        case b @ BinaryOperator(left @ FloatType(), StringNaN) =>
           b.makeCopy(Array(left, Literal(Float.NaN)))
 
         /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryExpression(left @ StringNaN, StringNaN) =>
+        case b @ BinaryOperator(left @ StringNaN, StringNaN) =>
           b.makeCopy(Array(left, Literal(Float.NaN)))
       }
     }
@@ -202,8 +199,6 @@ trait HiveTypeCoercion {
    * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    import HiveTypeCoercion._
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // TODO: unions with fixed-precision decimals
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
@@ -251,12 +246,12 @@ trait HiveTypeCoercion {
 
         Union(newLeft, newRight)
 
-      // Also widen types for BinaryExpressions.
+      // Also widen types for BinaryOperator.
       case q: LogicalPlan => q transformExpressions {
         // Skip nodes who's children have not been resolved yet.
         case e if !e.childrenResolved => e
 
-        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
+        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { widestType =>
             val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
             val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
@@ -484,7 +479,7 @@ trait HiveTypeCoercion {
 
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b @ BinaryExpression(left, right) if left.dataType != right.dataType =>
+        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
           (left.dataType, right.dataType) match {
             case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
               b.makeCopy(Array(Cast(left, intTypeToFixed(t)), right))
@@ -655,8 +650,6 @@ trait HiveTypeCoercion {
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
   object CaseWhenCoercion extends Rule[LogicalPlan] {
-    import HiveTypeCoercion._
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
         logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
@@ -713,14 +706,13 @@ trait HiveTypeCoercion {
    * Casts types according to the expected input types for Expressions that have the trait
    * [[AutoCastInputTypes]].
    */
-  object AddCastForAutoCastInputTypes extends Rule[LogicalPlan] {
-
+  object ImplicitTypeCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.expectedChildTypes =>
-        val newC = (e.children, e.children.map(_.dataType), e.expectedChildTypes).zipped.map {
+      case e: AutoCastInputTypes if e.children.map(_.dataType) != e.inputTypes =>
+        val newC = (e.children, e.children.map(_.dataType), e.inputTypes).zipped.map {
           case (child, actual, expected) =>
             if (actual == expected) child else Cast(child, expected)
         }

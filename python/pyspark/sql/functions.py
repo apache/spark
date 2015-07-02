@@ -266,7 +266,7 @@ def coalesce(*cols):
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
     +-------------+
-    |Coalesce(a,b)|
+    |coalesce(a,b)|
     +-------------+
     |         null|
     |            1|
@@ -275,7 +275,7 @@ def coalesce(*cols):
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
     +----+----+---------------+
-    |   a|   b|Coalesce(a,0.0)|
+    |   a|   b|coalesce(a,0.0)|
     +----+----+---------------+
     |null|null|            0.0|
     |   1|null|            1.0|

@@ -32,7 +32,7 @@ trait StringRegexExpression extends AutoCastInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
@@ -75,8 +75,6 @@ trait StringRegexExpression extends AutoCastInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
-  override def symbol: String = "LIKE"
-
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
   override def escape(v: String): String =
@@ -101,14 +99,16 @@ case class Like(left: Expression, right: Expression)
     }
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  override def toString: String = s"$left LIKE $right"
 }
 
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
-  override def symbol: String = "RLIKE"
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+  override def toString: String = s"$left RLIKE $right"
 }
 
 trait CaseConversionExpression extends AutoCastInputTypes {
@@ -117,7 +117,7 @@ trait CaseConversionExpression extends AutoCastInputTypes {
   def convert(v: UTF8String): UTF8String
 
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
@@ -134,9 +134,7 @@ trait CaseConversionExpression extends AutoCastInputTypes {
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
 
-  override def convert(v: UTF8String): UTF8String = v.toUpperCase()
-
-  override def toString: String = s"Upper($child)"
+  override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
@@ -148,9 +146,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
 
-  override def convert(v: UTF8String): UTF8String = v.toLowerCase()
-
-  override def toString: String = s"Lower($child)"
+  override def convert(v: UTF8String): UTF8String = v.toLowerCase
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
@@ -165,7 +161,7 @@ trait StringComparison extends AutoCastInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
@@ -177,8 +173,6 @@ trait StringComparison extends AutoCastInputTypes {
       else compare(leftEval.asInstanceOf[UTF8String], rightEval.asInstanceOf[UTF8String])
     }
   }
-
-  override def symbol: String = nodeName
 
   override def toString: String = s"$nodeName($left, $right)"
 }
@@ -238,7 +232,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
@@ -284,12 +278,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       }
     }
   }
-
-  override def toString: String = len match {
-    // TODO: This is broken because max is not an integer value.
-    case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
-    case _ => s"SUBSTR($str, $pos, $len)"
-  }
 }
 
 /**
@@ -297,16 +285,16 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
  */
 case class StringLength(child: Expression) extends UnaryExpression with AutoCastInputTypes {
   override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
     if (string == null) null else string.asInstanceOf[UTF8String].length
   }
 
-  override def toString: String = s"length($child)"
-
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).length()")
   }
+
+  override def prettyName: String = "length"
 }
