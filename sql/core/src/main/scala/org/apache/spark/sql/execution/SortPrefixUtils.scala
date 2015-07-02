@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.types.{DoubleType, FloatType, LongType, IntegerType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, PrefixComparator}
 
 
@@ -36,6 +37,7 @@ object SortPrefixUtils {
 
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
+      case StringType => PrefixComparators.STRING
       case IntegerType => PrefixComparators.INTEGER
       case LongType => PrefixComparators.LONG
       case FloatType => PrefixComparators.FLOAT
@@ -46,6 +48,8 @@ object SortPrefixUtils {
 
   def getPrefixComputer(sortOrder: SortOrder): InternalRow => Long = {
     sortOrder.dataType match {
+      case StringType => (row: InternalRow) =>
+        PrefixComparators.STRING.computePrefix(sortOrder.child.eval(row).asInstanceOf[UTF8String])
       case IntegerType => (row: InternalRow) =>
         PrefixComparators.INTEGER.computePrefix(sortOrder.child.eval(row).asInstanceOf[Int])
       case LongType => (row: InternalRow) => sortOrder.child.eval(row).asInstanceOf[Long]
