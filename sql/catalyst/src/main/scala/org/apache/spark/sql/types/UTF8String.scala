@@ -156,7 +156,8 @@ final class UTF8String extends Ordered[UTF8String] with Serializable {
     var i: Int = 0
     val b = other.getBytes
     while (i < bytes.length && i < b.length) {
-      val res = bytes(i).compareTo(b(i))
+      // UTF8 should be compared as unsigned int
+      val res = (bytes(i) & 0xFF) - (b(i) & 0xFF)
       if (res != 0) return res
       i += 1
     }

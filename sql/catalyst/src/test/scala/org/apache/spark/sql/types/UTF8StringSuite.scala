@@ -40,6 +40,11 @@ class UTF8StringSuite extends SparkFunSuite {
     check("世 界", 3)
   }
 
+  test("compare") {
+    assert(UTF8String("abc") > UTF8String("ABC"))
+    assert(UTF8String("世 界") > UTF8String("abc"))
+  }
+
   test("contains") {
     assert(UTF8String("hello").contains(UTF8String("ello")))
     assert(!UTF8String("hello").contains(UTF8String("vello")))
