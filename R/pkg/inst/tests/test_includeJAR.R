@@ -31,7 +31,7 @@ runScript <- function() {
 test_that("sparkJars tag in SparkContext", {
   testOutput <- runScript()
   helloTest <- testOutput[1]
-  expect_true(helloTest == "Hello, Dave")
+  expect_equal(helloTest, "Hello, Dave")
   basicFunction <- testOutput[2]
-  expect_true(basicFunction == 4L)
+  expect_equal(basicFunction, "4")
 })

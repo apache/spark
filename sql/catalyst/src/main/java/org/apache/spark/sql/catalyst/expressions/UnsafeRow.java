@@ -17,20 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import javax.annotation.Nullable;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.catalyst.util.ObjectPool;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -44,7 +36,20 @@ import static org.apache.spark.sql.types.DataTypes.*;
  * primitive types, such as long, double, or int, we store the value directly in the word. For
  * fields with non-primitive or variable-length values, we store a relative offset (w.r.t. the
  * base address of the row) that points to the beginning of the variable-length field, and length
- * (they are combined into a long).
+ * (they are combined into a long). For other objects, they are stored in a pool, the indexes of
+ * them are hold in the the word.
+ *
+ * In order to support fast hashing and equality checks for UnsafeRows that contain objects
+ * when used as grouping key in BytesToBytesMap, we put the objects in an UniqueObjectPool to make
+ * sure all the key have the same index for same object, then we can hash/compare the objects by
+ * hash/compare the index.
+ *
+ * For non-primitive types, the word of a field could be:
+ *   UNION {
+ *     [1] [offset: 31bits] [length: 31bits]  // StringType
+ *     [0] [offset: 31bits] [length: 31bits]  // BinaryType
+ *     - [index: 63bits]                      // StringType, Binary, index to object in pool
+ *   }
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
@@ -53,8 +58,12 @@ public final class UnsafeRow extends MutableRow {
   private Object baseObject;
   private long baseOffset;
 
+  /** A pool to hold non-primitive objects */
+  private ObjectPool pool;
+
   Object getBaseObject() { return baseObject; }
   long getBaseOffset() { return baseOffset; }
+  ObjectPool getPool() { return pool; }
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
@@ -63,15 +72,6 @@ public final class UnsafeRow extends MutableRow {
 
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
-  /**
-   * This optional schema is required if you want to call generic get() and set() methods on
-   * this UnsafeRow, but is optional if callers will only use type-specific getTYPE() and setTYPE()
-   * methods. This should be removed after the planned InternalRow / Row split; right now, it's only
-   * needed by the generic get() method, which is only called internally by code that accesses
-   * UTF8String-typed columns.
-   */
-  @Nullable
-  private StructType schema;
 
   private long getFieldOffset(int ordinal) {
    return baseOffset + bitSetWidthInBytes + ordinal * 8L;
@@ -81,42 +81,7 @@ public final class UnsafeRow extends MutableRow {
     return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
   }
 
-  /**
-   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
-   */
-  public static final Set<DataType> settableFieldTypes;
-
-  /**
-   * Fields types can be read(but not set (e.g. set() will throw UnsupportedOperationException).
-   */
-  public static final Set<DataType> readableFieldTypes;
-
-  // TODO: support DecimalType
-  static {
-    settableFieldTypes = Collections.unmodifiableSet(
-      new HashSet<DataType>(
-        Arrays.asList(new DataType[] {
-          NullType,
-          BooleanType,
-          ByteType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DateType,
-          TimestampType
-    })));
-
-    // We support get() on a superset of the types for which we support set():
-    final Set<DataType> _readableFieldTypes = new HashSet<DataType>(
-      Arrays.asList(new DataType[]{
-        StringType,
-        BinaryType
-      }));
-    _readableFieldTypes.addAll(settableFieldTypes);
-    readableFieldTypes = Collections.unmodifiableSet(_readableFieldTypes);
-  }
+  public static final long OFFSET_BITS = 31L;
 
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
@@ -130,22 +95,15 @@ public final class UnsafeRow extends MutableRow {
    * @param baseObject the base object
    * @param baseOffset the offset within the base object
    * @param numFields the number of fields in this row
-   * @param schema an optional schema; this is necessary if you want to call generic get() or set()
-   *               methods on this row, but is optional if the caller will only use type-specific
-   *               getTYPE() and setTYPE() methods.
+   * @param pool the object pool to hold arbitrary objects
    */
-  public void pointTo(
-      Object baseObject,
-      long baseOffset,
-      int numFields,
-      @Nullable StructType schema) {
+  public void pointTo(Object baseObject, long baseOffset, int numFields, ObjectPool pool) {
     assert numFields >= 0 : "numFields should >= 0";
-    assert schema == null || schema.fields().length == numFields;
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.numFields = numFields;
-    this.schema = schema;
+    this.pool = pool;
   }
 
   private void assertIndexIsValid(int index) {
@@ -168,9 +126,68 @@ public final class UnsafeRow extends MutableRow {
     BitSetMethods.unset(baseObject, baseOffset, i);
   }
 
+  /**
+   * Updates the column `i` as Object `value`, which cannot be primitive types.
+   */
   @Override
-  public void update(int ordinal, Object value) {
-    throw new UnsupportedOperationException();
+  public void update(int i, Object value) {
+    if (value == null) {
+      if (!isNullAt(i)) {
+        // remove the old value from pool
+        long idx = getLong(i);
+        if (idx <= 0) {
+          // this is the index of old value in pool, remove it
+          pool.replace((int)-idx, null);
+        } else {
+          // there will be some garbage left (UTF8String or byte[])
+        }
+        setNullAt(i);
+      }
+      return;
+    }
+
+    if (isNullAt(i)) {
+      // there is not an old value, put the new value into pool
+      int idx = pool.put(value);
+      setLong(i, (long)-idx);
+    } else {
+      // there is an old value, check the type, then replace it or update it
+      long v = getLong(i);
+      if (v <= 0) {
+        // it's the index in the pool, replace old value with new one
+        int idx = (int)-v;
+        pool.replace(idx, value);
+      } else {
+        // old value is UTF8String or byte[], try to reuse the space
+        boolean isString;
+        byte[] newBytes;
+        if (value instanceof UTF8String) {
+          newBytes = ((UTF8String) value).getBytes();
+          isString = true;
+        } else {
+          newBytes = (byte[]) value;
+          isString = false;
+        }
+        int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
+        int oldLength = (int) (v & Integer.MAX_VALUE);
+        if (newBytes.length <= oldLength) {
+          // the new value can fit in the old buffer, re-use it
+          PlatformDependent.copyMemory(
+            newBytes,
+            PlatformDependent.BYTE_ARRAY_OFFSET,
+            baseObject,
+            baseOffset + offset,
+            newBytes.length);
+          long flag = isString ? 1L << (OFFSET_BITS * 2) : 0L;
+          setLong(i, flag | (((long) offset) << OFFSET_BITS) | (long) newBytes.length);
+        } else {
+          // Cannot fit in the buffer
+          int idx = pool.put(value);
+          setLong(i, (long) -idx);
+        }
+      }
+    }
+    setNotNullAt(i);
   }
 
   @Override
@@ -227,28 +244,38 @@ public final class UnsafeRow extends MutableRow {
     return numFields;
   }
 
-  @Override
-  public StructType schema() {
-    return schema;
-  }
-
+  /**
+   * Returns the object for column `i`, which should not be primitive type.
+   */
   @Override
   public Object get(int i) {
     assertIndexIsValid(i);
-    assert (schema != null) : "Schema must be defined when calling generic get() method";
-    final DataType dataType = schema.fields()[i].dataType();
-    // UnsafeRow is only designed to be invoked by internal code, which only invokes this generic
-    // get() method when trying to access UTF8String-typed columns. If we refactor the codebase to
-    // separate the internal and external row interfaces, then internal code can fetch strings via
-    // a new getUTF8String() method and we'll be able to remove this method.
     if (isNullAt(i)) {
       return null;
-    } else if (dataType == StringType) {
-      return getUTF8String(i);
-    } else if (dataType == BinaryType) {
-      return getBinary(i);
+    }
+    long v = PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(i));
+    if (v <= 0) {
+      // It's an index to object in the pool.
+      int idx = (int)-v;
+      return pool.get(idx);
     } else {
-      throw new UnsupportedOperationException();
+      // The column could be StingType or BinaryType
+      boolean isString = (v >> (OFFSET_BITS * 2)) > 0;
+      int offset = (int) ((v >> OFFSET_BITS) & Integer.MAX_VALUE);
+      int size = (int) (v & Integer.MAX_VALUE);
+      final byte[] bytes = new byte[size];
+      PlatformDependent.copyMemory(
+        baseObject,
+        baseOffset + offset,
+        bytes,
+        PlatformDependent.BYTE_ARRAY_OFFSET,
+        size
+      );
+      if (isString) {
+        return UTF8String.fromBytes(bytes);
+      } else {
+        return bytes;
+      }
     }
   }
 
@@ -306,31 +333,6 @@ public final class UnsafeRow extends MutableRow {
     } else {
       return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(i));
     }
-  }
-
-  public UTF8String getUTF8String(int i) {
-    return UTF8String.fromBytes(getBinary(i));
-  }
-
-  public byte[] getBinary(int i) {
-    assertIndexIsValid(i);
-    final long offsetAndSize = getLong(i);
-    final int offset = (int)(offsetAndSize >> 32);
-    final int size = (int)(offsetAndSize & ((1L << 32) - 1));
-    final byte[] bytes = new byte[size];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset + offset,
-      bytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
-      size
-    );
-    return bytes;
-  }
-
-  @Override
-  public String getString(int i) {
-    return getUTF8String(i).toString();
   }
 
   @Override

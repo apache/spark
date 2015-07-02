@@ -75,6 +75,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       minPartitions: Int): JavaRDD[LabeledPoint] =
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
+  /**
+   * Loads and serializes vectors saved with `RDD#saveAsTextFile`.
+   * @param jsc Java SparkContext
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @return serialized vectors in a RDD
+   */
+  def loadVectors(jsc: JavaSparkContext, path: String): RDD[Vector] =
+    MLUtils.loadVectors(jsc.sc, path)
+
   private def trainRegressionModel(
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-trait StringRegexExpression extends ExpectsInputTypes {
+trait StringRegexExpression extends AutoCastInputTypes {
   self: BinaryExpression =>
 
   def escape(v: String): String
@@ -32,7 +32,7 @@ trait StringRegexExpression extends ExpectsInputTypes {
 
   override def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache the pattern for Literal
   private lazy val cache: Pattern = right match {
@@ -111,13 +111,13 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }
 
-trait CaseConversionExpression extends ExpectsInputTypes {
+trait CaseConversionExpression extends AutoCastInputTypes {
   self: UnaryExpression =>
 
   def convert(v: UTF8String): UTF8String
 
   override def dataType: DataType = StringType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val evaluated = child.eval(input)
@@ -158,14 +158,14 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-trait StringComparison extends ExpectsInputTypes {
+trait StringComparison extends AutoCastInputTypes {
   self: BinaryExpression =>
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
   override def nullable: Boolean = left.nullable || right.nullable
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
@@ -221,7 +221,7 @@ case class EndsWith(left: Expression, right: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with ExpectsInputTypes {
+  extends Expression with AutoCastInputTypes {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
@@ -238,7 +238,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     if (str.dataType == BinaryType) str.dataType else StringType
   }
 
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
@@ -295,9 +295,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 /**
  * A function that return the length of the given string expression.
  */
-case class StringLength(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class StringLength(child: Expression) extends UnaryExpression with AutoCastInputTypes {
   override def dataType: DataType = IntegerType
-  override def expectedChildTypes: Seq[DataType] = Seq(StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
