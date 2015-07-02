@@ -63,12 +63,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
    * Unknown Unknown
    */
   // scalastyle:on
-  val notTrueTable =
-    (true, false) ::
-      (false, true) ::
-      (null, null) :: Nil
 
   test("3VL Not") {
+    val notTrueTable =
+      (true, false) ::
+        (false, true) ::
+        (null, null) :: Nil
     notTrueTable.foreach { case (v, answer) =>
       checkEvaluation(Not(Literal.create(v, BooleanType)), answer)
     }
@@ -132,28 +132,59 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(And(InSet(one, hS), InSet(two, hS)), true)
   }
 
-  private def binaryComparisonTest(
-      name: String,
-      op: (Expression, Expression) => Expression,
-      result: Seq[Boolean]): Unit = {
-    val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
-    val largeValues = Seq(2, Decimal(2), Array(2.toByte), "b").map(Literal(_))
-    val equalValues = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
-    test("BinaryComparison: " + name) {
-      for (i <- 0 until result.length) {
-        checkEvaluation(op(smallValues(i), largeValues(i)), result(0))
-        checkEvaluation(op(smallValues(i), equalValues(i)), result(1))
-        checkEvaluation(op(largeValues(i), smallValues(i)), result(2))
-      }
+  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
+  private val largeValues = Seq(2, Decimal(2), Array(2.toByte), "b").map(Literal(_))
+
+  private val equalValues1 = smallValues
+  private val equalValues2 = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
+
+  test("BinaryComparison: <") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) < largeValues(i), true)
+      checkEvaluation(equalValues1(i) < equalValues2(i), false)
+      checkEvaluation(largeValues(i) < smallValues(i), false)
     }
   }
 
-  binaryComparisonTest("<", LessThan, Seq(true, false, false))
-  binaryComparisonTest("<=", LessThanOrEqual, Seq(true, true, false))
-  binaryComparisonTest(">", GreaterThan, Seq(false, false, true))
-  binaryComparisonTest(">=", GreaterThanOrEqual, Seq(false, true, true))
-  binaryComparisonTest("===", EqualTo, Seq(false, true, false))
-  binaryComparisonTest("<=>", EqualNullSafe, Seq(false, true, false))
+  test("BinaryComparison: <=") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) <= largeValues(i), true)
+      checkEvaluation(equalValues1(i) <= equalValues2(i), true)
+      checkEvaluation(largeValues(i) <= smallValues(i), false)
+    }
+  }
+
+  test("BinaryComparison: >") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) > largeValues(i), false)
+      checkEvaluation(equalValues1(i) > equalValues2(i), false)
+      checkEvaluation(largeValues(i) > smallValues(i), true)
+    }
+  }
+
+  test("BinaryComparison: >=") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) >= largeValues(i), false)
+      checkEvaluation(equalValues1(i) >= equalValues2(i), true)
+      checkEvaluation(largeValues(i) >= smallValues(i), true)
+    }
+  }
+
+  test("BinaryComparison: ===") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) === largeValues(i), false)
+      checkEvaluation(equalValues1(i) === equalValues2(i), true)
+      checkEvaluation(largeValues(i) === smallValues(i), false)
+    }
+  }
+
+  test("BinaryComparison: <=>") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(smallValues(i) <=> largeValues(i), false)
+      checkEvaluation(equalValues1(i) <=> equalValues2(i), true)
+      checkEvaluation(largeValues(i) <=> smallValues(i), false)
+    }
+  }
 
   test("BinaryComparison: null test") {
     val normalInt = Literal(1)
