@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.types.decimal
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.Decimal
-import org.scalatest.PrivateMethodTester
-
 import scala.language.postfixOps
 
-class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
+import org.scalacheck.Prop.forAll
+import org.scalatest.PrivateMethodTester
+import org.scalatest.prop.Checkers
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.Decimal
+
+class DecimalSuite extends SparkFunSuite with PrivateMethodTester with Checkers {
   test("creating decimals") {
     /** Check that a Decimal has the given string representation, precision and scale */
     def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
@@ -51,6 +54,12 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
     intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
     intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
+  }
+
+  test("SPARK-8802: Decimal.apply(x: BigDecimal).toBigDecimal === x") {
+    val x = BigDecimal(BigInt("18889465931478580854784"), -2147483648)
+    assert(Decimal(x).toBigDecimal === x)
+    check(forAll((d: BigDecimal) => Decimal(d).toBigDecimal === d))
   }
 
   test("double and long values") {
