@@ -117,8 +117,10 @@ abstract class InternalRow extends Row {
         code
       case r: Row =>
         var res: Int = 0
-        for (i <- 0 until r.length) {
+        var i = 0
+        while (i < r.length) {
           res += 31 * res + hashCode(r.get(i))
+          i += 1
         }
         res
       case other => other.hashCode()
