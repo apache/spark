@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
@@ -271,11 +270,13 @@ case class UnsafeExternalSort(
     assert(codegenEnabled, "UnsafeExternalSort requires code generation to be enabled")
     def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val ordering = newOrdering(sortOrder, child.output)
-      val prefixComparator = new PrefixComparator {
-        override def compare(prefix1: Long, prefix2: Long): Int = 0
+      val prefixComparator = SortPrefixUtils.getPrefixComparator(sortOrder.head)
+      val prefixComputer = {
+        val prefixComputer = SortPrefixUtils.getPrefixComputer(sortOrder.head)
+        new UnsafeExternalRowSorter.PrefixComputer {
+          override def computePrefix(row: InternalRow): Long = prefixComputer(row)
+        }
       }
-      // TODO: do real prefix comparison. For dev/testing purposes, this is a dummy implementation.
-      def prefixComputer(row: InternalRow): Long = 0
       new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer).sort(iterator)
     }
     child.execute().mapPartitions(doSort, preservesPartitioning = true)

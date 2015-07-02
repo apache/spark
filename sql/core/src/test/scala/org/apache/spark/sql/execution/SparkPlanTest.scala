@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.util._
-
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{DataFrameHolder, Row, DataFrame}
+import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row}
+
+import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
@@ -77,12 +75,92 @@ class SparkPlanTest extends SparkFunSuite {
       case None =>
     }
   }
+
+  /**
+   * Runs the plan and makes sure the answer matches the result produced by a reference plan.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
+   *                             instantiate a reference implementation of the physical operator
+   *                             that's being tested. The result of executing this plan will be
+   *                             treated as the source-of-truth for the test.
+   */
+  protected def checkAnswer(
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedPlanFunction: SparkPlan => SparkPlan): Unit = {
+    SparkPlanTest.checkAnswer(input, planFunction, expectedPlanFunction) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
 }
 
 /**
  * Helper methods for writing tests of individual physical operators.
  */
 object SparkPlanTest {
+
+  /**
+   * Runs the plan and makes sure the answer matches the result produced by a reference plan.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
+   *                             instantiate a reference implementation of the physical operator
+   *                             that's being tested. The result of executing this plan will be
+   *                             treated as the source-of-truth for the test.
+   */
+  def checkAnswer(
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedPlanFunction: SparkPlan => SparkPlan): Option[String] = {
+
+    val outputPlan = planFunction(input.queryExecution.sparkPlan)
+    val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
+
+    val expectedAnswer: Seq[Row] = try {
+      executePlan(input, expectedOutputPlan)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan to calculate expected answer:
+             | $expectedOutputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
+    }
+
+    val actualAnswer: Seq[Row] = try {
+      executePlan(input, outputPlan)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan:
+             | $outputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
+    }
+
+    compareAnswers(actualAnswer, expectedAnswer).map { errorMessage =>
+      s"""
+         | Results do not match.
+         | Actual result Spark plan:
+         | $outputPlan
+         | Expected result Spark plan:
+         | $expectedOutputPlan
+         | $errorMessage
+       """.stripMargin
+    }
+  }
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
@@ -98,22 +176,33 @@ object SparkPlanTest {
 
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
 
-    // A very simple resolver to make writing tests easier. In contrast to the real resolver
-    // this is always case sensitive and does not try to handle scoping or complex type resolution.
-    val resolvedPlan = outputPlan transform {
-      case plan: SparkPlan =>
-        val inputMap = plan.children.flatMap(_.output).zipWithIndex.map {
-          case (a, i) =>
-            (a.name, BoundReference(i, a.dataType, a.nullable))
-        }.toMap
-
-        plan.transformExpressions {
-          case UnresolvedAttribute(Seq(u)) =>
-            inputMap.getOrElse(u,
-              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
-        }
+    val sparkAnswer: Seq[Row] = try {
+      executePlan(input, outputPlan)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan:
+             | $outputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
     }
 
+    compareAnswers(sparkAnswer, expectedAnswer).map { errorMessage =>
+      s"""
+         | Results do not match for Spark plan:
+         | $outputPlan
+         | $errorMessage
+       """.stripMargin
+    }
+  }
+
+  private def compareAnswers(
+      sparkAnswer: Seq[Row],
+      expectedAnswer: Seq[Row]): Option[String] = {
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
@@ -130,38 +219,39 @@ object SparkPlanTest {
       }
       converted.sortBy(_.toString())
     }
-
-    val sparkAnswer: Seq[Row] = try {
-      resolvedPlan.executeCollect().toSeq
-    } catch {
-      case NonFatal(e) =>
-        val errorMessage =
-          s"""
-             | Exception thrown while executing Spark plan:
-             | $outputPlan
-             | == Exception ==
-             | $e
-             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
-          """.stripMargin
-        return Some(errorMessage)
-    }
-
     if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
       val errorMessage =
         s"""
-           | Results do not match for Spark plan:
-           | $outputPlan
            | == Results ==
            | ${sideBySide(
-              s"== Correct Answer - ${expectedAnswer.size} ==" +:
+              s"== Expected Answer - ${expectedAnswer.size} ==" +:
               prepareAnswer(expectedAnswer).map(_.toString()),
-              s"== Spark Answer - ${sparkAnswer.size} ==" +:
+              s"== Actual Answer - ${sparkAnswer.size} ==" +:
               prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
       """.stripMargin
-      return Some(errorMessage)
+      Some(errorMessage)
+    } else {
+      None
     }
+  }
 
-    None
+  private def executePlan(input: DataFrame, outputPlan: SparkPlan): Seq[Row] = {
+    // A very simple resolver to make writing tests easier. In contrast to the real resolver
+    // this is always case sensitive and does not try to handle scoping or complex type resolution.
+    val resolvedPlan = outputPlan transform {
+      case plan: SparkPlan =>
+        val inputMap = plan.children.flatMap(_.output).zipWithIndex.map {
+          case (a, i) =>
+            (a.name, BoundReference(i, a.dataType, a.nullable))
+        }.toMap
+
+        plan.transformExpressions {
+          case UnresolvedAttribute(Seq(u)) =>
+            inputMap.getOrElse(u,
+              sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+        }
+    }
+    resolvedPlan.executeCollect().toSeq
   }
 }
 

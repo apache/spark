@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 import java.util.Arrays;
 
-import scala.Function1;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -47,17 +46,20 @@ final class UnsafeExternalRowSorter {
 
   private final StructType schema;
   private final UnsafeRowConverter rowConverter;
-  private final Function1<InternalRow, Long> prefixComputer;
+  private final PrefixComputer prefixComputer;
   private final ObjectPool objPool = new ObjectPool(128);
   private final UnsafeExternalSorter sorter;
   private byte[] rowConversionBuffer = new byte[1024 * 8];
+
+  public static abstract class PrefixComputer {
+    abstract long computePrefix(InternalRow row);
+  }
 
   public UnsafeExternalRowSorter(
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      // TODO: if possible, avoid this boxing of the return value
-      Function1<InternalRow, Long> prefixComputer) throws IOException {
+      PrefixComputer prefixComputer) throws IOException {
     this.schema = schema;
     this.rowConverter = new UnsafeRowConverter(schema);
     this.prefixComputer = prefixComputer;
@@ -90,7 +92,7 @@ final class UnsafeExternalRowSorter {
     final int bytesWritten = rowConverter.writeRow(
       row, rowConversionBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, objPool);
     assert (bytesWritten == sizeRequirement);
-    final long prefix = prefixComputer.apply(row);
+    final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
       rowConversionBuffer,
       PlatformDependent.BYTE_ARRAY_OFFSET,

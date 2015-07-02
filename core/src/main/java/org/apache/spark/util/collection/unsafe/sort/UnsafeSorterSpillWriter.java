@@ -37,8 +37,7 @@ final class UnsafeSorterSpillWriter {
 
   // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
   // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
-  // data through a byte array. This array does not need to be large enough to hold a single
-  // record;
+  // data through a byte array.
   private byte[] writeBuffer = new byte[DISK_WRITE_BUFFER_SIZE];
 
   private final File file;
@@ -113,10 +112,6 @@ final class UnsafeSorterSpillWriter {
     writer.commitAndClose();
     writer = null;
     writeBuffer = null;
-  }
-
-  public long numberOfSpilledBytes() {
-    return file.length();
   }
 
   public UnsafeSorterSpillReader getReader(BlockManager blockManager) throws IOException {
