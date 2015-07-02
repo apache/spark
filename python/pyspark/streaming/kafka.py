@@ -21,7 +21,6 @@ from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
-from pyspark.streaming.util import TransformFunction
 
 __all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
 
@@ -237,9 +236,9 @@ class OffsetRange(object):
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return (self.topic == other.topic
-                and self.partition == other.partition
-                and self.fromOffset == other.fromOffset
-                and self.untilOffset == other.untilOffset)
+                    and self.partition == other.partition
+                    and self.fromOffset == other.fromOffset
+                    and self.untilOffset == other.untilOffset)
         else:
             return False
 
@@ -289,4 +288,3 @@ class Broker(object):
 
     def _jBroker(self, helper):
         return helper.createBroker(self._host, self._port)
-

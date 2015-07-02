@@ -601,6 +601,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         for i in chain.from_iterable(self._collect(stream.map(lambda x: x[1]),
                                                    sum(sendData.values()))):
             result[i] = result.get(i, 0) + 1
+
         self.assertEqual(sendData, result)
 
     def _validateRddResult(self, sendData, rdd):
@@ -704,6 +705,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
 
         offsetRanges = []
+
         def getOffsetRanges(_, rdd):
             for o in KafkaUtils.offsetRanges(rdd):
                 offsetRanges.append(o)
