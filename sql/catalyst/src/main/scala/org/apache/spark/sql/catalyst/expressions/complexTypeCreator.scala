@@ -43,7 +43,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     children.map(_.eval(input))
   }
 
-  override def toString: String = s"Array(${children.mkString(",")})"
+  override def prettyName: String = "array"
 }
 
 /**
@@ -71,4 +71,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = {
     InternalRow(children.map(_.eval(input)): _*)
   }
+
+  override def prettyName: String = "struct"
 }
