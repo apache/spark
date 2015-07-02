@@ -1305,7 +1305,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftLeft(e: Column, numBits: Integer): Column = ShiftLeft(e.expr, lit(numBits).expr)
+  def shiftLeft(e: Column, numBits: Int): Column = ShiftLeft(e.expr, lit(numBits).expr)
 
   /**
    * Shift the the given value numBits left. If the given value is a long value, this function
@@ -1314,7 +1314,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftLeft(columnName: String, numBits: Integer): Column =
+  def shiftLeft(columnName: String, numBits: Int): Column =
     shiftLeft(Column(columnName), numBits)
 
   /**
@@ -1324,7 +1324,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftRight(e: Column, numBits: Integer): Column = ShiftRight(e.expr, lit(numBits).expr)
+  def shiftRight(e: Column, numBits: Int): Column = ShiftRight(e.expr, lit(numBits).expr)
 
   /**
    * Shift the the given value numBits right. If the given value is a long value, it will return
@@ -1333,7 +1333,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftRight(columnName: String, numBits: Integer): Column =
+  def shiftRight(columnName: String, numBits: Int): Column =
     shiftRight(Column(columnName), numBits)
 
   /**
