@@ -577,23 +577,15 @@ class SparseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray:
+        assert len(self) == _vector_size(other), "dimension mismatch"
+        if isinstance(other, np.ndarray):
             if other.ndim == 2:
                 results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
                 return np.array(results)
-            elif other.ndim > 2:
+            elif other.ndim == 1:
+                return np.dot(other[self.indices], self.values)
+            else:
                 raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
-
-        assert len(self) == _vector_size(other), "dimension mismatch"
-
-        if isinstance(other, array.array):
-            result = 0.0
-            for i, ind in enumerate(self.indices):
-                result += self.values[i] * other[ind]
-            return result
-
-        elif isinstance(other, np.ndarray):
-            return np.dot(other[self.indices], self.values)
 
         elif isinstance(other, DenseVector):
             return np.dot(other.array[self.indices], self.values)
@@ -641,19 +633,8 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if isinstance(other, list) or isinstance(other, array.array):
-            result = 0.0
-            j = 0   # index into our own array
-            for i, val in enumerate(other):
-                if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - val
-                    result += diff * diff
-                    j += 1
-                else:
-                    result += val * val
-            return result
 
-        elif isinstance(other, np.ndarray) or isinstance(other, DenseVector):
+        if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
             if isinstance(other, np.ndarray) and other.ndim != 1:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
                                 other.ndim)

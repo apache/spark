@@ -128,7 +128,7 @@ class VectorTests(MLlibTestCase):
                      [1., 2., 3., 4.],
                      [1., 2., 3., 4.],
                      [1., 2., 3., 4.]])
-        arr = pyarray('d', [0, 1, 2, 3])
+        arr = pyarray.array('d', [0, 1, 2, 3])
         self.assertEquals(10.0, sv.dot(dv))
         self.assertTrue(array_equal(array([3., 6., 9., 12.]), sv.dot(mat)))
         self.assertEquals(30.0, dv.dot(dv))
@@ -142,7 +142,7 @@ class VectorTests(MLlibTestCase):
         dv = DenseVector(array([1., 2., 3., 4.]))
         lst = DenseVector([4, 3, 2, 1])
         lst1 = [4, 3, 2, 1]
-        arr = pyarray('d', [0, 2, 1, 3])
+        arr = pyarray.array('d', [0, 2, 1, 3])
         narr = array([0, 2, 1, 3])
         self.assertEquals(15.0, _squared_distance(sv, dv))
         self.assertEquals(25.0, _squared_distance(sv, lst))
