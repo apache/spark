@@ -104,20 +104,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
-  test("test thresholding") {
-    val rf = new RandomForestClassifier().setNumTrees(3)
-    val rfThreshold = new RandomForestClassifier().setNumTrees(3)
-      .setThresholds(Array(0.1, 100000.0, 0.2))
-    val input = Array(
-      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0)),
-      LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
-    )
-
-    assert(false)
-  }
-
   test("subsampling rate in RandomForest"){
     val rdd = orderedLabeledPoints5_20
     val categoricalFeatures = Map.empty[Int, Int]
