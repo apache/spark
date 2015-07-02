@@ -282,18 +282,30 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     Model produced by [[PowerIterationClustering]].
 
-    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (1, 3, 1.0), (2, 3, 1.0),
-    ...     (0, 3, 1.0), (1, 2, 1.0), (0, 4, 0.1)]
+    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (1, 3, 1.0),
+    ... (2, 3, 1.0), (3, 4, 0.1), (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0),
+    ... (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0), (10, 11, 1.0),
+    ... (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0)]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = PowerIterationClustering.train(rdd, 2, 100)
     >>> model.k
     2
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> sum([x.cluster != result[3].cluster for x in result if x.id < 3])
+    0
+    >>> sum([x.cluster != result[4].cluster for x in result if x.id > 4])
+    0
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
     >>> sameModel = PowerIterationClusteringModel.load(sc, path)
     >>> sameModel.k
     2
+    >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
+    >>> sum([x.cluster != result[3].cluster for x in result if x.id < 3])
+    0
+    >>> sum([x.cluster != result[4].cluster for x in result if x.id > 4])
+    0
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
