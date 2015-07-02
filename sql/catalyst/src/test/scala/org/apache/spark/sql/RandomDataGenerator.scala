@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.types._
+import java.lang.Double.longBitsToDouble
+import java.lang.Float.intBitsToFloat
 
 import scala.util.Random
+
+import org.apache.spark.sql.types._
 
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -90,11 +93,11 @@ object RandomDataGenerator {
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType => Some(() => new java.sql.Date(rand.nextInt(Int.MaxValue)))
       case DoubleType => randomNumeric[Double](
-        rand, _.nextDouble(), Seq(Double.MinValue, Double.MinPositiveValue, Double.MaxValue,
-          Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
+        rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
+          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
       case FloatType => randomNumeric[Float](
-        rand, _.nextFloat(), Seq(Float.MinValue, Float.MinPositiveValue, Float.MaxValue,
-          Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f))
+        rand, r => intBitsToFloat(r.nextInt()), Seq(Float.MinValue, Float.MinPositiveValue,
+          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f))
       case ByteType => randomNumeric[Byte](
         rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
       case IntegerType => randomNumeric[Int](
