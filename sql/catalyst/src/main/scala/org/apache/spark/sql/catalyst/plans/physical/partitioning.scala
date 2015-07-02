@@ -140,8 +140,8 @@ sealed case class Partitioning(
   /** work with `sortKeys` if the sorting cross or just within the partition. */
   globalOrdered: Boolean = false,
 
-  /** to indicate if null clustering key will be generated. */
-  additionalNullClusterKeyGenerated: Boolean = true) {
+  /** to indicate if new null clustering key will be generated in THIS operator. */
+  additionalNullClusterKeyGenerated: Boolean = false) {
 
   def withNumPartitions(num: Int): Partitioning = {
     new Partitioning(
@@ -219,7 +219,7 @@ sealed case class Partitioning(
       } else {
         // Child is not a global ordering partition, probably a Clustered Partitioning or
         // UnspecifiedPartitioning
-        if (this.clusterKeys == clustering) { // same distribution
+        if (this.clusterKeys == clustering && clustering.nonEmpty) { // same distribution
           if (nullKeysSensitive) {
             // No NEW null cluster key generated from the child to be required
             // e.g. In GROUP BY clause, even the clustering key is the same, however,

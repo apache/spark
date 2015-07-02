@@ -60,6 +60,40 @@ class PlannerSuite extends SparkFunSuite {
     assert(exchanges.size === 3)
   }
 
+  test("left outer join followed by aggregation") {
+    val planned = testData
+      .join(testData2, testData("key") === testData2("a"), "left") // join key testData('key)
+      .groupBy(testData("key")).agg(testData("key"), count("a"))    // group by key testData('key)
+      .queryExecution.executedPlan
+    val exchanges = planned.collect { case n: Exchange => n }
+
+    //    testData         testData2
+    //       \(shuffle:key) /(shuffle:a)
+    //        \            /
+    //              | (key)  <--- partial aggregation (no shuffle)
+    //              | (key)  <--- final aggregation (no shuffle)
+    //            result
+    assert(exchanges.size === 2)
+  }
+
+  test("full outer join followed by left outer join and aggregation") {
+    val planned = testData
+      .join(testData2, testData("key") === testData2("a"), "outer") // join key testData('key)
+      .join(testData3, testData("key") === testData3("a"), "left")
+      .groupBy(testData("key")).agg(testData("key"), count(lit(1)))    // group by key testData('key)
+      .queryExecution.executedPlan
+    val exchanges = planned.collect { case n: Exchange => n }
+
+    //    testData           testData2       testData3
+    //       \(shuffle: key)  /(shuffle: a)   /(shuffle:a)
+    //               \ (null key generated)  /
+    //                          |
+    //                          |  <--- partial aggregation
+    //                          | (shuffle:key) as the null key generated for the left side
+    //                        result <--- final aggregation
+    assert(exchanges.size === 4)
+  }
+
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
