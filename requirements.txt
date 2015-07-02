@@ -19,6 +19,7 @@ nose
 pandas
 pygments
 pyhive
+pydruid
 PySmbClient
 python-dateutil
 pyhs2
