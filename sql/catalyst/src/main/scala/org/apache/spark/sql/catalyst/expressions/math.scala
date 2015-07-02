@@ -351,6 +351,104 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
+case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
+      case (_, IntegerType) => left.dataType match {
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
+        case _ => // failed
+      }
+      case _ => // failed
+    }
+    TypeCheckResult.TypeCheckFailure(
+        s"ShiftLeft expects long, integer, short or byte value as first argument and an " +
+          s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val valueRight = right.eval(input)
+      if (valueRight != null) {
+        valueLeft match {
+          case l: Long => l << valueRight.asInstanceOf[Integer]
+          case i: Integer => i << valueRight.asInstanceOf[Integer]
+          case s: Short => s << valueRight.asInstanceOf[Integer]
+          case b: Byte => b << valueRight.asInstanceOf[Integer]
+        }
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = {
+    left.dataType match {
+      case LongType => LongType
+      case IntegerType | ShortType | ByteType => IntegerType
+      case _ => NullType
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left << $right;")
+  }
+}
+
+case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
+      case (_, IntegerType) => left.dataType match {
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
+        case _ => // failed
+      }
+      case _ => // failed
+    }
+    TypeCheckResult.TypeCheckFailure(
+          s"ShiftRight expects long, integer, short or byte value as first argument and an " +
+            s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val valueRight = right.eval(input)
+      if (valueRight != null) {
+        valueLeft match {
+          case l: Long => l >> valueRight.asInstanceOf[Integer]
+          case i: Integer => i >> valueRight.asInstanceOf[Integer]
+          case s: Short => s >> valueRight.asInstanceOf[Integer]
+          case b: Byte => b >> valueRight.asInstanceOf[Integer]
+        }
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = {
+    left.dataType match {
+      case LongType => LongType
+      case IntegerType | ShortType | ByteType => IntegerType
+      case _ => NullType
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >> $right;")
+  }
+}
+
 /**
  * Performs the inverse operation of HEX.
  * Resulting characters are returned as a byte array.
