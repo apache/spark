@@ -235,7 +235,7 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   }
 
   // see [SPARK-8647], this achieves the needed constant hash code without constant no.
-  override def hashCode(): Int = this.getClass.getName.hashCode()
+  override def hashCode(): Int = classOf[VectorUDT].getName.hashCode()
 
   override def typeName: String = "vector"
 
