@@ -402,12 +402,17 @@ PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.
 
 <div data-lang="python" markdown="1">
 
-PowerIterationClustering implements the PIC algorithm. It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the affinity matrix.
-Calling `PowerIterationClustering.run` returns a PowerIterationClusteringModel which contains the computed clustering assignments.
+[`PowerIterationClustering`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering)
+implements the PIC algorithm.
+It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
+which contains the computed clustering assignments.
 
 {% highlight python %}
 from __future__ import print_function
-from pyspark.mllib.clustering import PowerIterationClustering
+from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
 
 # Load and parse the data
 data = sc.textFile("data/mllib/pic_data.txt")
