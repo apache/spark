@@ -152,3 +152,15 @@ expects a python_callable that returns a task_id. The task_id returned
 is followed, and all of the other paths are skipped.
 The task_id returned by the Python function has to be referencing a task 
 directly downstream from the BranchPythonOperator task.
+
+
+SLAs
+''''
+
+Service License Agreements, or time by which a task or DAG should have 
+succeeded, can be set at a task level as a ``timedelta``. If
+one or many instances have not succeeded by that time, an alert email is sent
+detailing the list of tasks that missed their SLA. The event is also recorded
+in the database and made available in the web UI under ``Browse->Missed SLAs``
+where events can be analyzed and documented.
+

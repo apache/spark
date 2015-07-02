@@ -5,7 +5,7 @@ configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
 
-NUM_EXAMPLE_DAGS = 3
+NUM_EXAMPLE_DAGS = 4
 DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)

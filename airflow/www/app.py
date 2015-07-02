@@ -1780,6 +1780,25 @@ mv = PoolModelView(models.Pool, Session, name="Pools", category="Admin")
 admin.add_view(mv)
 
 
+class SlaMissModelView(wwwutils.SuperUserMixin, ModelView):
+    column_list = (
+        'dag_id', 'task_id', 'execution_date', 'email_sent', 'timestamp')
+    column_formatters = dict(
+        task_id=task_instance_link,
+        execution_date=datetime_f,
+        dag_id=dag_link)
+    named_filter_urls = True
+    column_searchable_list = ('dag_id', 'task_id',)
+    column_filters = (
+        'dag_id', 'task_id', 'email_sent', 'timestamp', 'execution_date')
+    form_widget_args = {
+        'email_sent': {'disabled': True},
+        'timestamp': {'disabled': True},
+    }
+mv = SlaMissModelView(
+    models.SlaMiss, Session, name="SLA Misses", category="Browse")
+admin.add_view(mv)
+
 
 def integrate_plugins():
     """Integrate plugins to the context"""

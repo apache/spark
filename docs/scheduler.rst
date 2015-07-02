@@ -7,6 +7,11 @@ it monitors a folder for all DAG objects it may contain,
 and periodically inspects all tasks to see whether it can schedule the
 next run.
 
+Note that if you run a DAG on a ``schedule_interval`` of one day,
+the run stamped ``2016-01-01`` will be trigger soon after ``2016-01-01T23:59``.
+In other words, the job instance is started once the period it covers
+has ended.
+
 The scheduler starts an instance of the executor specified in the your
 ``airflow.cfg``. If it happens to be the LocalExecutor, tasks will be
 executed as subprocesses; in the case of CeleryExecutor, tasks are
