@@ -85,6 +85,33 @@ class DataFrameStatSuite extends SparkFunSuite  {
     }
   }
 
+  test("special crosstab elements (., '', null, ``)") {
+    val data = Seq(
+      ("a", 1, "ho"),
+      (null, 2, "ho"),
+      ("a.b", 1, ""),
+      ("b", 2, "`ha`"),
+      ("a", 1, null)
+    )
+    val df = data.toDF("1", "2", "3")
+    val ct1 = df.stat.crosstab("1", "2")
+    // column fields should be 1 + distinct elements of second column
+    assert(ct1.schema.fields.length === 3)
+    assert(ct1.collect().length === 4)
+    val ct2 = df.stat.crosstab("1", "3")
+    assert(ct2.schema.fields.length === 4)
+    assert(ct2.schema.fieldNames.contains("ha"))
+    assert(ct2.collect().length === 4)
+    val ct3 = df.stat.crosstab("3", "2")
+    assert(ct3.schema.fields.length === 3)
+    assert(ct3.collect().length === 4)
+    val ct4 = df.stat.crosstab("3", "1")
+    assert(ct4.schema.fields.length === 5)
+    assert(ct4.schema.fieldNames.contains(""))
+    assert(ct4.schema.fieldNames.contains("a.b"))
+    assert(ct4.collect().length === 4)
+  }
+
   test("Frequent Items") {
     val rows = Seq.tabulate(1000) { i =>
       if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)

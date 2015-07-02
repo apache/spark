@@ -391,7 +391,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
    */
   private def fillCol[T](col: StructField, replacement: T): Column = {
-    coalesce(df.col(col.name), lit(replacement).cast(col.dataType)).as(col.name)
+    coalesce(df.col("`" + col.name + "`"), lit(replacement).cast(col.dataType)).as(col.name)
   }
 
   /**
