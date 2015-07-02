@@ -273,7 +273,12 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             Exchange(HashPartition(clustering).withNumPartitions(partitions), child)
           case RepartitionKeyAndSort(clustering, sortKeys) =>
             // TODO ideally, we probably will be benefit from the sort-based shuffle
-            // as the data is partially sorted during the shuffling
+            // when the clustering keys is identical with the sortKeys, because the data
+            // is partially sorted during the shuffling.
+            // There are 2 concerns we need to consider if we want to implement this:
+            // 1) Detect if it's the sort-based shuffle.
+            // 2) SparkSqlSerializer2 will reuse the row (MutableRow) in deserialization
+            //    that's will cause problem in sorting by ShuffledRDD.
             val num = if (clustering.isEmpty) 1 else numPartitions
             val exchanged = Exchange(HashPartition(clustering).withNumPartitions(num), child)
               addSortOperator(
