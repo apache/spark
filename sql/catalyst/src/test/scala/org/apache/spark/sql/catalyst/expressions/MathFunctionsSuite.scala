@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
+import org.apache.spark.sql.types.{IntegerType, DataType, DoubleType, LongType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -225,6 +225,32 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
   }
 
+  test("shift left") {
+    checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toByte), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toShort), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
+
+    checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+  }
+
+  test("shift right") {
+    checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toByte), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toShort), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
+
+    checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+  }
+
   test("hex") {
     checkEvaluation(Hex(Literal(28)), "1C")
     checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
@@ -236,6 +262,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Turn off scala style for non-ascii chars
     checkEvaluation(Hex(Literal("三重的")), "E4B889E9878DE79A84")
     // scalastyle:on
+  }
+
+  test("unhex") {
+    checkEvaluation(UnHex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(UnHex(Literal("")), new Array[Byte](0))
+    checkEvaluation(UnHex(Literal("0")), Array[Byte](0))
   }
 
   test("hypot") {
