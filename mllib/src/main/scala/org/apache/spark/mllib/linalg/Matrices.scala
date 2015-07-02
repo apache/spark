@@ -193,7 +193,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     }
   }
 
-  override def hashCode(): Int = 1994
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[MatrixUDT].getName.hashCode()
 
   override def typeName: String = "matrix"
 
