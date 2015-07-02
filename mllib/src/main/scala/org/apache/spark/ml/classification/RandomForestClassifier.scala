@@ -95,7 +95,8 @@ final class RandomForestClassifier(override val uid: String)
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
       oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures,
+      Option($(thresholds)))
   }
 
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
@@ -174,7 +175,8 @@ private[ml] object RandomForestClassificationModel {
   def fromOld(
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
-      categoricalFeatures: Map[Int, Int]): RandomForestClassificationModel = {
+      categoricalFeatures: Map[Int, Int],
+      thresholds: Option[Array[Double]]): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -182,6 +184,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees)
+    new RandomForestClassificationModel(uid, newTrees, thresholds)
   }
 }
