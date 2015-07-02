@@ -228,6 +228,20 @@ case class Bin(child: Expression)
   }
 }
 
+object Hex {
+  val hexDigits = Array[Char](
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+  ).map(_.toByte)
+
+  // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
+  val unhexDigits = {
+    val array = Array.fill[Byte](128)(-1)
+    (0 to 9).foreach(i => array('0' + i) = i.toByte)
+    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
+    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
+    array
+  }
+}
 
 /**
  * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
@@ -264,17 +278,13 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     }
   }
 
-  private[this] val hexDigits = Array[Char](
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-  ).map(_.toByte)
-
   private[this] def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
     val value = new Array[Byte](length * 2)
     var i = 0
     while (i < length) {
-      value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
-      value(i * 2 + 1) = hexDigits((bytes(i) & 0x0F))
+      value(i * 2) = Hex.hexDigits((bytes(i) & 0xF0) >> 4)
+      value(i * 2 + 1) = Hex.hexDigits(bytes(i) & 0x0F)
       i += 1
     }
     UTF8String.fromBytes(value)
@@ -287,8 +297,7 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     var len = 0
     do {
       len += 1
-      value(value.length - len) = Character.toUpperCase(Character
-        .forDigit((numBuf & 0xF).toInt, 16)).toByte
+      value(value.length - len) = Hex.hexDigits(numBuf & 0xF)
       numBuf >>>= 4
     } while (numBuf != 0)
     UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
@@ -315,15 +324,6 @@ case class Unhex(child: Expression)
     }
   }
 
-  // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
-  private[this] val unhexDigits = {
-    val array = Array.fill[Byte](128)(-1)
-    (0 to 9).foreach(i => array('0' + i) = i.toByte)
-    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
-    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
-    array
-  }
-
   private[this] def unhex(bytes: Array[Byte]): Array[Byte] = {
     val out = new Array[Byte]((bytes.length + 1) >> 1)
     var i = 0
@@ -332,7 +332,7 @@ case class Unhex(child: Expression)
       if (bytes(0) < 0) {
         return null
       }
-      val v = unhexDigits(bytes(0))
+      val v = Hex.unhexDigits(bytes(0))
       if (v == -1) {
         return null
       }
@@ -344,8 +344,8 @@ case class Unhex(child: Expression)
       if (bytes(i) < 0 || bytes(i + 1) < 0) {
         return null
       }
-      val first = unhexDigits(bytes(i))
-      val second = unhexDigits(bytes(i + 1))
+      val first = Hex.unhexDigits(bytes(i))
+      val second = Hex.unhexDigits(bytes(i + 1))
       if (first == -1 || second == -1) {
         return null
       }

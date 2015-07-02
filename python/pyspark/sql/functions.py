@@ -402,7 +402,7 @@ def unhex(col):
     and converts to the byte representation of number.
 
     >>> sqlContext.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
-    [Row(unhex(a)=u'ABC')]
+    [Row(unhex(a)=bytearray(b'ABC'))]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.unhex(_to_java_column(col))
