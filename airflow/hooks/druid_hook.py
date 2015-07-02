@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 
 import pydruid
 import requests
@@ -39,5 +40,10 @@ class DruidHook(BaseHook):
         """
         conn = self.get_connection(self.druid_query_conn_id)
         endpoint = conn.extra_dejson.get('enpoint', '')
-        requests.post(conn.host, hdfs_uri)
+        j = requests.post(conn.host, hdfs_uri)
+        while True:
+            response = request(uri + '', j)
+            if "success" in request.post(task_id).content:
+                break
+            time.sleep(5)
 
