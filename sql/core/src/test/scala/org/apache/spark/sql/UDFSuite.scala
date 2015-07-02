@@ -21,6 +21,7 @@ package org.apache.spark.sql
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
+  import org.apache.spark.sql.TestData._
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
@@ -80,6 +81,48 @@ class UDFSuite extends QueryTest {
   test("TwoArgument UDF") {
     ctx.udf.register("strLenScala", (_: String).length + (_: Int))
     assert(ctx.sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
+  }
+
+  test("UDF in a WHERE") {
+    testData.sqlContext.udf.register("oneArgFilter", (n:Int) => { n > 80 })
+
+    val result =
+      testData.sqlContext.sql("SELECT * FROM testData WHERE oneArgFilter(key)")
+    assert(result.count() === 20)
+  }
+
+  test("UDF in a HAVING") {
+    testData.sqlContext.udf.register("havingFilter", (n:Long) => { n > 5 })
+
+    val result =
+      testData.sqlContext.sql("SELECT g, SUM(v) as s FROM groupData GROUP BY g HAVING havingFilter(s)")
+    assert(result.count() === 2)
+  }
+
+  test("UDF in a GROUP BY") {
+    testData.sqlContext.udf.register("groupFunction", (n:Int) => { n > 10 })
+
+    val result =
+      testData.sqlContext.sql("SELECT SUM(v) FROM groupData GROUP BY groupFunction(v)")
+    assert(result.count() === 2)
+  }
+
+  test("UDFs everywhere") {
+    ctx.udf.register("groupFunction", (n:Int) => { n > 10 })
+    ctx.udf.register("havingFilter", (n:Long) => { n > 2000 })
+    ctx.udf.register("whereFilter", (n:Int) => { n < 150 })
+    ctx.udf.register("timesHundred", (n:Long) => { n * 100 })
+
+    val result =
+      testData.sqlContext.sql(
+        """
+         | SELECT timesHundred(SUM(v)) as v100
+         | FROM groupData
+         | WHERE whereFilter(v)
+         | GROUP BY groupFunction(v)
+         | HAVING havingFilter(v100)
+        """.stripMargin)
+    assert(result.count() === 1)
   }
 
   test("struct UDF") {

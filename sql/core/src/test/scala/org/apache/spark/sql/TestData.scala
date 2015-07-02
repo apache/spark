@@ -196,4 +196,15 @@ object TestData {
         :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
+
+  case class GroupData(g: String, v: Int)
+  val groupData =
+    TestSQLContext.sparkContext.parallelize(
+    GroupData("red", 1) ::
+    GroupData("red", 2) ::
+    GroupData("blue", 10) ::
+    GroupData("green", 100) ::
+    GroupData("green", 200) :: Nil).toDF()
+  groupData.registerTempTable("groupData")
+
 }
