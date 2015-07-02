@@ -15,34 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.mesos
+package org.apache.spark.scheduler.cluster.mesos
 
 import java.util
 import java.util.Collections
 
-import scala.collection.mutable
-
-import akka.actor.ActorSystem
-
-import com.typesafe.config.Config
-
 import org.apache.mesos.Protos.Value.Scalar
 import org.apache.mesos.Protos._
 import org.apache.mesos.SchedulerDriver
-import org.apache.mesos.MesosSchedulerDriver
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.scheduler.cluster.mesos.{ CoarseMesosSchedulerBackend, MemoryUtils }
-import org.apache.spark.{ LocalSparkContext, SparkConf, SparkEnv, SparkContext }
-
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.mockito.{ ArgumentCaptor, Matchers }
-
-import org.scalatest.FunSuite
+import org.mockito.Matchers
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
-class CoarseMesosSchedulerBackendSuite extends FunSuite
+import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+
+class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext
     with MockitoSugar
     with BeforeAndAfter {
@@ -66,10 +56,10 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite
       .build()
   }
 
-  private def createSchedulerBackend(taskScheduler: TaskSchedulerImpl,
-    driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
+  private def createSchedulerBackend(
+      taskScheduler: TaskSchedulerImpl,
+      driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master") {
-      override def driverURL = "driverURL"
       mesosDriver = driver
       markRegistered()
     }

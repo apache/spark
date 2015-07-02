@@ -1366,7 +1366,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * this application is supported. This is currently only available for YARN
    * and Mesos coarse-grained mode.
    */
-  private[spark] def supportDynamicAllocation = {
+  private[spark] def supportDynamicAllocation: Boolean = {
     (master.contains("yarn")
       || master.contains("mesos")
       || _conf.getBoolean("spark.dynamicAllocation.testing", false))

@@ -67,16 +67,19 @@ private[spark] class CoarseMesosSchedulerBackend(
   // How many times tasks on each slave failed
   val failuresBySlaveId: HashMap[String, Int] = new HashMap[String, Int]
 
-  // the total number of executors we aim to have
-  private[mesos] var executorLimitOption: Option[Int] = None
+  /**
+   * The total number of executors we aim to have. Undefined when not using dynamic allocation
+   * and before the ExecutorAllocatorManager calls [[doRequesTotalExecutors]].
+   */
+  private var executorLimitOption: Option[Int] = None
 
   /**
    *  Return the current executor limit, which may be [[Int.MaxValue]]
    *  before properly initialized.
    */
-  def executorLimit: Int = executorLimitOption.getOrElse(Int.MaxValue)
+  private[mesos] def executorLimit: Int = executorLimitOption.getOrElse(Int.MaxValue)
 
-  private[mesos] val pendingRemovedSlaveIds = new HashSet[String]
+  private val pendingRemovedSlaveIds = new HashSet[String]
 
   // private lock object protecting mutable state above. Using the intrinsic lock
   // may lead to deadlocks since the superclass might also try to lock
@@ -156,11 +159,12 @@ private[spark] class CoarseMesosSchedulerBackend(
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.get.split('/').last.split('.').head
+      val executorId = sparkExecutorId(offer.getSlaveId.getValue, taskId.toString)
       command.setValue(
         s"cd $basename*; $prefixEnv " +
          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
         s" --driver-url $driverURL" +
-        s" --executor-id ${sparkExecutorId(offer.getSlaveId.getValue, taskId.toString)}" +
+        s" --executor-id $executorId" +
         s" --hostname ${offer.getHostname}" +
         s" --cores $numCores" +
         s" --app-id $appId")
@@ -170,10 +174,14 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   protected def driverURL: String = {
-    sc.env.rpcEnv.uriOf(
-      SparkEnv.driverActorSystemName,
-      RpcAddress(conf.get("spark.driver.host"), conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    if (conf.contains("spark.testing")) {
+      "driverURL"
+    } else {
+      sc.env.rpcEnv.uriOf(
+        SparkEnv.driverActorSystemName,
+        RpcAddress(conf.get("spark.driver.host"), conf.get("spark.driver.port").toInt),
+        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    }
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
@@ -202,9 +210,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         val id = offer.getId.getValue
-        if (taskIdToSlaveId.size < executorLimitOption.getOrElse(Int.MaxValue) &&
-            meetsConstraints &&
+        if (taskIdToSlaveId.size < executorLimit &&
             totalCoresAcquired < maxCores &&
+            meetsConstraints &&
             mem >= calculateTotalMemory(sc) &&
             cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
@@ -285,12 +293,13 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
-  /** Called when a slave is lost or a Mesos task finished. Update local view on
-   *  what tasks are running and remove the terminated slave from the list of pending
-   *  slave IDs that we might have asked to be killed. It also notifies the driver
-   *  that an executor was removed.
+  /**
+   * Called when a slave is lost or a Mesos task finished. Update local view on
+   * what tasks are running and remove the terminated slave from the list of pending
+   * slave IDs that we might have asked to be killed. It also notifies the driver
+   * that an executor was removed.
    */
-  private def executorTerminated(d: SchedulerDriver, slaveId: String, reason: String) {
+  private def executorTerminated(d: SchedulerDriver, slaveId: String, reason: String): Unit = {
     stateLock.synchronized {
       if (slaveIdsWithExecutors.contains(slaveId)) {
         val slaveIdToTaskId = taskIdToSlaveId.inverse()
@@ -299,20 +308,24 @@ private[spark] class CoarseMesosSchedulerBackend(
           taskIdToSlaveId.remove(taskId)
           removeExecutor(sparkExecutorId(slaveId, taskId.toString), reason)
         }
+        // TODO: This assumes one Spark executor per Mesos slave,
+        // which may no longer be true after SPARK-5095
         pendingRemovedSlaveIds -= slaveId
         slaveIdsWithExecutors -= slaveId
       }
     }
   }
 
-  private def sparkExecutorId(slaveId: String, taskId: String) = "%s/%s".format(slaveId, taskId)
+  private def sparkExecutorId(slaveId: String, taskId: String): String = {
+    s"$slaveId/$taskId"
+  }
 
-  override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
+  override def slaveLost(d: SchedulerDriver, slaveId: SlaveID): Unit = {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     executorTerminated(d, slaveId.getValue, "Mesos slave lost: " + slaveId.getValue)
   }
 
-  override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {
+  override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int): Unit = {
     logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
     slaveLost(d, s)
   }
@@ -327,13 +340,13 @@ private[spark] class CoarseMesosSchedulerBackend(
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
     logInfo("Capping the total amount of executors to " + requestedTotal)
-    executorLimitOption = Option(requestedTotal)
+    executorLimitOption = Some(requestedTotal)
     true
   }
 
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
     if (mesosDriver == null) {
-      logWarning("Asked to kill executors before the executor was started.")
+      logWarning("Asked to kill executors before the Mesos driver was started.")
       return false
     }
 
@@ -342,7 +355,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       val slaveId = executorId.split("/")(0)
       if (slaveIdToTaskId.contains(slaveId)) {
         mesosDriver.killTask(
-          TaskID.newBuilder().setValue(slaveIdToTaskId.get(slaveId).toString).build)
+          TaskID.newBuilder().setValue(slaveIdToTaskId.get(slaveId).toString).build())
         pendingRemovedSlaveIds += slaveId
       } else {
         logWarning("Unable to find executor Id '" + executorId + "' in Mesos scheduler")
@@ -354,7 +367,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     // executors, that means the scheduler wants to set the limit that is less than
     // the amount of the executors that has been launched. Therefore, we take the existing
     // amount of executors launched and deduct the executors killed as the new limit.
-    executorLimitOption = Option(Math.max(0, taskIdToSlaveId.size - pendingRemovedSlaveIds.size))
+    executorLimitOption = Some(Math.max(0, taskIdToSlaveId.size - pendingRemovedSlaveIds.size))
     true
   }
 }
