@@ -53,6 +53,12 @@ case class GeneratedAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
+  override def outputPartitioning: Partitioning = if (partial) {
+    child.outputPartitioning
+  } else {
+    HashPartition(groupingExpressions)
+  }
+
   override def requiredChildDistribution: Seq[Distribution] =
     if (partial) {
       UnspecifiedDistribution :: Nil
