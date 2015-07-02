@@ -182,10 +182,14 @@ class VectorTests(MLlibTestCase):
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
-        self.assertTrue(mat, eval(repr(mat)))
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
 
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
-        self.assertTrue(mat, eval(repr(mat)))
+        self.assertTrue(
+            repr(mat),
+            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
 
     def test_sparse_matrix(self):
         # Test sparse matrix creation.
@@ -196,7 +200,9 @@ class VectorTests(MLlibTestCase):
         self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
         self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
         self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
-        self.assertTrue(sm1, eval(repr(sm1)))
+        self.assertTrue(
+            repr(sm1),
+            'SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)')
 
         # Test indexing
         expected = [
@@ -225,7 +231,9 @@ class VectorTests(MLlibTestCase):
         self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
         self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
         self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
-        self.assertTrue(sm1t, eval(repr(sm1t)))
+        self.assertTrue(
+            repr(sm1t),
+            'SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)')
 
         expected = [
             [3, 2, 0, 0],
