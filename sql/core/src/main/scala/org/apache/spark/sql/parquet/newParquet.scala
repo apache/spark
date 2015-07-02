@@ -19,7 +19,6 @@ package org.apache.spark.sql.parquet
 
 import java.net.URI
 import java.util.{List => JList}
-import java.io.IOException
 
 import scala.collection.JavaConversions._
 import scala.util.Try
@@ -168,7 +167,7 @@ private[sql] class ParquetRelation2(
       val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
-      throw new IOException(s"Duplicate column(s) : $duplicateColumns found, " +
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
         s"cannot save to parquet format")
     }
   }

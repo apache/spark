@@ -22,6 +22,7 @@ import java.io.IOException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -43,7 +44,7 @@ private[sql] class DefaultSource
       val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
-      throw new IOException(s"Duplicate column(s) : $duplicateColumns found, " +
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
         s"cannot save to JSON format")
     }
   }
@@ -151,7 +152,7 @@ private[sql] class JSONRelation(
       val duplicateColumns = data.schema.fieldNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
-      throw new IOException(s"Duplicate column(s) : $duplicateColumns found, " +
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
         s"cannot save to JSON format")
     }
   }
