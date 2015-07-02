@@ -723,26 +723,28 @@ object HiveTypeCoercion {
      * If the implicit cast is not allowed, return the expression itself.
      */
     def implicitCast(e: Expression, expectedType: AbstractDataType): Expression = {
-      (e, expectedType) match {
+      val inType = e.dataType
+      (inType, expectedType) match {
         // Cast null type (usually from null literals) into target types
-        case (in @ NullType(), target: DataType) => Cast(in, target.defaultConcreteType)
+        case (NullType, target: DataType) => Cast(e, target.defaultConcreteType)
 
         // Implicit cast among numeric types
-        case (in @ NumericType(), target: NumericType) if in.dataType != target =>
-          Cast(in, target)
+        case (_: NumericType, target: NumericType) if e.dataType != target => Cast(e, target)
 
         // Implicit cast between date time types
-        case (in @ DateType(), TimestampType) => Cast(in, TimestampType)
-        case (in @ TimestampType(), DateType) => Cast(in, DateType)
+        case (DateType, TimestampType) => Cast(e, TimestampType)
+        case (TimestampType, DateType) => Cast(e, DateType)
 
-        // Implicit from string to atomic types, and vice versa
-        case (in @ StringType(), target: AtomicType) if target != StringType =>
-          Cast(in, target.defaultConcreteType)
-        case (in, StringType) if in.dataType != StringType =>
-          Cast(in, StringType)
+        // Implicit cast from/to string
+        case (StringType, NumericType) => Cast(e, DoubleType)
+        case (StringType, target: NumericType) => Cast(e, target)
+        case (StringType, DateType) => Cast(e, DateType)
+        case (StringType, TimestampType) => Cast(e, TimestampType)
+        case (StringType, BinaryType) => Cast(e, BinaryType)
+        case (any, StringType) if any != StringType => Cast(e, StringType)
 
         // Else, just return the same input expression
-        case (in, _) => in
+        case _ => e
       }
     }
   }

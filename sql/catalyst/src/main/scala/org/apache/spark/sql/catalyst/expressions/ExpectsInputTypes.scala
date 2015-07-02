@@ -37,7 +37,7 @@ trait ExpectsInputTypes { self: Expression =>
   def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // We will do the type checking in `HiveTypeCoercion`, so always returning success here.
+    // TODO: implement proper type checking.
     TypeCheckResult.TypeCheckSuccess
   }
 }

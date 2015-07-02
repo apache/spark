@@ -122,7 +122,7 @@ case class InSet(value: Expression, hset: Set[Any])
 case class And(left: Expression, right: Expression)
   extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def toString: String = s"$left && $right"
+  override def toString: String = s"($left && $right)"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
@@ -171,7 +171,7 @@ case class And(left: Expression, right: Expression)
 case class Or(left: Expression, right: Expression)
   extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def toString: String = s"$left || $right"
+  override def toString: String = s"($left || $right)"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 

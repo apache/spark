@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * A non-concrete data type, reserved for internal uses.
  */
 private[sql] abstract class AbstractDataType {
-  def defaultConcreteType: DataType
+  private[sql] def defaultConcreteType: DataType
 }
 
 
@@ -50,8 +50,6 @@ protected[sql] abstract class AtomicType extends DataType {
 /**
  * :: DeveloperApi ::
  * Numeric data types.
- *
- * @group dataType
  */
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
@@ -73,7 +71,7 @@ private[sql] object NumericType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 
-  override def defaultConcreteType: DataType = IntegerType
+  private[sql] override def defaultConcreteType: DataType = IntegerType
 }
 
 
@@ -87,7 +85,7 @@ private[sql] object IntegralType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
 
-  override def defaultConcreteType: DataType = IntegerType
+  private[sql] override def defaultConcreteType: DataType = IntegerType
 }
 
 
@@ -106,7 +104,7 @@ private[sql] object FractionalType extends AbstractDataType {
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 
-  override def defaultConcreteType: DataType = DoubleType
+  private[sql] override def defaultConcreteType: DataType = DoubleType
 }
 
 

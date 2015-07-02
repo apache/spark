@@ -31,8 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 /**
  * :: DeveloperApi ::
  * The base type of all Spark SQL data types.
- *
- * @group dataType
  */
 @DeveloperApi
 abstract class DataType extends AbstractDataType {
