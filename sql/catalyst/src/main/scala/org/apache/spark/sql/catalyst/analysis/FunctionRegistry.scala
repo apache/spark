@@ -160,7 +160,7 @@ object FunctionRegistry {
     expression[UnHex]("unhex"),
     expression[Upper]("upper"),
 
-    //datetime functions
+    // datetime functions
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp")
   )
