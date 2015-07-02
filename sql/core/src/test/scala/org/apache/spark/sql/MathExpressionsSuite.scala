@@ -266,14 +266,14 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(
       df.select(
         shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
-          shiftLeft('e, null), shiftLeft('f, 1)),
-        Row(42.toLong, 42, 42.toShort, 42.toByte, null, null))
+        shiftLeft('f, 1)),
+        Row(42.toLong, 42, 42.toShort, 42.toByte, null))
 
     checkAnswer(
       df.selectExpr(
         "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
-        "shiftLeft(e, null)", "shiftLeft(f, 1)"),
-      Row(42.toLong, 42, 42.toShort, 42.toByte, null, null))
+        "shiftLeft(f, 1)"),
+      Row(42.toLong, 42, 42.toShort, 42.toByte, null))
   }
 
   test("shift right") {
@@ -283,14 +283,14 @@ class MathExpressionsSuite extends QueryTest {
     checkAnswer(
       df.select(
         shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
-        shiftRight('e, null), shiftRight('f, 1)),
-      Row(21.toLong, 21, 21.toShort, 21.toByte, null, null))
+        shiftRight('f, 1)),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
 
     checkAnswer(
       df.selectExpr(
         "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
-        "shiftRight(e, null)", "shiftRight(f, 1)"),
-      Row(21.toLong, 21, 21.toShort, 21.toByte, null, null))
+        "shiftRight(f, 1)"),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
   }
 
   test("binary log") {
