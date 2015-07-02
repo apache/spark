@@ -1281,6 +1281,44 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
+   * Shift the the given value numBits left. Returns int for tinyint, smallint and int and
+   * bigint for bigint a.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftLeft(e: Column, numBits: Integer): Column = ShiftLeft(e.expr, lit(numBits).expr)
+
+  /**
+   * Shift the the given value numBits left. Returns int for tinyint, smallint and int and
+   * bigint for bigint a.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftLeft(columnName: String, numBits: Integer): Column =
+    shiftLeft(Column(columnName), numBits)
+
+  /**
+   * Bitwise right shift of the given value. Returns int for tinyint, smallint and int and
+   * bigint for bigint a.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRight(e: Column, numBits: Integer): Column = ShiftRight(e.expr, lit(numBits).expr)
+
+  /**
+   * Shift the the given value numBits right. Returns int for tinyint, smallint and int and
+   * bigint for bigint a.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRight(columnName: String, numBits: Integer): Column =
+    shiftRight(Column(columnName), numBits)
+
+  /**
    * Computes the signum of the given value.
    *
    * @group math_funcs
