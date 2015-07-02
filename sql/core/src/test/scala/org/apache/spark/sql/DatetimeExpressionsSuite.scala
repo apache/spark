@@ -20,19 +20,30 @@ package org.apache.spark.sql
 import java.sql.Date
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.functions._
 
-class DatetimeExpressionsSuite extends QueryTest with BeforeAndAfterAll {
+class DatetimeExpressionsSuite extends QueryTest {
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+
+  import ctx.implicits._
+
+  val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
 
   test("function current_date") {
     // Date constructor would keep the original millis, we need to align it with begin of day.
+    checkAnswer(df1.select(current_date()),
+      Seq(
+        Row(new Date(DateTimeUtils.daysToMillis(
+          DateTimeUtils.millisToDays(System.currentTimeMillis())))), 
+        Row(new Date(DateTimeUtils.daysToMillis(
+          DateTimeUtils.millisToDays(System.currentTimeMillis()))))))
     checkAnswer(ctx.sql("""SELECT CURRENT_DATE()"""),
       Row(new Date(DateTimeUtils.daysToMillis(
         DateTimeUtils.millisToDays(System.currentTimeMillis())))))
   }
 
   test("function current_timestamp") {
+    checkAnswer(df1.select(countDistinct(current_timestamp())), Row(1))
     // Execution in one query should return the same value
     checkAnswer(ctx.sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""),
       Row(true))
