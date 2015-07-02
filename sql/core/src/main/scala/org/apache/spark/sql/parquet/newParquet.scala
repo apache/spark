@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.util.Try
 
 import com.google.common.base.Objects
@@ -30,8 +31,9 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.metadata.{FileMetaData, CompressionCodecName}
 import org.apache.parquet.hadoop.util.ContextUtil
+import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -488,44 +490,65 @@ private[sql] object ParquetRelation2 extends Logging {
 
   private[parquet] def readSchema(
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
-    footers.map { footer =>
+    val parquetSchemas = mutable.HashSet[MessageType]()
+    val metadataMap = mutable.HashMap[String, FileMetaData]()
+    footers.foreach { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
-      val parquetSchema = metadata.getSchema
-      val maybeSparkSchema = metadata
+      val serializedSchema = metadata
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .flatMap { serializedSchema =>
-          // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
-          // whatever is available.
-          Try(DataType.fromJson(serializedSchema))
-            .recover { case _: Throwable =>
-              logInfo(
-                s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
-                  "falling back to the deprecated DataType.fromCaseClassString parser.")
-              DataType.fromCaseClassString(serializedSchema)
-            }
-            .recover { case cause: Throwable =>
-              logWarning(
-                s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
-                   |\t$serializedSchema
-                 """.stripMargin,
-                cause)
-            }
-            .map(_.asInstanceOf[StructType])
-            .toOption
-        }
+      if (serializedSchema == None) {
+        parquetSchemas += metadata.getSchema
+      } else if (!metadataMap.contains(serializedSchema.get)) {
+        metadataMap += ((serializedSchema.get, metadata))
+      }
+    }
 
-      maybeSparkSchema.getOrElse {
-        // Falls back to Parquet schema if Spark SQL schema is absent.
+    val schemaFirstPart: Seq[StructType] = metadataMap.map { kv =>
+      val serializedSchema = kv._1
+      // Don't throw even if we failed to parse the serialized Spark schema. Just fallback to
+      // whatever is available.
+      val schema = Try(DataType.fromJson(serializedSchema))
+        .recover { case _: Throwable =>
+          logInfo(
+            s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
+              "falling back to the deprecated DataType.fromCaseClassString parser.")
+          DataType.fromCaseClassString(serializedSchema)
+        }
+        .recover { case cause: Throwable =>
+          logWarning(
+            s"""Failed to parse serialized Spark schema in Parquet key-value metadata:
+               |\t$serializedSchema
+             """.stripMargin,
+            cause)
+        }
+        .map(_.asInstanceOf[StructType])
+        .toOption
+
+      schema.getOrElse {
+        // Falls back to Parquet schema if Spark SQL schema can't be parsed.
         StructType.fromAttributes(
           // TODO Really no need to use `Attribute` here, we only need to know the data type.
           ParquetTypesConverter.convertToAttributes(
-            parquetSchema,
+            kv._2.getSchema,
             sqlContext.conf.isParquetBinaryAsString,
             sqlContext.conf.isParquetINT96AsTimestamp))
       }
-    }.reduceOption { (left, right) =>
+    }.toSeq
+
+    val schemaSecondPart: Seq[StructType] = parquetSchemas.toSeq.map { parquetSchema =>
+      // Falls back to Parquet schema if Spark SQL schema is absent.
+      StructType.fromAttributes(
+        // TODO Really no need to use `Attribute` here, we only need to know the data type.
+        ParquetTypesConverter.convertToAttributes(
+          parquetSchema,
+          sqlContext.conf.isParquetBinaryAsString,
+          sqlContext.conf.isParquetINT96AsTimestamp))
+    }
+
+
+    (schemaFirstPart ++ schemaSecondPart).reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }
