@@ -269,7 +269,7 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 }
 
-private[akka] final class AkkaRpcEndpointRef(
+private[akka] class AkkaRpcEndpointRef(
     @transient defaultAddress: RpcAddress,
     @transient _actorRef: => ActorRef,
     @transient conf: SparkConf,
