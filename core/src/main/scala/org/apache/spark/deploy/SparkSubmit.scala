@@ -262,14 +262,14 @@ object SparkSubmit {
     val resolvedMavenCoordinates =
       SparkSubmitUtils.resolveMavenCoordinates(
         args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
+    if (resolvedMavenCoordinates.trim.nonEmpty) {
+      if (!args.isNonEmptyArg(args.jars)) {
         args.jars = resolvedMavenCoordinates
       } else {
         args.jars += s",$resolvedMavenCoordinates"
       }
       if (args.isPython) {
-        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
+        if (!args.isNonEmptyArg(args.pyFiles)) {
           args.pyFiles = resolvedMavenCoordinates
         } else {
           args.pyFiles += s",$resolvedMavenCoordinates"
@@ -278,7 +278,7 @@ object SparkSubmit {
     }
     // install any R packages that may have been passed through --jars or --packages.
     // Spark Packages may contain R source code inside the jar.
-    if (args.isR) {
+    if (args.isR && args.isNonEmptyArg(args.jars)) {
       RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
     }
 
