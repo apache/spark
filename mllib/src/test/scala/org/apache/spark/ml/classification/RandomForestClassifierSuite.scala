@@ -196,7 +196,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented  SPARK-6725
+  // TODO: Reinstate test once save/load are implemented:  SPARK-6725
   /*
   test("model save/load") {
     val tempDir = Utils.createTempDir()
