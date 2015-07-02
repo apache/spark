@@ -235,8 +235,8 @@ class SQLQuerySuite extends QueryTest {
       checkRelation("ctas1", true)
       sql("DROP TABLE ctas1")
 
-      sql(
-        "CREATE TABLE ctas1 stored as sequencefile AS SELECT key k, value FROM src ORDER BY k, value")
+      sql("CREATE TABLE ctas1 stored as sequencefile AS " +
+          "SELECT key k, value FROM src ORDER BY k, value")
       checkRelation("ctas1", true)
       sql("DROP TABLE ctas1")
 
