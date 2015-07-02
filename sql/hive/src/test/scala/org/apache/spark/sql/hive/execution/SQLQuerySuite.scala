@@ -68,7 +68,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._
 
   test("UDTF") {
-    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath() }")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
@@ -84,6 +84,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(
       sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
       Row(3) :: Row(3) :: Nil)
+  }
+
+  def dropTable(table: String): Unit = {
+    sql(s"DROP TABLE IF EXISTS $table")
   }
 
   test("SPARK-6835: udtf in lateral view") {
@@ -282,6 +286,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val originalConf = convertCTAS
 
     setConf(HiveContext.CONVERT_CTAS, true)
+    dropTable("ctas1")
 
     try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -360,6 +365,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
+    dropTable("ctas1")
+    dropTable("ctas2")
+    dropTable("ctas3")
+    dropTable("ctas4")
+    dropTable("ctas5")
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
     sql(
       """CREATE TABLE ctas2
@@ -448,6 +458,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
+    dropTable("gen__tmp")
+    dropTable("mytable1")
     Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
 
     sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
@@ -519,6 +531,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test CTAS") {
+    dropTable("test_ctas_123")
     sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
@@ -526,6 +539,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-4825 save join to table") {
+    dropTable("test1")
+    dropTable("test2")
     val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
     testData.write.mode(SaveMode.Append).insertInto("test1")
@@ -613,6 +628,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
     hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    dropTable("nullValuesInInnerComplexTypes")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -692,6 +708,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(rdd).registerTempTable("data")
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
+    sql("DROP TABLE IF EXISTS explodeTest")
 
     try {
       sql("CREATE TABLE explodeTest (key bigInt)")
@@ -717,11 +734,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("sanity test for SPARK-6618") {
     (1 to 100).par.map { i =>
       val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(Seq(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
+      try {
+        sql(s"CREATE TABLE $tableName (col1 string)")
+        catalog.lookupRelation(Seq(tableName))
+        table(tableName)
+        tables()
+      } finally {
+        sql(s"DROP TABLE  IF EXISTS $tableName")
+      }
     }
   }
 
