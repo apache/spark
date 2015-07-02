@@ -46,7 +46,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUdfSuite extends QueryTest {
+class HiveUDFSuite extends QueryTest {
 
   import TestHive.{udf, sql}
   import TestHive.implicits._
@@ -73,7 +73,7 @@ class HiveUdfSuite extends QueryTest {
   test("hive struct udf") {
     sql(
       """
-      |CREATE EXTERNAL TABLE hiveUdfTestTable (
+      |CREATE EXTERNAL TABLE hiveUDFTestTable (
       |   pair STRUCT<id: INT, value: INT>
       |)
       |PARTITIONED BY (partition STRING)
@@ -82,15 +82,15 @@ class HiveUdfSuite extends QueryTest {
     """.
         stripMargin.format(classOf[PairSerDe].getName))
 
-    val location = Utils.getSparkClassLoader.getResource("data/files/testUdf").getFile
+    val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
     sql(s"""
-      ALTER TABLE hiveUdfTestTable
-      ADD IF NOT EXISTS PARTITION(partition='testUdf')
+      ALTER TABLE hiveUDFTestTable
+      ADD IF NOT EXISTS PARTITION(partition='testUDF')
       LOCATION '$location'""")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUdf AS '${classOf[PairUdf].getName}'")
-    sql("SELECT testUdf(pair) FROM hiveUdfTestTable")
-    sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
+    sql(s"CREATE TEMPORARY FUNCTION testUDF AS '${classOf[PairUDF].getName}'")
+    sql("SELECT testUDF(pair) FROM hiveUDFTestTable")
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDF")
   }
 
   test("SPARK-6409 UDAFAverage test") {
@@ -169,11 +169,11 @@ class HiveUdfSuite extends QueryTest {
       StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
     testData.registerTempTable("stringTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testStringStringUdf AS '${classOf[UDFStringString].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
-      sql("SELECT testStringStringUdf(\"hello\", s) FROM stringTable"),
+      sql("SELECT testStringStringUDF(\"hello\", s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))
-    sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUdf")
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUDF")
 
     TestHive.reset()
   }
@@ -244,7 +244,7 @@ class PairSerDe extends AbstractSerDe {
   }
 }
 
-class PairUdf extends GenericUDF {
+class PairUDF extends GenericUDF {
   override def initialize(p1: Array[ObjectInspector]): ObjectInspector =
     ObjectInspectorFactory.getStandardStructObjectInspector(
       Seq("id", "value"),

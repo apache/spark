@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
-import java.text.SimpleDateFormat
+import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, TimeZone}
-
-import org.apache.spark.sql.catalyst.expressions.Cast
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -41,35 +39,55 @@ object DateTimeUtils {
 
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
-  private val LOCAL_TIMEZONE = new ThreadLocal[TimeZone] {
+  private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
     override protected def initialValue: TimeZone = {
       Calendar.getInstance.getTimeZone
     }
   }
 
-  private def javaDateToDays(d: Date): Int = {
-    millisToDays(d.getTime)
+  // `SimpleDateFormat` is not thread-safe.
+  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+    override def initialValue(): SimpleDateFormat = {
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    }
+  }
+
+  // `SimpleDateFormat` is not thread-safe.
+  private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
+    override def initialValue(): SimpleDateFormat = {
+      new SimpleDateFormat("yyyy-MM-dd")
+    }
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
-  def millisToDays(millisLocal: Long): Int = {
-    ((millisLocal + LOCAL_TIMEZONE.get().getOffset(millisLocal)) / MILLIS_PER_DAY).toInt
+  def millisToDays(millisUtc: Long): Int = {
+    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // will correctly work as input for function toJavaDate(Int)
+    val millisLocal = millisUtc.toDouble + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    Math.floor(millisLocal / MILLIS_PER_DAY).toInt
   }
 
-  def toMillisSinceEpoch(days: Int): Long = {
+  // reverse of millisToDays
+  def daysToMillis(days: Int): Long = {
     val millisUtc = days.toLong * MILLIS_PER_DAY
-    millisUtc - LOCAL_TIMEZONE.get().getOffset(millisUtc)
+    millisUtc - threadLocalLocalTimeZone.get().getOffset(millisUtc)
   }
 
-  def fromJavaDate(date: Date): Int = {
-    javaDateToDays(date)
-  }
+  def dateToString(days: Int): String =
+    threadLocalDateFormat.get.format(toJavaDate(days))
 
-  def toJavaDate(daysSinceEpoch: Int): Date = {
-    new Date(toMillisSinceEpoch(daysSinceEpoch))
-  }
+  // Converts Timestamp to string according to Hive TimestampWritable convention.
+  def timestampToString(num100ns: Long): String = {
+    val ts = toJavaTimestamp(num100ns)
+    val timestampString = ts.toString
+    val formatted = threadLocalTimestampFormat.get.format(ts)
 
-  def toString(days: Int): String = Cast.threadLocalDateFormat.get.format(toJavaDate(days))
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
+  }
 
   def stringToTime(s: String): java.util.Date = {
     if (!s.contains('T')) {
@@ -100,7 +118,21 @@ object DateTimeUtils {
   }
 
   /**
-   * Return a java.sql.Timestamp from number of 100ns since epoch
+   * Returns the number of days since epoch from from java.sql.Date.
+   */
+  def fromJavaDate(date: Date): Int = {
+    millisToDays(date.getTime)
+  }
+
+  /**
+   * Returns a java.sql.Date from number of days since epoch.
+   */
+  def toJavaDate(daysSinceEpoch: Int): Date = {
+    new Date(daysToMillis(daysSinceEpoch))
+  }
+
+  /**
+   * Returns a java.sql.Timestamp from number of 100ns since epoch.
    */
   def toJavaTimestamp(num100ns: Long): Timestamp = {
     // setNanos() will overwrite the millisecond part, so the milliseconds should be
@@ -118,7 +150,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Return the number of 100ns since epoch from java.sql.Timestamp.
+   * Returns the number of 100ns since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): Long = {
     if (t != null) {
@@ -129,7 +161,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Return the number of 100ns (hundred of nanoseconds) since epoch from Julian day
+   * Returns the number of 100ns (hundred of nanoseconds) since epoch from Julian day
    * and nanoseconds in a day
    */
   def fromJulianDay(day: Int, nanoseconds: Long): Long = {
@@ -139,7 +171,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Return Julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
+   * Returns Julian day and nanoseconds in a day from the number of 100ns (hundred of nanoseconds)
    */
   def toJulianDay(num100ns: Long): (Int, Long) = {
     val seconds = num100ns / HUNDRED_NANOS_PER_SECOND + SECONDS_PER_DAY / 2

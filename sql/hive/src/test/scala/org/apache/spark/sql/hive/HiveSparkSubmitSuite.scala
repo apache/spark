@@ -95,7 +95,7 @@ class HiveSparkSubmitSuite
     ))
 
     try {
-      val exitCode = failAfter(120 seconds) { process.exitValue() }
+      val exitCode = failAfter(180 seconds) { process.exitValue() }
       if (exitCode != 0) {
         fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
       }
@@ -115,6 +115,7 @@ object SparkSubmitClassLoaderTest extends Logging {
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
+    logInfo("Testing load classes at the driver side.")
     // First, we load classes at driver side.
     try {
       Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
@@ -124,6 +125,7 @@ object SparkSubmitClassLoaderTest extends Logging {
         throw new Exception("Could not load user class from jar:\n", t)
     }
     // Second, we load classes at the executor side.
+    logInfo("Testing load classes at the executor side.")
     val result = df.mapPartitions { x =>
       var exception: String = null
       try {
@@ -141,6 +143,7 @@ object SparkSubmitClassLoaderTest extends Logging {
     }
 
     // Load a Hive UDF from the jar.
+    logInfo("Registering temporary Hive UDF provided in a jar.")
     hiveContext.sql(
       """
         |CREATE TEMPORARY FUNCTION example_max
@@ -150,18 +153,23 @@ object SparkSubmitClassLoaderTest extends Logging {
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
     source.registerTempTable("sourceTable")
     // Load a Hive SerDe from the jar.
+    logInfo("Creating a Hive table with a SerDe provided in a jar.")
     hiveContext.sql(
       """
         |CREATE TABLE t1(key int, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
       """.stripMargin)
     // Actually use the loaded UDF and SerDe.
+    logInfo("Writing data into the table.")
     hiveContext.sql(
       "INSERT INTO TABLE t1 SELECT example_max(key) as key, val FROM sourceTable GROUP BY val")
+    logInfo("Running a simple query on the table.")
     val count = hiveContext.table("t1").orderBy("key", "val").count()
     if (count != 10) {
       throw new Exception(s"table t1 should have 10 rows instead of $count rows")
     }
+    logInfo("Test finishes.")
+    sc.stop()
   }
 }
 
@@ -199,5 +207,6 @@ object SparkSQLConfTest extends Logging {
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
     hiveContext.tables().collect()
+    sc.stop()
   }
 }

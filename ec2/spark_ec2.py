@@ -505,6 +505,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('tcp', 50070, 50070, authorized_address)
         master_group.authorize('tcp', 60070, 60070, authorized_address)
         master_group.authorize('tcp', 4040, 4045, authorized_address)
+        # Rstudio (GUI for R) needs port 8787 for web access
+        master_group.authorize('tcp', 8787, 8787, authorized_address)
         # HDFS NFS gateway requires 111,2049,4242 for tcp & udp
         master_group.authorize('tcp', 111, 111, authorized_address)
         master_group.authorize('udp', 111, 111, authorized_address)

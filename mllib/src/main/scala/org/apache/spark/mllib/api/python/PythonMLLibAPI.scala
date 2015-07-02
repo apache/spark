@@ -75,6 +75,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       minPartitions: Int): JavaRDD[LabeledPoint] =
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
+  /**
+   * Loads and serializes vectors saved with `RDD#saveAsTextFile`.
+   * @param jsc Java SparkContext
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @return serialized vectors in a RDD
+   */
+  def loadVectors(jsc: JavaSparkContext, path: String): RDD[Vector] =
+    MLUtils.loadVectors(jsc.sc, path)
+
   private def trainRegressionModel(
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
@@ -278,7 +287,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for NaiveBayes.train()
    */
-  def trainNaiveBayes(
+  def trainNaiveBayesModel(
       data: JavaRDD[LabeledPoint],
       lambda: Double): JList[Object] = {
     val model = NaiveBayes.train(data.rdd, lambda)
@@ -346,7 +355,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib GaussianMixture.run()
    * Returns a list containing weights, mean and covariance of each mixture component.
    */
-  def trainGaussianMixture(
+  def trainGaussianMixtureModel(
       data: JavaRDD[Vector],
       k: Int,
       convergenceTol: Double,
@@ -404,6 +413,33 @@ private[python] class PythonMLLibAPI extends Serializable {
       }
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data).map(Vectors.dense)
+  }
+
+  /**
+   * Java stub for Python mllib PowerIterationClustering.run(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see the
+   * Py4J documentation.
+   * @param data an RDD of (i, j, s,,ij,,) tuples representing the affinity matrix.
+   * @param k number of clusters.
+   * @param maxIterations maximum number of iterations of the power iteration loop.
+   * @param initMode the initialization mode. This can be either "random" to use
+   *                 a random vector as vertex properties, or "degree" to use
+   *                 normalized sum similarities. Default: random.
+   */
+  def trainPowerIterationClusteringModel(
+      data: JavaRDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      initMode: String): PowerIterationClusteringModel = {
+
+    val pic = new PowerIterationClustering()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitializationMode(initMode)
+
+    val model = pic.run(data.rdd.map(v => (v(0).toLong, v(1).toLong, v(2))))
+    new PowerIterationClusteringModelWrapper(model)
   }
 
   /**
@@ -553,7 +589,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param seed initial seed for random generator
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
-  def trainWord2Vec(
+  def trainWord2VecModel(
       dataJRDD: JavaRDD[java.util.ArrayList[String]],
       vectorSize: Int,
       learningRate: Double,
