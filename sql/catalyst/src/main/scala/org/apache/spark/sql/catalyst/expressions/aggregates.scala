@@ -94,7 +94,6 @@ case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"MIN($child)"
 
   override def asPartial: SplitEvaluation = {
     val partialMin = Alias(Min(child), "PartialMin")()
@@ -387,6 +386,8 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 }
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+
+  override def prettyName: String = "avg"
 
   override def nullable: Boolean = true
 
