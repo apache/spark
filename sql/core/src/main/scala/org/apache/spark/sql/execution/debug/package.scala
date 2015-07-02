@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{AccumulatorParam, Accumulator}
+import org.apache.spark.{AccumulatorParam, Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -57,7 +57,7 @@ package object debug {
    * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
-  implicit class DebugQuery(query: DataFrame) {
+  implicit class DebugQuery(query: DataFrame) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
@@ -66,9 +66,7 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
-      // scalastyle:off println
-      println(s"Results returned: ${debugPlan.execute().count()}")
-      // scalastyle:on println
+      logDebug(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
@@ -84,15 +82,11 @@ package object debug {
           TypeCheck(s)
       }
       try {
-        // scalastyle:off println
-        println(s"Results returned: ${debugPlan.execute().count()}")
-        // scalastyle:on println
+        logDebug(s"Results returned: ${debugPlan.execute().count()}")
       } catch {
         case e: Exception =>
           def unwrap(e: Throwable): Throwable = if (e.getCause == null) e else unwrap(e.getCause)
-          // scalastyle:off println
-          println(s"Deepest Error: ${unwrap(e)}")
-          // scalastyle:on println
+          logDebug(s"Deepest Error: ${unwrap(e)}")
       }
     }
   }
@@ -125,15 +119,11 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      // scalastyle:off println
-      println(s"== ${child.simpleString} ==")
-      println(s"Tuples output: ${tupleCount.value}")
-      // scalastyle:on println
+      logDebug(s"== ${child.simpleString} ==")
+      logDebug(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case(attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
-        // scalastyle:off println
-        println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
-        // scalastyle:on println
+        logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
 

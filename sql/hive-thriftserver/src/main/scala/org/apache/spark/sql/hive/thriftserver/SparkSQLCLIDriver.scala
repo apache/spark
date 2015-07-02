@@ -40,7 +40,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.Utils
 
-private[hive] object SparkSQLCLIDriver {
+private[hive] object SparkSQLCLIDriver extends Logging {
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
@@ -158,14 +158,13 @@ private[hive] object SparkSQLCLIDriver {
       System.exit(cli.processLine(sessionState.execString))
     }
 
-    // scalastyle:off println
     try {
       if (sessionState.fileName != null) {
         System.exit(cli.processFile(sessionState.fileName))
       }
     } catch {
       case e: FileNotFoundException =>
-        System.err.println(s"Could not open input file for reading. (${e.getMessage})")
+        logError(s"Could not open input file for reading. (${e.getMessage})")
         System.exit(3)
     }
 
@@ -181,16 +180,15 @@ private[hive] object SparkSQLCLIDriver {
         val historyFile = historyDirectory + File.separator + ".hivehistory"
         reader.setHistory(new History(new File(historyFile)))
       } else {
-        System.err.println("WARNING: Directory for Hive history file: " + historyDirectory +
+        logWarning("WARNING: Directory for Hive history file: " + historyDirectory +
                            " does not exist.   History will not be available during this session.")
       }
     } catch {
       case e: Exception =>
-        System.err.println("WARNING: Encountered an error while trying to initialize Hive's " +
+        logWarning("WARNING: Encountered an error while trying to initialize Hive's " +
                            "history file.  History will not be available during this session.")
-        System.err.println(e.getMessage)
+        logWarning(e.getMessage)
     }
-    // scalastyle:on println
 
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
     clientTransportTSocketField.setAccessible(true)

@@ -40,7 +40,7 @@ private[spark] object UIWorkloadGenerator {
     if (args.length < 3) {
       // scalastyle:off println
       println(
-        "usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator " +
+        "Usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator " +
           "[master] [FIFO|FAIR] [#job set (4 jobs per set)]")
       // scalastyle:on println
       System.exit(1)
