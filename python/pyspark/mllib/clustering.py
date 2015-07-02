@@ -630,7 +630,7 @@ class LDA():
         :param seed:                Random Seed
         :param checkpointInterval:  Period (in iterations) between checkpoints.
         :param optimizer:           LDAOptimizer used to perform the actual calculation
-            (default = EMLDAOptimizer)
+            (default = EMLDAOptimizer). Currently "em", "online" are supported. Default to "em".
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                               docConcentration, topicConcentration, seed,
