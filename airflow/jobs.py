@@ -226,6 +226,7 @@ class SchedulerJob(BaseJob):
                 func.max(TI.execution_date).label('max_ti'))
             .filter(TI.dag_id == dag.dag_id)
             .filter(TI.state == State.SUCCESS)
+            .filter(TI.task_id.in_(dag.task_ids))
             .group_by(TI.task_id).subquery('sq')
         )
 
@@ -261,7 +262,10 @@ class SchedulerJob(BaseJob):
         Here's a list of tasks thas missed their SLAs:
         <pre><code>{task_list}\n{ascii.bug}<code></pre>
         """.format(**locals())
-        emails = list({t.email for t in dag.tasks if t.email})
+        emails = []
+        for t in dag.tasks:
+            if t.email and t.email not in emails:
+                emails.append(t.email)
         if emails and len(slas):
             utils.send_email(
                 emails,
