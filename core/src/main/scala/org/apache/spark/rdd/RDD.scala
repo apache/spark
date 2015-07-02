@@ -890,6 +890,10 @@ abstract class RDD[T: ClassTag](
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
+   *
+   * Note: this results in multiple Spark jobs, and if the input RDD is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input RDD should be cached first.
    */
   def toLocalIterator: Iterator[T] = withScope {
     def collectPartition(p: Int): Array[T] = {
