@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import org.scalatest.Matchers._
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -272,4 +273,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc.stop()
     }
   }
+
+  test("calling multiple sc.stop() must not throw any exception") {
+    noException should be thrownBy {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val cnt = sc.parallelize(1 to 4).count()
+      sc.cancelAllJobs()
+      sc.stop()
+      // call stop second time
+      sc.stop()
+    }
+  }
+
 }

@@ -238,6 +238,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("unhex") {
+    checkEvaluation(UnHex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(UnHex(Literal("")), new Array[Byte](0))
+    checkEvaluation(UnHex(Literal("0")), Array[Byte](0))
+  }
+
   test("hypot") {
     testBinary(Hypot, math.hypot)
   }

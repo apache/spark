@@ -591,7 +591,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rdd.map(_.asInstanceOf[InternalRow])
       }
     converted.mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled && requiredOutput.forall(_.isThreadSafe)) {
+      val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)

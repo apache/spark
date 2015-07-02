@@ -87,14 +87,6 @@ class DataFrameFunctionsSuite extends QueryTest {
 
   test("constant functions") {
     checkAnswer(
-      testData2.select(e()).limit(1),
-      Row(scala.math.E)
-    )
-    checkAnswer(
-      testData2.select(pi()).limit(1),
-      Row(scala.math.Pi)
-    )
-    checkAnswer(
       ctx.sql("SELECT E()"),
       Row(scala.math.E)
     )
@@ -171,6 +163,17 @@ class DataFrameFunctionsSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       df.select(sha2($"a", 1024))
     }
+  }
+
+  test("misc crc32 function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
+    checkAnswer(
+      df.select(crc32($"a"), crc32("b")),
+      Row(2743272264L, 2180413220L))
+
+    checkAnswer(
+      df.selectExpr("crc32(a)", "crc32(b)"),
+      Row(2743272264L, 2180413220L))
   }
 
   test("string length function") {

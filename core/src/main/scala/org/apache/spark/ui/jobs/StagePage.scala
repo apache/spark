@@ -570,6 +570,35 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
         val index = taskInfo.index
         val attempt = taskInfo.attempt
+
+        val svgTag =
+          if (totalExecutionTime == 0) {
+            // SPARK-8705: Avoid invalid attribute error in JavaScript if execution time is 0
+            """<svg class="task-assignment-timeline-duration-bar"></svg>"""
+          } else {
+           s"""<svg class="task-assignment-timeline-duration-bar">
+                 |<rect class="scheduler-delay-proportion"
+                   |x="$schedulerDelayProportionPos%" y="0px" height="26px"
+                   |width="$schedulerDelayProportion%"></rect>
+                 |<rect class="deserialization-time-proportion"
+                   |x="$deserializationTimeProportionPos%" y="0px" height="26px"
+                   |width="$deserializationTimeProportion%"></rect>
+                 |<rect class="shuffle-read-time-proportion"
+                   |x="$shuffleReadTimeProportionPos%" y="0px" height="26px"
+                   |width="$shuffleReadTimeProportion%"></rect>
+                 |<rect class="executor-runtime-proportion"
+                   |x="$executorRuntimeProportionPos%" y="0px" height="26px"
+                   |width="$executorComputingTimeProportion%"></rect>
+                 |<rect class="shuffle-write-time-proportion"
+                   |x="$shuffleWriteTimeProportionPos%" y="0px" height="26px"
+                   |width="$shuffleWriteTimeProportion%"></rect>
+                 |<rect class="serialization-time-proportion"
+                   |x="$serializationTimeProportionPos%" y="0px" height="26px"
+                   |width="$serializationTimeProportion%"></rect>
+                 |<rect class="getting-result-time-proportion"
+                   |x="$gettingResultTimeProportionPos%" y="0px" height="26px"
+                   |width="$gettingResultTimeProportion%"></rect></svg>""".stripMargin
+          }
         val timelineObject =
           s"""
              |{
@@ -595,32 +624,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                  |<br>Shuffle Write Time: ${UIUtils.formatDuration(shuffleWriteTime)}
                  |<br>Result Serialization Time: ${UIUtils.formatDuration(serializationTime)}
                  |<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">
-                 |<svg class="task-assignment-timeline-duration-bar">
-                 |<rect class="scheduler-delay-proportion"
-                   |x="$schedulerDelayProportionPos%" y="0px" height="26px"
-                   |width="$schedulerDelayProportion%""></rect>
-                 |<rect class="deserialization-time-proportion"
-                   |x="$deserializationTimeProportionPos%" y="0px" height="26px"
-                   |width="$deserializationTimeProportion%"></rect>
-                 |<rect class="shuffle-read-time-proportion"
-                   |x="$shuffleReadTimeProportionPos%" y="0px" height="26px"
-                   |width="$shuffleReadTimeProportion%"></rect>
-                 |<rect class="executor-runtime-proportion"
-                   |x="$executorRuntimeProportionPos%" y="0px" height="26px"
-                   |width="$executorComputingTimeProportion%"></rect>
-                 |<rect class="shuffle-write-time-proportion"
-                   |x="$shuffleWriteTimeProportionPos%" y="0px" height="26px"
-                   |width="$shuffleWriteTimeProportion%"></rect>
-                 |<rect class="serialization-time-proportion"
-                   |x="$serializationTimeProportionPos%" y="0px" height="26px"
-                   |width="$serializationTimeProportion%"></rect>
-                 |<rect class="getting-result-time-proportion"
-                   |x="$gettingResultTimeProportionPos%" y="0px" height="26px"
-                   |width="$gettingResultTimeProportion%"></rect></svg>',
+                 |$svgTag',
                |'start': new Date($launchTime),
                |'end': new Date($finishTime)
              |}
-           |""".stripMargin.replaceAll("\n", " ")
+           |""".stripMargin.replaceAll("""[\r\n]+""", " ")
         timelineObject
       }.mkString("[", ",", "]")
 

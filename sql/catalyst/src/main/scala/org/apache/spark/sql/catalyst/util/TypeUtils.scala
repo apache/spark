@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types._
 
 /**
- * Helper function to check for valid data types
+ * Helper functions to check for valid data types.
  */
 object TypeUtils {
   def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
