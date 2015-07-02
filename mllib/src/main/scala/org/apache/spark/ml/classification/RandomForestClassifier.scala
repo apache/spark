@@ -24,7 +24,7 @@ import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -95,7 +95,7 @@ final class RandomForestClassifier(override val uid: String)
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
       oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures,
+    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures, numClasses,
       Option($(thresholds)))
   }
 
@@ -124,8 +124,9 @@ object RandomForestClassifier {
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
-    private val _thresholds: Option[Array[Double]]=None)
-  extends PredictionModel[Vector, RandomForestClassificationModel]
+    override val numClasses: Int,
+    override protected val _thresholds: Option[Array[Double]]=None)
+  extends ClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
@@ -137,26 +138,21 @@ final class RandomForestClassificationModel private[ml] (
 
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def predict(features: Vector): Double = {
+  override protected def predictRaw(features: Vector): Vector = {
     // TODO: Override transform() to broadcast model.  SPARK-7127
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
-    val votes = mutable.Map.empty[Int, Double]
+    val votes = Array[Double](numClasses)
     _trees.view.foreach { tree =>
       val prediction = tree.rootNode.predict(features).toInt
-      votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
+      votes(prediction) = votes(prediction) + 1.0 // 1.0 = weight
     }
-    // Apply thresholding, or use votes if no thresholding
-    val scores = _thresholds.map{thresholds =>
-      votes.map{case (index, count) =>
-        (index, count/thresholds(index))
-      }}.getOrElse(votes)
-    scores.maxBy(_._2)._1
+    Vectors.dense(votes)
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    copyValues(new RandomForestClassificationModel(uid, _trees), extra)
+    copyValues(new RandomForestClassificationModel(uid, _trees, numClasses, _thresholds), extra)
   }
 
   override def toString: String = {
@@ -176,6 +172,7 @@ private[ml] object RandomForestClassificationModel {
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
+      numClasses: Int,
       thresholds: Option[Array[Double]]): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
@@ -184,6 +181,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees, thresholds)
+    new RandomForestClassificationModel(uid, newTrees, numClasses, thresholds)
   }
 }

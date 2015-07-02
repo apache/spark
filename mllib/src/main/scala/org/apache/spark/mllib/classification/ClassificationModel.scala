@@ -40,10 +40,10 @@ trait ClassificationModel extends Serializable {
   def predict(testData: RDD[Vector]): RDD[Double]
 
   /**
-   * Predict values for a single data point using the model trained.
+   * Predict values for the given data using the model trained.
    *
-   * @param testData array representing a single data point
-   * @return predicted category from the trained model
+   * @param testData RDD representing data points to be predicted
+   * @return an RDD[Double] where each entry contains the corresponding prediction
    */
   def predict(testData: Vector): Double
 
