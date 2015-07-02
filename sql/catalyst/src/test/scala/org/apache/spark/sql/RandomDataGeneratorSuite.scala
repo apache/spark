@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.types.{StructField, StructType, MapType, DataType}
+import org.apache.spark.sql.types._
 
 /**
  * Tests of [[RandomDataGenerator]].

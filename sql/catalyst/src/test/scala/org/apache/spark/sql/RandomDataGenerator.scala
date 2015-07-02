@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
-
-import org.apache.spark.sql.Row
-
-import scala.util.Random
+package org.apache.spark.sql
 
 import org.apache.spark.sql.types._
+
+import scala.util.Random
 
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random

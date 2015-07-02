@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
-
-import org.apache.spark.sql.types._
+package org.apache.spark.sql.types
 
 /**
  * Utility functions for working with DataTypes in tests.
