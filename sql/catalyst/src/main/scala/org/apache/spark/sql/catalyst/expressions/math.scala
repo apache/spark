@@ -297,7 +297,7 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     var len = 0
     do {
       len += 1
-      value(value.length - len) = Hex.hexDigits(numBuf & 0xF)
+      value(value.length - len) = Hex.hexDigits((numBuf & 0xF).toInt)
       numBuf >>>= 4
     } while (numBuf != 0)
     UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
