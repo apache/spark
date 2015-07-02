@@ -586,7 +586,7 @@ class SparseVector(Vector):
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
-        if type(other) == array.array:
+        if isinstance(other, array.array):
             result = 0.0
             for i, ind in enumerate(self.indices):
                 result += self.values[i] * other[ind]
@@ -641,23 +641,23 @@ class SparseVector(Vector):
         AssertionError: dimension mismatch
         """
         assert len(self) == _vector_size(other), "dimension mismatch"
-        if type(other) in (list, array.array):
-            if type(other) is np.array and other.ndim != 1:
-                raise Exception("Cannot call squared_distance with %d-dimensional array" %
-                                other.ndim)
+        if isinstance(other, list) or isinstance(other, array.array):
             result = 0.0
             j = 0   # index into our own array
-            for i in xrange(len(other)):
+            for i, val in enumerate(other):
                 if j < len(self.indices) and self.indices[j] == i:
-                    diff = self.values[j] - other[i]
+                    diff = self.values[j] - val
                     result += diff * diff
                     j += 1
                 else:
-                    result += other[i] * other[i]
+                    result += val * val
             return result
 
-        elif type(other) in (np.array, np.ndarray, DenseVector):
-            if type(other) == DenseVector:
+        elif isinstance(other, np.ndarray) or isinstance(other, DenseVector):
+            if isinstance(other, np.ndarray) and other.ndim != 1:
+                raise Exception("Cannot call squared_distance with %d-dimensional array" %
+                                other.ndim)
+            if isinstance(other, DenseVector):
                 other = other.array
             sparse_ind = np.zeros(other.size, dtype=bool)
             sparse_ind[self.indices] = True
@@ -668,7 +668,7 @@ class SparseVector(Vector):
             result += np.dot(other_ind, other_ind)
             return result
 
-        elif type(other) is SparseVector:
+        elif isinstance(other, SparseVector):
             result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):
