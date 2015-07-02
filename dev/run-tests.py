@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+import itertools
 import os
 import re
 import sys
@@ -27,6 +28,361 @@ from collections import namedtuple
 SPARK_HOME = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
 USER_HOME = os.environ.get("HOME")
 
+
+# -------------------------------------------------------------------------------------------------
+# Test module definitions and functions for traversing module dependency graph
+# -------------------------------------------------------------------------------------------------
+
+
+all_modules = []
+
+
+class Module(object):
+    """
+    A module is the basic abstraction in our test runner script. Each module consists of a set of
+    source files, a set of test commands, and a set of dependencies on other modules. We use modules
+    to define a dependency graph that lets determine which tests to run based on which files have
+    changed.
+    """
+
+    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
+                 sbt_test_goals=(), should_run_python_tests=False, should_run_r_tests=False):
+        """
+        Define a new module.
+
+        :param name: A short module name, for display in logging and error messages.
+        :param dependencies: A set of dependencies for this module. This should only include direct
+            dependencies; transitive dependencies are resolved automatically.
+        :param source_file_regexes: a set of regexes that match source files belonging to this
+            module. These regexes are applied by attempting to match at the beginning of the
+            filename strings.
+        :param build_profile_flags: A set of profile flags that should be passed to Maven or SBT in
+            order to build and test this module (e.g. '-PprofileName').
+        :param sbt_test_goals: A set of SBT test goals for testing this module.
+        :param should_run_python_tests: If true, changes in this module will trigger Python tests.
+            For now, this has the effect of causing _all_ Python tests to be run, although in the
+            future this should be changed to run only a subset of the Python tests that depend
+            on this module.
+        :param should_run_r_tests: If true, changes in this module will trigger all R tests.
+        """
+        self.name = name
+        self.dependencies = dependencies
+        self.source_file_prefixes = source_file_regexes
+        self.sbt_test_goals = sbt_test_goals
+        self.build_profile_flags = build_profile_flags
+        self.should_run_python_tests = should_run_python_tests
+        self.should_run_r_tests = should_run_r_tests
+
+        self.dependent_modules = set()
+        for dep in dependencies:
+            dep.dependent_modules.add(self)
+        all_modules.append(self)
+
+    def contains_file(self, filename):
+        return any(re.match(p, filename) for p in self.source_file_prefixes)
+
+
+sql = Module(
+    name="sql",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/(?!hive-thriftserver)",
+        "bin/spark-sql",
+    ],
+    build_profile_flags=[
+        "-Phive",
+    ],
+    sbt_test_goals=[
+        "catalyst/test",
+        "sql/test",
+        "hive/test",
+    ]
+)
+
+
+hive_thriftserver = Module(
+    name="hive-thriftserver",
+    dependencies=[sql],
+    source_file_regexes=[
+        "sql/hive-thriftserver",
+        "sbin/start-thriftserver.sh",
+    ],
+    build_profile_flags=[
+        "-Phive-thriftserver",
+    ],
+    sbt_test_goals=[
+        "hive-thriftserver/test",
+    ]
+)
+
+
+graphx = Module(
+    name="graphx",
+    dependencies=[],
+    source_file_regexes=[
+        "graphx/",
+    ],
+    sbt_test_goals=[
+        "graphx/test"
+    ]
+)
+
+
+streaming = Module(
+    name="streaming",
+    dependencies=[],
+    source_file_regexes=[
+        "streaming",
+    ],
+    sbt_test_goals=[
+        "streaming/test",
+    ]
+)
+
+
+streaming_kinesis_asl = Module(
+    name="kinesis-asl",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "extras/kinesis-asl/",
+    ],
+    build_profile_flags=[
+        "-Pkinesis-asl",
+    ],
+    sbt_test_goals=[
+        "kinesis-asl/test",
+    ]
+)
+
+
+streaming_zeromq = Module(
+    name="streaming-zeromq",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/zeromq",
+    ],
+    sbt_test_goals=[
+        "streaming-zeromq/test",
+    ]
+)
+
+
+streaming_twitter = Module(
+    name="streaming-twitter",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/twitter",
+    ],
+    sbt_test_goals=[
+        "streaming-twitter/test",
+    ]
+)
+
+
+streaming_mqqt = Module(
+    name="streaming-mqqt",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/mqqt",
+    ],
+    sbt_test_goals=[
+        "streaming-mqqt/test",
+    ]
+)
+
+
+streaming_kafka = Module(
+    name="streaming-kafka",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/kafka",
+        "external/kafka-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka/test",
+    ]
+)
+
+
+streaming_flume_sink = Module(
+    name="streaming-flume-sink",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume-sink",
+    ],
+    sbt_test_goals=[
+        "streaming-flume-sink/test",
+    ]
+)
+
+
+streaming_flume = Module(
+    name="streaming_flume",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume",
+    ],
+    sbt_test_goals=[
+        "streaming-flume/test",
+    ]
+)
+
+
+mllib = Module(
+    name="mllib",
+    dependencies=[streaming, sql],
+    source_file_regexes=[
+        "data/mllib/",
+        "mllib/",
+    ],
+    sbt_test_goals=[
+        "mllib/test",
+    ]
+)
+
+
+examples = Module(
+    name="examples",
+    dependencies=[graphx, mllib, streaming, sql],
+    source_file_regexes=[
+        "examples/",
+    ],
+    sbt_test_goals=[
+        "examples/test",
+    ]
+)
+
+
+pyspark = Module(
+    name="pyspark",
+    dependencies=[mllib, streaming, streaming_kafka, sql],
+    source_file_regexes=[
+        "python/"
+    ],
+    should_run_python_tests=True
+)
+
+
+sparkr = Module(
+    name="sparkr",
+    dependencies=[sql, mllib],
+    source_file_regexes=[
+        "R/",
+    ],
+    should_run_r_tests=True
+)
+
+
+docs = Module(
+    name="docs",
+    dependencies=[],
+    source_file_regexes=[
+        "docs/",
+    ]
+)
+
+
+ec2 = Module(
+    name="ec2",
+    dependencies=[],
+    source_file_regexes=[
+        "ec2/",
+    ]
+)
+
+
+# The root module is a dummy module which is used to run all of the tests.
+# No other modules should directly depend on this module.
+root = Module(
+    name="root",
+    dependencies=[],
+    source_file_regexes=[],
+    # In order to run all of the tests, enable every test profile:
+    build_profile_flags=
+        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
+    sbt_test_goals=[
+        "test",
+    ],
+    should_run_python_tests=True,
+    should_run_r_tests=True
+)
+
+
+def determine_modules_for_files(filenames):
+    """
+    Given a list of filenames, return the set of modules that contain those files.
+    If a file is not associated with a more specific submodule, then this method will consider that
+    file to belong to the 'root' module.
+
+    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/test/foo"]))
+    ['pyspark', 'sql']
+    >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
+    ['root']
+    """
+    changed_modules = set()
+    for filename in filenames:
+        matched_at_least_one_module = False
+        for module in all_modules:
+            if module.contains_file(filename):
+                changed_modules.add(module)
+                matched_at_least_one_module = True
+        if not matched_at_least_one_module:
+            changed_modules.add(root)
+    return changed_modules
+
+
+def identify_changed_files_from_git_commits(patch_sha, target_branch=None, target_ref=None):
+    """
+    Given a git commit and target ref, use the set of files changed in the diff in order to
+    determine which modules' tests should be run.
+
+    >>> [x.name for x in determine_modules_for_files( \
+            identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
+    ['graphx']
+    >>> 'root' in [x.name for x in determine_modules_for_files( \
+         identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
+    True
+    """
+    if target_branch is None and target_ref is None:
+        raise AttributeError("must specify either target_branch or target_ref")
+    elif target_branch is not None and target_ref is not None:
+        raise AttributeError("must specify either target_branch or target_ref, not both")
+    if target_branch is not None:
+        diff_target = target_branch
+        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
+    else:
+        diff_target = target_ref
+    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target])
+    # Remove any empty strings
+    return [f for f in raw_output.split('\n') if f]
+
+
+def determine_modules_to_test(changed_modules):
+    """
+    Given a set of modules that have changed, compute the transitive closure of those modules'
+    dependent modules in order to determine the set of modules that should be tested.
+
+    >>> sorted(x.name for x in determine_modules_to_test([root]))
+    ['root']
+    >>> sorted(x.name for x in determine_modules_to_test([graphx]))
+    ['examples', 'graphx']
+    >>> sorted(x.name for x in determine_modules_to_test([sql]))
+    ['examples', 'hive-thriftserver', 'mllib', 'pyspark', 'sparkr', 'sql']
+    """
+    # If we're going to have to run all of the tests, then we can just short-circuit
+    # and return 'root'. No module depends on root, so if it appears then it will be
+    # in changed_modules.
+    if root in changed_modules:
+        return [root]
+    modules_to_test = set()
+    for module in changed_modules:
+        modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
+    return modules_to_test.union(set(changed_modules))
+
+
+# -------------------------------------------------------------------------------------------------
+# Functions for working with subprocesses and shell tools
+# -------------------------------------------------------------------------------------------------
 
 def get_error_codes(err_code_file):
     """Function to retrieve all block numbers from the `run-tests-codes.sh`
@@ -43,7 +399,7 @@ ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh")
 
 
 def exit_from_command_with_retcode(cmd, retcode):
-    print "[error] running", cmd, "; received return code", retcode
+    print "[error] running", ' '.join(cmd), "; received return code", retcode
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -82,7 +438,7 @@ def which(program):
     """Find and return the given program by its absolute path or 'None'
     - from: http://stackoverflow.com/a/377028"""
 
-    fpath, fname = os.path.split(program)
+    fpath = os.path.split(program)[0]
 
     if fpath:
         if is_exe(program):
@@ -134,6 +490,11 @@ def determine_java_version(java_exe):
                        update=version_info[3])
 
 
+# -------------------------------------------------------------------------------------------------
+# Functions for running the other build and test scripts
+# -------------------------------------------------------------------------------------------------
+
+
 def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
     line_str = '=' * 72
@@ -177,14 +538,14 @@ def build_spark_documentation():
     os.chdir(SPARK_HOME)
 
 
-def exec_maven(mvn_args=[]):
+def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
     run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
 
 
-def exec_sbt(sbt_args=[]):
+def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
@@ -213,8 +574,10 @@ def exec_sbt(sbt_args=[]):
 
 
 def get_hadoop_profiles(hadoop_version):
-    """Return a list of profiles indicating which Hadoop version to use from
-    a Hadoop version tag."""
+    """
+    For the given Hadoop version tag, return a list of SBT profile flags for
+    building and testing against that Hadoop version.
+    """
 
     sbt_maven_hadoop_profiles = {
         "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.0.4"],
@@ -231,35 +594,9 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def get_build_profiles(hadoop_version="hadoop2.3",
-                       enable_base_profiles=True,
-                       enable_hive_profiles=False,
-                       enable_doc_profiles=False):
-    """Returns a list of hadoop profiles to be used as looked up from the passed in hadoop profile
-    key with the option of adding on the base and hive profiles."""
-
-    base_profiles = ["-Pkinesis-asl"]
-    hive_profiles = ["-Phive", "-Phive-thriftserver"]
-    doc_profiles = []
-    hadoop_profiles = get_hadoop_profiles(hadoop_version)
-
-    build_profiles = hadoop_profiles
-
-    if enable_base_profiles:
-        build_profiles += base_profiles
-
-    if enable_hive_profiles:
-        build_profiles += hive_profiles
-
-    if enable_doc_profiles:
-        build_profiles += doc_profiles
-
-    return build_profiles
-
-
 def build_spark_maven(hadoop_version):
-    # we always build with Hive support even if we skip Hive tests in most builds
-    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
@@ -270,7 +607,8 @@ def build_spark_maven(hadoop_version):
 
 
 def build_spark_sbt(hadoop_version):
-    build_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=True)
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + root.build_profile_flags
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly"]
@@ -301,84 +639,6 @@ def detect_binary_inop_with_mima():
     run_cmd([os.path.join(SPARK_HOME, "dev", "mima")])
 
 
-def identify_changed_modules(test_env):
-    """Given the passed in environment will determine the changed modules and
-    return them as a set. If the environment is local, will simply run all tests.
-    If run under the `amplab_jenkins` environment will determine the changed files
-    as compared to the `ghprbTargetBranch` and execute the necessary set of tests
-    to provide coverage for the changed code."""
-    changed_modules = set()
-
-    if test_env == "amplab_jenkins":
-        target_branch = os.environ["ghprbTargetBranch"]
-
-        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
-
-        raw_output = subprocess.check_output(['git', 'diff', '--name-only', target_branch])
-        # remove any empty strings
-        changed_files = [f for f in raw_output.split('\n') if f]
-
-        sql_files = [f for f in changed_files
-                     if any(f.startswith(p) for p in
-                            ["sql/",
-                             "bin/spark-sql",
-                             "sbin/start-thriftserver.sh",
-                             "examples/src/main/java/org/apache/spark/examples/sql/",
-                             "examples/src/main/scala/org/apache/spark/examples/sql/"])]
-        mllib_files = [f for f in changed_files
-                       if any(f.startswith(p) for p in
-                              ["examples/src/main/java/org/apache/spark/examples/mllib/",
-                               "examples/src/main/scala/org/apache/spark/examples/mllib",
-                               "data/mllib/",
-                               "mllib/"])]
-        streaming_files = [f for f in changed_files
-                           if any(f.startswith(p) for p in
-                                  ["examples/scala-2.10/",
-                                   "examples/src/main/java/org/apache/spark/examples/streaming/",
-                                   "examples/src/main/scala/org/apache/spark/examples/streaming/",
-                                   "external/",
-                                   "extras/java8-tests/",
-                                   "extras/kinesis-asl/",
-                                   "streaming/"])]
-        graphx_files = [f for f in changed_files
-                        if any(f.startswith(p) for p in
-                               ["examples/src/main/scala/org/apache/spark/examples/graphx/",
-                                "graphx/"])]
-        doc_files = [f for f in changed_files if f.startswith("docs/")]
-
-        # union together all changed top level project files
-        top_level_project_files = set().union(*[set(f) for f in [sql_files,
-                                                                 mllib_files,
-                                                                 streaming_files,
-                                                                 graphx_files,
-                                                                 doc_files]])
-        changed_core_files = set(changed_files).difference(top_level_project_files)
-
-        if changed_core_files:
-            changed_modules.add("CORE")
-        if sql_files:
-            print "[info] Detected changes in SQL. Will run Hive test suite."
-            changed_modules.add("SQL")
-        if mllib_files:
-            print "[info] Detected changes in MLlib. Will run MLlib test suite."
-            changed_modules.add("MLLIB")
-        if streaming_files:
-            print "[info] Detected changes in Streaming. Will run Streaming test suite."
-            changed_modules.add("STREAMING")
-        if graphx_files:
-            print "[info] Detected changes in GraphX. Will run GraphX test suite."
-            changed_modules.add("GRAPHX")
-        if doc_files:
-            print "[info] Detected changes in documentation. Will build spark with documentation."
-            changed_modules.add("DOCS")
-
-        return changed_modules
-    else:
-        # we aren't in the Amplab environment so simply run all tests
-        changed_modules.add("ALL")
-        return changed_modules
-
-
 def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
@@ -390,38 +650,13 @@ def run_scala_tests_maven(test_profiles):
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
-    # declare the variable for reference
-    sbt_test_goals = []
 
-    if "ALL" in test_modules:
-        sbt_test_goals = ["test"]
-    else:
-        # if we only have changes in SQL, MLlib, Streaming, or GraphX then build
-        # a custom test list
-        if "SQL" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals += ["catalyst/test",
-                               "sql/test",
-                               "hive/test",
-                               "hive-thriftserver/test",
-                               "mllib/test",
-                               "examples/test"]
-        if "MLLIB" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals += ["mllib/test", "examples/test"]
-        if "STREAMING" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals += ["streaming/test",
-                               "streaming-flume/test",
-                               "streaming-flume-sink/test",
-                               "streaming-kafka/test",
-                               "streaming-mqtt/test",
-                               "streaming-twitter/test",
-                               "streaming-zeromq/test",
-                               "examples/test"]
-        if "GRAPHX" in test_modules and "CORE" not in test_modules:
-            sbt_test_goals += ["graphx/test", "examples/test"]
-        if not sbt_test_goals:
-            sbt_test_goals = ["test"]
+    sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
-    profiles_and_goals = test_profiles + sbt_test_goals
+    if not sbt_test_goals:
+        return
+
+    profiles_and_goals = test_profiles + list(sbt_test_goals)
 
     print "[info] Running Spark tests using SBT with these arguments:",
     print " ".join(profiles_and_goals)
@@ -436,9 +671,8 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_modules = set(test_modules)
 
-    hive_profiles = ("SQL" in test_modules)
-    test_profiles = get_build_profiles(hadoop_version, enable_hive_profiles=hive_profiles)
-
+    test_profiles = get_hadoop_profiles(hadoop_version) + \
+        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
@@ -502,19 +736,29 @@ def main():
         hadoop_version = "hadoop2.3"
         test_env = "local"
 
-    print "[info] Using build tool", build_tool, "with profile", hadoop_version,
+    print "[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
     print "under environment", test_env
 
-    # determine high level changes
-    changed_modules = identify_changed_modules(test_env)
-    print "[info] Found the following changed modules:", ", ".join(changed_modules)
+    changed_modules = None
+    changed_files = None
+    if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+        target_branch = os.environ["ghprbTargetBranch"]
+        changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
+        changed_modules = determine_modules_for_files(changed_files)
+    if not changed_modules:
+        changed_modules = [root]
+    print "[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules)
+
+    test_modules = determine_modules_to_test(changed_modules)
 
     # license checks
     run_apache_rat_checks()
 
     # style checks
-    run_scala_style_checks()
-    run_python_style_checks()
+    if not changed_files or any(f.endswith(".scala") for f in changed_files):
+        run_scala_style_checks()
+    if not changed_files or any(f.endswith(".py") for f in changed_files):
+        run_python_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
@@ -528,9 +772,20 @@ def main():
     detect_binary_inop_with_mima()
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, changed_modules)
-    run_python_tests()
-    run_sparkr_tests()
+    run_scala_tests(build_tool, hadoop_version, test_modules)
+
+    if any(m.should_run_python_tests for m in test_modules):
+        run_python_tests()
+    if any(m.should_run_r_tests for m in test_modules):
+        run_sparkr_tests()
+
+
+def _test():
+    import doctest
+    failure_count = doctest.testmod()[0]
+    if failure_count:
+        exit(-1)
 
 if __name__ == "__main__":
+    _test()
     main()
