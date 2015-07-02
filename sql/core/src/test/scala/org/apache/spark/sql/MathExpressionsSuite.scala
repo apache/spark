@@ -212,6 +212,29 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
+  test("hex") {
+    val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
+    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
+    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
+    checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
+    checkAnswer(data.selectExpr("hex(d)"), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(cast(d as binary))"), Seq(Row("68656C6C6F")))
+  }
+
+  test("unhex") {
+    val data = Seq(("1C", "737472696E67")).toDF("a", "b")
+    checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
+  }
+
   test("hypot") {
     testTwoToOneMathFunction(hypot, hypot, math.hypot)
   }

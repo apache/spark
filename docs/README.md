@@ -28,7 +28,7 @@ in some cases:
     $ sudo gem install jekyll
     $ sudo gem install jekyll-redirect-from
 
-Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory
+Execute `jekyll build` from the `docs/` directory to compile the site. Compiling the site with Jekyll will create a directory
 called `_site` containing index.html as well as the rest of the compiled files.
 
 You can modify the default Jekyll build as follows:

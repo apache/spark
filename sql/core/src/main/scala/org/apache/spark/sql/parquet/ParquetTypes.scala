@@ -38,8 +38,8 @@ import org.apache.spark.sql.types._
 
 private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean = ctype match {
-    case _: NumericType | BooleanType | StringType | BinaryType => true
-    case _: DataType => false
+    case _: NumericType | BooleanType | DateType | TimestampType | StringType | BinaryType => true
+    case _ => false
   }
 
   /**

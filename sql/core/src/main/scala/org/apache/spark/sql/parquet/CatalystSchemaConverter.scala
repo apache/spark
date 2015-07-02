@@ -177,7 +177,7 @@ private[parquet] class CatalystSchemaConverter(
 
       case BINARY =>
         field.getOriginalType match {
-          case UTF8 => StringType
+          case UTF8 | ENUM => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
           case DECIMAL => makeDecimalType()

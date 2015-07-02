@@ -990,15 +990,6 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * Returns the double value that is closer than any other to e, the base of the natural
-   * logarithms.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def e(): Column = EulerNumber()
-
-  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1045,6 +1036,40 @@ object functions {
    * @since 1.4.0
    */
   def floor(columnName: String): Column = floor(Column(columnName))
+
+  /**
+   * Computes hex value of the given column
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def hex(column: Column): Column = Hex(column.expr)
+
+  /**
+   * Computes hex value of the given input
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def hex(colName: String): Column = hex(Column(colName))
+
+  /**
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
+   * and converts to the byte representation of number.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def unhex(column: Column): Column = UnHex(column.expr)
+
+  /**
+   * Inverse of hex. Interprets each pair of characters as a hexadecimal number
+   * and converts to the byte representation of number.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def unhex(colName: String): Column = unhex(Column(colName))
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1174,15 +1199,6 @@ object functions {
    * @since 1.4.0
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
-
-  /**
-   * Returns the double value that is closer than any other to pi, the ratio of the circumference
-   * of a circle to its diameter.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def pi(): Column = Pi()
 
   /**
    * Computes the logarithm of the given column in base 2.
@@ -1414,6 +1430,58 @@ object functions {
    */
   def md5(columnName: String): Column = md5(Column(columnName))
 
+  /**
+   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha1(e: Column): Column = Sha1(e.expr)
+
+  /**
+   * Calculates the SHA-1 digest and returns the value as a 40 character hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha1(columnName: String): Column = sha1(Column(columnName))
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(e: Column, numBits: Int): Column = {
+    require(Seq(0, 224, 256, 384, 512).contains(numBits),
+      s"numBits $numBits is not in the permitted values (0, 224, 256, 384, 512)")
+    Sha2(e.expr, lit(numBits).expr)
+  }
+
+  /**
+   * Calculates the SHA-2 family of hash functions and returns the value as a hex string.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def sha2(columnName: String, numBits: Int): Column = sha2(Column(columnName), numBits)
+
+  /**
+   * Calculates the cyclic redundancy check value and returns the value as a bigint.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def crc32(e: Column): Column = Crc32(e.expr)
+
+  /**
+   * Calculates the cyclic redundancy check value and returns the value as a bigint.
+   *
+   * @group misc_funcs
+   * @since 1.5.0
+   */
+  def crc32(columnName: String): Column = crc32(Column(columnName))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1457,7 +1525,7 @@ object functions {
   (0 to 10).map { x =>
     val args = (1 to x).map(i => s"arg$i: Column").mkString(", ")
     val fTypes = Seq.fill(x + 1)("_").mkString(", ")
-    val argsInUdf = (1 to x).map(i => s"arg$i.expr").mkString(", ")
+    val argsInUDF = (1 to x).map(i => s"arg$i.expr").mkString(", ")
     println(s"""
     /**
      * Call a Scala function of ${x} arguments as user-defined function (UDF). This requires
@@ -1469,7 +1537,7 @@ object functions {
      */
     @deprecated("Use udf", "1.5.0")
     def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
-      ScalaUdf(f, returnType, Seq($argsInUdf))
+      ScalaUDF(f, returnType, Seq($argsInUDF))
     }""")
   }
   }
@@ -1607,7 +1675,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function0[_], returnType: DataType): Column = {
-    ScalaUdf(f, returnType, Seq())
+    ScalaUDF(f, returnType, Seq())
   }
 
   /**
@@ -1620,7 +1688,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr))
   }
 
   /**
@@ -1633,7 +1701,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr))
   }
 
   /**
@@ -1646,7 +1714,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
   }
 
   /**
@@ -1659,7 +1727,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
   }
 
   /**
@@ -1672,7 +1740,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
   }
 
   /**
@@ -1685,7 +1753,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
   }
 
   /**
@@ -1698,7 +1766,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
   }
 
   /**
@@ -1711,7 +1779,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
   }
 
   /**
@@ -1724,7 +1792,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
   }
 
   /**
@@ -1737,7 +1805,7 @@ object functions {
    */
   @deprecated("Use udf", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = {
-    ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
+    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
 
   // scalastyle:on
@@ -1750,8 +1818,8 @@ object functions {
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", callUDF("simpleUdf", $"value"))
+   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", callUDF("simpleUDF", $"value"))
    * }}}
    *
    * @group udf_funcs
@@ -1769,8 +1837,8 @@ object functions {
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUdf", (v: Int) => v * v)
-   *  df.select($"id", callUdf("simpleUdf", $"value"))
+   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  df.select($"id", callUdf("simpleUDF", $"value"))
    * }}}
    *
    * @group udf_funcs
@@ -1779,7 +1847,15 @@ object functions {
    */
   @deprecated("Use callUDF", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = {
-     UnresolvedFunction(udfName, cols.map(_.expr))
+    // Note: we avoid using closures here because on file systems that are case-insensitive, the
+    // compiled class file for the closure here will conflict with the one in callUDF (upper case).
+    val exprs = new Array[Expression](cols.size)
+    var i = 0
+    while (i < cols.size) {
+      exprs(i) = cols(i).expr
+      i += 1
+    }
+    UnresolvedFunction(udfName, exprs)
   }
 
 }
