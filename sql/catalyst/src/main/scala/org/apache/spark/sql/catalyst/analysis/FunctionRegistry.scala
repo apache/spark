@@ -96,6 +96,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CreateNamedStruct]("named_struct"),
     expression[Sqrt]("sqrt"),
 
     // math functions
