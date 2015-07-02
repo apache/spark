@@ -29,16 +29,17 @@ class HiveTypeCoercionSuite extends PlanTest {
   test("implicit type cast") {
     def shouldCast(from: DataType, to: AbstractDataType): Unit = {
       val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-      assert(got.dataType === to.defaultConcreteType)
+      assert(got.map(_.dataType) == Option(to.defaultConcreteType),
+        s"Failed to cast $from to $to")
     }
 
     // TODO: write the entire implicit cast table out for test cases.
     shouldCast(ByteType, IntegerType)
     shouldCast(IntegerType, IntegerType)
     shouldCast(IntegerType, LongType)
-    shouldCast(IntegerType, DecimalType.Unlimited)
+    shouldCast(IntegerType, DecimalType)
     shouldCast(LongType, IntegerType)
-    shouldCast(LongType, DecimalType.Unlimited)
+    shouldCast(LongType, DecimalType)
 
     shouldCast(DateType, TimestampType)
     shouldCast(TimestampType, DateType)

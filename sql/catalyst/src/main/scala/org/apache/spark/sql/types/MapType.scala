@@ -71,6 +71,10 @@ object MapType extends AbstractDataType {
 
   private[sql] override def defaultConcreteType: DataType = apply(NullType, NullType)
 
+  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
+    childCandidate.isInstanceOf[MapType]
+  }
+
   /**
    * Construct a [[MapType]] object with the given key type and value type.
    * The `valueContainsNull` is true.
