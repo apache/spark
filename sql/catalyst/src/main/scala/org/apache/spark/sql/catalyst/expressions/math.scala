@@ -379,7 +379,7 @@ case class UnHex(child: Expression) extends UnaryExpression with Serializable {
     }
   }
 
-  private val hexDigits = {
+  private val unhexDigits = {
     val array = Array.fill[Byte](128)(-1)
     (0 to 9).foreach(i => array('0' + i) = i.toByte)
     (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
@@ -387,29 +387,20 @@ case class UnHex(child: Expression) extends UnaryExpression with Serializable {
     array
   }
 
-  private def toDigit(b: Byte): Byte = {
-    val digit = hexDigits(b)
-    if (digit == -1) {
-      throw new NumberFormatException(s"invalid hex number $b")
-    }
-    digit
-  }
-
   private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
     var bytes = inputBytes
     if ((bytes.length & 0x01) != 0) {
-      bytes = 48.toByte +: bytes // padding with '0'
+      bytes = '0'.toByte +: bytes
     }
     val out = new Array[Byte](bytes.length >> 1)
     // two characters form the hex value.
     var i = 0
     while (i < bytes.length) {
-      try {
-        out(i / 2) = ((toDigit(bytes(i)) << 4) | toDigit(bytes(i + 1)) & 0xFF).toByte
+        val first = unhexDigits(bytes(i))
+        val second = unhexDigits(bytes(i + 1))
+        if (first == -1 || second == -1) { return null}
+        out(i / 2) = (((first << 4) | second) & 0xFF).toByte
         i += 2
-      } catch {
-        case _: NumberFormatException => return null
-      }
     }
     out
   }
