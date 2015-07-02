@@ -351,17 +351,14 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
-case class ShiftLeft(left: Expression, right: Expression) extends Expression {
-
-  override def nullable: Boolean = true
-
-  override def children: Seq[Expression] = Seq(left, right)
+case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
       case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType => TypeCheckResult.TypeCheckSuccess
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
         case _ => // failed
       }
       case _ => // failed
@@ -399,37 +396,20 @@ case class ShiftLeft(left: Expression, right: Expression) extends Expression {
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          ${ev.primitive} = ${eval1.primitive} << ${eval2.primitive};
-        } else {
-          ${ev.isNull} = true;
-        }
-      }
-    """
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left << $right;")
   }
 
   override def toString: String = s"ShiftLeft($left, $right)"
 }
 
-case class ShiftRight(left: Expression, right: Expression) extends Expression {
-
-  override def nullable: Boolean = true
-
-  override def children: Seq[Expression] = Seq(left, right)
+case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
       case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType => return TypeCheckResult.TypeCheckSuccess
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
         case _ => // failed
       }
       case _ => // failed
@@ -467,21 +447,7 @@ case class ShiftRight(left: Expression, right: Expression) extends Expression {
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          ${ev.primitive} = ${eval1.primitive} >> ${eval2.primitive};
-        } else {
-          ${ev.isNull} = true;
-        }
-      }
-    """
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >> $right;")
   }
 
   override def toString: String = s"ShiftRight($left, $right)"

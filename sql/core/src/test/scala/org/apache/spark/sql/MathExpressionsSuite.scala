@@ -248,11 +248,11 @@ class MathExpressionsSuite extends QueryTest {
   test("log1p") {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
   }
-  
+
   test("shift left") {
     val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((21, 21, 21, 21, 21, null))
       .toDF("a", "b", "c", "d", "e", "f")
-    
+
     checkAnswer(
       df.select(
         shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
