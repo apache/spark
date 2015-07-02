@@ -117,6 +117,10 @@ def _format_float(f, digits=4):
     return s
 
 
+def _format_float_list(l):
+    return [_format_float(x) for x in l]
+
+
 class VectorUDT(UserDefinedType):
     """
     SQL user-defined type (UDT) for Vector.
@@ -883,17 +887,20 @@ class DenseMatrix(Matrix):
 
         >>> dm = DenseMatrix(2, 2, range(4))
         >>> print(dm)
-        0.0  2.0
-        1.0  3.0
+        DenseMatrix([[ 0.,  2.],
+                     [ 1.,  3.]])
         >>> dm = DenseMatrix(2, 2, range(4), isTransposed=True)
         >>> print(dm)
-        0.0  1.0
-        2.0  3.0
+        DenseMatrix([[ 0.,  1.],
+                     [ 2.,  3.]])
         """
-        ds = []
-        for row in self.toArray():
-            ds.append("  ".join([str(col) for col in row]))
-        return "\n".join(ds)
+        # Inspired by __repr__ in scipy matrices.
+        array_lines = repr(self.toArray()).splitlines()
+
+        # We need to adjust six spaces which is the difference in number
+        # of letters between "DenseMatrix" and "array"
+        x = '\n'.join([(" " * 6 + line) for line in array_lines[1:]])
+        return array_lines[0].replace("array", "DenseMatrix") + "\n" + x
 
     def __repr__(self):
         """
@@ -903,7 +910,18 @@ class DenseMatrix(Matrix):
         >>> dm
         DenseMatrix(2, 2, [0.0, 1.0, 2.0, 3.0], False)
         """
-        entries = ', '.join([_format_float(val) for val in self.values])
+        # If the number of values are less than seven then return as it is.
+        # Else return first three values and last three values.
+        if len(self.values) <= 6:
+            entries = _format_float_list(self.values)
+        else:
+            entries = (
+                _format_float_list(self.values[:3]) +
+                ["..."] +
+                _format_float_list(self.values[-3:])
+            )
+
+        entries = ", ".join(entries)
         return "DenseMatrix({0}, {1}, [{2}], {3})".format(
             self.numRows, self.numCols, entries, self.isTransposed)
 
@@ -1008,7 +1026,12 @@ class SparseMatrix(Matrix):
 
         cur_col = 0
         smlist = []
-        zipindval = zip(self.rowIndices, self.values)
+
+        # Display first 5 values.
+        if len(self.values) <= 5:
+            zipindval = zip(self.rowIndices, self.values)
+        else:
+            zipindval = zip(self.rowIndices[:5], self.values[:5])
         for i, (rowInd, value) in enumerate(zipindval):
             if self.colPtrs[cur_col + 1] <= i:
                 cur_col += 1
@@ -1018,7 +1041,11 @@ class SparseMatrix(Matrix):
             else:
                 smlist.append('({0},{1}) {2}'.format(
                     rowInd, cur_col, _format_float(value)))
-        return spstr + "\n".join(smlist)
+        spstr += "\n".join(smlist)
+
+        if len(self.values) > 5:
+            spstr += "\n.." * 2
+        return spstr
 
     def __repr__(self):
         """
@@ -1028,10 +1055,29 @@ class SparseMatrix(Matrix):
         >>> sm1
         SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
         """
-        values = ", ".join([_format_float(val) for val in self.values])
-        return "SparseMatrix({0}, {1}, {2!r}, {3!r}, [{4}], {5})".format(
-            self.numRows, self.numCols, list(self.colPtrs),
-            list(self.rowIndices), values, self.isTransposed)
+
+        if len(self.values) <= 6:
+            values = _format_float_list(self.values)
+            rowIndices = self.rowIndices
+        else:
+            values = (
+                _format_float_list(self.values[:3]) +
+                ["..."] +
+                _format_float_list(self.values[-3:])
+            )
+            rowIndices = self.rowIndices[:3] + ["..."] + self.rowIndices[-3:]
+
+        if len(self.colPtrs) <= 6:
+            colPtrs = self.colPtrs
+        else:
+            colPtrs = self.colPtrs[:3] + ["..."] + self.colPtrs[-3:]
+
+        values = ", ".join(values)
+        rowIndices = ", ".join([str(ind) for ind in rowIndices])
+        colPtrs = ", ".join([str(ptr) for ptr in colPtrs])
+        return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
+            self.numRows, self.numCols, colPtrs, rowIndices,
+            values, self.isTransposed)
 
     def __reduce__(self):
         return SparseMatrix, (
