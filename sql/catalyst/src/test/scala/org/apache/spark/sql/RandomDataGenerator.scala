@@ -32,7 +32,7 @@ object RandomDataGenerator {
    * The conditional probability of a non-null value being drawn from a set of "interesting" values
    * instead of being chosen uniformly at random.
    */
-  private val PROBABILITY_OF_INTERESTING_VALUE: Float = 0.25f
+  private val PROBABILITY_OF_INTERESTING_VALUE: Float = 0.5f
 
   /**
    * The probability of the generated value being null
@@ -90,9 +90,11 @@ object RandomDataGenerator {
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType => Some(() => new java.sql.Date(rand.nextInt(Int.MaxValue)))
       case DoubleType => randomNumeric[Double](
-        rand, _.nextDouble(), Seq(Double.MinValue, Double.MinPositiveValue, Double.MaxValue, 0.0))
+        rand, _.nextDouble(), Seq(Double.MinValue, Double.MinPositiveValue, Double.MaxValue,
+          Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
       case FloatType => randomNumeric[Float](
-        rand, _.nextFloat(), Seq(Float.MinValue, Float.MinPositiveValue, Float.MaxValue, 0.0f))
+        rand, _.nextFloat(), Seq(Float.MinValue, Float.MinPositiveValue, Float.MaxValue,
+          Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f))
       case ByteType => randomNumeric[Byte](
         rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
       case IntegerType => randomNumeric[Int](
