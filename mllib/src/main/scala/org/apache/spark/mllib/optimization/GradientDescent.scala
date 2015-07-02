@@ -80,8 +80,13 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   /**
    * Set the convergence tolerance. Default 0.001
    * convergenceTol is a condition which decides iteration termination.
-   * If the difference between the current loss and the previous loss is less than convergenceTol
-   * minibatch iteration will end at that point. Must be between 0.0 and 1.0 inclusively.
+   * The end of iteration is decided based on below logic.
+   * - If the norm of the new solution vector is >1, the diff of solution vectors
+   *   is compared to relative tolerance which means normalizing by the norm of
+   *   the new solution vector.
+   * - If the norm of the new solution vector is <=1, the diff of solution vectors
+   *   is compared to absolute tolerance which is not normalizing.
+   * Must be between 0.0 and 1.0 inclusively.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
     require(0.0 <= tolerance && tolerance <= 1.0)
@@ -240,19 +245,11 @@ object GradientDescent extends Logging {
         weights = update._1
         regVal = update._2
 
-        if (i == 1) {
-          previousWeights = Some(weights)
-        } else if (i == 2) {
-          currentWeights = Some(weights)
-        } else {
-          previousWeights = currentWeights
-          currentWeights = Some(weights)
-        }
+        previousWeights = currentWeights
+        currentWeights = Some(weights)
         if (previousWeights != None && currentWeights != None) {
-          if (isConverged(previousWeights.get,
-            currentWeights.get, convergenceTol)) {
-            converged = true
-          }
+          converged = isConverged(previousWeights.get,
+            currentWeights.get, convergenceTol)
         }
       } else {
         logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
