@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.language.postfixOps
+import scala.util.Random
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -736,5 +737,17 @@ class DataFrameSuite extends QueryTest {
     // We should allow empty string as column name
     df.col("")
     df.col("t.``")
+  }
+
+  test("SPARK-XXXX: sort by float column containing NaN") {
+    val inputData = Seq.fill(10)(Tuple1(Float.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toFloat))
+    val df = Random.shuffle(inputData).toDF("a")
+    df.orderBy("a").collect()
+  }
+
+  test("SPARK-XXXX: sort by double column containing NaN") {
+    val inputData = Seq.fill(10)(Tuple1(Double.NaN)) ++ (1 to 1000).map(x => Tuple1(x.toDouble))
+    val df = Random.shuffle(inputData).toDF("a")
+    df.orderBy("a").collect()
   }
 }
