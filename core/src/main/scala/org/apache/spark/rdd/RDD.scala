@@ -1447,11 +1447,16 @@ abstract class RDD[T: ClassTag](
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() {
+  def checkpoint(): Unit = {
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
-      checkpointData = Some(new RDDCheckpointData(this))
+      // NOTE: we use a global lock here due to complexities downstream with ensuring
+      // children RDD partitions point to the correct parent partitions. In the future
+      // we should revisit this consideration.
+      RDDCheckpointData.synchronized {
+        checkpointData = Some(new RDDCheckpointData(this))
+      }
     }
   }
 
