@@ -29,7 +29,7 @@ case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expressi
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"scalaUDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(",")})"
 
   // scalastyle:off
 

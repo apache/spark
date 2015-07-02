@@ -59,7 +59,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
   extends UnaryExpression with Serializable with AutoCastInputTypes {
   self: Product =>
 
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType)
+  override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
@@ -98,7 +98,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with AutoCastInputTypes { self: Product =>
 
-  override def expectedChildTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
   override def toString: String = s"$name($left, $right)"
 
@@ -210,7 +210,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 case class Bin(child: Expression)
   extends UnaryExpression with Serializable with AutoCastInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(LongType)
+  override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
 
   override def eval(input: InternalRow): Any = {
@@ -348,6 +348,58 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
+  }
+}
+
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class UnHex(child: Expression) extends UnaryExpression with Serializable {
+
+  override def dataType: DataType = BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType.isInstanceOf[StringType] || child.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"unHex accepts String type, not ${child.dataType}")
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val num = child.eval(input)
+    if (num == null) {
+      null
+    } else {
+      unhex(num.asInstanceOf[UTF8String].getBytes)
+    }
+  }
+
+  private val unhexDigits = {
+    val array = Array.fill[Byte](128)(-1)
+    (0 to 9).foreach(i => array('0' + i) = i.toByte)
+    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
+    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
+    array
+  }
+
+  private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
+    var bytes = inputBytes
+    if ((bytes.length & 0x01) != 0) {
+      bytes = '0'.toByte +: bytes
+    }
+    val out = new Array[Byte](bytes.length >> 1)
+    // two characters form the hex value.
+    var i = 0
+    while (i < bytes.length) {
+        val first = unhexDigits(bytes(i))
+        val second = unhexDigits(bytes(i + 1))
+        if (first == -1 || second == -1) { return null}
+        out(i / 2) = (((first << 4) | second) & 0xFF).toByte
+        i += 2
+    }
+    out
   }
 }
 

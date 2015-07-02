@@ -72,7 +72,7 @@ trait PredicateHelper {
 case class Not(child: Expression) extends UnaryExpression with Predicate with AutoCastInputTypes {
   override def toString: String = s"NOT $child"
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) match {
@@ -120,9 +120,9 @@ case class InSet(value: Expression, hset: Set[Any])
 }
 
 case class And(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with AutoCastInputTypes {
+  extends BinaryOperator with Predicate with AutoCastInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
   override def symbol: String = "&&"
 
@@ -169,9 +169,9 @@ case class And(left: Expression, right: Expression)
 }
 
 case class Or(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with AutoCastInputTypes {
+  extends BinaryOperator with Predicate with AutoCastInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
   override def symbol: String = "||"
 
@@ -217,7 +217,7 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
-abstract class BinaryComparison extends BinaryExpression with Predicate {
+abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
   override def checkInputDataTypes(): TypeCheckResult = {
