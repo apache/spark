@@ -80,7 +80,7 @@ class PlannerSuite extends SparkFunSuite {
     val planned = testData
       .join(testData2, testData("key") === testData2("a"), "outer") // join key testData('key)
       .join(testData3, testData("key") === testData3("a"), "left")
-      .groupBy(testData("key")).agg(testData("key"), count(lit(1)))    // group by key testData('key)
+      .groupBy(testData("key")).agg(testData("key"), count(lit(1))) // group by key testData('key)
       .queryExecution.executedPlan
     val exchanges = planned.collect { case n: Exchange => n }
 
