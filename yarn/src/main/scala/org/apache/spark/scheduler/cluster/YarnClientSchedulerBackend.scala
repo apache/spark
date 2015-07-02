@@ -41,7 +41,6 @@ private[spark] class YarnClientSchedulerBackend(
    * This waits until the application is running.
    */
   override def start() {
-    super.start()
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -56,6 +55,12 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
+
+    // SPARK-8687: Ensure all necessary properties have already been set before
+    // we initialize our driver scheduler backend, which serves these properties
+    // to the executors
+    super.start()
+
     waitForApplication()
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
