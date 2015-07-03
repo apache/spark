@@ -24,12 +24,17 @@ import org.apache.spark.sql.types.DataType
  * User-defined function.
  * @param dataType  Return type of function.
  */
-case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expression])
-  extends Expression {
+case class ScalaUDF(
+    function: AnyRef,
+    dataType: DataType,
+    children: Seq[Expression],
+    expectedInputTypes: Seq[DataType] = Nil) extends Expression with ExpectsInputTypes {
 
   override def nullable: Boolean = true
 
   override def toString: String = s"UDF(${children.mkString(",")})"
+
+  override def inputTypes: Seq[DataType] = expectedInputTypes
 
   // scalastyle:off
 
