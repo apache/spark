@@ -1574,7 +1574,7 @@ object functions {
   def ascii(columnName: String): Column = ascii(Column(columnName))
 
   /**
-   * Computes the specified value from binary to a base 64 string.
+   * Computes the specified value from binary to a base64 string.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -1582,7 +1582,7 @@ object functions {
   def base64(e: Column): Column = Base64(e.expr)
 
   /**
-   * Computes the specified column from binary to a base 64 string.
+   * Computes the specified column from binary to a base64 string.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -1590,7 +1590,7 @@ object functions {
   def base64(columnName: String): Column = base64(Column(columnName))
 
   /**
-   * Computes the specified value from a base 64 string to binary.
+   * Computes the specified value from a base64 string to binary.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -1598,7 +1598,7 @@ object functions {
   def unbase64(e: Column): Column = UnBase64(e.expr)
 
   /**
-   * Computes the specified column from a base 64 string to binary.
+   * Computes the specified column from a base64 string to binary.
    *
    * @group string_funcs
    * @since 1.5.0
