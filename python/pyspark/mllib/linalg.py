@@ -910,15 +910,15 @@ class DenseMatrix(Matrix):
         >>> dm
         DenseMatrix(2, 2, [0.0, 1.0, 2.0, 3.0], False)
         """
-        # If the number of values are less than seven then return as it is.
-        # Else return first three values and last three values.
-        if len(self.values) <= 6:
+        # If the number of values are less than seventeen then return as it is.
+        # Else return first eight values and last eight values.
+        if len(self.values) < 17:
             entries = _format_float_list(self.values)
         else:
             entries = (
-                _format_float_list(self.values[:3]) +
+                _format_float_list(self.values[:8]) +
                 ["..."] +
-                _format_float_list(self.values[-3:])
+                _format_float_list(self.values[-8:])
             )
 
         entries = ", ".join(entries)
@@ -1027,8 +1027,8 @@ class SparseMatrix(Matrix):
         cur_col = 0
         smlist = []
 
-        # Display first 5 values.
-        if len(self.values) <= 5:
+        # Display first 16 values.
+        if len(self.values) <= 16:
             zipindval = zip(self.rowIndices, self.values)
         else:
             zipindval = zip(self.rowIndices[:5], self.values[:5])
@@ -1043,7 +1043,7 @@ class SparseMatrix(Matrix):
                     rowInd, cur_col, _format_float(value)))
         spstr += "\n".join(smlist)
 
-        if len(self.values) > 5:
+        if len(self.values) > 16:
             spstr += "\n.." * 2
         return spstr
 
@@ -1056,21 +1056,21 @@ class SparseMatrix(Matrix):
         SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
         """
 
-        if len(self.values) <= 6:
+        if len(self.values) <= 16:
             values = _format_float_list(self.values)
             rowIndices = self.rowIndices
         else:
             values = (
-                _format_float_list(self.values[:3]) +
+                _format_float_list(self.values[:8]) +
                 ["..."] +
-                _format_float_list(self.values[-3:])
+                _format_float_list(self.values[-8:])
             )
             rowIndices = self.rowIndices[:3] + ["..."] + self.rowIndices[-3:]
 
-        if len(self.colPtrs) <= 6:
+        if len(self.colPtrs) <= 16:
             colPtrs = self.colPtrs
         else:
-            colPtrs = self.colPtrs[:3] + ["..."] + self.colPtrs[-3:]
+            colPtrs = self.colPtrs[:8] + ["..."] + self.colPtrs[-8:]
 
         values = ", ".join(values)
         rowIndices = ", ".join([str(ind) for ind in rowIndices])
