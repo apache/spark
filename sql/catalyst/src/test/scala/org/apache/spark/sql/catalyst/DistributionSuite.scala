@@ -78,7 +78,7 @@ class DistributionSuite extends SparkFunSuite {
       RepartitionKey(Seq('a, 'b, 'c)))
 
     checkGap(
-      HashPartition(Seq('a, 'b, 'c)), // will create new null value for clustering expressions.
+      HashPartition(Seq('a, 'b, 'c)).withAdditionalNullClusterKeyGenerated(true),
       ClusteredDistribution(Seq('a, 'b, 'c), nullKeysSensitive = true),
       RepartitionKey(Seq('a, 'b, 'c)))
 
@@ -140,7 +140,8 @@ class DistributionSuite extends SparkFunSuite {
       RepartitionKeyAndSort(Seq('c, 'd), Seq(SortOrder('e, Ascending), SortOrder('f, Ascending))))
 
     checkGap(
-      HashPartitionWithSort(Seq('b, 'c), Seq(SortOrder('b, Ascending), SortOrder('c, Ascending))),
+      HashPartitionWithSort(Seq('b, 'c), Seq(SortOrder('b, Ascending), SortOrder('c, Ascending)))
+        .withAdditionalNullClusterKeyGenerated(true),
       ClusteredDistribution(Seq('b, 'c), nullKeysSensitive = true),
       RepartitionKey(Seq('b, 'c)))
 
