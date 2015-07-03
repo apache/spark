@@ -18,8 +18,8 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.param.{Param, Params, IntParam, DoubleParam, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasMaxIter, HasPredictionCol, HasSeed}
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -40,7 +40,7 @@ private[clustering] trait KMeansParams
    * Set the number of clusters to create (k). Default: 2.
    * @group param
    */
-  val k = new Param[Int](this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
 
   /** @group getParam */
   def getK: Int = $(k)
@@ -51,8 +51,8 @@ private[clustering] trait KMeansParams
    * return the best clustering found over any run. Default: 1.
    * @group param
    */
-  val runs = new Param[Int](this, "runs", "number of runs of the algorithm to execute in parallel",
-    (value: Int) => value >= 1)
+  final val runs = new IntParam(this, "runs",
+    "number of runs of the algorithm to execute in parallel", (value: Int) => value >= 1)
 
   /** @group getParam */
   def getRuns: Int = $(runs)
@@ -62,7 +62,7 @@ private[clustering] trait KMeansParams
    * If all centers move less than this Euclidean distance, we stop iterating one run.
    * @group param
    */
-  val epsilon = new Param[Double](this, "epsilon", "distance threshold")
+  final val epsilon = new DoubleParam(this, "epsilon", "distance threshold")
 
   /** @group getParam */
   def getEpsilon: Double = $(epsilon)
@@ -73,7 +73,7 @@ private[clustering] trait KMeansParams
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    * @group param
    */
-  val initMode = new Param[String](this, "initMode", "initialization algorithm",
+  final val initMode = new Param[String](this, "initMode", "initialization algorithm",
     (value: String) => MLlibKMeans.validateInitializationMode(value))
 
   /** @group getParam */
@@ -84,7 +84,7 @@ private[clustering] trait KMeansParams
    * setting -- the default of 5 is almost always enough. Default: 5.
    * @group param
    */
-  val initSteps = new Param[Int](this, "initSteps", "number of steps for k-means||",
+  final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
     (value: Int) => value > 0)
 
   /** @group getParam */
@@ -139,13 +139,14 @@ class KMeansModel private[ml] (
 @Experimental
 class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
 
-  setDefault(k, 2)
-  setDefault(maxIter, 20)
-  setDefault(runs, 1)
-  setDefault(initMode, MLlibKMeans.K_MEANS_PARALLEL)
-  setDefault(initSteps, 5)
-  setDefault(epsilon, 1e-4)
-  setDefault(seed, Utils.random.nextLong())
+  setDefault(
+    k -> 2,
+    maxIter -> 20,
+    runs -> 1,
+    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
+    initSteps -> 5,
+    epsilon -> 1e-4,
+    seed -> Utils.random.nextLong())
 
   override def copy(extra: ParamMap): Estimator[KMeansModel] = defaultCopy(extra)
 

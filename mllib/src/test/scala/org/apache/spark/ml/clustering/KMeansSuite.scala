@@ -36,7 +36,7 @@ object KMeansSuite {
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  val k = 5
+  final val k = 5
   @transient var dataset: DataFrame = _
 
   override def beforeAll(): Unit = {
