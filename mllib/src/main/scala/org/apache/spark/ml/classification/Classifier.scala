@@ -87,7 +87,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /** @group setParam */
   def setThresholds(value: Array[Double]): M = set(thresholds, value).asInstanceOf[M]
-  setDefault(thresholds -> null)
 
   /** Number of classes (values which the label can take). */
   def numClasses: Int
