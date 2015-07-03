@@ -748,48 +748,77 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
 
+    // things start out smoothly, stage 0 completes with no issues
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
       (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.size)),
       (Success, makeMapStatus("hostA", shuffleMapRdd.partitions.size))
     ))
 
-    complete(taskSets(1), Seq(
-      (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
-      (Success, makeMapStatus("hostB", reduceRdd.partitions.size))
-    ))
+    // then one executor dies, and a task fails in stage 1
     runEvent(ExecutorLost("exec-hostA"))
-    // Resubmit already succcessd in hostA task
-    runEvent(CompletionEvent(taskSets(1).tasks(0), Resubmitted,
-      null, null, createFakeTaskInfo(), null))
-
-    // Cause mapOutTracker remove hostA outputs for taskset(0).
-    // Task that resubmitted will fetch matadata failed.
     runEvent(CompletionEvent(taskSets(1).tasks(0),
       FetchFailed(null, firstShuffleId, 2, 0, "Fetch failed"),
       null, null, createFakeTaskInfo(), null))
 
-    // FetchFailed cause resubmit failed Stages.
-    scheduler.resubmitFailedStages()
-
-    runEvent(CompletionEvent(taskSets(0).tasks(2), Success,
+    // so we resubmit stage 0, which completes happily
+    Thread.sleep(1000)
+    val stage0Resubmit = taskSets(2)
+    assert(stage0Resubmit.stageId == 0)
+    assert(stage0Resubmit.attempt === 1)
+    val task = stage0Resubmit.tasks(0)
+    assert(task.partitionId === 2)
+    runEvent(CompletionEvent(task, Success,
       makeMapStatus("hostC", shuffleMapRdd.partitions.size), null, createFakeTaskInfo(), null))
 
-    try {
-      mapOutputTracker.getServerStatuses(0, 2)
-    } catch {
-      case e: MetadataFetchFailedException => fail("Should not throw metadataFetchFailedException")
+    // now here is where things get tricky : we will now have a task set representing
+    // the second attempt for stage 1, but we *also* have some tasks for the first attempt for
+    // stage 1 still going
+    val stage1Resubmit = taskSets(3)
+    assert(stage1Resubmit.stageId == 1)
+    assert(stage1Resubmit.attempt === 1)
+    assert(stage1Resubmit.tasks.length === 3)
+
+    // we'll have some tasks finish from the first attempt, and some finish from the second attempt,
+    // so that we actually have all stage outputs, though no attempt has completed all its
+    // tasks
+    runEvent(CompletionEvent(taskSets(3).tasks(0), Success,
+      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSets(3).tasks(1), Success,
+      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
+    // late task finish from the first attempt
+    runEvent(CompletionEvent(taskSets(1).tasks(2), Success,
+      makeMapStatus("hostB", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
+
+    // What should happen now is that we submit stage 2.  However, we might not see an error
+    // b/c of DAGScheduler's error handling (it tends to swallow errors and just log them).  But
+    // we can check some conditions.
+    // Note that the really important thing here is not so much that we submit stage 2 *immediately*
+    // but that we don't end up with some error from these interleaved completions.  It would also
+    // be OK (though sub-optimal) if stage 2 simply waited until the resubmission of stage 1 had
+    // all its tasks complete
+
+    // check that we have all the map output for stage 0 (it should have been there even before
+    // the last round of completions from stage 1, but just to double check it hasn't been messed
+    // up)
+    (0 until 3).foreach { reduceIdx =>
+      val arr = mapOutputTracker.getServerStatuses(0, reduceIdx)
+      assert(arr != null)
+      assert(arr.nonEmpty)
     }
 
-    runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
-      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
-    runEvent(CompletionEvent(taskSets(1).tasks(2), Success,
-      makeMapStatus("hostC", reduceRdd.partitions.size), null, createFakeTaskInfo(), null))
+    // and check we have all the map output for stage 1
+    (0 until 1).foreach { reduceIdx =>
+      val arr = mapOutputTracker.getServerStatuses(1,reduceIdx)
+      assert(arr != null)
+      assert(arr.nonEmpty)
+    }
 
-    val stage = scheduler.stageIdToStage(taskSets(1).stageId).asInstanceOf[ShuffleMapStage]
-    assert(stage.attemptId === 2)
-    assert(stage.isAvailable)
-    assert(stage.pendingTasks.isEmpty)
+    // and check that stage 2 has been submitted
+    assert(taskSets.size == 5)
+    val stage2TaskSet = taskSets(4)
+    assert(stage2TaskSet.stageId == 2)
+    assert(stage2TaskSet.attempt == 0)
   }
 
   /**
