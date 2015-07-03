@@ -159,13 +159,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   protected def raw2prediction(rawPrediction: Vector): Double = {
     val modelScores = rawPrediction.toArray.zipWithIndex
     // Apply thresholding, or use votes if no thresholding
-    val scores = _thresholds.map{thresholds =>
+    val scores = Option(getThresholds).map{thresholds =>
       modelScores.map{case (score, index) =>
         (score/thresholds(index), index)
       }}.getOrElse(modelScores)
     scores.maxBy(_._1)._2
   }
 
-  // TODO: Leave this as undefined to force algs to implement.
-  protected val _thresholds: Option[Array[Double]]=None
+  protected def getThresholds: Array[Double]
 }

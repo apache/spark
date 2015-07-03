@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasThresholds
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -95,8 +96,7 @@ final class RandomForestClassifier(override val uid: String)
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
       oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures, numClasses,
-      Option($(thresholds)))
+    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures, numClasses)
   }
 
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
@@ -124,12 +124,14 @@ object RandomForestClassifier {
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
-    override val numClasses: Int,
-    override protected val _thresholds: Option[Array[Double]]=None)
+    override val numClasses: Int)
   extends ClassificationModel[Vector, RandomForestClassificationModel]
-  with TreeEnsembleModel with Serializable {
+  with TreeEnsembleModel with HasThresholds with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -152,7 +154,7 @@ final class RandomForestClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    copyValues(new RandomForestClassificationModel(uid, _trees, numClasses, _thresholds), extra)
+    copyValues(new RandomForestClassificationModel(uid, _trees, numClasses), extra)
   }
 
   override def toString: String = {
@@ -172,8 +174,7 @@ private[ml] object RandomForestClassificationModel {
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int,
-      thresholds: Option[Array[Double]]): RandomForestClassificationModel = {
+      numClasses: Int): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -181,6 +182,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees, numClasses, thresholds)
+    new RandomForestClassificationModel(uid, newTrees, numClasses)
   }
 }

@@ -23,13 +23,15 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 class ClassifierSuite extends SparkFunSuite {
   class TestClassificationModel(
       override val numClasses: Int,
-      override protected val _thresholds: Option[Array[Double]])
+      val thresholds: Option[Array[Double]])
         extends ClassificationModel[Vector, TestClassificationModel] {
     override val uid = "1"
     override def copy(extra: org.apache.spark.ml.param.ParamMap):
         ClassifierSuite.this.TestClassificationModel = {
       null
     }
+
+    override def getThresholds = thresholds
 
     override def predictRaw(input: Vector) = {
       input
