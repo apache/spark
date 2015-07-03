@@ -113,6 +113,7 @@ object FunctionRegistry {
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
+    expression[Factorial]("factorial"),
     expression[Hypot]("hypot"),
     expression[Hex]("hex"),
     expression[Logarithm]("log"),

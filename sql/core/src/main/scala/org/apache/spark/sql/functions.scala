@@ -1023,6 +1023,22 @@ object functions {
   def expm1(columnName: String): Column = expm1(Column(columnName))
 
   /**
+   * Computes the factorial of the given value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def factorial(e: Column): Column = Factorial(e.expr)
+
+  /**
+   * Computes the factorial of the given column.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def factorial(columnName: String): Column = factorial(Column(columnName))
+
+  /**
    * Computes the floor of the given value.
    *
    * @group math_funcs

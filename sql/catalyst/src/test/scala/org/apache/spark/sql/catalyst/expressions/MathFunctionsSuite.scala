@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.google.common.math.LongMath
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{IntegerType, DataType, DoubleType, LongType}
+import org.apache.spark.sql.types.{DataType, LongType}
+import org.apache.spark.sql.types.{IntegerType, DoubleType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -155,6 +158,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("floor") {
     testUnary(Floor, math.floor)
+  }
+
+  test("factorial") {
+    val dataLong = (0 to 20)
+    dataLong.foreach { value =>
+      checkEvaluation(Factorial(Literal(value)), LongMath.factorial(value), EmptyRow)
+    }
+    checkEvaluation((Literal.create(null, IntegerType)), null, create_row(null))
+    checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
+    checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
   }
 
   test("rint") {
