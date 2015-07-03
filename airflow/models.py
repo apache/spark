@@ -749,17 +749,9 @@ class TaskInstance(Base):
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
 
-        msg = "\n"
-        msg += ("-" * 80)
-        if self.state == State.UP_FOR_RETRY:
-            msg += "\nRetry run {self.try_number} out of {task.retries} "
-            msg += "starting @{iso}\n"
-        else:
-            msg += "\nNew run starting @{iso}\n"
-        msg += ("-" * 80)
-        logging.info(msg.format(**locals()))
-
-        if not force and self.state == State.SUCCESS:
+        if self.state == State.RUNNING:
+            logging.warning("Another instance is running, skipping.")
+        elif not force and self.state == State.SUCCESS:
             logging.info(
                 "Task {self} previously succeeded"
                 " on {self.end_date}".format(**locals())
@@ -775,6 +767,15 @@ class TaskInstance(Base):
                 "Next run after {0}".format(next_run)
             )
         elif force or self.state in State.runnable():
+            msg = "\n" + ("-" * 80)
+            if self.state == State.UP_FOR_RETRY:
+                msg += "\nRetry run {self.try_number} out of {task.retries} "
+                msg += "starting @{iso}\n"
+            else:
+                msg += "\nNew run starting @{iso}\n"
+            msg += ("-" * 80)
+            logging.info(msg.format(**locals()))
+
             self.start_date = datetime.now()
             if not force and task.pool and self.pool_full(session=session):
                 self.state = State.QUEUED
@@ -799,7 +800,7 @@ class TaskInstance(Base):
                     msg = "Marking success for "
                 else:
                     msg = "Executing "
-                msg += "{self.task} for {self.execution_date}"
+                msg += "{self.task} on {self.execution_date}"
 
             try:
                 logging.info(msg.format(self=self))
