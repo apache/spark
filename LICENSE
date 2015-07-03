@@ -922,7 +922,7 @@ The following components are provided under a BSD-style license. See project lin
      (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.10.4 - http://www.scala-lang.org/)
      (BSD-like) Scala Library (org.scala-lang:scala-library:2.10.4 - http://www.scala-lang.org/)
      (BSD-like) Scalap (org.scala-lang:scalap:2.10.4 - http://www.scala-lang.org/)
-     (BSD-style) scalacheck (org.scalacheck:scalacheck_2.10:1.10.0 - http://www.scalacheck.org)
+     (BSD-style) scalacheck (org.scalacheck:scalacheck_2.10:1.12.4 - http://www.scalacheck.org)
      (BSD-style) spire (org.spire-math:spire_2.10:0.7.1 - http://spire-math.org)
      (BSD-style) spire-macros (org.spire-math:spire-macros_2.10:0.7.1 - http://spire-math.org)
      (New BSD License) Kryo (com.esotericsoftware.kryo:kryo:2.21 - http://code.google.com/p/kryo/)
