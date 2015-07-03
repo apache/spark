@@ -111,7 +111,7 @@ private[sql] object StatFunctions extends Logging {
         "the pairs. Please try reducing the amount of distinct items in your columns.")
     }
     def cleanElement(element: Any): String = {
-      if (element == null) "" else element.toString
+      if (element == null) "null" else element.toString
     }
     // get the distinct values of column 2, so that we can make them the column names
     val distinctCol2: Map[Any, Int] =

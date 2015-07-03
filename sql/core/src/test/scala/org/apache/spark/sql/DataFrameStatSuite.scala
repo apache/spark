@@ -99,7 +99,7 @@ class DataFrameStatSuite extends SparkFunSuite  {
     assert(ct1.schema.fields.length === 3)
     assert(ct1.collect().length === 4)
     val ct2 = df.stat.crosstab("1", "3")
-    assert(ct2.schema.fields.length === 4)
+    assert(ct2.schema.fields.length === 5)
     assert(ct2.schema.fieldNames.contains("ha"))
     assert(ct2.collect().length === 4)
     val ct3 = df.stat.crosstab("3", "2")
