@@ -35,6 +35,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 
@@ -145,7 +146,9 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, weights, intercept)
-      val trainingResults = new LinearRegressionTrainingResults(model, dataset, Array())
+      val trainingResults = new LinearRegressionTrainingResults(
+        model.transform(dataset).select(model.getPredictionCol,model.getLabelCol),
+        Array())
       return model.setTrainingResults(trainingResults)
     }
 
@@ -201,7 +204,9 @@ class LinearRegression(override val uid: String)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     val model = new LinearRegressionModel(uid, weights.compressed, intercept)
-    val trainingResults = new LinearRegressionTrainingResults(model, dataset, lossHistory.result())
+    val trainingResults = new LinearRegressionTrainingResults(
+      model.transform(dataset).select(model.getPredictionCol,model.getLabelCol),
+      lossHistory.result())
     copyValues(model.setTrainingResults(trainingResults))
   }
 
@@ -221,8 +226,12 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  private var trainingResults: Option[LinearRegressionTrainingResults] = None
+  @transient private var trainingResults: Option[LinearRegressionTrainingResults] = None
 
+  /**
+   * Gets results (e.g. residuals, mse, r^2) of model on training set. This method should only
+   * be called on the driver (it is not available on workers).
+   */
   def getTrainingResults: Option[LinearRegressionTrainingResults] = trainingResults
 
   def setTrainingResults(trainingResults: LinearRegressionTrainingResults): this.type = {
@@ -236,9 +245,9 @@ class LinearRegressionModel private[ml] (
    * @return
    */
   def evaluate(testset: DataFrame): LinearRegressionResults = {
+    val t = udf { features: Vector => predict(features) }
     val predictionAndObservations = testset
-      .select($(labelCol), $(featuresCol))
-      .map { case Row(label: Double, features: Vector) => (predict(features), label) }
+      .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
 
     new LinearRegressionResults(predictionAndObservations)
   }
@@ -257,42 +266,32 @@ class LinearRegressionModel private[ml] (
 /**
  * :: Experimental ::
  * Linear regression training results.
- * @param predictionAndObservations dataframe with columns predictions (0) and observations(0).
+ * @param predictionAndLabel dataframe with columns prediction (0) and label (1).
  * @param objectiveTrace objective function value at each iteration.
  */
 @Experimental
 class LinearRegressionTrainingResults private[ml] (
-    predictionAndObservations: RDD[(Double, Double)],
+    predictionAndLabel: DataFrame,
     val objectiveTrace: Array[Double])
-  extends LinearRegressionResults(predictionAndObservations) {
+  extends LinearRegressionResults(predictionAndLabel) {
 
   /** Number of training iterations until termination */
   val totalIterations = objectiveTrace.length
 
-  def this(
-      model: LinearRegressionModel,
-      dataset: DataFrame,
-      objectiveTrace: Array[Double]) {
-
-    this(
-      model.transform(dataset).select(model.getPredictionCol, model.getLabelCol).map {
-        case Row(pred: Double, label: Double) => (pred, label)
-      },
-      objectiveTrace
-    )
-  }
 }
 
 /**
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
- * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @param predictionAndLabel dataframe with columns prediction(0) and label (1).
  */
 @Experimental
 class LinearRegressionResults private[ml] (
-    @transient val predictionAndObservations: RDD[(Double, Double)]) extends Serializable {
+    val predictionAndLabel: DataFrame) {
 
-  private val metrics = new RegressionMetrics(predictionAndObservations)
+  private val metrics = new RegressionMetrics(predictionAndLabel.map {
+    case Row(pred: Double, obs: Double) => (pred, obs)
+  })
 
   /**
    * Returns the explained variance regression score.
@@ -326,7 +325,12 @@ class LinearRegressionResults private[ml] (
   def r2: Double = metrics.r2
 
   /** Get residuals */
-  def residuals: RDD[Double] = predictionAndObservations.map(r => r._1 - r._2)
+  def residuals: DataFrame = {
+    val t = udf { (pred: Double, label: Double) => pred - label}
+    val predCol = predictionAndLabel.columns(0)
+    val labelCol = predictionAndLabel.columns(1)
+    predictionAndLabel.select(t(col(predCol), col(labelCol)).as("residuals"))
+  }
 }
 
 /**

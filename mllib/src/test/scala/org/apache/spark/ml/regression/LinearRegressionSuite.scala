@@ -19,8 +19,8 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.DenseVector
-import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -96,7 +96,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         val prediction =
           features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
         prediction - label
-    }.zip(model.getTrainingResults.get.residuals)
+    }.zip(model.getTrainingResults.get.residuals.map(_.getDouble(0)))
       .collect()
       .foreach {
       case (manualResidual: Double, resultResidual: Double) =>
