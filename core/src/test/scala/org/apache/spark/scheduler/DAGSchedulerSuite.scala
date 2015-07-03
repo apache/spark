@@ -809,7 +809,7 @@ class DAGSchedulerSuite
 
     // and check we have all the map output for stage 1
     (0 until 1).foreach { reduceIdx =>
-      val arr = mapOutputTracker.getServerStatuses(1,reduceIdx)
+      val arr = mapOutputTracker.getServerStatuses(1, reduceIdx)
       assert(arr != null)
       assert(arr.nonEmpty)
     }
