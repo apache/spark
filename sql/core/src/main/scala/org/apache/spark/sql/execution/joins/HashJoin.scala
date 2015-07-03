@@ -44,7 +44,7 @@ trait HashJoin {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   @transient protected lazy val buildSideKeyGenerator: Projection =
-    newProjection(buildKeys, buildPlan.output)
+    new InterpretedProjection(buildKeys, buildPlan.output)
 
   @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
     newMutableProjection(streamedKeys, streamedPlan.output)
