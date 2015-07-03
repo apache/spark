@@ -756,7 +756,6 @@ object HiveTypeCoercion {
         case (TimestampType, DateType) => Cast(e, DateType)
 
         // Implicit cast from/to string
-        //case (StringType, NumericType) => Cast(e, DoubleType)  // not sure if we need this now.
         case (StringType, DecimalType) => Cast(e, DecimalType.Unlimited)
         case (StringType, target: NumericType) => Cast(e, target)
         case (StringType, DateType) => Cast(e, DateType)
