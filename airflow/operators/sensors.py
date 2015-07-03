@@ -335,36 +335,50 @@ class TimeSensor(BaseSensorOperator):
 
 class HttpSensor(BaseSensorOperator):
     """
-    Executes an HTTP get statement until the specified criteria is met.
+    Executes a HTTP get statement and returns False on failure:
+        404 not found or response_check function returned False
 
-    :param conn_id: The connection to run the sensor against
-    :type conn_id: string
-    :param url: To pass, the url must respond with
+    :param http_conn_id: The connection to run the sensor against
+    :type http_conn_id: string
+    :param endpoint: The relative part of the full url
+    :type endpoint: string
+    :param params: The parameters to be added to the GET url
+    :type params: a dictionary of string key/value pairs
+    :param headers: The HTTP headers to be added to the GET request
+    :type headers: a dictionary of string key/value pairs
+    :param response_check: A check against the 'requests' response object.
+        Returns True for 'pass' and False otherwise.
+    :type response_check: A lambda or defined function.
+    :param extra_options: Extra options for the 'requests' library, see the
+        'requests' documentation (options to modify timeout, ssl, etc.)
+    :type extra_options: A dictionary of options, where key is string and value
+        depends on the option that's being modified.
     """
 
     @apply_defaults
     def __init__(self,
-                 conn_id,
                  endpoint,
-                 params={},
+                 http_conn_id='http_default',
+                 params=None,
                  headers=None,
                  response_check=None,
-                 extra_options={}, *args, **kwargs):
+                 extra_options=None, *args, **kwargs):
         super(HttpSensor, self).__init__(*args, **kwargs)
 
         self.endpoint = endpoint
-        self.conn_id = conn_id
-        self.params = params
-        self.headers = headers
-        self.extra_options = extra_options
+        self.http_conn_id = http_conn_id
+        self.params = params or {}
+        self.headers = headers or {}
+        self.extra_options = extra_options or {}
         self.response_check = response_check
 
         session = settings.Session()
-        site = session.query(DB).filter(DB.conn_id == conn_id).first()
+        site = session.query(DB).filter(DB.conn_id == http_conn_id).first()
         if not site:
-            raise AirflowException("conn_id doesn't exist in the repository")
-        self.conn_id = conn_id
-        self.hook = hooks.HttpHook(method='GET', http_conn_id=self.conn_id)
+            raise AirflowException("http_conn_id not found in the repository")
+
+        self.hook = hooks.HttpHook(method='GET',
+                                   http_conn_id=self.http_conn_id)
         session.commit()
         session.close()
 

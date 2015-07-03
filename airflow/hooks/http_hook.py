@@ -33,7 +33,7 @@ class HttpHook(BaseHook):
 
         return session
 
-    def run(self, endpoint, data=None, headers=None, extra_options={}):
+    def run(self, endpoint, data=None, headers=None, extra_options=None):
         """
         Performs the request
         """
@@ -54,11 +54,11 @@ class HttpHook(BaseHook):
                                    data=data,
                                    headers=headers)
 
-        preppedRequest = session.prepare_request(req)
+        prepped_request = session.prepare_request(req)
         logging.info("Sending '" + self.method + "' to url: " + url)
-        return self.run_and_check(session, preppedRequest, extra_options)
+        return self.run_and_check(session, prepped_request, extra_options)
 
-    def run_and_check(self, session, preppedRequest, extra_options):
+    def run_and_check(self, session, prepped_request, extra_options):
         """
         Grabs extra options like timeout and actually runs the request,
         checking for the result
@@ -70,7 +70,7 @@ class HttpHook(BaseHook):
         timeout = extra_options.get("timeout", None)
         allow_redirects = extra_options.get("allow_redirects", True)
 
-        response = session.send(preppedRequest,
+        response = session.send(prepped_request,
                                 stream=stream,
                                 verify=verify,
                                 proxies=proxies,
