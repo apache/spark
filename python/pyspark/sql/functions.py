@@ -435,6 +435,7 @@ def shiftRight(col, numBits):
     jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
     return Column(jc)
 
+
 @since(1.5)
 def shiftRightUnsigned(col, numBits):
     """Unsigned shift the the given value numBits right.
@@ -446,6 +447,7 @@ def shiftRightUnsigned(col, numBits):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
+
 
 @since(1.4)
 def sparkPartitionId():
