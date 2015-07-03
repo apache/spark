@@ -1439,6 +1439,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <version>2.3</version>
         <configuration>
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
