@@ -123,14 +123,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       s" ${predAllZero.count(_ === 0)} of ${dataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
-      model.transform(dataset, model.thresholds -> Array(1.0, 0.0), model.probabilityCol -> "myProb")
+      model.transform(dataset, model.threshold -> 0.0, model.probabilityCol -> "myProb")
         .select("prediction", "myProb")
         .collect()
         .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predNotAllZero.exists(_ !== 0.0))
 
     // Call fit() with new params, and check as many params as we can.
-    val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.thresholds -> Array(0.5, 0.4),
+    val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.threshold -> 0.4,
       lr.probabilityCol -> "theProb")
     val parent2 = model2.parent.asInstanceOf[LogisticRegression]
     assert(parent2.getMaxIter === 5)
