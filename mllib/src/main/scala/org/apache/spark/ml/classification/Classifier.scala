@@ -63,9 +63,6 @@ abstract class Classifier[
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): E = set(thresholds, value).asInstanceOf[E]
-
   // TODO: defaultEvaluator (follow-up PR)
 }
 
