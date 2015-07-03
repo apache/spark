@@ -322,6 +322,8 @@ private[akka] class AkkaRpcEndpointRef(
     case other: AkkaRpcEndpointRef => actorRef == other.actorRef
     case _ => false
   }
+
+  final override def hashCode(): Int = if (actorRef == null) 0 else actorRef.hashCode()
 }
 
 /**
