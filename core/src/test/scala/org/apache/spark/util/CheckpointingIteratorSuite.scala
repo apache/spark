@@ -51,7 +51,7 @@ class CheckpointingIteratorSuite extends SparkFunSuite with LocalSparkContext wi
     val context = new TaskContextImpl(0, 0, 0, 0, null)
     val iter = List(1, 2, 3).iterator
     val checkpoingIter = CheckpointingIterator[Int](
-      iter, 
+      iter,
       checkpointDir.toString,
       broadcastedConf,
       0,
@@ -85,7 +85,7 @@ class CheckpointingIteratorSuite extends SparkFunSuite with LocalSparkContext wi
     val context = new TaskContextImpl(0, 0, 0, 0, null)
     val iter = List(1, 2, 3).iterator
     val checkpoingIter = CheckpointingIterator[Int](
-      iter, 
+      iter,
       checkpointDir.toString,
       broadcastedConf,
       0,
