@@ -342,8 +342,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("round") {
     val domain = -16 to 16
     val doublePi = math.Pi
-    val stringPi = "3.141592653589793"
-    val arrayPi: Array[Byte] = stringPi.toCharArray.map(_.toByte)
     val shortPi: Short = 31415
     val intPi = 314159265
     val longPi = 31415926535897932L
@@ -352,10 +350,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     domain.foreach { scale =>
       checkEvaluation(Round(doublePi, scale),
         BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
-      checkEvaluation(Round(stringPi, scale),
-        BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
-      checkEvaluation(Round(arrayPi, scale),
-        BigDecimal.valueOf(doublePi).setScale(scale, RoundingMode.HALF_UP).toDouble, EmptyRow)
       checkEvaluation(Round(shortPi, scale),
         BigDecimal.valueOf(shortPi).setScale(scale, RoundingMode.HALF_UP).toShort, EmptyRow)
       checkEvaluation(Round(intPi, scale),
@@ -363,7 +357,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(longPi, scale),
         BigDecimal.valueOf(longPi).setScale(scale, RoundingMode.HALF_UP).toLong, EmptyRow)
     }
-    checkEvaluation(new Round(Literal("invalid input")), null, EmptyRow)
 
     // round_scale > current_scale would result in precision increase
     // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null

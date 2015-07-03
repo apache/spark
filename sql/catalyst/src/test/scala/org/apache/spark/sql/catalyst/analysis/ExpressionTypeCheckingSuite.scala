@@ -52,6 +52,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       s"differing types in ${expr.getClass.getSimpleName} (IntegerType and BooleanType).")
   }
 
+  def assertErrorWithImplicitCast(expr: Expression, errorMessage: String): Unit = {
+    val e = intercept[AnalysisException] {
+      assertSuccess(expr)
+    }
+    assert(e.getMessage.contains(errorMessage))
+  }
+
   test("check types for unary arithmetic") {
     assertError(UnaryMinus('stringField), "operator - accepts numeric type")
     assertError(Abs('stringField), "function abs accepts numeric type")
@@ -173,14 +180,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for ROUND") {
-    assertError(Round(Literal(null), 'booleanField),
-      "Only Integral or Null foldable Expression is allowed for ROUND scale argument")
-    assertError(Round(Literal(null), 'complexField),
-      "Only Integral or Null foldable Expression is allowed for ROUND scale argument")
+    assertErrorWithImplicitCast(Round(Literal(null), 'booleanField),
+      "Only foldable Integral Expression is allowed for ROUND scale arguments")
+    assertErrorWithImplicitCast(Round(Literal(null), 'complexField),
+      "Only foldable Integral Expression is allowed for ROUND scale arguments")
     assertSuccess(Round(Literal(null), Literal(null)))
     assertError(Round('booleanField, 'intField),
-      "Only numeric, string or binary data types are allowed for ROUND function")
-    assertError(Round(Literal(null), Literal(1L + Int.MaxValue)),
+      "Only numeric type is allowed for ROUND function")
+    assertErrorWithImplicitCast(Round(Literal(null), Literal(1L + Int.MaxValue)),
       "ROUND scale argument out of allowed range")
   }
 }

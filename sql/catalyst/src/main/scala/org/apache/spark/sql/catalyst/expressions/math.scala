@@ -524,7 +524,7 @@ case class Logarithm(left: Expression, right: Expression)
   }
 }
 
-case class Round(child: Expression, scale: Expression) extends Expression {
+case class Round(child: Expression, scale: Expression) extends Expression with ExpectsInputTypes {
 
   def this(child: Expression) = {
     this(child, Literal(0))
@@ -537,17 +537,17 @@ case class Round(child: Expression, scale: Expression) extends Expression {
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-      case StringType | BinaryType => DoubleType
       case DecimalType.Fixed(p, s) => DecimalType(p, _scale)
       case t => t
     }
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegralType)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case _: NumericType | NullType | BinaryType | StringType => // satisfy requirement
+      case _: NumericType => // satisfy requirement
       case dt =>
-        return TypeCheckFailure(s"Only numeric, string or binary data types" +
-          s" are allowed for ROUND function, got $dt")
+        return TypeCheckFailure(s"Only numeric type is allowed for ROUND function, got $dt")
     }
     scale match {
       case Literal(value, LongType) =>
@@ -555,12 +555,11 @@ case class Round(child: Expression, scale: Expression) extends Expression {
           return TypeCheckFailure("ROUND scale argument out of allowed range")
         }
       case _ =>
-        if ((scale.dataType.isInstanceOf[IntegralType] || scale.dataType == NullType) &&
-          scale.foldable) {
-          // TODO: foldable LongType is not checked for out of range
+        if (scale.dataType.isInstanceOf[IntegralType] && scale.foldable) {
+          // TODO: How to check out of range for foldable LongType Expression
           // satisfy requirement
         } else {
-          return TypeCheckFailure("Only Integral or Null foldable Expression " +
+          return TypeCheckFailure("Only foldable Integral Expression " +
             s"is allowed for ROUND scale arguments, got ${child.dataType}")
         }
     }
@@ -596,10 +595,6 @@ case class Round(child: Expression, scale: Expression) extends Expression {
         numericRound(x.asInstanceOf[Float], _scale)
       case DoubleType =>
         numericRound(x.asInstanceOf[Double], _scale)
-      case StringType =>
-        stringLikeRound(x.asInstanceOf[UTF8String].toString, _scale)
-      case BinaryType =>
-        stringLikeRound(UTF8String.fromBytes(x.asInstanceOf[Array[Byte]]).toString, _scale)
     }
   }
 
@@ -610,12 +605,6 @@ case class Round(child: Expression, scale: Expression) extends Expression {
       case _ =>
     }
     bdc.fromBigDecimal(bdc.toBigDecimal(input).setScale(scale, BigDecimal.RoundingMode.HALF_UP))
-  }
-
-  private def stringLikeRound(input: String, scale: Int): Any = {
-    try numericRound(input.toDouble, scale) catch {
-      case _: NumberFormatException => null
-    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -635,19 +624,6 @@ case class Round(child: Expression, scale: Expression) extends Expression {
       } else {
         ${round(primitive, false)}.${function};
       }"""
-    }
-
-    def stringLikeConvert(primitive: String): String = {
-      val dName = ctx.freshName("converter")
-      s"""
-      Double $dName = 0.0;
-      try {
-        $dName = Double.valueOf(${primitive}.toString());
-      } catch (NumberFormatException e) {
-        ${ev.isNull} = true;
-      }
-      ${fractionalCheck(dName, "doubleValue()")}
-      """
     }
 
     def decimalRound(): String = {
@@ -676,10 +652,6 @@ case class Round(child: Expression, scale: Expression) extends Expression {
         fractionalCheck(ce.primitive, "floatValue()")
       case DoubleType =>
         fractionalCheck(ce.primitive, "doubleValue()")
-      case StringType =>
-        stringLikeConvert(ce.primitive)
-      case BinaryType =>
-        stringLikeConvert(s"${ctx.stringType}.fromBytes(${ce.primitive})")
     }
 
     ce.code + s"""
