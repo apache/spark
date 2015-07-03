@@ -91,7 +91,7 @@ public class JavaPCASuite implements Serializable {
 
     JavaRDD<VectorPair> featuresExpected = dataRDD.zip(expected).map(
       new Function<Tuple2<Vector, Vector>, VectorPair>() {
-        public VectorPair call(Tuple2<Vector, Vector> pair) throws Exception {
+        public VectorPair call(Tuple2<Vector, Vector> pair) {
           VectorPair featuresExpected = new VectorPair();
           featuresExpected.setFeatures(pair._1());
           featuresExpected.setExpected(pair._2());
