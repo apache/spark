@@ -129,6 +129,7 @@ object FunctionRegistry {
     expression[Rint]("rint"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
+    expression[ShiftRightUnsigned]("shiftrightunsigned"),
     expression[Signum]("sign"),
     expression[Signum]("signum"),
     expression[Sin]("sin"),

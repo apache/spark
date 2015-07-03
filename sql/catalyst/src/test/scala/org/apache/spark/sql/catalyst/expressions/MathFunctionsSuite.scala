@@ -264,6 +264,19 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
   }
 
+  test("shift right unsigned") {
+    checkEvaluation(ShiftRightUnsigned(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toByte), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toShort), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
+
+    checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
+  }
+
   test("hex") {
     checkEvaluation(Hex(Literal(28)), "1C")
     checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
