@@ -543,11 +543,11 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends Binar
     if (valueLeft != null) {
       val valueRight = right.eval(input)
       if (valueRight != null) {
-        left.dataType match {
-          case LongType => valueLeft.asInstanceOf[Long] >>> valueRight.asInstanceOf[Int]
-          case IntegerType => valueLeft.asInstanceOf[Int] >>> valueRight.asInstanceOf[Int]
-          case ShortType => valueLeft.asInstanceOf[Short] >>> valueRight.asInstanceOf[Int]
-          case ByteType => valueLeft.asInstanceOf[Byte] >>> valueRight.asInstanceOf[Int]
+        valueLeft match {
+          case l: Long => l >>> valueRight.asInstanceOf[Integer]
+          case i: Integer => i >>> valueRight.asInstanceOf[Integer]
+          case s: Short => s >>> valueRight.asInstanceOf[Integer]
+          case b: Byte => b >>> valueRight.asInstanceOf[Integer]
         }
       } else {
         null
