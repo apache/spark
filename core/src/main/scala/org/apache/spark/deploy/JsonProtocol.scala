@@ -76,13 +76,13 @@ private[deploy] object JsonProtocol {
   }
 
   def writeMasterState(obj: MasterStateResponse): JObject = {
-    val alive_workers = obj.workers.filter(_.isAlive())
+    val aliveWorkers = obj.workers.filter(_.isAlive())
     ("url" -> obj.uri) ~
     ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("cores" -> alive_workers.map(_.cores).sum) ~
-    ("coresused" -> alive_workers.map(_.coresUsed).sum) ~
-    ("memory" -> alive_workers.map(_.memory).sum) ~
-    ("memoryused" -> alive_workers.map(_.memoryUsed).sum) ~
+    ("cores" -> aliveWorkers.map(_.cores).sum) ~
+    ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
+    ("memory" -> aliveWorkers.map(_.memory).sum) ~
+    ("memoryused" -> aliveWorkers.map(_.memoryUsed).sum) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
     ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
