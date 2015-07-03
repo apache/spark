@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
-import org.apache.spark.ml.param.shared.{HasRawPredictionCol, HasThresholds}
+import org.apache.spark.ml.param.shared.{HasRawPredictionCol, HasThresholdInfo}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * (private[spark]) Params for classification.
  */
 private[spark] trait ClassifierParams
-  extends PredictorParams with HasRawPredictionCol with HasThresholds {
+  extends PredictorParams with HasRawPredictionCol with HasThresholdInfo {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
