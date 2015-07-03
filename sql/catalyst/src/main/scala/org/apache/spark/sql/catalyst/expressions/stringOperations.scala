@@ -319,8 +319,6 @@ case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTyp
       }
     }
   }
-
-  override def toString: String = s"ASCII($child)"
 }
 
 /**
@@ -340,8 +338,6 @@ case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTy
           bytes.asInstanceOf[Array[Byte]]))
     }
   }
-
-  override def toString: String = s"BASE64($child)"
 }
 
 /**
@@ -359,8 +355,6 @@ case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInput
       org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
     }
   }
-
-  override def toString: String = s"UNBASE64($child)"
 }
 
 /**
@@ -389,8 +383,6 @@ case class Decode(bin: Expression, charset: Expression) extends Expression with 
       }
     }
   }
-
-  override def toString: String = s"DECODE($bin, $charset)"
 }
 
 /**
@@ -420,8 +412,6 @@ case class Encode(value: Expression, charset: Expression)
       }
     }
   }
-
-  override def toString: String = s"ENCODE($value, $charset)"
 }
 
 
