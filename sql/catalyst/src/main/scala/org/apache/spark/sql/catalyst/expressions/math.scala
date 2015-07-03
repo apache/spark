@@ -21,10 +21,8 @@ import java.lang.{Long => JLong}
 import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.{StringType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType, IntegerType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -192,8 +190,7 @@ object Factorial {
   )
 }
 
-case class Factorial(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class Factorial(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -203,8 +200,6 @@ case class Factorial(child: Expression)
 
   // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
   override def nullable: Boolean = true
-
-  override def toString: String = s"factorial($child)"
 
   override def eval(input: InternalRow): Any = {
     val evalE = child.eval(input)
@@ -372,8 +367,8 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     var len = 0
     do {
       len += 1
-      value(value.length - len) = Character.toUpperCase(Character
-        .forDigit((numBuf & 0xF).toInt, 16)).toByte
+      value(value.length - len) =
+        Character.toUpperCase(Character.forDigit((numBuf & 0xF).toInt, 16)).toByte
       numBuf >>>= 4
     } while (numBuf != 0)
     UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
