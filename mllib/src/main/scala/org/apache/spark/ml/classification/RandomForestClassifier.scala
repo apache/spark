@@ -132,9 +132,6 @@ final class RandomForestClassificationModel private[ml] (
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
-
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.

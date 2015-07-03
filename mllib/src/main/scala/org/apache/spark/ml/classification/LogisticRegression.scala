@@ -41,7 +41,6 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasThreshold
 
 /**
  * :: Experimental ::
@@ -99,8 +98,12 @@ class LogisticRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.5)
+  def setThreshold(value: Double): this.type = set(thresholds, Array(1.0, value))
+  setDefault(thresholds -> Array(1.0, 0.5))
+  def getThreshold: Double = {
+    val thresholds = getThresholds
+    thresholds(1)/thresholds(0)
+  }
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -237,7 +240,11 @@ class LogisticRegressionModel private[ml] (
   with LogisticRegressionParams {
 
   /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
+  def setThreshold(value: Double): this.type = set(thresholds, Array(1.0, value))
+  def getThreshold: Double = {
+    val thresholds = getThresholds
+    thresholds(1) / thresholds(0)
+  }
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {

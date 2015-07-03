@@ -63,6 +63,9 @@ abstract class Classifier[
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): E = set(thresholds, value).asInstanceOf[E]
+
   // TODO: defaultEvaluator (follow-up PR)
 }
 
@@ -81,6 +84,9 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): M = set(thresholds, value).asInstanceOf[M]
 
   /** Number of classes (values which the label can take). */
   def numClasses: Int
