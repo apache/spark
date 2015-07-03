@@ -19,7 +19,7 @@ package org.apache.spark.ml.tree
 
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasThresholds}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
@@ -266,7 +266,7 @@ private[ml] object TreeRegressorParams {
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed with HasThresholds {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
@@ -278,6 +278,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
+
 
   /** @group setParam */
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)

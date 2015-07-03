@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
-import org.apache.spark.ml.param.shared.HasRawPredictionCol
+import org.apache.spark.ml.param.shared.{HasRawPredictionCol, HasThresholds}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * (private[spark]) Params for classification.
  */
 private[spark] trait ClassifierParams
-  extends PredictorParams with HasRawPredictionCol {
+  extends PredictorParams with HasRawPredictionCol with HasThresholds {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -63,6 +63,9 @@ abstract class Classifier[
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): E = set(thresholds, value).asInstanceOf[E]
+
   // TODO: defaultEvaluator (follow-up PR)
 }
 
@@ -81,6 +84,10 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
+
+  /** @group setParam */
+  def setThresholds(value: Array[Double]): M = set(thresholds, value).asInstanceOf[M]
+  setDefault(thresholds -> null)
 
   /** Number of classes (values which the label can take). */
   def numClasses: Int
@@ -165,6 +172,4 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
       }}.getOrElse(modelScores)
     scores.maxBy(_._1)._2
   }
-
-  protected def getThresholds: Array[Double]
 }

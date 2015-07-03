@@ -74,6 +74,8 @@ final class RandomForestClassifier(override val uid: String)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
+  override def setThresholds(value: Array[Double]): this.type = super.set(thresholds, value)
+
   // Parameters from RandomForestParams:
 
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
@@ -129,9 +131,6 @@ final class RandomForestClassificationModel private[ml] (
   with TreeEnsembleModel with HasThresholds with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
-
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
