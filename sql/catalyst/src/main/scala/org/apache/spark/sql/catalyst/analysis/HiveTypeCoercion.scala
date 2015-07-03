@@ -35,7 +35,6 @@ object HiveTypeCoercion {
 
   val typeCoercionRules =
     PropagateTypes ::
-      ConvertNaNs ::
       InConversion ::
       WidenTypes ::
       PromoteStrings ::
@@ -145,38 +144,6 @@ object HiveTypeCoercion {
                 newType
             }
         }
-    }
-  }
-
-  /**
-   * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to
-   * the appropriate numeric equivalent.
-   */
-  // TODO: remove this rule and make Cast handle Nan.
-  object ConvertNaNs extends Rule[LogicalPlan] {
-    private val StringNaN = Literal("NaN")
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case q: LogicalPlan => q transformExpressions {
-        // Skip nodes who's children have not been resolved yet.
-        case e if !e.childrenResolved => e
-
-        /* Double Conversions */
-        case b @ BinaryOperator(StringNaN, right @ DoubleType()) =>
-          b.makeCopy(Array(Literal(Double.NaN), right))
-        case b @ BinaryOperator(left @ DoubleType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Double.NaN)))
-
-        /* Float Conversions */
-        case b @ BinaryOperator(StringNaN, right @ FloatType()) =>
-          b.makeCopy(Array(Literal(Float.NaN), right))
-        case b @ BinaryOperator(left @ FloatType(), StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-
-        /* Use float NaN by default to avoid unnecessary type widening */
-        case b @ BinaryOperator(left @ StringNaN, StringNaN) =>
-          b.makeCopy(Array(left, Literal(Float.NaN)))
-      }
     }
   }
 
