@@ -732,9 +732,13 @@ object HiveTypeCoercion {
 
       // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
       // We wrap immediately an Option after this.
-      @Nullable val ret = (inType, expectedType) match {
+      @Nullable val ret: Expression = (inType, expectedType) match {
+
+        // If the expected type is already a parent of the input type, no need to cast.
+        case _ if expectedType.isParentOf(inType) => e
+
         // Cast null type (usually from null literals) into target types
-        case (NullType, target: DataType) => Cast(e, target.defaultConcreteType)
+        case (NullType, target) => Cast(e, target.defaultConcreteType)
 
         // Implicit cast among numeric types
         // If input is decimal, and we expect a decimal type, just use the input.
@@ -760,12 +764,15 @@ object HiveTypeCoercion {
         case (StringType, BinaryType) => Cast(e, BinaryType)
         case (any, StringType) if any != StringType => Cast(e, StringType)
 
-        // Type collection. Pick the first that we can implicit cast to.
+        // Type collection.
+        // First see if we can find our input type in the type collection. If we can, then just
+        // use the current expression; otherwise, find the first one we can implicitly cast.
         case (_, TypeCollection(types)) =>
-          types.flatMap(implicitCast(e, _)).headOption.orNull
-
-        // If the expected type is already a parent of the input type, no need to cast.
-        case _ if expectedType.isParentOf(inType) => e
+          if (types.exists(_.isParentOf(inType))) {
+            e
+          } else {
+            types.flatMap(implicitCast(e, _)).headOption.orNull
+          }
 
         // Else, just return the same input expression
         case _ => null
