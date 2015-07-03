@@ -556,7 +556,7 @@ class ClusterNode private (
     this.toArray.filter(_.isLeaf).sortBy(_.center.toArray.sum)
   }
 
-  def isLeaf: Boolean = (this.children.size == 0)
+  def isLeaf: Boolean = this.children.size == 0
 
   def getParent: Option[ClusterNode] = this.parent
 
@@ -578,7 +578,7 @@ class ClusterNode private (
   }
 
   private[mllib]
-  def setLocalHeight(height: Double) = (this.localHeight = height)
+  def setLocalHeight(height: Double) = this.localHeight = height
 
   /**
    * Converts to an adjacency list
@@ -612,7 +612,7 @@ class ClusterNode private (
     val leaves = nodes.filter(_.isLeaf)
     val notLeaves = nodes.filterNot(_.isLeaf).filter(_.getChildren.size > 1)
     val clusters = leaves ++ notLeaves
-    val treeMap = clusters.zipWithIndex.map { case (node, idx) => (node -> idx)}.toMap
+    val treeMap = clusters.zipWithIndex.map { case (node, idx) => node -> idx}.toMap
 
     // If a node only has one-child, the child is regarded as the cluster of the child.
     // Cluster A has cluster B and Cluster B. B is a leaf. C only has cluster D.
