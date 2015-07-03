@@ -541,7 +541,10 @@ case class Round(child: Expression, scale: Expression) extends Expression with E
       case t => t
     }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    //rely on precedence to implicit cast String into Double
+    TypeCollection(DoubleType, FloatType, LongType, IntegerType, ShortType, ByteType),
+    TypeCollection(LongType, IntegerType, ShortType, ByteType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
