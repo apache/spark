@@ -671,8 +671,16 @@ private class KafkaUtilsPythonHelper {
 
   def createBroker(host: String, port: JInt): Broker = Broker(host, port)
 
-  def getParentKafkaRDDs(rdd: RDD[_]): JList[RDD[_]] = {
+  def offsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
     val parentRDDs = rdd.getNarrowAncestors
-    parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
+    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
+    if (kafkaRDDs.isEmpty) {
+      throw new IllegalStateException("Get offsetRanges from a non KafkaRDD is illegal")
+    } else if (kafkaRDDs.length > 1) {
+      throw new IllegalStateException("Get offsetRanges from multiple KafkaRDDs is unexpected")
+    } else {
+      val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
+      kafkaRDD.offsetRanges.toSeq
+    }
   }
 }

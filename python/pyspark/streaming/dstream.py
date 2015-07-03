@@ -619,12 +619,15 @@ class TransformedDStream(DStream):
             self.prev = prev
             self.func = func
 
+    def _transformFunction(self, ctx, func, *deserializers):
+        return TransformFunction(ctx, func, deserializers)
+
     @property
     def _jdstream(self):
         if self._jdstream_val is not None:
             return self._jdstream_val
 
-        jfunc = TransformFunction(self._sc, self.func, self.prev._jrdd_deserializer)
+        jfunc = self._transformFunction(self._sc, self.func, self.prev._jrdd_deserializer)
         dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
         self._jdstream_val = dstream.asJavaDStream()
         return self._jdstream_val

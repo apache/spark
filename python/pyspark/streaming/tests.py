@@ -689,10 +689,10 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
-        self.assertEqual(offsetRanges, KafkaUtils.offsetRanges(rdd))
+        self.assertEqual(offsetRanges, rdd.offsetRanges())
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
-    def test_kafka_direct_stream_get_offsetRanges(self):
+    def test_kafka_direct_stream_foreach_get_offsetRanges(self):
         """Test the Python direct Kafka stream API."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
@@ -707,10 +707,36 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         offsetRanges = []
 
         def getOffsetRanges(_, rdd):
-            for o in KafkaUtils.offsetRanges(rdd):
+            for o in rdd.offsetRanges():
                 offsetRanges.append(o)
 
         stream.foreachRDD(getOffsetRanges)
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_transform_get_offsetRanges(self):
+        """Test the Python direct Kafka stream API."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        stream.transform(transformWithOffsetRanges).foreachRDD(lambda rdd: rdd.count())
         self.ssc.start()
         self.wait_for(offsetRanges, 1)
 

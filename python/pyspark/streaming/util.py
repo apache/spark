@@ -38,6 +38,9 @@ class TransformFunction(object):
         self.func = func
         self.deserializers = deserializers
 
+    def _wrapPythonRdd(self, jrdd, ctx, ser):
+        return RDD(jrdd, ctx, ser)
+
     def call(self, milliseconds, jrdds):
         try:
             if self.ctx is None:
@@ -51,7 +54,7 @@ class TransformFunction(object):
             if len(sers) < len(jrdds):
                 sers += (sers[0],) * (len(jrdds) - len(sers))
 
-            rdds = [RDD(jrdd, self.ctx, ser) if jrdd else None
+            rdds = [self._wrapPythonRdd(jrdd, self.ctx, ser) if jrdd else None
                     for jrdd, ser in zip(jrdds, sers)]
             t = datetime.fromtimestamp(milliseconds / 1000.0)
             r = self.func(t, *rdds)
