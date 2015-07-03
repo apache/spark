@@ -114,11 +114,10 @@ public class JavaLDASuite implements Serializable {
     // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
     // over topics. Compare it against nonEmptyCorpus instead of corpus
     JavaPairRDD<Long, Vector> nonEmptyCorpus = corpus.filter(
-            new Function<Tuple2<Long, Vector>, Boolean>() {
-              public Boolean call(Tuple2<Long, Vector> tuple2) {
-                return Vectors.norm(tuple2._2(), 1.0) != 0.0;
-              }
-
+      new Function<Tuple2<Long, Vector>, Boolean>() {
+        public Boolean call(Tuple2<Long, Vector> tuple2) {
+          return Vectors.norm(tuple2._2(), 1.0) != 0.0;
+        }
     });
     assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
   }

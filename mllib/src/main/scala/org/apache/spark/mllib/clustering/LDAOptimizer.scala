@@ -134,9 +134,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
       verticesTMP.reduceByKey(_ + _)
     }
 
-    val docAllTermVertices = docTermVertices
     // Partition such that edges are grouped by document
-    this.graph = Graph(docAllTermVertices, edges).partitionBy(PartitionStrategy.EdgePartition1D)
+    this.graph = Graph(docTermVertices, edges).partitionBy(PartitionStrategy.EdgePartition1D)
     this.k = k
     this.vocabSize = docs.take(1).head._2.size
     this.checkpointInterval = lda.getCheckpointInterval
