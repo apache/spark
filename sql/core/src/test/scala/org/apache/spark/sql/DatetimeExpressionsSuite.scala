@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.Date
-
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 
@@ -27,7 +25,7 @@ class DatetimeExpressionsSuite extends QueryTest {
 
   import ctx.implicits._
 
-  val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
+  lazy val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
 
   test("function current_date") {
     val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())

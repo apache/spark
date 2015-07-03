@@ -34,15 +34,6 @@ case class CurrentDate() extends LeafExpression {
   override def eval(input: InternalRow): Any = {
     DateTimeUtils.millisToDays(System.currentTimeMillis())
   }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val datetimeUtils = "org.apache.spark.sql.catalyst.util.DateTimeUtils"
-    s"""
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} =
-        $datetimeUtils.millisToDays(System.currentTimeMillis());
-    """
-  }
 }
 
 /**
@@ -57,12 +48,5 @@ case class CurrentTimestamp() extends LeafExpression {
 
   override def eval(input: InternalRow): Any = {
     System.currentTimeMillis() * 10000L
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    s"""
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = System.currentTimeMillis() * 10000L;
-    """
   }
 }
