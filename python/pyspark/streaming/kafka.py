@@ -285,7 +285,7 @@ class KafkaRDD(RDD):
             joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
-                KafkaUtils._printErrorMsg(rdd.ctx)
+                KafkaUtils._printErrorMsg(self.ctx)
             raise e
 
         offsets = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
