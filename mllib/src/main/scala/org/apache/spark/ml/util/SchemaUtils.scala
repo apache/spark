@@ -34,10 +34,11 @@ object SchemaUtils {
    * @param colName  column name
    * @param dataType  required column data type
    */
-  def checkColumnType(schema: StructType,
-                      colName: String,
-                      dataType: DataType,
-                      msg: String = ""): Unit = {
+  def checkColumnType(
+      schema: StructType,
+      colName: String,
+      dataType: DataType,
+      msg: String = ""): Unit = {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
