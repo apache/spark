@@ -147,7 +147,7 @@ final class RandomForestClassificationModel private[ml] (
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
-    val votes = Array[Double](numClasses)
+    val votes = new Array[Double](numClasses)
     _trees.view.foreach { tree =>
       val prediction = tree.rootNode.predict(features).toInt
       votes(prediction) = votes(prediction) + 1.0 // 1.0 = weight
