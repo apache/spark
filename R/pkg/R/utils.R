@@ -334,21 +334,21 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "MEMORY_ONLY_SER_2",
                                          "OFF_HEAP")) {
   match.arg(newLevel)
-  strageLevelClass <- "org.apache.spark.storage.StorageLevel"
+  storageLevelClass <- "org.apache.spark.storage.StorageLevel"
   storageLevel <- switch(newLevel,
-                         "DISK_ONLY" = callJStatic(strageLevelClass, "DISK_ONLY"),
-                         "DISK_ONLY_2" = callJStatic(strageLevelClass, "DISK_ONLY_2"),
-                         "MEMORY_AND_DISK" = callJStatic(strageLevelClass, "MEMORY_AND_DISK"),
-                         "MEMORY_AND_DISK_2" = callJStatic(strageLevelClass, "MEMORY_AND_DISK_2"),
-                         "MEMORY_AND_DISK_SER" = callJStatic(strageLevelClass,
+                         "DISK_ONLY" = callJStatic(storageLevelClass, "DISK_ONLY"),
+                         "DISK_ONLY_2" = callJStatic(storageLevelClass, "DISK_ONLY_2"),
+                         "MEMORY_AND_DISK" = callJStatic(storageLevelClass, "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = callJStatic(storageLevelClass, "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = callJStatic(storageLevelClass,
                                                              "MEMORY_AND_DISK_SER"),
-                         "MEMORY_AND_DISK_SER_2" = callJStatic(strageLevelClass,
+                         "MEMORY_AND_DISK_SER_2" = callJStatic(storageLevelClass,
                                                                "MEMORY_AND_DISK_SER_2"),
-                         "MEMORY_ONLY" = callJStatic(strageLevelClass, "MEMORY_ONLY"),
-                         "MEMORY_ONLY_2" = callJStatic(strageLevelClass, "MEMORY_ONLY_2"),
-                         "MEMORY_ONLY_SER" = callJStatic(strageLevelClass, "MEMORY_ONLY_SER"),
-                         "MEMORY_ONLY_SER_2" = callJStatic(strageLevelClass, "MEMORY_ONLY_SER_2"),
-                         "OFF_HEAP" = callJStatic(strageLevelClass, "OFF_HEAP"))
+                         "MEMORY_ONLY" = callJStatic(storageLevelClass, "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow
