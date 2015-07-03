@@ -542,7 +542,7 @@ case class Round(child: Expression, scale: Expression) extends Expression with E
     }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    //rely on precedence to implicit cast String into Double
+    // rely on precedence to implicit cast String into Double
     TypeCollection(DoubleType, FloatType, LongType, IntegerType, ShortType, ByteType),
     TypeCollection(LongType, IntegerType, ShortType, ByteType))
 
