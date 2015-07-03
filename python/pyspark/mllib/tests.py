@@ -135,7 +135,7 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
         self.assertEquals(30.0, lst.dot(dv))
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
-        self.assertTrue(7.0, sv.dot(arr))
+        self.assertEquals(7.0, sv.dot(arr))
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})

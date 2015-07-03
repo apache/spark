@@ -579,14 +579,10 @@ class SparseVector(Vector):
         """
 
         if isinstance(other, np.ndarray):
-            if other.ndim == 2:
-                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
-                return np.array(results)
-            elif other.ndim == 1:
-                assert len(self) == _vector_size(other), "dimension mismatch"
-                return np.dot(other[self.indices], self.values)
-            else:
+            if other.ndim not in [2, 1]:
                 raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
+            assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.values, other[self.indices])
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
