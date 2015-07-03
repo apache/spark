@@ -158,6 +158,7 @@ object FunctionRegistry {
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[Upper]("ucase"),
