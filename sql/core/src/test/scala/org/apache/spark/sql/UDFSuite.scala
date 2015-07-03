@@ -21,7 +21,6 @@ package org.apache.spark.sql
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
-  import org.apache.spark.sql.TestData._
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
@@ -84,37 +83,65 @@ class UDFSuite extends QueryTest {
   }
 
   test("UDF in a WHERE") {
-    testData.sqlContext.udf.register("oneArgFilter", (n:Int) => { n > 80 })
+    ctx.udf.register("oneArgFilter", (n: Int) => { n > 80 })
+
+    val df = ctx.sparkContext.parallelize(
+      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+    df.registerTempTable("integerData")
 
     val result =
-      testData.sqlContext.sql("SELECT * FROM testData WHERE oneArgFilter(key)")
+      ctx.sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
     assert(result.count() === 20)
   }
 
   test("UDF in a HAVING") {
-    testData.sqlContext.udf.register("havingFilter", (n:Long) => { n > 5 })
+    ctx.udf.register("havingFilter", (n: Long) => { n > 5 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
 
     val result =
-      testData.sqlContext.sql("SELECT g, SUM(v) as s FROM groupData GROUP BY g HAVING havingFilter(s)")
+      ctx.sql(
+        """
+         | SELECT g, SUM(v) as s
+         | FROM groupData
+         | GROUP BY g
+         | HAVING havingFilter(s)
+        """.stripMargin)
+
     assert(result.count() === 2)
   }
 
   test("UDF in a GROUP BY") {
-    testData.sqlContext.udf.register("groupFunction", (n:Int) => { n > 10 })
+    ctx.udf.register("groupFunction", (n: Int) => { n > 10 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
 
     val result =
-      testData.sqlContext.sql("SELECT SUM(v) FROM groupData GROUP BY groupFunction(v)")
+      ctx.sql(
+        """
+         | SELECT SUM(v)
+         | FROM groupData
+         | GROUP BY groupFunction(v)
+        """.stripMargin)
     assert(result.count() === 2)
   }
 
   test("UDFs everywhere") {
-    ctx.udf.register("groupFunction", (n:Int) => { n > 10 })
-    ctx.udf.register("havingFilter", (n:Long) => { n > 2000 })
-    ctx.udf.register("whereFilter", (n:Int) => { n < 150 })
-    ctx.udf.register("timesHundred", (n:Long) => { n * 100 })
+    ctx.udf.register("groupFunction", (n: Int) => { n > 10 })
+    ctx.udf.register("havingFilter", (n: Long) => { n > 2000 })
+    ctx.udf.register("whereFilter", (n: Int) => { n < 150 })
+    ctx.udf.register("timesHundred", (n: Long) => { n * 100 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
 
     val result =
-      testData.sqlContext.sql(
+      ctx.sql(
         """
          | SELECT timesHundred(SUM(v)) as v100
          | FROM groupData
