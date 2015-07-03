@@ -33,9 +33,9 @@ class SignificantSelectorTest extends FunSuite with MLlibTestSparkContext {
     ))
 
     val significant = new SignificantSelector().fit(vectors)
-    assert(significant.transform(dv).toString == dv.toString)
-    assert(significant.transform(sv1).toString == sv1.toString)
-    assert(significant.transform(sv2).toString == sv2.toString)
+    assert(significant.transform(dv) == dv)
+    assert(significant.transform(sv1) == sv1)
+    assert(significant.transform(sv2) == sv2)
   }
   
   
