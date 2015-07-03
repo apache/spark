@@ -17,24 +17,21 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Date
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.DateType
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("datetime function current_date") {
-    checkEvaluation(
-      CurrentDate(),
-      new Date(System.currentTimeMillis), EmptyRow)
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
   }
 
   test("datetime function current_timestamp") {
-    // By the time we run check, current timestamp has been different.
-    // So we just check the date part.
-    checkEvaluation(
-      Cast(CurrentTimestamp(), DateType),
-      new Date(System.currentTimeMillis), EmptyRow)
+    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
+    val t1 = System.currentTimeMillis()
+    assert(math.abs(t1 - ct.getTime) < 5000)
   }
 
 }
