@@ -21,8 +21,10 @@ import java.lang.{Long => JLong}
 import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType, IntegerType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -158,6 +160,82 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
+
+object Factorial {
+
+  def factorial(n: Int): Long = {
+    if (n < factorials.length) factorials(n) else Long.MaxValue
+  }
+
+  private val factorials: Array[Long] = Array[Long](
+    1,
+    1,
+    2,
+    6,
+    24,
+    120,
+    720,
+    5040,
+    40320,
+    362880,
+    3628800,
+    39916800,
+    479001600,
+    6227020800L,
+    87178291200L,
+    1307674368000L,
+    20922789888000L,
+    355687428096000L,
+    6402373705728000L,
+    121645100408832000L,
+    2432902008176640000L
+  )
+}
+
+case class Factorial(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(IntegerType)
+
+  override def dataType: DataType = LongType
+
+  override def foldable: Boolean = child.foldable
+
+  // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
+  override def nullable: Boolean = true
+
+  override def toString: String = s"factorial($child)"
+
+  override def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      val input = evalE.asInstanceOf[Integer]
+      if (input > 20 || input < 0) {
+        null
+      } else {
+        Factorial.factorial(input)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        if (${eval.primitive} > 20 || ${eval.primitive} < 0) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} =
+            org.apache.spark.sql.catalyst.expressions.Factorial.factorial(${eval.primitive});
+        }
+      }
+    """
+  }
+}
 
 case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 

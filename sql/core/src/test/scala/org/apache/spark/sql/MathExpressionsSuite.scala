@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 
-
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
@@ -181,6 +180,18 @@ class MathExpressionsSuite extends QueryTest {
 
   test("floor") {
     testOneToOneMathFunction(floor, math.floor)
+  }
+
+  test("factorial") {
+    val df = (0 to 5).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(factorial('a)),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+    checkAnswer(
+      df.selectExpr("factorial(a)"),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
   }
 
   test("rint") {
