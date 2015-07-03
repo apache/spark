@@ -50,9 +50,14 @@ class SignificantSelectorTest extends FunSuite with MLlibTestSparkContext {
     ))
 
     val significant = new SignificantSelector().fit(vectors)
-    assert(significant.transform(dv).toString == "[2.0,3.0,4.0]")
-    assert(significant.transform(sv1).toString == "(3,[0,1,2],[2.0,3.0,4.0])")
-    assert(significant.transform(sv2).toString == "(3,[1],[3.0])")
+
+    val significanted_dv = Vectors.dense(2.0, 3.0, 4.0)
+    val significanted_sv1 = Vectors.sparse(3, Seq((0, 2.0), (1, 3.0), (2, 4.0)))
+    val significanted_sv2 = Vectors.sparse(3, Seq((1, 3.0)))
+
+    assert(significant.transform(dv) == significanted_dv)
+    assert(significant.transform(sv1) == significanted_sv1)
+    assert(significant.transform(sv2) == significanted_sv2)
   }
   
   test("empty result vector") {
@@ -62,8 +67,11 @@ class SignificantSelectorTest extends FunSuite with MLlibTestSparkContext {
     ))
 
     val significant = new SignificantSelector().fit(vectors)
-    assert(significant.transform(dv).toString == "[]")
-    assert(significant.transform(sv1).toString == "[]")
-    assert(significant.transform(sv2).toString == "[]")
+
+    val empty_vector = Vectors.dense(Array[Double]())
+
+    assert(significant.transform(dv) == empty_vector)
+    assert(significant.transform(sv1) == empty_vector)
+    assert(significant.transform(sv2) == empty_vector)
   }
 }
