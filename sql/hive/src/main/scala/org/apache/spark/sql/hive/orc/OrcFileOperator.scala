@@ -29,18 +29,34 @@ import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
 
 private[orc] object OrcFileOperator extends Logging {
-  // TODO Needs to consider all files when schema evolution is taken into account.
+  /**
+   * Retrieves a ORC file reader from a given path.  The path can point to either a directory or a
+   * single ORC file.  If it points to an directory, it picks any non-empty ORC file within that
+   * directory.
+   *
+   * The reader returned by this method is mainly used for two purposes:
+   *
+   * 1. Retrieving file metadata (schema and compression codecs, etc.)
+   * 2. Read the actual file content (in this case, the given path should point to the target file)
+   *
+   * @note As recorded by SPARK-8501, ORC writes an empty schema (<code>struct&lt;&gt;</code) to an
+   *       ORC file if the file contains zero rows. This is OK for Hive since the schema of the
+   *       table is managed by metastore.  But this becomes a problem when reading ORC files
+   *       directly from HDFS via Spark SQL, because we have to discover the schema from raw ORC
+   *       files.  So this method always tries to find a ORC file whose schema is non-empty, and
+   *       create the result reader from that file.  If no such file is found, it returns `None`.
+   *
+   * @todo Needs to consider all files when schema evolution is taken into account.
+   */
   def getFileReader(basePath: String, config: Option[Configuration] = None): Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
-        case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() > 0 =>
-          true
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
           logInfo(
             s"ORC file $path has empty schema, it probably contains no rows. " +
               "Trying to read another ORC file to figure out the schema.")
           false
-        case _ => false
+        case _ => true
       }
     }
 
@@ -50,10 +66,6 @@ private[orc] object OrcFileOperator extends Logging {
       hdfsPath.getFileSystem(conf)
     }
 
-    // SPARK-8501: ORC writes an empty schema ("struct<>") to an ORC file if the file contains zero
-    // rows. This is OK for Hive since the schema of the table is managed by metastore.  But this
-    // becomes a problem when reading ORC files directly from HDFS via Spark SQL, because we have
-    // to discover the schema from raw ORC files.
     listOrcFiles(basePath, conf).iterator.map { path =>
       path -> OrcFile.createReader(fs, path)
     }.collectFirst {
