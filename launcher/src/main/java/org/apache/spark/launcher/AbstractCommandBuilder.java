@@ -133,7 +133,7 @@ abstract class AbstractCommandBuilder {
       }
     }
 
-    cmd.add("-XX:MaxPermSize=128m");
+    cmd.add("-XX:MaxPermSize=256m");
   }
 
   void addOptionString(List<String> cmd, String options) {
