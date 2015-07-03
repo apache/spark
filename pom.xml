@@ -689,7 +689,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.11.3</version>
+        <version>1.12.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>

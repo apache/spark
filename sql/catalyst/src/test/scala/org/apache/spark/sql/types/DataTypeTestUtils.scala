@@ -48,7 +48,13 @@ object DataTypeTestUtils {
   /**
    * Instances of all [[AtomicType]]s.
    */
-  val atomicTypes: Set[DataType] = Set(BinaryType, StringType, TimestampType) ++ numericTypes
+  val atomicTypes: Set[DataType] = numericTypes ++ Set(
+    BinaryType,
+    BooleanType,
+    DateType,
+    StringType,
+    TimestampType
+  )
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

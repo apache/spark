@@ -19,13 +19,12 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.types._
 import org.scalacheck.{Arbitrary, Gen}
 
+import org.apache.spark.sql.types._
+
 /**
- * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
- * values; instead, they're biased to return "interesting" values (such as maximum / minimum values)
- * with higher probability.
+ * ScalaCheck random data generators for Spark SQL DataTypes.
  */
 object RandomDataGenerator {
 
