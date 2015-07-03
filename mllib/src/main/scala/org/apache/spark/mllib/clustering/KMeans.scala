@@ -174,7 +174,7 @@ class KMeans private (
       new VectorWithNorm(v, norm)
     }
     val model = runAlgorithm(zippedData)
-    norms.unpersist()
+    norms.unpersist(blocking = false)
 
     // Warn at the end of the run as well, for increased visibility.
     if (data.getStorageLevel == StorageLevel.NONE) {

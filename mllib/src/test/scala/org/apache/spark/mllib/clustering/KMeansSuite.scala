@@ -192,7 +192,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    data.unpersist()
+    data.unpersist(blocking = false)
   }
 
   test("k-means|| initialization") {

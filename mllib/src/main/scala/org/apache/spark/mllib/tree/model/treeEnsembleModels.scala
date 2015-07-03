@@ -152,7 +152,7 @@ class GradientBoostedTreesModel(
       evaluationArray(nTree) = predictionAndError.values.mean()
     }
 
-    broadcastTrees.unpersist()
+    broadcastTrees.unpersist(blocking = false)
     evaluationArray
   }
 

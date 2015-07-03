@@ -577,7 +577,7 @@ object ALS extends Logging {
         val previousItemFactors = itemFactors
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, solver)
-        previousItemFactors.unpersist()
+        previousItemFactors.unpersist(blocking = false)
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
         if (shouldCheckpoint(iter)) {
@@ -590,7 +590,7 @@ object ALS extends Logging {
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
-        previousUserFactors.unpersist()
+        previousUserFactors.unpersist(blocking = false)
       }
     } else {
       for (iter <- 0 until maxIter) {
@@ -630,13 +630,13 @@ object ALS extends Logging {
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemFactors.unpersist()
+      itemFactors.unpersist(blocking = false)
       itemIdAndFactors.count()
-      userInBlocks.unpersist()
+      userInBlocks.unpersist(blocking = false)
       userOutBlocks.unpersist()
-      itemInBlocks.unpersist()
+      itemInBlocks.unpersist(blocking = false)
       itemOutBlocks.unpersist()
-      blockRatings.unpersist()
+      blockRatings.unpersist(blocking = false)
     }
     (userIdAndFactors, itemIdAndFactors)
   }

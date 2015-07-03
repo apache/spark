@@ -103,7 +103,7 @@ private[tree] class NodeIdCache(
       bins: Array[Array[Bin]]): Unit = {
     if (prevNodeIdsForInstances != null) {
       // Unpersist the previous one if one exists.
-      prevNodeIdsForInstances.unpersist()
+      prevNodeIdsForInstances.unpersist(blocking = false)
     }
 
     prevNodeIdsForInstances = nodeIdsForInstances

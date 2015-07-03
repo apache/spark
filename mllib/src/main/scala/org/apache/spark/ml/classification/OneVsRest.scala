@@ -119,7 +119,7 @@ final class OneVsRestModel private[ml] (
     }
 
     if (handlePersistence) {
-      newDataset.unpersist()
+      newDataset.unpersist(blocking = false)
     }
 
     // output the index of the classifier with highest confidence as prediction
@@ -199,7 +199,7 @@ final class OneVsRest(override val uid: String)
     }.toArray[ClassificationModel[_, _]]
 
     if (handlePersistence) {
-      multiclassLabeled.unpersist()
+      multiclassLabeled.unpersist(blocking = false)
     }
 
     // extract label metadata from label column if present, or create a nominal attribute
