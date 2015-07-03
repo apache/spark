@@ -411,7 +411,7 @@ class SchedulerJob(BaseJob):
             open_slots = pools[pool].open_slots(session=session)
             if open_slots > 0:
                 tis = sorted(
-                    tis, key=lambda ti: ti.priority_weight, reverse=True)
+                    tis, key=lambda ti: (-ti.priority_weight, ti.start_date))
                 for ti in tis[:open_slots]:
                     task = None
                     try:
