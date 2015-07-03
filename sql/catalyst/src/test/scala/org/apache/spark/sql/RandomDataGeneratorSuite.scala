@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.scalacheck.Prop.{exists, forAll, secure}
-import org.scalatest.prop.Checkers
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types._
@@ -27,7 +24,7 @@ import org.apache.spark.sql.types._
 /**
  * Tests of [[RandomDataGenerator]].
  */
-class RandomDataGeneratorSuite extends SparkFunSuite with Checkers {
+class RandomDataGeneratorSuite extends SparkFunSuite {
 
   /**
    * Tests random data generation for the given type by using it to generate random values then
@@ -39,12 +36,14 @@ class RandomDataGeneratorSuite extends SparkFunSuite with Checkers {
       fail(s"Random data generator was not defined for $dataType")
     }
     if (nullable) {
-      check(exists(generator) { _ == null })
+      assert(Iterator.fill(100)(generator()).contains(null))
+    } else {
+      assert(Iterator.fill(100)(generator()).forall(_ != null))
     }
-    if (!nullable) {
-      check(forAll(generator) { _ != null })
+    for (_ <- 1 to 10) {
+      val generatedValue = generator()
+      toCatalyst(generatedValue)
     }
-    check(secure(forAll(generator) { v => { toCatalyst(v); true } }))
   }
 
   // Basic types:
