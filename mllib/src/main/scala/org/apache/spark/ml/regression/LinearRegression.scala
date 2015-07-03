@@ -147,7 +147,7 @@ class LinearRegression(override val uid: String)
 
       val model = new LinearRegressionModel(uid, weights, intercept)
       val trainingResults = new LinearRegressionTrainingResults(
-        model.transform(dataset).select(model.getPredictionCol,model.getLabelCol),
+        model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
         Array())
       return model.setTrainingResults(trainingResults)
     }
@@ -205,7 +205,7 @@ class LinearRegression(override val uid: String)
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     val model = new LinearRegressionModel(uid, weights.compressed, intercept)
     val trainingResults = new LinearRegressionTrainingResults(
-      model.transform(dataset).select(model.getPredictionCol,model.getLabelCol),
+      model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
       lossHistory.result())
     copyValues(model.setTrainingResults(trainingResults))
   }
