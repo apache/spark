@@ -33,22 +33,26 @@ import org.apache.spark.serializer.SerializationStream
  * Wrapper around an iterator which writes checkpoint data to HDFS while running action on
  * a RDD to support checkpointing RDD.
  */
-private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
-  sub: I,
-  path: String,
-  broadcastedConf: Broadcast[SerializableConfiguration],
-  partitionId: Int,
-  context: TaskContext,
-  blockSize: Int = -1) extends Iterator[A] with Logging {
+private[spark] class CheckpointingIterator[A: ClassTag](
+    values: Iterator[A],
+    path: String,
+    broadcastedConf: Broadcast[SerializableConfiguration],
+    partitionId: Int,
+    context: TaskContext,
+    blockSize: Int = -1) extends Iterator[A] with Logging {
 
-  val env = SparkEnv.get
-  var fs: FileSystem = null
-  val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
-  var serializeStream: SerializationStream = null
+  private val env = SparkEnv.get
+  private var fs: FileSystem = null
+  private val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
+  private var serializeStream: SerializationStream = null
 
-  var finalOutputPath: Path = null
-  var tempOutputPath: Path = null
+  private var finalOutputPath: Path = null
+  private var tempOutputPath: Path = null
 
+  /**
+   * Initialize this iterator by creating temporary output path and serializer instance.
+   *
+   */
   def init(): this.type = {
     val outputDir = new Path(path)
     fs = outputDir.getFileSystem(broadcastedConf.value.value)
@@ -76,6 +80,10 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
     this
   }
 
+  /**
+   * Called when this iterator is on the latest element by `hasNext`.
+   * This method will rename temporary output path to final output path of checkpoint data.
+   */
   def completion(): Unit = {
     if (!doCheckpoint) {
       return
@@ -102,7 +110,7 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
   }
 
   override def next(): A = {
-    val item = sub.next()
+    val item = values.next()
     if (doCheckpoint) {
       checkpointing(item)
     }
@@ -115,7 +123,7 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
   private[this] var completed = false
 
   override def hasNext: Boolean = {
-    val r = sub.hasNext
+    val r = values.hasNext
     if (!r && !completed) {
       completed = true
       completion()
@@ -125,15 +133,15 @@ private[spark] class CheckpointingIterator[A: ClassTag, +I <: Iterator[A]](
 }
 
 private[spark] object CheckpointingIterator {
-  def apply[A: ClassTag, I <: Iterator[A]](
-    sub: I,
-    path: String,
-    broadcastedConf: Broadcast[SerializableConfiguration],
-    partitionId: Int,
-    context: TaskContext,
-    blockSize: Int = -1) : CheckpointingIterator[A, I] = {
-    new CheckpointingIterator[A, I](
-      sub,
+  def apply[A: ClassTag](
+      values: Iterator[A],
+      path: String,
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      partitionId: Int,
+      context: TaskContext,
+      blockSize: Int = -1) : CheckpointingIterator[A] = {
+    new CheckpointingIterator[A](
+      values,
       path,
       broadcastedConf,
       partitionId,

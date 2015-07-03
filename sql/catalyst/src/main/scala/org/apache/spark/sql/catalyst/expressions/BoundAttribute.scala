@@ -47,7 +47,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     s"""
         boolean ${ev.isNull} = i.isNullAt($ordinal);
         ${ctx.javaType(dataType)} ${ev.primitive} = ${ev.isNull} ?
-            ${ctx.defaultValue(dataType)} : (${ctx.getColumn(dataType, ordinal)});
+            ${ctx.defaultValue(dataType)} : (${ctx.getColumn("i", dataType, ordinal)});
     """
   }
 }

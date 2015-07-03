@@ -23,16 +23,16 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.scheduler.{ResultTask, ShuffleMapTask}
 import org.apache.spark.util.{CheckpointingIterator, SerializableConfiguration}
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Enumeration to manage state transitions of an RDD through checkpointing
- * [ Initialized --> marked for checkpointing --> checkpointing in progress --> checkpointed ]
+ * [ Initialized --> checkpointing in progress --> checkpointed ].
  */
 private[spark] object CheckpointState extends Enumeration {
   type CheckpointState = Value
-  val Initialized, MarkedForCheckpoint, CheckpointingInProgress, Checkpointed = Value
+  val Initialized, CheckpointingInProgress, Checkpointed = Value
 }
 
 /**
@@ -67,41 +67,37 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     new SerializableConfiguration(rdd.context.hadoopConfiguration))
 
   // The checkpoint state of the associated RDD.
-  var cpState = Initialized
+  private var cpState = Initialized
 
   // The file to which the associated RDD has been checkpointed to
-  @transient var cpFile: Option[String] = None
+  private var cpFile: Option[String] = None
 
   // The CheckpointRDD created from the checkpoint file, that is, the new parent the associated RDD.
-  var cpRDD: Option[RDD[T]] = None
+  // This is defined if and only if `cpState` is `Checkpointed`.
+  private var cpRDD: Option[CheckpointRDD[T]] = None
 
-  // Mark the RDD for checkpointing
-  def markForCheckpoint() {
-    RDDCheckpointData.synchronized {
-      if (cpState == Initialized) cpState = MarkedForCheckpoint
-    }
-  }
+  // TODO: are we sure we need to use a global lock in the following methods?
 
   // Is the RDD already checkpointed
-  def isCheckpointed: Boolean = {
-    RDDCheckpointData.synchronized { cpState == Checkpointed }
+  def isCheckpointed: Boolean = RDDCheckpointData.synchronized {
+    cpState == Checkpointed
   }
 
   // Get the file to which this RDD was checkpointed to as an Option
-  def getCheckpointFile: Option[String] = {
-    RDDCheckpointData.synchronized { cpFile }
+  def getCheckpointFile: Option[String] = RDDCheckpointData.synchronized {
+    cpFile
   }
 
   // Get the iterator used to write checkpoint data to HDFS
   def getCheckpointIterator(
-    rddIterator: Iterator[T],
-    context: TaskContext,
-    partitionId: Int): Iterator[T] = {
+      rddIterator: Iterator[T],
+      context: TaskContext,
+      partitionId: Int): Iterator[T] = {
     RDDCheckpointData.synchronized {
-      if (cpState == MarkedForCheckpoint) {
+      if (cpState == Initialized) {
         // Create the output path for the checkpoint
         val path = new Path(checkpointDir.get, "rdd-" + rddId)
-        CheckpointingIterator[T, Iterator[T]](
+        CheckpointingIterator[T](
           rddIterator,
           path.toString,
           broadcastedConf,
@@ -113,12 +109,16 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     }
   }
 
-  // Do the checkpointing of the RDD. Called after the first job using that RDD is over.
-  def doCheckpoint() {
-    // If it is marked for checkpointing AND checkpointing is not already in progress,
-    // then set it to be in progress, else return
+  /**
+   * Materialize this RDD and write its content to a reliable DFS.
+   * This is called immediately after the first action invoked on this RDD has completed.
+   */
+  def doCheckpoint(): Unit = {
+
+    // Guard against multiple threads checkpointing the same RDD by
+    // atomically flipping the state of this RDDCheckpointData
     RDDCheckpointData.synchronized {
-      if (cpState == MarkedForCheckpoint) {
+      if (cpState == Initialized) {
         cpState = CheckpointingInProgress
       } else {
         return
@@ -145,34 +145,26 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
     }
-    logInfo("Done checkpointing RDD " + rddId + " to " + path + ", new parent is RDD " + newRDD.id)
+    logInfo(s"Done checkpointing RDD ${rddId} to $path, new parent is RDD ${newRDD.id}")
   }
 
-  // Get preferred location of a split after checkpointing
-  def getPreferredLocations(split: Partition): Seq[String] = {
-    RDDCheckpointData.synchronized {
-      cpRDD.get.preferredLocations(split)
-    }
+  def getPartitions: Array[Partition] = RDDCheckpointData.synchronized {
+    cpRDD.get.partitions
   }
 
-  def getPartitions: Array[Partition] = {
-    RDDCheckpointData.synchronized {
-      cpRDD.get.partitions
-    }
-  }
-
-  def checkpointRDD: Option[RDD[T]] = {
-    RDDCheckpointData.synchronized {
-      cpRDD
-    }
+  def checkpointRDD: Option[CheckpointRDD[T]] = RDDCheckpointData.synchronized {
+    cpRDD
   }
 }
 
 private[spark] object RDDCheckpointData {
+
+  /** Return the path of the directory to which this RDD's checkpoint data is written. */
   def rddCheckpointDataPath(sc: SparkContext, rddId: Int): Option[Path] = {
-    sc.checkpointDir.map { dir => new Path(dir, "rdd-" + rddId) }
+    sc.checkpointDir.map { dir => new Path(dir, s"rdd-$rddId") }
   }
 
+  /** Clean up the files associated with the checkpoint data for this RDD. */
   def clearRDDCheckpointData(sc: SparkContext, rddId: Int): Unit = {
     rddCheckpointDataPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)

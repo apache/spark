@@ -28,8 +28,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
  * :: DeveloperApi ::
  * The data type representing `java.sql.Timestamp` values.
  * Please use the singleton [[DataTypes.TimestampType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class TimestampType private() extends AtomicType {

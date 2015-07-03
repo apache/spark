@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 
-
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
@@ -183,6 +182,18 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction(floor, math.floor)
   }
 
+  test("factorial") {
+    val df = (0 to 5).map(i => (i, i)).toDF("a", "b")
+    checkAnswer(
+      df.select(factorial('a)),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+    checkAnswer(
+      df.selectExpr("factorial(a)"),
+      Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
+    )
+  }
+
   test("rint") {
     testOneToOneMathFunction(rint, math.rint)
   }
@@ -212,6 +223,29 @@ class MathExpressionsSuite extends QueryTest {
     )
   }
 
+  test("hex") {
+    val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
+    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
+    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
+    checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
+    checkAnswer(data.selectExpr("hex(d)"), Seq(Row("68656C6C6F")))
+    checkAnswer(data.selectExpr("hex(cast(d as binary))"), Seq(Row("68656C6C6F")))
+  }
+
+  test("unhex") {
+    val data = Seq(("1C", "737472696E67")).toDF("a", "b")
+    checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
+  }
+
   test("hypot") {
     testTwoToOneMathFunction(hypot, hypot, math.hypot)
   }
@@ -234,6 +268,40 @@ class MathExpressionsSuite extends QueryTest {
 
   test("log1p") {
     testOneToOneNonNegativeMathFunction(log1p, math.log1p)
+  }
+
+  test("shift left") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((21, 21, 21, 21, 21, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
+        shiftLeft('f, 1)),
+        Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
+        "shiftLeft(f, 1)"),
+      Row(42.toLong, 42, 42.toShort, 42.toByte, null))
+  }
+
+  test("shift right") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
+        shiftRight('f, 1)),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
+        "shiftRight(f, 1)"),
+      Row(21.toLong, 21, 21.toShort, 21.toByte, null))
   }
 
   test("binary log") {

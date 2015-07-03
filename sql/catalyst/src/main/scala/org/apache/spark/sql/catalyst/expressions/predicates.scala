@@ -69,13 +69,10 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-
 case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"NOT $child"
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType)
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) match {
@@ -125,9 +122,9 @@ case class InSet(value: Expression, hset: Set[Any])
 case class And(left: Expression, right: Expression)
   extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def toString: String = s"($left && $right)"
 
-  override def symbol: String = "&&"
+  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
   override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
@@ -174,9 +171,9 @@ case class And(left: Expression, right: Expression)
 case class Or(left: Expression, right: Expression)
   extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def expectedChildTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def toString: String = s"($left || $right)"
 
-  override def symbol: String = "||"
+  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
 
   override def eval(input: InternalRow): Any = {
     val l = left.eval(input)
@@ -220,7 +217,7 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
-abstract class BinaryComparison extends BinaryExpression with Predicate {
+abstract class BinaryComparison extends BinaryOperator with Predicate {
   self: Product =>
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -305,7 +302,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (l == null || r == null) {
       false
     } else {
-      l == r
+      if (left.dataType != BinaryType) l == r
+      else java.util.Arrays.equals(l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]])
     }
   }
 
