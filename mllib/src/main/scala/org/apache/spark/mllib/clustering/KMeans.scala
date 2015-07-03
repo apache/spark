@@ -209,12 +209,11 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val numRuns = if (initialModel.nonEmpty) runs else 1
+    val numRuns = if (initialModel.isEmpty) 1 else runs
 
     val centers = initialModel match {
       case Some(kMeansCenters) => {
-        Array.tabulate(numRuns)(r => kMeansCenters.clusterCenters
-          .map(s => new VectorWithNorm(s, Vectors.norm(s, 2.0))))
+        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s, Vectors.norm(s, 2.0))))
       }
       case None => {
         if (initializationMode == KMeans.RANDOM) {
