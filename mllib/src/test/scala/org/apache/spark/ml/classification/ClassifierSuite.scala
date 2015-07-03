@@ -18,33 +18,38 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
-class ClassifierSuite extends SparkFunSuite {
-  class TestClassificationModel(
-      override val numClasses: Int,
-      val thresholds: Option[Array[Double]])
-        extends ClassificationModel[Vector, TestClassificationModel] {
-    override val uid = "1"
-    override def copy(extra: org.apache.spark.ml.param.ParamMap):
-        ClassifierSuite.this.TestClassificationModel = {
-      null
-    }
-
-    override def getThresholds = thresholds
-
-    override def predictRaw(input: Vector) = {
-      input
-    }
-    def friendlyPredict(input: Vector) = {
-      predict(input)
-    }
+final class TestClassificationModel(
+  override val numClasses: Int)
+    extends ClassificationModel[Vector, TestClassificationModel] {
+  override val uid = null
+  override def copy(extra: org.apache.spark.ml.param.ParamMap):
+      TestClassificationModel = {
+    defaultCopy(extra)
   }
+
+  override def predictRaw(input: Vector) = {
+    input
+  }
+  def friendlyPredict(input: Vector) = {
+    predict(input)
+  }
+}
+
+
+class ClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
     val threshold = Array(0.5, 0.2)
-    val testModel = new TestClassificationModel(2, Some(threshold))
+    val testModel = (new TestClassificationModel(2)).setThresholds(threshold)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) == 1.0)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) == 0.0)
+  }
+
+  test("test thresholding not required") {
+    val testModel = new TestClassificationModel(2)
+    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) == 1.0)
   }
 }

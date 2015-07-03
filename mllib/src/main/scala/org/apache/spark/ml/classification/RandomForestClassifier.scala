@@ -73,6 +73,8 @@ final class RandomForestClassifier(override val uid: String)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
+  override def setThresholds(value: Array[Double]): this.type = super.set(thresholds, value)
+
   // Parameters from RandomForestParams:
 
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
@@ -140,9 +142,6 @@ final class RandomForestClassificationModel private[ml] (
   def this(trees: Array[DecisionTreeClassificationModel], numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
 
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
-
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
@@ -186,7 +185,6 @@ final class RandomForestClassificationModel private[ml] (
         throw new RuntimeException("Unexpected error in RandomForestClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
-    Vectors.dense(votes)
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {

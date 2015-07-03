@@ -272,7 +272,6 @@ class LogisticRegressionModel private[ml] (
 
   /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
-  override protected def getThresholds = Array($(threshold))
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
