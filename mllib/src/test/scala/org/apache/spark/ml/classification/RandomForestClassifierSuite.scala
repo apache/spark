@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -102,6 +102,32 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setFeatureSubsetStrategy("sqrt")
       .setSeed(12345)
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
+  }
+
+  test("ensure thresholding works") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0)),
+      LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
+    )
+    val rdd = sc.parallelize(arr)
+    val categoricalFeatures = Map(0 -> 3, 2 -> 2, 4 -> 4)
+    val numClasses = 3
+
+    val thresholds = Array(1.0, 10000.0, 0.01)
+    val rf = new RandomForestClassifier()
+      .setNumTrees(2)
+      .setSeed(12345)
+      .setThresholds(thresholds)
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(newData)
+    assert(model.getThresholds == thresholds)
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+    val testData = rdd.toDF
+    val results = model.transform(testData).select("prediction")
+    results.count()
   }
 
   test("subsampling rate in RandomForest"){
