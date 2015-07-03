@@ -1344,6 +1344,26 @@ object functions {
   def shiftRight(e: Column, numBits: Int): Column = ShiftRight(e.expr, lit(numBits).expr)
 
   /**
+   * Unsigned shift the the given value numBits right. If the given value is a long value,
+   * it will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRightUnsigned(columnName: String, numBits: Int): Column =
+    shiftRightUnsigned(Column(columnName), numBits)
+
+  /**
+   * Unsigned shift the the given value numBits right. If the given value is a long value,
+   * it will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
+  def shiftRightUnsigned(e: Column, numBits: Int): Column =
+    ShiftRightUnsigned(e.expr, lit(numBits).expr)
+
+  /**
    * Shift the the given value numBits right. If the given value is a long value, it will return
    * a long value else it will return an integer value.
    *
