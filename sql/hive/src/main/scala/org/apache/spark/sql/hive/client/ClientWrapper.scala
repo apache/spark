@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
+import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
 import javax.annotation.concurrent.GuardedBy
@@ -28,16 +28,13 @@ import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
-import org.apache.hadoop.hive.metastore.api
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.{Driver, metadata}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -314,6 +311,13 @@ private[hive] class ClientWrapper(
   override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
     val qlTable = toQlTable(hTable)
     shim.getAllPartitions(client, qlTable).map(toHivePartition)
+  }
+
+  override def getPartitionsByFilter(
+      hTable: HiveTable,
+      filter: String): Seq[HivePartition] = withHiveState {
+    val qlTable = toQlTable(hTable)
+    shim.getPartitionsByFilter(client, qlTable, filter).map(toHivePartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {

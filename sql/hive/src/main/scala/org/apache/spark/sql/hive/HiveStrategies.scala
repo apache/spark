@@ -107,6 +107,12 @@ private[hive] trait HiveStrategies {
 
         try {
           if (relation.hiveQlTable.isPartitioned) {
+            val metastoreFilter =
+              HiveShim.toMetastoreFilter(
+                pruningPredicates,
+                relation.hiveQlTable.getPartitionKeys,
+                hiveContext.hiveMetastoreVersion)
+
             val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))
             // Translate the predicate so that it automatically casts the input values to the
             // correct data types during evaluation.
@@ -125,7 +131,9 @@ private[hive] trait HiveStrategies {
                 InterpretedPredicate.create(castedPredicate)
               }
 
-            val partitions = relation.hiveQlPartitions.filter { part =>
+            logDebug(s"Hive metastore filter is $metastoreFilter")
+
+            val partitions = relation.getHiveQlPartitions(metastoreFilter).filter { part =>
               val partitionValues = part.getValues
               var i = 0
               while (i < partitionValues.size()) {
@@ -213,7 +221,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
+          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
       case _ =>
         Nil
     }

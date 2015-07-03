@@ -61,6 +61,8 @@ private[client] sealed abstract class Shim {
 
   def getAllPartitions(hive: Hive, table: Table): Seq[Partition]
 
+  def getPartitionsByFilter(hive: Hive, table: Table, filter: String): Seq[Partition]
+
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
   def getDriverResults(driver: Driver): Seq[String]
@@ -127,6 +129,12 @@ private[client] class Shim_v0_12 extends Shim {
       classOf[Hive],
       "getAllPartitionsForPruner",
       classOf[Table])
+  private lazy val getPartitionsByFilterMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionsByFilter",
+      classOf[Table],
+      classOf[String])
   private lazy val getCommandProcessorMethod =
     findStaticMethod(
       classOf[CommandProcessorFactory],
@@ -195,6 +203,10 @@ private[client] class Shim_v0_12 extends Shim {
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
+
+  override def getPartitionsByFilter(hive: Hive, table: Table, filter: String): Seq[Partition] =
+    getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
+      .toSeq
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
@@ -267,6 +279,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Hive],
       "getAllPartitionsOf",
       classOf[Table])
+  private lazy val getPartitionsByFilterMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionsByFilter",
+      classOf[Table],
+      classOf[String])
   private lazy val getCommandProcessorMethod =
     findStaticMethod(
       classOf[CommandProcessorFactory],
@@ -287,6 +305,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
     getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
+
+  override def getPartitionsByFilter(hive: Hive, table: Table, filter: String): Seq[Partition] =
+    getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
+      .toSeq
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, Array(token), conf).asInstanceOf[CommandProcessor]
