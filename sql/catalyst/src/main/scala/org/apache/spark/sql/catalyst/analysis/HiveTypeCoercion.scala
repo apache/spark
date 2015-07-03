@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import javax.annotation.Nullable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -713,39 +715,68 @@ object HiveTypeCoercion {
 
       case e: ExpectsInputTypes =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
-          implicitCast(in, expected)
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
     }
 
     /**
-     * If needed, cast the expression into the expected type.
-     * If the implicit cast is not allowed, return the expression itself.
+     * Given an expected data type, try to cast the expression and return the cast expression.
+     *
+     * If the expression already fits the input type, we simply return the expression itself.
+     * If the expression has an incompatible type that cannot be implicitly cast, return None.
      */
-    def implicitCast(e: Expression, expectedType: AbstractDataType): Expression = {
+    def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
       val inType = e.dataType
-      (inType, expectedType) match {
+
+      // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
+      // We wrap immediately an Option after this.
+      @Nullable val ret: Expression = (inType, expectedType) match {
+
+        // If the expected type is already a parent of the input type, no need to cast.
+        case _ if expectedType.isParentOf(inType) => e
+
         // Cast null type (usually from null literals) into target types
-        case (NullType, target: DataType) => Cast(e, target.defaultConcreteType)
+        case (NullType, target) => Cast(e, target.defaultConcreteType)
 
         // Implicit cast among numeric types
+        // If input is decimal, and we expect a decimal type, just use the input.
+        case (_: DecimalType, DecimalType) => e
+        // If input is a numeric type but not decimal, and we expect a decimal type,
+        // cast the input to unlimited precision decimal.
+        case (_: NumericType, DecimalType) if !inType.isInstanceOf[DecimalType] =>
+          Cast(e, DecimalType.Unlimited)
+        // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
         case (_: NumericType, target: NumericType) if e.dataType != target => Cast(e, target)
+        case (_: NumericType, target: NumericType) => e
 
         // Implicit cast between date time types
         case (DateType, TimestampType) => Cast(e, TimestampType)
         case (TimestampType, DateType) => Cast(e, DateType)
 
         // Implicit cast from/to string
-        case (StringType, NumericType) => Cast(e, DoubleType)
+        case (StringType, DecimalType) => Cast(e, DecimalType.Unlimited)
         case (StringType, target: NumericType) => Cast(e, target)
         case (StringType, DateType) => Cast(e, DateType)
         case (StringType, TimestampType) => Cast(e, TimestampType)
         case (StringType, BinaryType) => Cast(e, BinaryType)
         case (any, StringType) if any != StringType => Cast(e, StringType)
 
+        // Type collection.
+        // First see if we can find our input type in the type collection. If we can, then just
+        // use the current expression; otherwise, find the first one we can implicitly cast.
+        case (_, TypeCollection(types)) =>
+          if (types.exists(_.isParentOf(inType))) {
+            e
+          } else {
+            types.flatMap(implicitCast(e, _)).headOption.orNull
+          }
+
         // Else, just return the same input expression
-        case _ => e
+        case _ => null
       }
+      Option(ret)
     }
   }
 }

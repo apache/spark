@@ -27,28 +27,47 @@ import org.apache.spark.sql.types._
 class HiveTypeCoercionSuite extends PlanTest {
 
   test("implicit type cast") {
-    def shouldCast(from: DataType, to: AbstractDataType): Unit = {
+    def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
       val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-      assert(got.dataType === to.defaultConcreteType)
+      assert(got.map(_.dataType) == Option(expected),
+        s"Failed to cast $from to $to")
     }
 
+    shouldCast(NullType, NullType, NullType)
+    shouldCast(NullType, IntegerType, IntegerType)
+    shouldCast(NullType, DecimalType, DecimalType.Unlimited)
+
     // TODO: write the entire implicit cast table out for test cases.
-    shouldCast(ByteType, IntegerType)
-    shouldCast(IntegerType, IntegerType)
-    shouldCast(IntegerType, LongType)
-    shouldCast(IntegerType, DecimalType.Unlimited)
-    shouldCast(LongType, IntegerType)
-    shouldCast(LongType, DecimalType.Unlimited)
+    shouldCast(ByteType, IntegerType, IntegerType)
+    shouldCast(IntegerType, IntegerType, IntegerType)
+    shouldCast(IntegerType, LongType, LongType)
+    shouldCast(IntegerType, DecimalType, DecimalType.Unlimited)
+    shouldCast(LongType, IntegerType, IntegerType)
+    shouldCast(LongType, DecimalType, DecimalType.Unlimited)
 
-    shouldCast(DateType, TimestampType)
-    shouldCast(TimestampType, DateType)
+    shouldCast(DateType, TimestampType, TimestampType)
+    shouldCast(TimestampType, DateType, DateType)
 
-    shouldCast(StringType, IntegerType)
-    shouldCast(StringType, DateType)
-    shouldCast(StringType, TimestampType)
-    shouldCast(IntegerType, StringType)
-    shouldCast(DateType, StringType)
-    shouldCast(TimestampType, StringType)
+    shouldCast(StringType, IntegerType, IntegerType)
+    shouldCast(StringType, DateType, DateType)
+    shouldCast(StringType, TimestampType, TimestampType)
+    shouldCast(IntegerType, StringType, StringType)
+    shouldCast(DateType, StringType, StringType)
+    shouldCast(TimestampType, StringType, StringType)
+
+    shouldCast(StringType, BinaryType, BinaryType)
+    shouldCast(BinaryType, StringType, StringType)
+
+    shouldCast(NullType, TypeCollection(StringType, BinaryType), StringType)
+
+    shouldCast(StringType, TypeCollection(StringType, BinaryType), StringType)
+    shouldCast(BinaryType, TypeCollection(StringType, BinaryType), BinaryType)
+    shouldCast(StringType, TypeCollection(BinaryType, StringType), StringType)
+
+    shouldCast(IntegerType, TypeCollection(IntegerType, BinaryType), IntegerType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, IntegerType), IntegerType)
+    shouldCast(BinaryType, TypeCollection(BinaryType, IntegerType), BinaryType)
+    shouldCast(BinaryType, TypeCollection(IntegerType, BinaryType), BinaryType)
   }
 
   test("tightest common bound for types") {
