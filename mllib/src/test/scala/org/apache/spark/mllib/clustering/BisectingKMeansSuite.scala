@@ -25,10 +25,10 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
 
-class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkContext {
+class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("the root index is equal to 1") {
-    assert(HierarchicalClustering.ROOT_INDEX_KEY === 1)
+    assert(BisectingKMeans.ROOT_INDEX_KEY === 1)
   }
 
   test("findClosestCenter") {
@@ -41,13 +41,13 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
 
     for (i <- 0 to (centers.size - 1)) {
       val point = centers(i)
-      val closestIndex = HierarchicalClustering.findClosestCenter(metric)(centers)(point)
+      val closestIndex = BisectingKMeans.findClosestCenter(metric)(centers)(point)
       assert(closestIndex === i)
     }
   }
 
   test("run") {
-    val algo = new HierarchicalClustering().setNumClusters(123)
+    val algo = new BisectingKMeans().setNumClusters(123)
     val localSeed: Seq[Vector] = (0 to 999).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
@@ -62,7 +62,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("run with too many cluster size than the records") {
-    val algo = new HierarchicalClustering().setNumClusters(123)
+    val algo = new BisectingKMeans().setNumClusters(123)
     val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val data = sc.parallelize(localSeed, 2)
     val model = algo.run(data)
@@ -71,7 +71,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("initializeData") {
-    val algo = new HierarchicalClustering
+    val algo = new BisectingKMeans
     val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val seed = sc.parallelize(localSeed)
     val data = algo.initData(seed)
@@ -79,7 +79,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("get center stats") {
-    val algo = new HierarchicalClustering
+    val algo = new BisectingKMeans
     val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
     val seed = sc.parallelize(localSeed)
     val data = algo.initData(seed)
@@ -103,7 +103,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("getChildrenCenter") {
-    val algo = new HierarchicalClustering
+    val algo = new BisectingKMeans
     val centers = Map(
       2L -> Vectors.dense(1.0, 1.0).toBreeze,
       3L -> Vectors.dense(2.0, 2.0).toBreeze
@@ -114,7 +114,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("should divide clusters") {
-    val algo = new HierarchicalClustering
+    val algo = new BisectingKMeans
     val seed = (0 to 99).map(i => ((i / 50) + 2L, Vectors.dense(i, i).toBreeze))
     val data = sc.parallelize(seed)
     val clusters = algo.summarizeAsClusters(data)
@@ -132,7 +132,7 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("should assign each data to new clusters") {
-    val algo = new HierarchicalClustering
+    val algo = new BisectingKMeans
     val seed = Seq(
       (2L, Vectors.dense(0.0, 0.0)), (2L, Vectors.dense(1.0, 1.0)), (2L, Vectors.dense(2.0, 2.0)),
       (2L, Vectors.dense(3.0, 3.0)), (2L, Vectors.dense(4.0, 4.0)), (2L, Vectors.dense(5.0, 5.0)),
@@ -159,28 +159,28 @@ class HierarchicalClusteringSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("setNumClusters") {
-    val algo = new HierarchicalClustering()
+    val algo = new BisectingKMeans()
     assert(algo.getNumClusters == 20)
     algo.setNumClusters(1000)
     assert(algo.getNumClusters == 1000)
   }
 
   test("setSubIterations") {
-    val algo = new HierarchicalClustering()
+    val algo = new BisectingKMeans()
     assert(algo.getMaxIterations == 20)
     algo.setMaxIterations(15)
     assert(algo.getMaxIterations == 15)
   }
 
   test("setNumRetries") {
-    val algo = new HierarchicalClustering()
+    val algo = new BisectingKMeans()
     assert(algo.getMaxRetries == 10)
     algo.setMaxRetries(15)
     assert(algo.getMaxRetries == 15)
   }
 
   test("setSeed") {
-    val algo = new HierarchicalClustering()
+    val algo = new BisectingKMeans()
     assert(algo.getSeed == 1)
     algo.setSeed(987)
     assert(algo.getSeed == 987)

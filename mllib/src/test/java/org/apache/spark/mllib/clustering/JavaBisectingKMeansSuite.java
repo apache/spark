@@ -32,12 +32,12 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
-public class JavaHierarchicalClusteringSuite implements Serializable {
+public class JavaBisectingKMeansSuite implements Serializable {
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaHierarchicalClustering");
+    sc = new JavaSparkContext("local", this.getClass().getSimpleName());
   }
 
   @After
@@ -57,8 +57,8 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
     Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    HierarchicalClustering algo = new HierarchicalClustering().setNumClusters(1);
-    HierarchicalClusteringModel model = algo.run(data.rdd());
+    BisectingKMeans algo = new BisectingKMeans().setNumClusters(1);
+    BisectingKMeansModel model = algo.run(data.rdd());
     assertEquals(1, model.getCenters().length);
     assertEquals(expectedCenter, model.getCenters()[0]);
   }
@@ -73,8 +73,8 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
       points.add(point);
     }
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    HierarchicalClustering algo = new HierarchicalClustering().setNumClusters(numClusters);
-    HierarchicalClusteringModel model = algo.run(data.rdd());
+    BisectingKMeans algo = new BisectingKMeans().setNumClusters(numClusters);
+    BisectingKMeansModel model = algo.run(data.rdd());
     Vector[] centers = model.getCenters();
     assertEquals(numClusters, centers.length);
     assertEquals(Vectors.dense(0.0, 0.0), centers[0]);
@@ -103,8 +103,8 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
       points.add(point);
     }
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    HierarchicalClustering algo = new HierarchicalClustering().setNumClusters(numClusters);
-    HierarchicalClusteringModel model = algo.run(data.rdd());
+    BisectingKMeans algo = new BisectingKMeans().setNumClusters(numClusters);
+    BisectingKMeansModel model = algo.run(data.rdd());
     Vector[] centers = model.getCenters();
     assertEquals(numClusters, centers.length);
     assertEquals(points.get(0), centers[0]);

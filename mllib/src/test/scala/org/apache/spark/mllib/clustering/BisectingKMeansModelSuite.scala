@@ -22,11 +22,11 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.BeforeAndAfterEach
 
-class HierarchicalClusteringModelSuite
+class BisectingKMeansModelSuite
     extends SparkFunSuite with MLlibTestSparkContext with BeforeAndAfterEach {
 
   test("clustering dense vectors") {
-    val app = new HierarchicalClustering().setNumClusters(5).setSeed(1)
+    val app = new BisectingKMeans().setNumClusters(5).setSeed(1)
 
     val localData = (1 to 100).toSeq.map { i =>
       val label = i % 5
@@ -87,7 +87,7 @@ class HierarchicalClusteringModelSuite
   }
 
   test("clustering sparse vectors") {
-    val app = new HierarchicalClustering().setNumClusters(5).setSeed(1)
+    val app = new BisectingKMeans().setNumClusters(5).setSeed(1)
 
     val localData = (1 to 100).toSeq.map { i =>
       val label = i % 5
@@ -148,7 +148,7 @@ class HierarchicalClusteringModelSuite
 
   test("clustering should be done correctly") {
     for (numClusters <- Array(9, 99, 999)) {
-      val app = new HierarchicalClustering().setNumClusters(numClusters).setSeed(1)
+      val app = new BisectingKMeans().setNumClusters(numClusters).setSeed(1)
       val localData = (1 to 1000).toSeq.map { i =>
         val label = i % numClusters
         val sparseVector = Vectors.sparse(numClusters, Seq((label, label.toDouble)))

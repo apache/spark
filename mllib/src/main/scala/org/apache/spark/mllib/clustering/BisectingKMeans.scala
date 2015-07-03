@@ -27,7 +27,7 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.{Logging, SparkException}
 
 
-object HierarchicalClustering extends Logging {
+object BisectingKMeans extends Logging {
 
   private[clustering] val ROOT_INDEX_KEY: Long = 1
 
@@ -49,7 +49,7 @@ object HierarchicalClustering extends Logging {
 }
 
 /**
- * This is a divisive hierarchical clustering algorithm based on bisect k-means algorithm.
+ * This is a divisive hierarchical clustering algorithm based on bisecting k-means algorithm.
  *
  * The main idea of this algorithm is based on "A comparison of document clustering techniques",
  * M. Steinbach, G. Karypis and V. Kumar. Workshop on Text Mining, KDD, 2000.
@@ -61,7 +61,7 @@ object HierarchicalClustering extends Logging {
  * @param maxRetries the number of maximum retries
  * @param seed a random seed
  */
-class HierarchicalClustering private (
+class BisectingKMeans private (
   private var numClusters: Int,
   private var clusterMap: Map[Long, ClusterNode],
   private var maxIterations: Int,
@@ -114,13 +114,13 @@ class HierarchicalClustering private (
   def getSeed: Long = this.seed
 
   /**
-   * Runs the hierarchical clustering algorithm
+   * Runs the bisecting kmeans algorithm
    * @param input RDD of vectors
-   * @return model for the hierarchical clustering
+   * @return model for the bisecting kmeans
    */
-  def run(input: RDD[Vector]): HierarchicalClusteringModel = {
+  def run(input: RDD[Vector]): BisectingKMeansModel = {
     val sc = input.sparkContext
-    log.info(s"${sc.appName} starts a hierarchical clustering algorithm")
+    log.info(s"${sc.appName} starts a bisecting kmeans algorithm")
 
     var data = initData(input).cache()
     val startTime = System.currentTimeMillis()
@@ -172,17 +172,17 @@ class HierarchicalClustering private (
 
     // build a cluster tree by Map class which is expressed
     log.info(s"Building the cluster tree is started in ${sc.appName}")
-    val root = buildTree(clusters, HierarchicalClustering.ROOT_INDEX_KEY, this.numClusters)
+    val root = buildTree(clusters, BisectingKMeans.ROOT_INDEX_KEY, this.numClusters)
     if (root == None) {
       new SparkException("Failed to build a cluster tree from a Map type of clusters")
     }
 
     // set the elapsed time for training
     val finishTime = (System.currentTimeMillis() - startTime) / 1000.0
-    log.info(s"Elapsed Time for Hierarchical Clustering Training: ${finishTime} [sec]")
+    log.info(s"Elapsed Time for ${this.getClass.getSimpleName} Training: ${finishTime} [sec]")
 
-    // make a hierarchical clustering model
-    val model = new HierarchicalClusteringModel(root.get)
+    // make a bisecting kmeans model
+    val model = new BisectingKMeansModel(root.get)
     val leavesNodes = model.getClusters
     if (leavesNodes.length < this.numClusters) {
       log.warn(s"# clusters is less than you want: ${leavesNodes.length} / ${numClusters}")
@@ -195,7 +195,7 @@ class HierarchicalClustering private (
    */
   private[clustering]
   def initData(data: RDD[Vector]): RDD[(Long, BV[Double])] = {
-    data.map { v: Vector => (HierarchicalClustering.ROOT_INDEX_KEY, v.toBreeze)}
+    data.map { v: Vector => (BisectingKMeans.ROOT_INDEX_KEY, v.toBreeze)}
   }
 
   /**
@@ -334,7 +334,7 @@ class HierarchicalClustering private (
               .filter(x => bcNewCenters.value.contains(x)).map(bcNewCenters.value(_))
           if (childrenCenters.length >= 1) {
             val closestIndex =
-              HierarchicalClustering.findClosestCenter(bcMetric.value)(childrenCenters)(point)
+              BisectingKMeans.findClosestCenter(bcMetric.value)(childrenCenters)(point)
             val nextIndex = 2 * idx + closestIndex
 
             // get a map value or else get a sparse vector
@@ -466,7 +466,7 @@ class HierarchicalClustering private (
         // update the indexes
         case _ => {
           val nextCenters = childrenIndexes.map(bcCenters.value(_)).map(_.toBreeze)
-          val closestIndex = HierarchicalClustering
+          val closestIndex = BisectingKMeans
               .findClosestCenter(bcMetric.value)(nextCenters)(point)
           val nextIndex = 2 * idx + closestIndex
           (nextIndex, point)

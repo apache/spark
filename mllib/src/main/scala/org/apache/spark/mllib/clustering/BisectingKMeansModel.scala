@@ -24,11 +24,11 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
- * This class is used for the model of the hierarchical clustering
+ * This class is used for the model of the bisecting kmeans
  *
  * @param node a cluster as a tree node
  */
-class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable with Logging {
+class BisectingKMeansModel(val node: ClusterNode) extends Serializable with Logging {
 
   def getClusters: Array[ClusterNode] = this.node.getLeavesNodes
 
@@ -42,7 +42,7 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
 
     val centers = this.getCenters.map(_.toBreeze)
-    HierarchicalClustering.findClosestCenter(metric)(centers)(vector.toBreeze)
+    BisectingKMeans.findClosestCenter(metric)(centers)(vector.toBreeze)
   }
 
   /**
@@ -58,7 +58,7 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
     sc.broadcast(centers)
 
     data.map{point =>
-      HierarchicalClustering.findClosestCenter(metric)(centers)(point.toBreeze)
+      BisectingKMeans.findClosestCenter(metric)(centers)(point.toBreeze)
     }
   }
 
@@ -77,7 +77,7 @@ class HierarchicalClusteringModel(val node: ClusterNode) extends Serializable wi
     val distances = data.map {point =>
       val bvPoint = point.toBreeze
       val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-      val idx = HierarchicalClustering.findClosestCenter(metric)(bvCenters)(bvPoint)
+      val idx = BisectingKMeans.findClosestCenter(metric)(bvCenters)(bvPoint)
       val closestCenter = bvCenters(idx)
       val distance = metric(bvPoint, closestCenter)
       distance
