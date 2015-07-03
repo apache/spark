@@ -85,9 +85,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): M = set(thresholds, value).asInstanceOf[M]
-
   /** Number of classes (values which the label can take). */
   def numClasses: Int
 
