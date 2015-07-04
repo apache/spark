@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{Long => JLong}
-import java.util.Arrays
+import java.{lang => jl}
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -206,7 +204,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ExpectsInpu
     if (evalE == null) {
       null
     } else {
-      val input = evalE.asInstanceOf[Integer]
+      val input = evalE.asInstanceOf[jl.Integer]
       if (input > 20 || input < 0) {
         null
       } else {
@@ -290,7 +288,7 @@ case class Bin(child: Expression)
     if (evalE == null) {
       null
     } else {
-      UTF8String.fromString(JLong.toBinaryString(evalE.asInstanceOf[Long]))
+      UTF8String.fromString(jl.Long.toBinaryString(evalE.asInstanceOf[Long]))
     }
   }
 
@@ -300,27 +298,18 @@ case class Bin(child: Expression)
   }
 }
 
-
 /**
  * If the argument is an INT or binary, hex returns the number as a STRING in hexadecimal format.
  * Otherwise if the number is a STRING, it converts each character into its hex representation
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
-case class Hex(child: Expression) extends UnaryExpression with Serializable  {
+case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  // TODO: Create code-gen version.
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, StringType, BinaryType))
 
   override def dataType: DataType = StringType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[StringType]
-      || child.dataType.isInstanceOf[IntegerType]
-      || child.dataType.isInstanceOf[LongType]
-      || child.dataType.isInstanceOf[BinaryType]
-      || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"hex doesn't accepts ${child.dataType} type")
-    }
-  }
 
   override def eval(input: InternalRow): Any = {
     val num = child.eval(input)
@@ -329,7 +318,6 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     } else {
       child.dataType match {
         case LongType => hex(num.asInstanceOf[Long])
-        case IntegerType => hex(num.asInstanceOf[Integer].toLong)
         case BinaryType => hex(num.asInstanceOf[Array[Byte]])
         case StringType => hex(num.asInstanceOf[UTF8String])
       }
@@ -371,7 +359,55 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
         Character.toUpperCase(Character.forDigit((numBuf & 0xF).toInt, 16)).toByte
       numBuf >>>= 4
     } while (numBuf != 0)
-    UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
+    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
+  }
+}
+
+
+/**
+ * Performs the inverse operation of HEX.
+ * Resulting characters are returned as a byte array.
+ */
+case class UnHex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  // TODO: Create code-gen version.
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def dataType: DataType = BinaryType
+
+  override def eval(input: InternalRow): Any = {
+    val num = child.eval(input)
+    if (num == null) {
+      null
+    } else {
+      unhex(num.asInstanceOf[UTF8String].getBytes)
+    }
+  }
+
+  private val unhexDigits = {
+    val array = Array.fill[Byte](128)(-1)
+    (0 to 9).foreach(i => array('0' + i) = i.toByte)
+    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
+    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
+    array
+  }
+
+  private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
+    var bytes = inputBytes
+    if ((bytes.length & 0x01) != 0) {
+      bytes = '0'.toByte +: bytes
+    }
+    val out = new Array[Byte](bytes.length >> 1)
+    // two characters form the hex value.
+    var i = 0
+    while (i < bytes.length) {
+      val first = unhexDigits(bytes(i))
+      val second = unhexDigits(bytes(i + 1))
+      if (first == -1 || second == -1) { return null}
+      out(i / 2) = (((first << 4) | second) & 0xFF).toByte
+      i += 2
+    }
+    out
   }
 }
 
@@ -423,22 +459,19 @@ case class Pow(left: Expression, right: Expression)
   }
 }
 
-case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpression {
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-        s"ShiftLeft expects long, integer, short or byte value as first argument and an " +
-          s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
+/**
+ * Bitwise unsigned left shift.
+ * @param left the base number to shift.
+ * @param right number of bits to left shift.
+ */
+case class ShiftLeft(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
 
   override def eval(input: InternalRow): Any = {
     val valueLeft = left.eval(input)
@@ -446,24 +479,14 @@ case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpressi
       val valueRight = right.eval(input)
       if (valueRight != null) {
         valueLeft match {
-          case l: Long => l << valueRight.asInstanceOf[Integer]
-          case i: Integer => i << valueRight.asInstanceOf[Integer]
-          case s: Short => s << valueRight.asInstanceOf[Integer]
-          case b: Byte => b << valueRight.asInstanceOf[Integer]
+          case l: jl.Long => l << valueRight.asInstanceOf[jl.Integer]
+          case i: jl.Integer => i << valueRight.asInstanceOf[jl.Integer]
         }
       } else {
         null
       }
     } else {
       null
-    }
-  }
-
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
     }
   }
 
@@ -472,22 +495,19 @@ case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpressi
   }
 }
 
-case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-          s"ShiftRight expects long, integer, short or byte value as first argument and an " +
-            s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
+/**
+ * Bitwise unsigned left shift.
+ * @param left the base number to shift.
+ * @param right number of bits to left shift.
+ */
+case class ShiftRight(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
 
   override def eval(input: InternalRow): Any = {
     val valueLeft = left.eval(input)
@@ -495,24 +515,14 @@ case class ShiftRight(left: Expression, right: Expression) extends BinaryExpress
       val valueRight = right.eval(input)
       if (valueRight != null) {
         valueLeft match {
-          case l: Long => l >> valueRight.asInstanceOf[Integer]
-          case i: Integer => i >> valueRight.asInstanceOf[Integer]
-          case s: Short => s >> valueRight.asInstanceOf[Integer]
-          case b: Byte => b >> valueRight.asInstanceOf[Integer]
+          case l: jl.Long => l >> valueRight.asInstanceOf[jl.Integer]
+          case i: jl.Integer => i >> valueRight.asInstanceOf[jl.Integer]
         }
       } else {
         null
       }
     } else {
       null
-    }
-  }
-
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
     }
   }
 
@@ -521,22 +531,19 @@ case class ShiftRight(left: Expression, right: Expression) extends BinaryExpress
   }
 }
 
-case class ShiftRightUnsigned(left: Expression, right: Expression) extends BinaryExpression {
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
-      case (_, IntegerType) => left.dataType match {
-        case LongType | IntegerType | ShortType | ByteType =>
-          return TypeCheckResult.TypeCheckSuccess
-        case _ => // failed
-      }
-      case _ => // failed
-    }
-    TypeCheckResult.TypeCheckFailure(
-      s"ShiftRightUnsigned expects long, integer, short or byte value as first argument and an " +
-        s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
-  }
+/**
+ * Bitwise unsigned right shift, for integer and long data type.
+ * @param left the base number.
+ * @param right the number of bits to right shift.
+ */
+case class ShiftRightUnsigned(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
+
+  override def dataType: DataType = left.dataType
 
   override def eval(input: InternalRow): Any = {
     val valueLeft = left.eval(input)
@@ -544,10 +551,8 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends Binar
       val valueRight = right.eval(input)
       if (valueRight != null) {
         valueLeft match {
-          case l: Long => l >>> valueRight.asInstanceOf[Integer]
-          case i: Integer => i >>> valueRight.asInstanceOf[Integer]
-          case s: Short => s >>> valueRight.asInstanceOf[Integer]
-          case b: Byte => b >>> valueRight.asInstanceOf[Integer]
+          case l: jl.Long => l >>> valueRight.asInstanceOf[jl.Integer]
+          case i: jl.Integer => i >>> valueRight.asInstanceOf[jl.Integer]
         }
       } else {
         null
@@ -557,74 +562,21 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends Binar
     }
   }
 
-  override def dataType: DataType = {
-    left.dataType match {
-      case LongType => LongType
-      case IntegerType | ShortType | ByteType => IntegerType
-      case _ => NullType
-    }
-  }
-
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >>> $right;")
   }
 }
 
-/**
- * Performs the inverse operation of HEX.
- * Resulting characters are returned as a byte array.
- */
-case class UnHex(child: Expression) extends UnaryExpression with Serializable {
-
-  override def dataType: DataType = BinaryType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[StringType] || child.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"unHex accepts String type, not ${child.dataType}")
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val num = child.eval(input)
-    if (num == null) {
-      null
-    } else {
-      unhex(num.asInstanceOf[UTF8String].getBytes)
-    }
-  }
-
-  private val unhexDigits = {
-    val array = Array.fill[Byte](128)(-1)
-    (0 to 9).foreach(i => array('0' + i) = i.toByte)
-    (0 to 5).foreach(i => array('A' + i) = (i + 10).toByte)
-    (0 to 5).foreach(i => array('a' + i) = (i + 10).toByte)
-    array
-  }
-
-  private def unhex(inputBytes: Array[Byte]): Array[Byte] = {
-    var bytes = inputBytes
-    if ((bytes.length & 0x01) != 0) {
-      bytes = '0'.toByte +: bytes
-    }
-    val out = new Array[Byte](bytes.length >> 1)
-    // two characters form the hex value.
-    var i = 0
-    while (i < bytes.length) {
-        val first = unhexDigits(bytes(i))
-        val second = unhexDigits(bytes(i + 1))
-        if (first == -1 || second == -1) { return null}
-        out(i / 2) = (((first << 4) | second) & 0xFF).toByte
-        i += 2
-    }
-    out
-  }
-}
 
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
+
+/**
+ * Computes the logarithm of a number.
+ * @param left the logarithm base, default to e.
+ * @param right the number to compute the logarithm of.
+ */
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
 
@@ -642,7 +594,7 @@ case class Logarithm(left: Expression, right: Expression)
       defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.log($c2) / java.lang.Math.log($c1)")
     }
     logCode + s"""
-      if (Double.valueOf(${ev.primitive}).isNaN()) {
+      if (Double.isNaN(${ev.primitive})) {
         ${ev.isNull} = true;
       }
     """
