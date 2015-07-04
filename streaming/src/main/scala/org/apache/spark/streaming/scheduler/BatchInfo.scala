@@ -33,11 +33,14 @@ import org.apache.spark.streaming.Time
 @DeveloperApi
 case class BatchInfo(
     batchTime: Time,
-    streamIdToInputInfo: Map[Int, InputInfo],
+    streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long]
   ) {
+
+  @deprecated("Use streamIdToInputInfo instead", "1.5.0")
+  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch

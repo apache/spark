@@ -19,7 +19,7 @@ package org.apache.spark.streaming.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node, Text}
+import scala.xml.{NodeSeq, Node, Text, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -301,8 +301,9 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       batchUIData.processingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val formattedTotalDelay = batchUIData.totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
-    val inputMetadatas = batchUIData.streamIdToInputInfo.values.filter(_.metadata != None).
-      map(inputInfo => inputInfo.inputStreamId -> inputInfo.metadata.get).toSeq
+    val inputMetadatas = batchUIData.streamIdToInputInfo.values.flatMap { inputInfo =>
+      inputInfo.metadataDescription.map(desc => inputInfo.inputStreamId -> desc)
+    }.toSeq
     val summary: NodeSeq =
       <div>
         <ul class="unstyled">
@@ -367,7 +368,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
     <tr>
       <td>{streamingListener.streamName(streamId).getOrElse(s"Stream-$streamId")}</td>
-      <td>{inputMetadata._2}</td>
+      <td>{metadataDescriptionToHTML(inputMetadata._2)}</td>
     </tr>
+  }
+
+  private def metadataDescriptionToHTML(metadataDescription: String): Seq[Node] = {
+    // tab to 4 spaces and "\n" to "<br/>"
+    Unparsed(StringEscapeUtils.escapeHtml4(metadataDescription).
+      replaceAllLiterally("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replaceAllLiterally("\n", "<br/>"))
   }
 }

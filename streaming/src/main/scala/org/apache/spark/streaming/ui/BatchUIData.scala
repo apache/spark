@@ -19,14 +19,14 @@
 package org.apache.spark.streaming.ui
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.scheduler.{BatchInfo, InputInfo}
+import org.apache.spark.streaming.scheduler.{BatchInfo, StreamInputInfo}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
 private[ui] case class OutputOpIdAndSparkJobId(outputOpId: OutputOpId, sparkJobId: SparkJobId)
 
 private[ui] case class BatchUIData(
     val batchTime: Time,
-    val streamIdToInputInfo: Map[Int, InputInfo],
+    val streamIdToInputInfo: Map[Int, StreamInputInfo],
     val submissionTime: Long,
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],

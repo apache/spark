@@ -29,7 +29,7 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
-import org.apache.spark.streaming.scheduler.InputInfo
+import org.apache.spark.streaming.scheduler.StreamInputInfo
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -119,12 +119,18 @@ class DirectKafkaInputDStream[
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
-    // Report the record number of this batch interval to InputInfoTracker.
+    // Report the record number and metadata of this batch interval to InputInfoTracker.
     val offsetRanges = currentOffsets.map { case (tp, fo) =>
       val uo = untilOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo.offset)
     }
-    val inputInfo = InputInfo(id, rdd.count, Some(offsetRanges.mkString(", ")))
+    val description = offsetRanges.map { offsetRange =>
+      s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+        s"range: [${offsetRange.fromOffset}, ${offsetRange.untilOffset})"
+    }.mkString("\n")
+    // Copy offsetRanges to immutable.List to prevent from being modified by the user
+    val metadata = Map("offsets" -> offsetRanges.toList, "Description" -> description)
+    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
