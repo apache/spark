@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
 
+import scala.collection.JavaConversions._
 import scala.concurrent._
 import scala.concurrent.duration._
 
@@ -77,8 +78,8 @@ case class BroadcastHashOuterJoin(
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     // buildHashTable uses code-generated rows as keys, which are not serializable
-    val hashed = new GeneralHashedRelation(
-      buildHashTable(input.iterator, newProjection(buildKeys, buildPlan.output)))
+    val hashed =
+      buildHashTable(input.iterator, new InterpretedProjection(buildKeys, buildPlan.output))
     sparkContext.broadcast(hashed)
   }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
 
