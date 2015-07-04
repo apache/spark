@@ -17,6 +17,28 @@
 
 /* Dynamically injected style for the API docs */
 
+.badge {
+  font-family: Arial, san-serif;
+  float: right;
+  margin: 4px;
+  /* The following declarations are taken from the ScalaDoc template.css */
+  display: inline-block;
+  padding: 2px 4px;
+  font-size: 11.844px;
+  font-weight: bold;
+  line-height: 14px;
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  vertical-align: baseline;
+  background-color: #999999;
+  padding-right: 9px;
+  padding-left: 9px;
+  -webkit-border-radius: 9px;
+     -moz-border-radius: 9px;
+          border-radius: 9px;
+}
+
 .developer {
   background-color: #44751E;
 }
@@ -27,9 +49,4 @@
 
 .alphaComponent {
   background-color: #bb0000;
-}
-
-.badge {
-  font-family: Arial, san-serif;
-  float: right;
 }

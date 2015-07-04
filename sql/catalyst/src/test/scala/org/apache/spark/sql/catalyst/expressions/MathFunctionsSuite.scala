@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.google.common.math.LongMath
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{DataType, DoubleType, LongType}
+import org.apache.spark.sql.types.{DataType, LongType}
+import org.apache.spark.sql.types.{IntegerType, DoubleType}
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -157,6 +160,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Floor, math.floor)
   }
 
+  test("factorial") {
+    val dataLong = (0 to 20)
+    dataLong.foreach { value =>
+      checkEvaluation(Factorial(Literal(value)), LongMath.factorial(value), EmptyRow)
+    }
+    checkEvaluation((Literal.create(null, IntegerType)), null, create_row(null))
+    checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
+    checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
+  }
+
   test("rint") {
     testUnary(Rint, math.rint)
   }
@@ -223,6 +236,45 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNull = true)
+  }
+
+  test("shift left") {
+    checkEvaluation(ShiftLeft(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toByte), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toShort), Literal(1)), 42)
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
+
+    checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+  }
+
+  test("shift right") {
+    checkEvaluation(ShiftRight(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toByte), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toShort), Literal(1)), 21)
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
+
+    checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+  }
+
+  test("shift right unsigned") {
+    checkEvaluation(ShiftRightUnsigned(Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+    checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toByte), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toShort), Literal(1)), 21)
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
+
+    checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
   }
 
   test("hex") {

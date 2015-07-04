@@ -56,8 +56,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with AutoCastInputTypes {
-  self: Product =>
+  extends UnaryExpression with Serializable with ExpectsInputTypes { self: Product =>
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -96,7 +95,7 @@ abstract class UnaryMathExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with AutoCastInputTypes { self: Product =>
+  extends BinaryExpression with Serializable with ExpectsInputTypes { self: Product =>
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -160,6 +159,79 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
 
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR")
 
+object Factorial {
+
+  def factorial(n: Int): Long = {
+    if (n < factorials.length) factorials(n) else Long.MaxValue
+  }
+
+  private val factorials: Array[Long] = Array[Long](
+    1,
+    1,
+    2,
+    6,
+    24,
+    120,
+    720,
+    5040,
+    40320,
+    362880,
+    3628800,
+    39916800,
+    479001600,
+    6227020800L,
+    87178291200L,
+    1307674368000L,
+    20922789888000L,
+    355687428096000L,
+    6402373705728000L,
+    121645100408832000L,
+    2432902008176640000L
+  )
+}
+
+case class Factorial(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(IntegerType)
+
+  override def dataType: DataType = LongType
+
+  override def foldable: Boolean = child.foldable
+
+  // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      val input = evalE.asInstanceOf[Integer]
+      if (input > 20 || input < 0) {
+        null
+      } else {
+        Factorial.factorial(input)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val eval = child.gen(ctx)
+    eval.code + s"""
+      boolean ${ev.isNull} = ${eval.isNull};
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        if (${eval.primitive} > 20 || ${eval.primitive} < 0) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} =
+            org.apache.spark.sql.catalyst.expressions.Factorial.factorial(${eval.primitive});
+        }
+      }
+    """
+  }
+}
+
 case class Log(child: Expression) extends UnaryMathExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
@@ -208,7 +280,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 }
 
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with AutoCastInputTypes {
+  extends UnaryExpression with Serializable with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
@@ -295,8 +367,8 @@ case class Hex(child: Expression) extends UnaryExpression with Serializable  {
     var len = 0
     do {
       len += 1
-      value(value.length - len) = Character.toUpperCase(Character
-        .forDigit((numBuf & 0xF).toInt, 16)).toByte
+      value(value.length - len) =
+        Character.toUpperCase(Character.forDigit((numBuf & 0xF).toInt, 16)).toByte
       numBuf >>>= 4
     } while (numBuf != 0)
     UTF8String.fromBytes(Arrays.copyOfRange(value, value.length - len, value.length))
@@ -348,6 +420,153 @@ case class Pow(left: Expression, right: Expression)
         ${ev.isNull} = true;
       }
       """
+  }
+}
+
+case class ShiftLeft(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
+      case (_, IntegerType) => left.dataType match {
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
+        case _ => // failed
+      }
+      case _ => // failed
+    }
+    TypeCheckResult.TypeCheckFailure(
+        s"ShiftLeft expects long, integer, short or byte value as first argument and an " +
+          s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val valueRight = right.eval(input)
+      if (valueRight != null) {
+        valueLeft match {
+          case l: Long => l << valueRight.asInstanceOf[Integer]
+          case i: Integer => i << valueRight.asInstanceOf[Integer]
+          case s: Short => s << valueRight.asInstanceOf[Integer]
+          case b: Byte => b << valueRight.asInstanceOf[Integer]
+        }
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = {
+    left.dataType match {
+      case LongType => LongType
+      case IntegerType | ShortType | ByteType => IntegerType
+      case _ => NullType
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left << $right;")
+  }
+}
+
+case class ShiftRight(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
+      case (_, IntegerType) => left.dataType match {
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
+        case _ => // failed
+      }
+      case _ => // failed
+    }
+    TypeCheckResult.TypeCheckFailure(
+          s"ShiftRight expects long, integer, short or byte value as first argument and an " +
+            s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val valueRight = right.eval(input)
+      if (valueRight != null) {
+        valueLeft match {
+          case l: Long => l >> valueRight.asInstanceOf[Integer]
+          case i: Integer => i >> valueRight.asInstanceOf[Integer]
+          case s: Short => s >> valueRight.asInstanceOf[Integer]
+          case b: Byte => b >> valueRight.asInstanceOf[Integer]
+        }
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = {
+    left.dataType match {
+      case LongType => LongType
+      case IntegerType | ShortType | ByteType => IntegerType
+      case _ => NullType
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >> $right;")
+  }
+}
+
+case class ShiftRightUnsigned(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) => return TypeCheckResult.TypeCheckSuccess
+      case (_, IntegerType) => left.dataType match {
+        case LongType | IntegerType | ShortType | ByteType =>
+          return TypeCheckResult.TypeCheckSuccess
+        case _ => // failed
+      }
+      case _ => // failed
+    }
+    TypeCheckResult.TypeCheckFailure(
+      s"ShiftRightUnsigned expects long, integer, short or byte value as first argument and an " +
+        s"integer value as second argument, not (${left.dataType}, ${right.dataType})")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    if (valueLeft != null) {
+      val valueRight = right.eval(input)
+      if (valueRight != null) {
+        valueLeft match {
+          case l: Long => l >>> valueRight.asInstanceOf[Integer]
+          case i: Integer => i >>> valueRight.asInstanceOf[Integer]
+          case s: Short => s >>> valueRight.asInstanceOf[Integer]
+          case b: Byte => b >>> valueRight.asInstanceOf[Integer]
+        }
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = {
+    left.dataType match {
+      case LongType => LongType
+      case IntegerType | ShortType | ByteType => IntegerType
+      case _ => NullType
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (result, left, right) => s"$result = $left >>> $right;")
   }
 }
 
