@@ -680,7 +680,7 @@ object HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: ExpectsInputTypes =>
+      case e: ExpectsInputTypes if (e.inputTypes.nonEmpty) =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
           implicitCast(in, expected).getOrElse(in)
