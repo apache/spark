@@ -274,4 +274,13 @@ class StringFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
     checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
   }
+
+  test("Levenshtein distance") {
+    checkEvaluation(Levenshtein(Literal.create(null, StringType), Literal("")), null)
+    checkEvaluation(Levenshtein(Literal(""), Literal.create(null, StringType)), null)
+    checkEvaluation(Levenshtein(Literal(""), Literal("")), 0)
+    checkEvaluation(Levenshtein(Literal("abc"), Literal("abc")), 0)
+    checkEvaluation(Levenshtein(Literal("kitten"), Literal("sitting")), 3)
+    checkEvaluation(Levenshtein(Literal("frog"), Literal("fog")), 1)
+  }
 }
