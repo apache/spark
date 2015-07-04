@@ -161,11 +161,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("factorial") {
-    val dataLong = (0 to 20)
-    dataLong.foreach { value =>
+    (0 to 20).foreach { value =>
       checkEvaluation(Factorial(Literal(value)), LongMath.factorial(value), EmptyRow)
     }
-    checkEvaluation((Literal.create(null, IntegerType)), null, create_row(null))
+    checkEvaluation(Literal.create(null, IntegerType), null, create_row(null))
     checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
     checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
   }
@@ -244,10 +243,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       ShiftLeft(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftLeft(Literal(21), Literal(1)), 42)
-    checkEvaluation(ShiftLeft(Literal(21.toByte), Literal(1)), 42)
-    checkEvaluation(ShiftLeft(Literal(21.toShort), Literal(1)), 42)
-    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
 
+    checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
     checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
   }
 
@@ -257,10 +254,8 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftRight(Literal(42), Literal(1)), 21)
-    checkEvaluation(ShiftRight(Literal(42.toByte), Literal(1)), 21)
-    checkEvaluation(ShiftRight(Literal(42.toShort), Literal(1)), 21)
-    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
 
+    checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
   }
 
@@ -270,16 +265,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       ShiftRight(Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
     checkEvaluation(ShiftRightUnsigned(Literal(42), Literal(1)), 21)
-    checkEvaluation(ShiftRightUnsigned(Literal(42.toByte), Literal(1)), 21)
-    checkEvaluation(ShiftRightUnsigned(Literal(42.toShort), Literal(1)), 21)
-    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
 
+    checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
   }
 
   test("hex") {
-    checkEvaluation(Hex(Literal(28)), "1C")
-    checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
     checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
     checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
@@ -313,12 +304,24 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Logarithm(Literal(v2), Literal(v1)), f(v2 + 0.0, v1 + 0.0), EmptyRow)
       checkEvaluation(new Logarithm(Literal(v1)), f(math.E, v1 + 0.0), EmptyRow)
     }
+
+    // null input should yield null output
     checkEvaluation(
       Logarithm(Literal.create(null, DoubleType), Literal(1.0)),
       null,
       create_row(null))
     checkEvaluation(
       Logarithm(Literal(1.0), Literal.create(null, DoubleType)),
+      null,
+      create_row(null))
+
+    // negative input should yield null output
+    checkEvaluation(
+      Logarithm(Literal(-1.0), Literal(1.0)),
+      null,
+      create_row(null))
+    checkEvaluation(
+      Logarithm(Literal(1.0), Literal(-1.0)),
       null,
       create_row(null))
   }
