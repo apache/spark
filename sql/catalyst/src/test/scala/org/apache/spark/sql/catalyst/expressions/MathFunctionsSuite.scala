@@ -270,22 +270,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("hex") {
-<<<<<<< HEAD
-    checkEvaluation(Hex(Literal.create(null, IntegerType)), null)
-    checkEvaluation(Hex(Literal(28)), "1C")
-    checkEvaluation(Hex(Literal(-28)), "FFFFFFFFFFFFFFE4")
     checkEvaluation(Hex(Literal.create(null, LongType)), null)
-=======
->>>>>>> c991ef5abbb501933b2a68eea1987cf8d88794a5
+    checkEvaluation(Hex(Literal(28L)), "1C")
+    checkEvaluation(Hex(Literal(-28L)), "FFFFFFFFFFFFFFE4")
     checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
-    checkEvaluation(Hex(Literal.create(null, StringType)), null)
-    checkEvaluation(Hex(Literal("helloHex")), "68656C6C6F486578")
     checkEvaluation(Hex(Literal.create(null, BinaryType)), null)
     checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Hex(Literal("三重的")), "E4B889E9878DE79A84")
+    checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
     // scalastyle:on
   }
 
