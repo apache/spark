@@ -304,6 +304,23 @@ class MathExpressionsSuite extends QueryTest {
       Row(21.toLong, 21, 21.toShort, 21.toByte, null))
   }
 
+  test("shift right unsigned") {
+    val df = Seq[(Long, Integer, Short, Byte, Integer, Integer)]((-42, 42, 42, 42, 42, null))
+      .toDF("a", "b", "c", "d", "e", "f")
+
+    checkAnswer(
+      df.select(
+        shiftRightUnsigned('a, 1), shiftRightUnsigned('b, 1), shiftRightUnsigned('c, 1),
+        shiftRightUnsigned('d, 1), shiftRightUnsigned('f, 1)),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
+
+    checkAnswer(
+      df.selectExpr(
+        "shiftRightUnsigned(a, 1)", "shiftRightUnsigned(b, 1)", "shiftRightUnsigned(c, 1)",
+        "shiftRightUnsigned(d, 1)", "shiftRightUnsigned(f, 1)"),
+      Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
+  }
+
   test("binary log") {
     val df = Seq[(Integer, Integer)]((123, null)).toDF("a", "b")
     checkAnswer(
