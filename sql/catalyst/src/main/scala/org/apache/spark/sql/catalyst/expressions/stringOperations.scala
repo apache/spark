@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -297,6 +298,37 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
   }
 
   override def prettyName: String = "length"
+}
+
+/**
+ * A function that return the Levenshtein distance between the two given strings.
+ */
+case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
+    with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override def dataType: DataType = IntegerType
+
+  override def eval(input: InternalRow): Any = {
+    val leftValue = left.eval(input)
+    if (leftValue == null) {
+      null
+    } else {
+      val rightValue = right.eval(input)
+      if(rightValue == null) {
+        null
+      } else {
+        StringUtils.getLevenshteinDistance(leftValue.toString, rightValue.toString)
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val stringUtils = classOf[StringUtils].getName
+    nullSafeCodeGen(ctx, ev, (res, left, right) =>
+      s"$res = $stringUtils.getLevenshteinDistance($left.toString(), $right.toString());")
+  }
 }
 
 /**

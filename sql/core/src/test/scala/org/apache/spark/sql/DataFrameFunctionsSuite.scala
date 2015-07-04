@@ -226,6 +226,12 @@ class DataFrameFunctionsSuite extends QueryTest {
       })
   }
 
+  test("Levenshtein distance") {
+    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(

@@ -1580,20 +1580,35 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the length of a given string value
-   *
+   * Computes the length of a given string value.
+   * 
    * @group string_funcs
    * @since 1.5.0
    */
   def strlen(e: Column): Column = StringLength(e.expr)
 
   /**
-   * Computes the length of a given string column
-   *
+   * Computes the length of a given string column.
+   * 
    * @group string_funcs
    * @since 1.5.0
    */
   def strlen(columnName: String): Column = strlen(Column(columnName))
+
+  /**
+   * Computes the Levenshtein distance of the two given strings.
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def levenshtein(l: Column, r: Column): Column = Levenshtein(l.expr, r.expr)
+
+  /**
+   * Computes the Levenshtein distance of the two given strings.
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def levenshtein(leftColumnName: String, rightColumnName: String): Column =
+    levenshtein(Column(leftColumnName), Column(rightColumnName))
 
   /**
    * Computes the numeric value of the first character of the specified string value.
