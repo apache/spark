@@ -31,6 +31,8 @@ object ArrayType extends AbstractDataType {
   private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
     childCandidate.isInstanceOf[ArrayType]
   }
+
+  private[sql] override def simpleString: String = "array"
 }
 
 

@@ -75,6 +75,8 @@ object MapType extends AbstractDataType {
     childCandidate.isInstanceOf[MapType]
   }
 
+  private[sql] override def simpleString: String = "map"
+
   /**
    * Construct a [[MapType]] object with the given key type and value type.
    * The `valueContainsNull` is true.
