@@ -19,30 +19,33 @@ package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
 
-import junit.framework.Assert;
 import org.junit.Test;
+
+import static junit.framework.Assert.*;
+
+import static org.apache.spark.unsafe.types.UTF8String.*;
 
 public class UTF8StringSuite {
 
   private void checkBasic(String str, int len) throws UnsupportedEncodingException {
-    UTF8String s1 = UTF8String.fromString(str);
-    UTF8String s2 = UTF8String.fromBytes(str.getBytes("utf8"));
-    Assert.assertEquals(s1.length(), len);
-    Assert.assertEquals(s2.length(), len);
+    UTF8String s1 = fromString(str);
+    UTF8String s2 = fromBytes(str.getBytes("utf8"));
+    assertEquals(s1.numChars(), len);
+    assertEquals(s2.numChars(), len);
 
-    Assert.assertEquals(s1.toString(), str);
-    Assert.assertEquals(s2.toString(), str);
-    Assert.assertEquals(s1, s2);
+    assertEquals(s1.toString(), str);
+    assertEquals(s2.toString(), str);
+    assertEquals(s1, s2);
 
-    Assert.assertEquals(s1.hashCode(), s2.hashCode());
+    assertEquals(s1.hashCode(), s2.hashCode());
 
-    Assert.assertEquals(s1.compare(s2), 0);
-    Assert.assertEquals(s1.compareTo(s2), 0);
+    assertEquals(s1.compare(s2), 0);
+    assertEquals(s1.compareTo(s2), 0);
 
-    Assert.assertEquals(s1.contains(s2), true);
-    Assert.assertEquals(s2.contains(s1), true);
-    Assert.assertEquals(s1.startsWith(s1), true);
-    Assert.assertEquals(s1.endsWith(s1), true);
+    assertEquals(s1.contains(s2), true);
+    assertEquals(s2.contains(s1), true);
+    assertEquals(s1.startsWith(s1), true);
+    assertEquals(s1.endsWith(s1), true);
   }
 
   @Test
@@ -52,49 +55,55 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void compare() {
+    assertTrue(fromString("abc").compare(fromString("ABC")) > 0);
+    assertTrue(fromString("abc0").compare(fromString("abc")) > 0);
+    assertTrue(fromString("abcabcabc").compare(fromString("abcabcabc")) == 0);
+    assertTrue(fromString("aBcabcabc").compare(fromString("Abcabcabc")) > 0);
+    assertTrue(fromString("Abcabcabc").compare(fromString("abcabcabC")) < 0);
+    assertTrue(fromString("abcabcabc").compare(fromString("abcabcabC")) > 0);
+
+    assertTrue(fromString("abc").compare(fromString("世界")) < 0);
+    assertTrue(fromString("你好").compare(fromString("世界")) > 0);
+    assertTrue(fromString("你好123").compare(fromString("你好122")) > 0);
+  }
+
+  @Test
   public void contains() {
-    Assert.assertTrue(UTF8String.fromString("hello").contains(UTF8String.fromString("ello")));
-    Assert.assertFalse(UTF8String.fromString("hello").contains(UTF8String.fromString("vello")));
-    Assert.assertFalse(UTF8String.fromString("hello").contains(UTF8String.fromString("hellooo")));
-    Assert.assertTrue(UTF8String.fromString("大千世界").contains(UTF8String.fromString("千世")));
-    Assert.assertFalse(UTF8String.fromString("大千世界").contains(UTF8String.fromString("世千")));
-    Assert.assertFalse(
-      UTF8String.fromString("大千世界").contains(UTF8String.fromString("大千世界好")));
+    assertTrue(fromString("hello").contains(fromString("ello")));
+    assertFalse(fromString("hello").contains(fromString("vello")));
+    assertFalse(fromString("hello").contains(fromString("hellooo")));
+    assertTrue(fromString("大千世界").contains(fromString("千世界")));
+    assertFalse(fromString("大千世界").contains(fromString("世千")));
+    assertFalse(fromString("大千世界").contains(fromString("大千世界好")));
   }
 
   @Test
   public void startsWith() {
-    Assert.assertTrue(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hell")));
-    Assert.assertFalse(UTF8String.fromString("hello").startsWith(UTF8String.fromString("ell")));
-    Assert.assertFalse(UTF8String.fromString("hello").startsWith(UTF8String.fromString("hellooo")));
-    Assert.assertTrue(UTF8String.fromString("数据砖头").startsWith(UTF8String.fromString("数据")));
-    Assert.assertFalse(UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("千")));
-    Assert.assertFalse(
-      UTF8String.fromString("大千世界").startsWith(UTF8String.fromString("大千世界好")));
+    assertTrue(fromString("hello").startsWith(fromString("hell")));
+    assertFalse(fromString("hello").startsWith(fromString("ell")));
+    assertFalse(fromString("hello").startsWith(fromString("hellooo")));
+    assertTrue(fromString("数据砖头").startsWith(fromString("数据")));
+    assertFalse(fromString("大千世界").startsWith(fromString("千")));
+    assertFalse(fromString("大千世界").startsWith(fromString("大千世界好")));
   }
 
   @Test
   public void endsWith() {
-    Assert.assertTrue(UTF8String.fromString("hello").endsWith(UTF8String.fromString("ello")));
-    Assert.assertFalse(UTF8String.fromString("hello").endsWith(UTF8String.fromString("ellov")));
-    Assert.assertFalse(UTF8String.fromString("hello").endsWith(UTF8String.fromString("hhhello")));
-    Assert.assertTrue(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世界")));
-    Assert.assertFalse(UTF8String.fromString("大千世界").endsWith(UTF8String.fromString("世")));
-    Assert.assertFalse(
-      UTF8String.fromString("数据砖头").endsWith(UTF8String.fromString("我的数据砖头")));
+    assertTrue(fromString("hello").endsWith(fromString("ello")));
+    assertFalse(fromString("hello").endsWith(fromString("ellov")));
+    assertFalse(fromString("hello").endsWith(fromString("hhhello")));
+    assertTrue(fromString("大千世界").endsWith(fromString("世界")));
+    assertFalse(fromString("大千世界").endsWith(fromString("世")));
+    assertFalse(fromString("数据砖头").endsWith(fromString("我的数据砖头")));
   }
 
   @Test
   public void substring() {
-    Assert.assertEquals(
-      UTF8String.fromString("hello").substring(0, 0), UTF8String.fromString(""));
-    Assert.assertEquals(
-      UTF8String.fromString("hello").substring(1, 3), UTF8String.fromString("el"));
-    Assert.assertEquals(
-      UTF8String.fromString("数据砖头").substring(0, 1), UTF8String.fromString("数"));
-    Assert.assertEquals(
-      UTF8String.fromString("数据砖头").substring(1, 3), UTF8String.fromString("据砖"));
-    Assert.assertEquals(
-      UTF8String.fromString("数据砖头").substring(3, 5), UTF8String.fromString("头"));
+    assertEquals(fromString("hello").substring(0, 0), fromString(""));
+    assertEquals(fromString("hello").substring(1, 3), fromString("el"));
+    assertEquals(fromString("数据砖头").substring(0, 1), fromString("数"));
+    assertEquals(fromString("数据砖头").substring(1, 3), fromString("据砖"));
+    assertEquals(fromString("数据砖头").substring(3, 5), fromString("头"));
   }
 }

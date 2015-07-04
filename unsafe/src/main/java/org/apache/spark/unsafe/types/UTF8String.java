@@ -21,6 +21,8 @@ import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+
 import static org.apache.spark.unsafe.PlatformDependent.*;
 
 /**
@@ -36,7 +38,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Nonnull
   private final Object base;
   private final long offset;
-  private final int size;
+  private final int numBytes;
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -45,6 +47,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6, 6, 6};
 
+  /**
+   * Note: `bytes` will be hold by returned UTF8String.
+   */
   public static UTF8String fromBytes(byte[] bytes) {
     if (bytes != null) {
       return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length);
@@ -68,16 +73,23 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public UTF8String(Object base, long offset, int size) {
     this.base = base;
     this.offset = offset;
-    this.size = size;
+    this.numBytes = size;
   }
 
   /**
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  public int numBytes(final byte b) {
+  public int numBytesForFirstByte(final byte b) {
     final int offset = (b & 0xFF) - 192;
     return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
+  }
+
+  /**
+   * Returns the number of bytes
+   */
+  public int numBytes() {
+    return numBytes;
   }
 
   /**
@@ -85,18 +97,27 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    *
    * This is only used by Substring() when `start` is negative.
    */
-  public int length() {
+  public int numChars() {
     int len = 0;
-    for (int i = 0; i < size; i += numBytes(getByte(i))) {
+    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
       len += 1;
     }
     return len;
   }
 
+  /**
+   * Returns the underline bytes, will be a copy of it if it's part of another array.
+   */
   public byte[] getBytes() {
-    byte[] bytes = new byte[size];
-    copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, size);
-    return bytes;
+    // avoid copy if `base` is `byte[]`
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
+      && ((byte[]) base).length == numBytes) {
+      return (byte[]) base;
+    } else {
+      byte[] bytes = new byte[numBytes];
+      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
+      return bytes;
+    }
   }
 
   /**
@@ -105,18 +126,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * @param until the position after last code point, exclusive.
    */
   public UTF8String substring(final int start, final int until) {
-    if (until <= start || start >= size) {
+    if (until <= start || start >= numBytes) {
       return UTF8String.fromBytes(new byte[0]);
     }
 
     int i = 0;
     int c = 0;
-    for (; i < size && c < start; i += numBytes(getByte(i))) {
+    for (; i < numBytes && c < start; i += numBytesForFirstByte(getByte(i))) {
       c += 1;
     }
 
     int j = i;
-    for (; j < size && c < until; j += numBytes(getByte(i))) {
+    for (; j < numBytes && c < until; j += numBytesForFirstByte(getByte(i))) {
       c += 1;
     }
 
@@ -126,12 +147,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public boolean contains(final UTF8String substring) {
-    if (substring.size == 0) {
+    if (substring.numBytes == 0) {
       return true;
     }
 
     byte first = substring.getByte(0);
-    for (int i = 0; i <= size - substring.size; i++) {
+    for (int i = 0; i <= numBytes - substring.numBytes; i++) {
       if (getByte(i) == first && matchAt(substring, i)) {
         return true;
       }
@@ -139,33 +160,15 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return false;
   }
 
-  private long getLong(int i) {
-    return UNSAFE.getLong(base, offset + i);
-  }
-
   private byte getByte(int i) {
     return UNSAFE.getByte(base, offset + i);
   }
 
   private boolean matchAt(final UTF8String s, int pos) {
-    if (s.size + pos > size || pos < 0) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
-
-    int i = 0;
-    while (i <= s.size - 8) {
-      if (getLong(pos + i) != s.getLong(i)) {
-        return false;
-      }
-      i += 8;
-    }
-    while (i < s.size) {
-      if (getByte(pos + i) != s.getByte(i)) {
-        return false;
-      }
-      i += 1;
-    }
-    return true;
+    return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -173,7 +176,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public boolean endsWith(final UTF8String suffix) {
-    return matchAt(suffix, size - suffix.size);
+    return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
   public UTF8String toUpperCase() {
@@ -206,25 +209,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int compareTo(final UTF8String other) {
-    int len = size < other.size ? size : other.size;
+    int len = numBytes < other.numBytes ? numBytes : other.numBytes;
     int i = 0;
-    while (i <= len - 8) {
-      long a = getLong(i);
-      long b = other.getLong(i);
-      // a - b will overflow
-      if (a != b) {
-        return a < b ? -1 : 1;
-      }
-      i += 8;
-    }
+    // TODO: compare 8 bytes as unsigned long
     while (i < len) {
-      int res = getByte(i) - other.getByte(i);
+      int res = (getByte(i) & 0xFF) - (other.getByte(i) & 0xFF);
       if (res != 0) {
         return res;
       }
       i += 1;
     }
-    return size - other.size;
+    return numBytes - other.numBytes;
   }
 
   public int compare(final UTF8String other) {
@@ -234,7 +229,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String) {
-      return compareTo((UTF8String) other) == 0;
+      UTF8String o = (UTF8String) other;
+      if (numBytes != o.numBytes){
+        return false;
+      }
+      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
     } else {
       return false;
     }
@@ -242,16 +241,6 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int hashCode() {
-    long result = 1;
-    int i = 0;
-    while (i <= size - 8) {
-      result = result * 31 + getLong(i);
-      i += 8;
-    }
-    while (i < size) {
-      result = 31 * result + getByte(i);
-      i += 1;
-    }
-    return (int) ((result >> 32) ^ result);
+    return ByteArrayMethods.arrayHashCode(base, offset, numBytes);
   }
 }

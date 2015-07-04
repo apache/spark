@@ -273,7 +273,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
           val (st, end) = slicePos(start, length, () => ba.length)
           ba.slice(st, end)
         case s: UTF8String =>
-          val (st, end) = slicePos(start, length, () => s.length())
+          val (st, end) = slicePos(start, length, () => s.numChars())
           s.substring(st, end)
       }
     }
@@ -289,7 +289,7 @@ case class StringLength(child: Expression) extends UnaryExpression with AutoCast
 
   override def eval(input: InternalRow): Any = {
     val string = child.eval(input)
-    if (string == null) null else string.asInstanceOf[UTF8String].length
+    if (string == null) null else string.asInstanceOf[UTF8String].numChars
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

@@ -268,11 +268,11 @@ public final class UnsafeRow extends MutableRow {
       } else {
         final byte[] bytes = new byte[size];
         PlatformDependent.copyMemory(
-                baseObject,
-                baseOffset + offset,
-                bytes,
-                PlatformDependent.BYTE_ARRAY_OFFSET,
-                size
+          baseObject,
+          baseOffset + offset,
+          bytes,
+          PlatformDependent.BYTE_ARRAY_OFFSET,
+          size
         );
         return bytes;
       }
