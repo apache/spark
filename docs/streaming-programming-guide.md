@@ -928,7 +928,9 @@ runningCounts = pairs.updateStateByKey(updateFunction)
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Python code, take a look at the example
-[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py). 
+
+Spark will run the updateStateByKey for all existing keys, regardless of whether they have new data in a batch or not. If updateStateByKey returns None then the key-value pair will be eliminated.
 
 </div>
 </div>
