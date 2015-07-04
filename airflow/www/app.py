@@ -1506,7 +1506,7 @@ class TaskInstanceModelView(ModelViewOnly):
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
         'unixname', 'priority_weight', 'log')
     can_delete = True
-    page_size = 100
+    page_size = 1000
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
