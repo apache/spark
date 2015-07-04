@@ -1581,6 +1581,7 @@ object functions {
 
   /**
    * Computes the length of a given string value
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -1588,10 +1589,102 @@ object functions {
 
   /**
    * Computes the length of a given string column
+   *
    * @group string_funcs
    * @since 1.5.0
    */
   def strlen(columnName: String): Column = strlen(Column(columnName))
+
+  /**
+   * Computes the numeric value of the first character of the specified string value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def ascii(e: Column): Column = Ascii(e.expr)
+
+  /**
+   * Computes the numeric value of the first character of the specified string column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def ascii(columnName: String): Column = ascii(Column(columnName))
+
+  /**
+   * Computes the specified value from binary to a base64 string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def base64(e: Column): Column = Base64(e.expr)
+
+  /**
+   * Computes the specified column from binary to a base64 string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def base64(columnName: String): Column = base64(Column(columnName))
+
+  /**
+   * Computes the specified value from a base64 string to binary.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def unbase64(e: Column): Column = UnBase64(e.expr)
+
+  /**
+   * Computes the specified column from a base64 string to binary.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def unbase64(columnName: String): Column = unbase64(Column(columnName))
+
+  /**
+   * Computes the first argument into a binary from a string using the provided character set
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * If either argument is null, the result will also be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def encode(value: Column, charset: Column): Column = Encode(value.expr, charset.expr)
+
+  /**
+   * Computes the first argument into a binary from a string using the provided character set
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * If either argument is null, the result will also be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def encode(columnName: String, charsetColumnName: String): Column =
+    encode(Column(columnName), Column(charsetColumnName))
+
+  /**
+   * Computes the first argument into a string from a binary using the provided character set
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * If either argument is null, the result will also be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def decode(value: Column, charset: Column): Column = Decode(value.expr, charset.expr)
+
+  /**
+   * Computes the first argument into a string from a binary using the provided character set
+   * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+   * If either argument is null, the result will also be null.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def decode(columnName: String, charsetColumnName: String): Column =
+    decode(Column(columnName), Column(charsetColumnName))
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -298,3 +298,120 @@ case class StringLength(child: Expression) extends UnaryExpression with ExpectsI
 
   override def prettyName: String = "length"
 }
+
+/**
+ * Returns the numeric value of the first character of str.
+ */
+case class Ascii(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) {
+      null
+    } else {
+      val bytes = string.asInstanceOf[UTF8String].getBytes
+      if (bytes.length > 0) {
+        bytes(0).asInstanceOf[Int]
+      } else {
+        0
+      }
+    }
+  }
+}
+
+/**
+ * Converts the argument from binary to a base 64 string.
+ */
+case class Base64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def eval(input: InternalRow): Any = {
+    val bytes = child.eval(input)
+    if (bytes == null) {
+      null
+    } else {
+      UTF8String.fromBytes(
+        org.apache.commons.codec.binary.Base64.encodeBase64(
+          bytes.asInstanceOf[Array[Byte]]))
+    }
+  }
+}
+
+/**
+ * Converts the argument from a base 64 string to BINARY.
+ */
+case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val string = child.eval(input)
+    if (string == null) {
+      null
+    } else {
+      org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+    }
+  }
+}
+
+/**
+ * Decodes the first argument into a String using the provided character set
+ * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+ * If either argument is null, the result will also be null. (As of Hive 0.12.0.).
+ */
+case class Decode(bin: Expression, charset: Expression) extends Expression with ExpectsInputTypes {
+  override def children: Seq[Expression] = bin :: charset :: Nil
+  override def foldable: Boolean = bin.foldable && charset.foldable
+  override def nullable: Boolean = bin.nullable || charset.nullable
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val l = bin.eval(input)
+    if (l == null) {
+      null
+    } else {
+      val r = charset.eval(input)
+      if (r == null) {
+        null
+      } else {
+        val fromCharset = r.asInstanceOf[UTF8String].toString
+        UTF8String.fromString(new String(l.asInstanceOf[Array[Byte]], fromCharset))
+      }
+    }
+  }
+}
+
+/**
+ * Encodes the first argument into a BINARY using the provided character set
+ * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+ * If either argument is null, the result will also be null. (As of Hive 0.12.0.)
+*/
+case class Encode(value: Expression, charset: Expression)
+  extends Expression with ExpectsInputTypes {
+  override def children: Seq[Expression] = value :: charset :: Nil
+  override def foldable: Boolean = value.foldable && charset.foldable
+  override def nullable: Boolean = value.nullable || charset.nullable
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def eval(input: InternalRow): Any = {
+    val l = value.eval(input)
+    if (l == null) {
+      null
+    } else {
+      val r = charset.eval(input)
+      if (r == null) {
+        null
+      } else {
+        val toCharset = r.asInstanceOf[UTF8String].toString
+        l.asInstanceOf[UTF8String].toString.getBytes(toCharset)
+      }
+    }
+  }
+}
+
+

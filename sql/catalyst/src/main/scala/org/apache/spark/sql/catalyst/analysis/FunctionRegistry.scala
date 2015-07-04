@@ -156,11 +156,16 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
     expression[UnHex]("unhex"),
     expression[Upper]("upper"),
