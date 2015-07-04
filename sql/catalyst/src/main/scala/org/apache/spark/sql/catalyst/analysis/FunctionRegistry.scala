@@ -163,7 +163,11 @@ object FunctionRegistry {
     expression[Substring]("substring"),
     expression[Upper]("ucase"),
     expression[UnHex]("unhex"),
-    expression[Upper]("upper")
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
   )
 
   val builtin: FunctionRegistry = {

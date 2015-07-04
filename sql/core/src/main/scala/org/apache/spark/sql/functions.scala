@@ -35,6 +35,7 @@ import org.apache.spark.util.Utils
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
+ * @groupname datetime_funcs Date time functions
  * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname math_funcs Math functions
@@ -990,6 +991,22 @@ object functions {
    * @since 1.4.0
    */
   def cosh(columnName: String): Column = cosh(Column(columnName))
+
+  /**
+   * Returns the current date.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def current_date(): Column = CurrentDate()
+
+  /**
+   * Returns the current timestamp.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def current_timestamp(): Column = CurrentTimestamp()
 
   /**
    * Computes the exponential of the given value.
