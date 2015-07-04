@@ -1581,7 +1581,7 @@ object functions {
 
   /**
    * Computes the length of a given string value.
-   * 
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -1589,7 +1589,7 @@ object functions {
 
   /**
    * Computes the length of a given string column.
-   * 
+   *
    * @group string_funcs
    * @since 1.5.0
    */
