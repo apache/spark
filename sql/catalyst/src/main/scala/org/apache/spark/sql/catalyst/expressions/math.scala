@@ -541,7 +541,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, IntegerType), IntegerType)
+    Seq(TypeCollection(IntegerType, LongType), IntegerType)
 
   override def dataType: DataType = left.dataType
 
