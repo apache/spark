@@ -22,7 +22,7 @@ class PythonOperator(BaseOperator):
         keyword arguments that can be used in your function. This set of
         kwargs correspond exactly to what you can use in your jinja
         templates. For this to work, you need to define `**kwargs` in your
-        funciton header.
+        function header.
     :type provide_context: bool
     """
     template_fields = tuple()
