@@ -308,6 +308,8 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
+  override def dataType: DataType = IntegerType
+
   override def eval(input: InternalRow): Any = {
     val leftValue = left.eval(input)
     if (leftValue == null) {
@@ -327,6 +329,4 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     nullSafeCodeGen(ctx, ev, (res, left, right) =>
       s"$res = $stringUtils.getLevenshteinDistance($left.toString(), $right.toString());")
   }
-
-  override def dataType: DataType = IntegerType
 }
