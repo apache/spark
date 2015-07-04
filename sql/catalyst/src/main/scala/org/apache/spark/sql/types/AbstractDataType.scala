@@ -37,6 +37,9 @@ private[sql] abstract class AbstractDataType {
    * Returns true if this data type is a parent of the `childCandidate`.
    */
   private[sql] def isParentOf(childCandidate: DataType): Boolean
+
+  /** Readable string representation for the type. */
+  private[sql] def simpleString: String
 }
 
 
@@ -56,6 +59,10 @@ private[sql] class TypeCollection(private val types: Seq[DataType]) extends Abst
   private[sql] override def defaultConcreteType: DataType = types.head
 
   private[sql] override def isParentOf(childCandidate: DataType): Boolean = false
+
+  private[sql] override def simpleString: String = {
+    types.map(_.simpleString).mkString("(", " or ", ")")
+  }
 }
 
 

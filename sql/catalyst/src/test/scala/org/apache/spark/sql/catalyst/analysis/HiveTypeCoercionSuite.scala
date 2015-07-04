@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends PlanTest {
 
-  test("implicit type cast") {
+  test("eligible implicit type cast") {
     def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
       val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
       assert(got.map(_.dataType) == Option(expected),
@@ -68,6 +68,29 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldCast(IntegerType, TypeCollection(BinaryType, IntegerType), IntegerType)
     shouldCast(BinaryType, TypeCollection(BinaryType, IntegerType), BinaryType)
     shouldCast(BinaryType, TypeCollection(IntegerType, BinaryType), BinaryType)
+
+    shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
+  }
+
+  test("ineligible implicit type cast") {
+    def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
+      val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+      assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+    }
+
+    shouldNotCast(IntegerType, DateType)
+    shouldNotCast(IntegerType, TimestampType)
+    shouldNotCast(LongType, DateType)
+    shouldNotCast(LongType, TimestampType)
+    shouldNotCast(DecimalType.Unlimited, DateType)
+    shouldNotCast(DecimalType.Unlimited, TimestampType)
+
+    shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+
+    shouldNotCast(IntegerType, ArrayType)
+    shouldNotCast(IntegerType, MapType)
+    shouldNotCast(IntegerType, StructType)
   }
 
   test("tightest common bound for types") {
