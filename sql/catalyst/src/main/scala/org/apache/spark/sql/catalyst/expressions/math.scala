@@ -321,7 +321,8 @@ object Hex {
 case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   // TODO: Create code-gen version.
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(LongType, BinaryType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, BinaryType, StringType))
 
   override def dataType: DataType = StringType
 
@@ -333,6 +334,7 @@ case class Hex(child: Expression) extends UnaryExpression with ExpectsInputTypes
       child.dataType match {
         case LongType => hex(num.asInstanceOf[Long])
         case BinaryType => hex(num.asInstanceOf[Array[Byte]])
+        case StringType => hex(num.asInstanceOf[UTF8String].getBytes)
       }
     }
   }
