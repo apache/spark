@@ -73,7 +73,7 @@ public class ByteArrayMethods {
       offset += 8;
     }
     while (offset < last) {
-      result += (result << 5) + UNSAFE.getLong(base, offset);
+      result += (result << 5) + UNSAFE.getByte(base, offset);
       offset += 1;
     }
     return (int) ((result >> 32) ^ result);

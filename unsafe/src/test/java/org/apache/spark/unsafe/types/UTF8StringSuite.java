@@ -50,6 +50,7 @@ public class UTF8StringSuite {
 
   @Test
   public void basicTest() throws UnsupportedEncodingException {
+    checkBasic("", 0);
     checkBasic("hello", 5);
     checkBasic("大 千 世 界", 7);
   }
