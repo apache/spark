@@ -227,6 +227,12 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "<TODO>")
 
+  val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
+    defaultValue = Some(true),
+    doc = "When true, the Parquet data source merges schemas collected from all data files, " +
+          "otherwise the schema is picked from the summary file or a random data file " +
+          "if no summary file is available.")
+
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),
     doc = "Some other Parquet-producing systems, in particular Impala and older versions of " +

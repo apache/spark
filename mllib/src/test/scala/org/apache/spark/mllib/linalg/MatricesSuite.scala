@@ -455,4 +455,14 @@ class MatricesSuite extends SparkFunSuite {
     lines = mat.toString(5, 100).lines.toArray
     assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
+
+  test("numNonzeros and numActives") {
+    val dm1 = Matrices.dense(3, 2, Array(0, 0, -1, 1, 0, 1))
+    assert(dm1.numNonzeros === 3)
+    assert(dm1.numActives === 6)
+
+    val sm1 = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
+    assert(sm1.numNonzeros === 1)
+    assert(sm1.numActives === 3)
+  }
 }
