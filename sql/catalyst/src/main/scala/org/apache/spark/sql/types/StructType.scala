@@ -87,8 +87,6 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
  * val row = Row(Row(1, 2, true))
  * // row: Row = [[1,2,true]]
  * }}}
- *
- * @group dataType
  */
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
@@ -303,7 +301,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 }
 
 
-object StructType {
+object StructType extends AbstractDataType {
+
+  private[sql] override def defaultConcreteType: DataType = new StructType
+
+  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
+    childCandidate.isInstanceOf[StructType]
+  }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
