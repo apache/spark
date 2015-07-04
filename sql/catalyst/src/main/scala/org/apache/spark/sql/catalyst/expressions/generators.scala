@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, trees}
 import org.apache.spark.sql.types._
 
@@ -68,19 +69,19 @@ abstract class Generator extends Expression {
  */
 case class UserDefinedGenerator(
     elementTypes: Seq[(DataType, Boolean)],
-    function: InternalRow => TraversableOnce[InternalRow],
+    function: Row => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator {
 
   @transient private[this] var inputRow: InterpretedProjection = _
-  @transient private[this] var convertToScala: (InternalRow) => InternalRow = _
+  @transient private[this] var convertToScala: (InternalRow) => Row = _
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
       CatalystTypeConverters.createToScalaConverter(inputSchema)
-    }.asInstanceOf[(InternalRow => InternalRow)]
+    }.asInstanceOf[InternalRow => Row]
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
@@ -100,9 +101,14 @@ case class UserDefinedGenerator(
 case class Explode(child: Expression)
   extends Generator with trees.UnaryNode[Expression] {
 
-  override lazy val resolved =
-    child.resolved &&
-    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType]) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function explode should be array or map type, not ${child.dataType}")
+    }
+  }
 
   override def elementTypes: Seq[(DataType, Boolean)] = child.dataType match {
     case ArrayType(et, containsNull) => (et, containsNull) :: Nil
@@ -113,10 +119,11 @@ case class Explode(child: Expression)
     child.dataType match {
       case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
-        if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
+        if (inputArray == null) Nil else inputArray.map(v => InternalRow(v))
       case MapType(_, _, _) =>
         val inputMap = child.eval(input).asInstanceOf[Map[Any, Any]]
-        if (inputMap == null) Nil else inputMap.map { case (k, v) => new GenericRow(Array(k, v)) }
+        if (inputMap == null) Nil
+        else inputMap.map { case (k, v) => InternalRow(k, v) }
     }
   }
 

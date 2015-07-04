@@ -68,7 +68,7 @@ class PCA(val k: Int) {
  * @param k number of principal components.
  * @param pc a principal components Matrix. Each column is one principal component.
  */
-class PCAModel private[mllib] (val k: Int, val pc: DenseMatrix) extends VectorTransformer {
+class PCAModel private[spark] (val k: Int, val pc: DenseMatrix) extends VectorTransformer {
   /**
    * Transform a vector by computed Principal Components.
    *

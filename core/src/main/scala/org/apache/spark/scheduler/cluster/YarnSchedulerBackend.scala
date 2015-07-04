@@ -46,7 +46,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
-  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
+  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.

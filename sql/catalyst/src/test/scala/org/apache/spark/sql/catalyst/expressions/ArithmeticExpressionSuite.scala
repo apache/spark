@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType}
+import org.apache.spark.sql.types.Decimal
 
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -123,23 +123,39 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("MaxOf") {
-    checkEvaluation(MaxOf(1, 2), 2)
-    checkEvaluation(MaxOf(2, 1), 2)
-    checkEvaluation(MaxOf(1L, 2L), 2L)
-    checkEvaluation(MaxOf(2L, 1L), 2L)
-
-    checkEvaluation(MaxOf(Literal.create(null, IntegerType), 2), 2)
-    checkEvaluation(MaxOf(2, Literal.create(null, IntegerType)), 2)
+  test("MaxOf basic") {
+    testNumericDataTypes { convert =>
+      val small = Literal(convert(1))
+      val large = Literal(convert(2))
+      checkEvaluation(MaxOf(small, large), convert(2))
+      checkEvaluation(MaxOf(large, small), convert(2))
+      checkEvaluation(MaxOf(Literal.create(null, small.dataType), large), convert(2))
+      checkEvaluation(MaxOf(large, Literal.create(null, small.dataType)), convert(2))
+    }
   }
 
-  test("MinOf") {
-    checkEvaluation(MinOf(1, 2), 1)
-    checkEvaluation(MinOf(2, 1), 1)
-    checkEvaluation(MinOf(1L, 2L), 1L)
-    checkEvaluation(MinOf(2L, 1L), 1L)
+  test("MaxOf for atomic type") {
+    checkEvaluation(MaxOf(true, false), true)
+    checkEvaluation(MaxOf("abc", "bcd"), "bcd")
+    checkEvaluation(MaxOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
+      Array(1.toByte, 3.toByte))
+  }
 
-    checkEvaluation(MinOf(Literal.create(null, IntegerType), 1), 1)
-    checkEvaluation(MinOf(1, Literal.create(null, IntegerType)), 1)
+  test("MinOf basic") {
+    testNumericDataTypes { convert =>
+      val small = Literal(convert(1))
+      val large = Literal(convert(2))
+      checkEvaluation(MinOf(small, large), convert(1))
+      checkEvaluation(MinOf(large, small), convert(1))
+      checkEvaluation(MinOf(Literal.create(null, small.dataType), large), convert(2))
+      checkEvaluation(MinOf(small, Literal.create(null, small.dataType)), convert(1))
+    }
+  }
+
+  test("MinOf for atomic type") {
+    checkEvaluation(MinOf(true, false), false)
+    checkEvaluation(MinOf("abc", "bcd"), "abc")
+    checkEvaluation(MinOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
+      Array(1.toByte, 2.toByte))
   }
 }
