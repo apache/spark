@@ -777,7 +777,9 @@ class TaskInstance(Base):
             logging.info(msg.format(**locals()))
 
             self.start_date = datetime.now()
-            if not force and task.pool and self.pool_full(session=session):
+            if not force and task.pool:
+                # If a pool is set for this task, marking the task instance
+                # as QUEUED
                 self.state = State.QUEUED
                 session.merge(self)
                 session.commit()
