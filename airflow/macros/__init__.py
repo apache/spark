@@ -48,4 +48,6 @@ def ds_format(ds, input_format, output_format):
 
 def integrate_plugins():
     """Integrate plugins to the context"""
-    pass
+    from airflow.plugins_manager import macros as _macros
+    for _macro in _macros:
+        globals()[_macro.__name__] = _macro
