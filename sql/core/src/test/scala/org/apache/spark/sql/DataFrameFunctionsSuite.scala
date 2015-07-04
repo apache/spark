@@ -225,4 +225,48 @@ class DataFrameFunctionsSuite extends QueryTest {
         Row(l)
       })
   }
+
+  test("Levenshtein distance") {
+    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    checkAnswer(df.select(levenshtein("l", "r")), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+  }
+
+  test("string ascii function") {
+    val df = Seq(("abc", "")).toDF("a", "b")
+    checkAnswer(
+      df.select(ascii($"a"), ascii("b")),
+      Row(97, 0))
+
+    checkAnswer(
+      df.selectExpr("ascii(a)", "ascii(b)"),
+      Row(97, 0))
+  }
+
+  test("string base64/unbase64 function") {
+    val bytes = Array[Byte](1, 2, 3, 4)
+    val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")
+    checkAnswer(
+      df.select(base64("a"), base64($"a"), unbase64("b"), unbase64($"b")),
+      Row("AQIDBA==", "AQIDBA==", bytes, bytes))
+
+    checkAnswer(
+      df.selectExpr("base64(a)", "unbase64(b)"),
+      Row("AQIDBA==", bytes))
+  }
+
+  test("string encode/decode function") {
+    val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
+    // scalastyle:off  
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("大千世界", "utf-8", bytes)).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(encode($"a", $"b"), encode("a", "b"), decode($"c", $"b"), decode("c", "b")),
+      Row(bytes, bytes, "大千世界", "大千世界"))
+
+    checkAnswer(
+      df.selectExpr("encode(a, b)", "decode(c, b)"),
+      Row(bytes, "大千世界"))
+    // scalastyle:on
+  }
 }
