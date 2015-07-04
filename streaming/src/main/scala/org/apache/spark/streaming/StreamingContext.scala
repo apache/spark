@@ -204,6 +204,8 @@ class StreamingContext private[streaming] (
 
   private var shutdownHookRef: AnyRef = _
 
+  conf.getOption("spark.streaming.checkpointDir").foreach(checkpoint)
+
   /**
    * Return the associated Spark context
    */
