@@ -27,7 +27,7 @@
             <tr>
                 <td class="text-center" style="width:10px;">
                     {% if dag_id in orm_dags %}
-                    <a href="/admin/dagmodel/edit/?id=airflow_maintenance" title="Info">
+                    <a href="/admin/dagmodel/edit/?id={{ dag_id }}" title="Info">
                         <span class="glyphicon glyphicon-search" aria-hidden="true"></span>
                     </a>
                     {% endif %}
