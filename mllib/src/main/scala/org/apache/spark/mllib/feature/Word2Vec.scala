@@ -143,7 +143,7 @@ class Word2Vec extends Serializable with Logging {
     this
   }
 
-  /** 
+  /**
    * Sets the threshold for randomly downsampling higher-frequency words, default is 0.0 (off),
    * useful value is 1e-5 (default: 0.0).
    */
