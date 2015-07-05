@@ -58,6 +58,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
+  protected val DAY = Keyword("DAY")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -68,16 +69,20 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
   protected val HAVING = Keyword("HAVING")
+  protected val HOUR = Keyword("HOUR")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
   protected val INTERSECT = Keyword("INTERSECT")
+  protected val INTERVAL = Keyword("INTERVAL")
   protected val INTO = Keyword("INTO")
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
+  protected val MINUTE = Keyword("MINUTE")
+  protected val MONTH = Keyword("MONTH")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -89,6 +94,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val REGEXP = Keyword("REGEXP")
   protected val RIGHT = Keyword("RIGHT")
   protected val RLIKE = Keyword("RLIKE")
+  protected val SECOND = Keyword("SECOND")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
   protected val TABLE = Keyword("TABLE")
@@ -98,6 +104,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
   protected val WITH = Keyword("WITH")
+  protected val YEAR = Keyword("YEAR")
 
   protected lazy val start: Parser[LogicalPlan] =
     start1 | insert | cte
@@ -309,6 +316,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     ( numericLiteral
     | booleanLiteral
     | stringLit ^^ {case s => Literal.create(s, StringType) }
+    | intervalLiteral
     | NULL ^^^ Literal.create(null, NullType)
     )
 
@@ -318,20 +326,44 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val numericLiteral: Parser[Literal] =
-    signedNumericLiteral | unsignedNumericLiteral
-
-  protected lazy val sign: Parser[String] =
-    "+" | "-"
-
-  protected lazy val signedNumericLiteral: Parser[Literal] =
-    ( sign ~ numericLit  ^^ { case s ~ l => Literal(toNarrowestIntegerType(s + l)) }
+    ( signedNumeric  ^^ { case sn => Literal(toNarrowestIntegerType(sn)) }
     | sign ~ floatLit ^^ { case s ~ f => Literal((s + f).toDouble) }
     )
 
-  protected lazy val unsignedNumericLiteral: Parser[Literal] =
-    ( numericLit ^^ { n => Literal(toNarrowestIntegerType(n)) }
-    | floatLit ^^ { f => Literal(f.toDouble) }
+  protected lazy val floatLit: Parser[String] =
+    ( "." ~> numericLit ^^ { u => "0." + u }
+    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
     )
+
+  protected lazy val sign: Parser[String] =
+    ("+" | "-").? ^^ { case s => s.getOrElse("") }
+
+  protected lazy val signedNumeric: Parser[String] =
+    sign ~ numericLit ^^ { case s ~ n => s + n }
+
+  protected lazy val intervalLiteral: Parser[Literal] =
+    ( yearMonthIntervalLiteral
+    | dayTimeIntervalLiteral
+    )
+
+  protected lazy val yearMonthIntervalLiteral: Parser[Literal] =
+    ( INTERVAL ~> signedNumeric <~ MONTH ^^
+      { case sn => Literal.create(sn.toInt, YearMonthIntervalType) }
+    | INTERVAL ~> signedNumeric <~ YEAR ^^
+      { case sn => Literal.create(sn.toInt * 12, YearMonthIntervalType) }
+    )
+
+  protected lazy val dayTimeIntervalLiteral: Parser[Literal] =
+    ( INTERVAL ~> signedNumeric <~ SECOND ^^
+      { case sn => Literal.create(sn.toLong, DayTimeIntervalType) }
+    | INTERVAL ~> signedNumeric <~ MINUTE ^^
+      { case sn => Literal.create(sn.toLong * 60, DayTimeIntervalType) }
+    | INTERVAL ~> signedNumeric <~ HOUR ^^
+      { case sn => Literal.create(sn.toLong * 60 * 60, DayTimeIntervalType) }
+    | INTERVAL ~> signedNumeric <~ DAY ^^
+      { case sn => Literal.create(sn.toLong * 60 * 60 * 24, DayTimeIntervalType) }
+    )
+
 
   private def toNarrowestIntegerType(value: String): Any = {
     val bigIntValue = BigDecimal(value)
@@ -342,11 +374,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       case v => v.underlying()
     }
   }
-
-  protected lazy val floatLit: Parser[String] =
-    ( "." ~> unsignedNumericLiteral ^^ { u => "0." + u }
-    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
-    )
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)

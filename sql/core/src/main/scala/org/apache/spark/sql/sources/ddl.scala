@@ -304,6 +304,10 @@ private[sql] object ResolvedDataSource {
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
+    if (data.schema.map(_.dataType).exists(
+      t => t == YearMonthIntervalType || t == DayTimeIntervalType)) {
+      sys.error("cannot save dataframe with interval type out to external systems")
+    }
     val clazz: Class[_] = lookupDataSource(provider)
     val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>

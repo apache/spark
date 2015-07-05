@@ -1467,4 +1467,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       checkAnswer(sql("select count, sort from t"), Row(1, "a"))
     }
   }
+
+  test("SPARK-8753: add interval type") {
+    val df = sql("select interval 3 year, interval -14 month, interval 99 second, interval -4 day")
+    checkAnswer(df, Row(36, -14, 99L, -345600L))
+    withTempPath(f => {
+      intercept[RuntimeException] {
+        df.write.json(f.getCanonicalPath)
+      }
+    })
+  }
 }
