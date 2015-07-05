@@ -256,8 +256,6 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
       val bytes = value.getBytes
 
-      require(bytes.length <= 16, "Decimal field too large to read")
-
       var unscaled = 0L
       var i = 0
 
