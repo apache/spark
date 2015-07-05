@@ -74,11 +74,17 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.parquet.ParquetTypeInfo"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.sql.parquet.ParquetTypeInfo$"),
+              "org.apache.spark.sql.parquet.ParquetTypeInfo$")
+          ) ++ Seq(
+            // SPARK-8479 Add numNonzeros and numActives to Matrix.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numNonzeros"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.numActives")
+          ) ++ Seq(
             // SPARK-8464 Separating aggregator and non-aggregator paths in ExternalSorter
-            ProblemFilters.exclude[AbstractClassProblem]
-              ("org.apache.spark.util.collection.ExternalSorter")
-
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.util.collection.ExternalSorter")
           )
         case v if v.startsWith("1.4") =>
           Seq(

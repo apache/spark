@@ -26,6 +26,73 @@ import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends PlanTest {
 
+  test("eligible implicit type cast") {
+    def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
+      val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+      assert(got.map(_.dataType) == Option(expected),
+        s"Failed to cast $from to $to")
+    }
+
+    shouldCast(NullType, NullType, NullType)
+    shouldCast(NullType, IntegerType, IntegerType)
+    shouldCast(NullType, DecimalType, DecimalType.Unlimited)
+
+    // TODO: write the entire implicit cast table out for test cases.
+    shouldCast(ByteType, IntegerType, IntegerType)
+    shouldCast(IntegerType, IntegerType, IntegerType)
+    shouldCast(IntegerType, LongType, LongType)
+    shouldCast(IntegerType, DecimalType, DecimalType.Unlimited)
+    shouldCast(LongType, IntegerType, IntegerType)
+    shouldCast(LongType, DecimalType, DecimalType.Unlimited)
+
+    shouldCast(DateType, TimestampType, TimestampType)
+    shouldCast(TimestampType, DateType, DateType)
+
+    shouldCast(StringType, IntegerType, IntegerType)
+    shouldCast(StringType, DateType, DateType)
+    shouldCast(StringType, TimestampType, TimestampType)
+    shouldCast(IntegerType, StringType, StringType)
+    shouldCast(DateType, StringType, StringType)
+    shouldCast(TimestampType, StringType, StringType)
+
+    shouldCast(StringType, BinaryType, BinaryType)
+    shouldCast(BinaryType, StringType, StringType)
+
+    shouldCast(NullType, TypeCollection(StringType, BinaryType), StringType)
+
+    shouldCast(StringType, TypeCollection(StringType, BinaryType), StringType)
+    shouldCast(BinaryType, TypeCollection(StringType, BinaryType), BinaryType)
+    shouldCast(StringType, TypeCollection(BinaryType, StringType), StringType)
+
+    shouldCast(IntegerType, TypeCollection(IntegerType, BinaryType), IntegerType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, IntegerType), IntegerType)
+    shouldCast(BinaryType, TypeCollection(BinaryType, IntegerType), BinaryType)
+    shouldCast(BinaryType, TypeCollection(IntegerType, BinaryType), BinaryType)
+
+    shouldCast(IntegerType, TypeCollection(StringType, BinaryType), StringType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, StringType), StringType)
+  }
+
+  test("ineligible implicit type cast") {
+    def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
+      val got = HiveTypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+      assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+    }
+
+    shouldNotCast(IntegerType, DateType)
+    shouldNotCast(IntegerType, TimestampType)
+    shouldNotCast(LongType, DateType)
+    shouldNotCast(LongType, TimestampType)
+    shouldNotCast(DecimalType.Unlimited, DateType)
+    shouldNotCast(DecimalType.Unlimited, TimestampType)
+
+    shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+
+    shouldNotCast(IntegerType, ArrayType)
+    shouldNotCast(IntegerType, MapType)
+    shouldNotCast(IntegerType, StructType)
+  }
+
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
       var found = HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
@@ -113,8 +180,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("coalesce casts") {
-    val fac = new HiveTypeCoercion { }.FunctionArgumentConversion
-    ruleTest(fac,
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1.0)
         :: Literal(1)
         :: Literal.create(1.0, FloatType)
@@ -123,7 +189,7 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), DoubleType)
         :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
-    ruleTest(fac,
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       Coalesce(Literal(1L)
         :: Literal(1)
         :: Literal(new java.math.BigDecimal("1000000000000000000000"))
@@ -135,7 +201,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion for If") {
-    val rule = new HiveTypeCoercion { }.IfCoercion
+    val rule = HiveTypeCoercion.IfCoercion
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),
       If(Literal(true), Cast(Literal(1), LongType), Literal(1L))
@@ -148,19 +214,18 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    val cwc = new HiveTypeCoercion {}.CaseWhenCoercion
-    ruleTest(cwc,
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
-    ruleTest(cwc,
+    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
   }
 
   test("type coercion simplification for equal to") {
-    val be = new HiveTypeCoercion {}.BooleanEquality
+    val be = HiveTypeCoercion.BooleanEquality
 
     ruleTest(be,
       EqualTo(Literal(true), Literal(1)),

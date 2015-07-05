@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.client
 
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] object TestClient {
 
@@ -46,13 +47,12 @@ private[spark] object TestClient {
   def main(args: Array[String]) {
     val url = args(0)
     val conf = new SparkConf
-    val (actorSystem, _) = AkkaUtils.createActorSystem("spark", Utils.localHostName(), 0,
-      conf = conf, securityManager = new SecurityManager(conf))
+    val rpcEnv = RpcEnv.create("spark", Utils.localHostName(), 0, conf, new SecurityManager(conf))
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
       Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored")
     val listener = new TestListener
-    val client = new AppClient(actorSystem, Array(url), desc, listener, new SparkConf)
+    val client = new AppClient(rpcEnv, Array(url), desc, listener, new SparkConf)
     client.start()
-    actorSystem.awaitTermination()
+    rpcEnv.awaitTermination()
   }
 }

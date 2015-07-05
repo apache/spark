@@ -57,7 +57,7 @@ case class UnaryMinus(child: Expression) extends UnaryArithmetic {
 }
 
 case class UnaryPositive(child: Expression) extends UnaryArithmetic {
-  override def toString: String = s"positive($child)"
+  override def prettyName: String = "positive"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     defineCodeGen(ctx, ev, c => c)
@@ -69,8 +69,6 @@ case class UnaryPositive(child: Expression) extends UnaryArithmetic {
  * A function that get the absolute value of the numeric value.
  */
 case class Abs(child: Expression) extends UnaryArithmetic {
-  override def toString: String = s"Abs($child)"
-
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function abs")
 
@@ -79,11 +77,8 @@ case class Abs(child: Expression) extends UnaryArithmetic {
   protected override def evalInternal(evalE: Any) = numeric.abs(evalE)
 }
 
-abstract class BinaryArithmetic extends BinaryExpression {
+abstract class BinaryArithmetic extends BinaryOperator {
   self: Product =>
-
-  /** Name of the function for this expression on a [[Decimal]] type. */
-  def decimalMethod: String = ""
 
   override def dataType: DataType = left.dataType
 
@@ -112,6 +107,10 @@ abstract class BinaryArithmetic extends BinaryExpression {
       }
     }
   }
+
+  /** Name of the function for this expression on a [[Decimal]] type. */
+  def decimalMethod: String =
+    sys.error("BinaryArithmetics must override either decimalMethod or genCode")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType =>
@@ -214,23 +213,32 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val test = if (left.dataType.isInstanceOf[DecimalType]) {
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
       s"${eval2.primitive}.isZero()"
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
-    val javaType = ctx.javaType(left.dataType)
-    eval1.code + eval2.code +
-      s"""
+    val javaType = ctx.javaType(dataType)
+    val divide = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $divide;
+        }
       }
-      """
+    """
   }
 }
 
@@ -271,23 +279,32 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val test = if (left.dataType.isInstanceOf[DecimalType]) {
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
       s"${eval2.primitive}.isZero()"
     } else {
       s"${eval2.primitive} == 0"
     }
-    val method = if (left.dataType.isInstanceOf[DecimalType]) s".$decimalMethod" else s" $symbol "
-    val javaType = ctx.javaType(left.dataType)
-    eval1.code + eval2.code +
-      s"""
+    val javaType = ctx.javaType(dataType)
+    val remainder = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.primitive}.$decimalMethod(${eval2.primitive})"
+    } else {
+      s"($javaType)(${eval1.primitive} $symbol ${eval2.primitive})"
+    }
+    s"""
+      ${eval2.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(left.dataType)} ${ev.primitive} = ${ctx.defaultValue(left.dataType)};
-      if (${eval1.isNull} || ${eval2.isNull} || $test) {
+      $javaType ${ev.primitive} = ${ctx.defaultValue(javaType)};
+      if (${eval2.isNull} || $isZero) {
         ${ev.isNull} = true;
       } else {
-        ${ev.primitive} = ($javaType) (${eval1.primitive}$method(${eval2.primitive}));
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.primitive} = $remainder;
+        }
       }
-      """
+    """
   }
 }
 
@@ -340,7 +357,9 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
       }
     """
   }
-  override def toString: String = s"MaxOf($left, $right)"
+
+  override def symbol: String = "max"
+  override def prettyName: String = symbol
 }
 
 case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -393,5 +412,6 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
     """
   }
 
-  override def toString: String = s"MinOf($left, $right)"
+  override def symbol: String = "min"
+  override def prettyName: String = symbol
 }
