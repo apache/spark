@@ -55,11 +55,15 @@ private[parquet] trait ParentContainerUpdater {
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
 /**
- * This Parquet converter converts Parquet records to Spark SQL [[Row]]s.
+ * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[Row]]s.  Since
+ * any Parquet record is also a struct, this converter can also be used as root converter.
+ *
+ * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
+ * any "parent" container.
  *
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type
- * @param updater An updater which takes care of the converted row object
+ * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class CatalystRowConverter(
     parquetType: GroupType,
@@ -68,8 +72,8 @@ private[parquet] class CatalystRowConverter(
   extends GroupConverter {
 
   /**
-   * Updater used together with field converters of [[CatalystRowConverter]].  It sets converted
-   * filed values to the `ordinal`-th cell in `currentRow`.
+   * Updater used together with field converters within a [[CatalystRowConverter]].  It propagates
+   * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
   private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
@@ -187,9 +191,9 @@ private[parquet] class CatalystRowConverter(
   }
 
   /**
-   * Parquet converter for Parquet primitive types.  Note that not all Spark SQL primitive types
+   * Parquet converter for Parquet primitive types.  Note that not all Spark SQL atomic types
    * are handled by this converter.  Parquet primitive types are only a subset of those of Spark
-   * SQL.  For example, BYTE, SHORT and INT in Spark SQL are all covered by INT32 in Parquet.
+   * SQL.  For example, BYTE, SHORT, and INT in Spark SQL are all covered by INT32 in Parquet.
    */
   private final class CatalystPrimitiveConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
@@ -311,9 +315,7 @@ private[parquet] class CatalystRowConverter(
 
     override def end(): Unit = updater.set(currentArray)
 
-    override def start(): Unit = {
-      currentArray = ArrayBuffer.empty[Any]
-    }
+    override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
 
     // scalastyle:off
     /**
@@ -383,9 +385,7 @@ private[parquet] class CatalystRowConverter(
 
     override def end(): Unit = updater.set(currentMap)
 
-    override def start(): Unit = {
-      currentMap = mutable.Map.empty[Any, Any]
-    }
+    override def start(): Unit = currentMap = mutable.Map.empty[Any, Any]
 
     /** Parquet converter for key-value pairs within the map. */
     private final class KeyValueConverter(
