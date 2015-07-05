@@ -22,9 +22,15 @@ package org.apache.spark.sql.catalyst.expressions
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */
-class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
-  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+class InterpretedProjection(expressions: Seq[Expression], mutableRow: Boolean = false)
+  extends Projection {
+
+  def this(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      mutableRow: Boolean = false) = {
+    this(expressions.map(BindReferences.bindReference(_, inputSchema)), mutableRow)
+  }
 
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
@@ -36,7 +42,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
       outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
-    new GenericInternalRow(outputArray)
+    if (mutableRow) new GenericMutableRow(outputArray) else new GenericInternalRow(outputArray)
   }
 
   override def toString: String = s"Row => [${exprArray.mkString(",")}]"
