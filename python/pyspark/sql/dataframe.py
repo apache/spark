@@ -908,12 +908,12 @@ class DataFrame(object):
             Row(name='Alice', age=5, height=80), \
             Row(name='Alice', age=5, height=80), \
             Row(name='Alice', age=10, height=80)]).toDF()
-        >>> df.dropDuplicates().show()
+        >>> df.dropDuplicates().sort("age").show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
-        | 10|    80|Alice|
         |  5|    80|Alice|
+        | 10|    80|Alice|
         +---+------+-----+
 
         >>> df.dropDuplicates(['name', 'height']).show()
