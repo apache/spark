@@ -48,7 +48,14 @@ import scala.collection.JavaConversions._
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
+    new SparkContext(
+      System.getProperty("spark.sql.test.master", "local[32]"),
+      "TestSQLContext",
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set(
+          "spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -75,9 +82,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir()
 
+  private lazy val temporaryConfig = newTemporaryConfiguration()
+
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] =
-   newTemporaryConfiguration() ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
+    temporaryConfig ++ Map("hive.metastore.warehouse.dir" -> warehousePath.toString)
 
   val testTempDir = Utils.createTempDir()
 
@@ -103,12 +112,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   protected[hive] class SQLSession extends super.SQLSession {
     /** Fewer partitions to speed up testing. */
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+      override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
       // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
       // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
       override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
-      override def caseSensitiveAnalysis: Boolean =
-        getConf(SQLConf.CASE_SENSITIVE, "false").toBoolean
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
     }
   }
 
@@ -180,7 +188,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }
   }
 
-  case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -244,8 +252,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_,_]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_,_]].getName}'
+         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
       runSqlHive(
@@ -383,7 +391,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * Records the UDFs present when the server starts, so we can delete ones that are created by
    * tests.
    */
-  protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
+  protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
    * Resets the test instance by deleting any tables that have been created.
@@ -402,7 +410,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       catalog.client.reset()
       catalog.unregisterAllTables()
 
-      FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
+      FunctionRegistry.getFunctionNames.filterNot(originalUDFs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 

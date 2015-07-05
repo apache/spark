@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.scheduler._
-import org.scalatest.FunSuite
 
 /**
  * Holds state shared across task threads in some ThreadingSuite tests.
@@ -37,7 +36,7 @@ object ThreadingSuiteState {
   }
 }
 
-class ThreadingSuite extends FunSuite with LocalSparkContext {
+class ThreadingSuite extends SparkFunSuite with LocalSparkContext {
 
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")

@@ -77,7 +77,7 @@ private[r] class RBackendHandler(server: RBackend)
     val reply = bos.toByteArray
     ctx.write(reply)
   }
-  
+
   override def channelReadComplete(ctx: ChannelHandlerContext): Unit = {
     ctx.flush()
   }
@@ -87,6 +87,21 @@ private[r] class RBackendHandler(server: RBackend)
     cause.printStackTrace()
     ctx.close()
   }
+
+  // Looks up a class given a class name. This function first checks the
+  // current class loader and if a class is not found, it looks up the class
+  // in the context class loader. Address [SPARK-5185]
+  def getStaticClass(objId: String): Class[_] = {
+    try {
+      val clsCurrent = Class.forName(objId)
+      clsCurrent
+    } catch {
+      // Use contextLoader if we can't find the JAR in the system class loader
+      case e: ClassNotFoundException =>
+        val clsContext = Class.forName(objId, true, Thread.currentThread().getContextClassLoader)
+        clsContext
+      }
+    }
 
   def handleMethodCall(
       isStatic: Boolean,
@@ -98,7 +113,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        getStaticClass(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
@@ -124,7 +139,7 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args:_*)
+        val ret = methods.head.invoke(obj, args : _*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -135,7 +150,7 @@ private[r] class RBackendHandler(server: RBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
-        val obj = ctor.newInstance(args:_*)
+        val obj = ctor.newInstance(args : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])

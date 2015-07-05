@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext {
+class ElementwiseProductSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("elementwise (hadamard) product should properly apply vector to dense data set") {
     val denseData = Array(

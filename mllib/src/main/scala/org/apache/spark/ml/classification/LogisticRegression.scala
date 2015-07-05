@@ -19,13 +19,14 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import breeze.linalg.{norm => brzNorm, DenseVector => BDV}
-import breeze.optimize.{LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
-import breeze.optimize.{CachedDiffFunction, DiffFunction}
+import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -34,7 +35,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{SparkException, Logging}
 
 /**
  * Params for logistic regression.
@@ -44,15 +44,16 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   with HasThreshold
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Logistic regression.
  * Currently, this class only supports binary classification.
  */
-@AlphaComponent
-class LogisticRegression
+@Experimental
+class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with Logging {
+
+  def this() = this(Identifiable.randomUID("logreg"))
 
   /**
    * Set the regularization parameter.
@@ -73,7 +74,7 @@ class LogisticRegression
   setDefault(elasticNetParam -> 0.0)
 
   /**
-   * Set the maximal number of iterations.
+   * Set the maximum number of iterations.
    * Default is 100.
    * @group setParam
    */
@@ -89,7 +90,11 @@ class LogisticRegression
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
-  /** @group setParam */
+  /**
+   * Whether to fit an intercept term.
+   * Default is true.
+   * @group setParam
+   * */
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -213,18 +218,19 @@ class LogisticRegression
       (weightsWithIntercept, 0.0)
     }
 
-    new LogisticRegressionModel(this, weights.compressed, intercept)
+    new LogisticRegressionModel(uid, weights.compressed, intercept)
   }
+
+  override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
 /**
- * :: AlphaComponent ::
- *
+ * :: Experimental ::
  * Model produced by [[LogisticRegression]].
  */
-@AlphaComponent
+@Experimental
 class LogisticRegressionModel private[ml] (
-    override val parent: LogisticRegression,
+    override val uid: String,
     val weights: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
@@ -276,7 +282,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    copyValues(new LogisticRegressionModel(parent, weights, intercept), extra)
+    copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

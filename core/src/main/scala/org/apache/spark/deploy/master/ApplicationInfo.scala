@@ -22,10 +22,9 @@ import java.util.Date
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import akka.actor.ActorRef
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationInfo(
@@ -33,7 +32,7 @@ private[spark] class ApplicationInfo(
     val id: String,
     val desc: ApplicationDescription,
     val submitDate: Date,
-    val driver: ActorRef,
+    val driver: RpcEndpointRef,
     defaultCores: Int)
   extends Serializable {
 

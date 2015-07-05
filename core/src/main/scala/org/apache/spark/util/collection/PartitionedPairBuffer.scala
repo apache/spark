@@ -25,11 +25,16 @@ import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 /**
  * Append-only buffer of key-value pairs, each with a corresponding partition ID, that keeps track
  * of its estimated size in bytes.
+ *
+ * The buffer can support up to `1073741823 (2 ^ 30 - 1)` elements.
  */
 private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
   extends WritablePartitionedPairCollection[K, V] with SizeTracker
 {
-  require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
+  import PartitionedPairBuffer._
+
+  require(initialCapacity <= MAXIMUM_CAPACITY,
+    s"Can't make capacity bigger than ${MAXIMUM_CAPACITY} elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
   // Basic growable array data structure. We use a single array of AnyRef to hold both the keys
@@ -51,11 +56,15 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 
   /** Double the size of the array because we've reached capacity */
   private def growArray(): Unit = {
-    if (capacity == (1 << 29)) {
-      // Doubling the capacity would create an array bigger than Int.MaxValue, so don't
-      throw new Exception("Can't grow buffer beyond 2^29 elements")
+    if (capacity >= MAXIMUM_CAPACITY) {
+      throw new IllegalStateException(s"Can't insert more than ${MAXIMUM_CAPACITY} elements")
     }
-    val newCapacity = capacity * 2
+    val newCapacity =
+      if (capacity * 2 < 0 || capacity * 2 > MAXIMUM_CAPACITY) { // Overflow
+        MAXIMUM_CAPACITY
+      } else {
+        capacity * 2
+      }
     val newArray = new Array[AnyRef](2 * newCapacity)
     System.arraycopy(data, 0, newArray, 0, 2 * capacity)
     data = newArray
@@ -69,10 +78,6 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
     val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
     new Sorter(new KVArraySortDataFormat[(Int, K), AnyRef]).sort(data, 0, curSize, comparator)
     iterator
-  }
-
-  override def writablePartitionedIterator(): WritablePartitionedIterator = {
-    WritablePartitionedIterator.fromIterator(iterator)
   }
 
   private def iterator(): Iterator[((Int, K), V)] = new Iterator[((Int, K), V)] {
@@ -89,4 +94,8 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
       pair
     }
   }
+}
+
+private object PartitionedPairBuffer {
+  val MAXIMUM_CAPACITY = Int.MaxValue / 2 // 2 ^ 30 - 1
 }

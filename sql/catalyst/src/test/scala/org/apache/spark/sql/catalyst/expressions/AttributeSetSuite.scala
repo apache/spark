@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.IntegerType
 
-class AttributeSetSuite extends FunSuite {
+class AttributeSetSuite extends SparkFunSuite {
 
   val aUpper = AttributeReference("A", IntegerType)(exprId = ExprId(1))
   val aLower = AttributeReference("a", IntegerType)(exprId = ExprId(1))

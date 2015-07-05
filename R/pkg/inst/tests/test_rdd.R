@@ -33,9 +33,9 @@ test_that("get number of partitions in RDD", {
 })
 
 test_that("first on RDD", {
-  expect_true(first(rdd) == 1)
+  expect_equal(first(rdd), 1)
   newrdd <- lapply(rdd, function(x) x + 1)
-  expect_true(first(newrdd) == 2)
+  expect_equal(first(newrdd), 2)
 })
 
 test_that("count and length on RDD", {
@@ -477,7 +477,7 @@ test_that("cartesian() on RDDs", {
                  list(1, 1), list(1, 2), list(1, 3),
                  list(2, 1), list(2, 2), list(2, 3),
                  list(3, 1), list(3, 2), list(3, 3)))
-  
+
   # test case where one RDD is empty
   emptyRdd <- parallelize(sc, list())
   actual <- collect(cartesian(rdd, emptyRdd))
@@ -486,7 +486,7 @@ test_that("cartesian() on RDDs", {
   mockFile = c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
-  
+
   rdd <- textFile(sc, fileName)
   actual <- collect(cartesian(rdd, rdd))
   expected <- list(
@@ -495,7 +495,7 @@ test_that("cartesian() on RDDs", {
     list("Spark is pretty.", "Spark is pretty."),
     list("Spark is pretty.", "Spark is awesome."))
   expect_equal(sortKeyValueList(actual), expected)
-  
+
   rdd1 <- parallelize(sc, 0:1)
   actual <- collect(cartesian(rdd1, rdd))
   expect_equal(sortKeyValueList(actual),
@@ -504,11 +504,11 @@ test_that("cartesian() on RDDs", {
                  list(0, "Spark is awesome."),
                  list(1, "Spark is pretty."),
                  list(1, "Spark is awesome.")))
-  
+
   rdd1 <- map(rdd, function(x) { x })
   actual <- collect(cartesian(rdd, rdd1))
   expect_equal(sortKeyValueList(actual), expected)
-  
+
   unlink(fileName)
 })
 
@@ -760,7 +760,7 @@ test_that("collectAsMap() on a pairwise RDD", {
 })
 
 test_that("show()", {
-  rdd <- parallelize(sc, list(1:10))    
+  rdd <- parallelize(sc, list(1:10))
   expect_output(show(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
 })
 

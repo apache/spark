@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.partial.{PartialResult, BoundedDouble}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
 
@@ -58,6 +60,48 @@ class KafkaRDD[
         val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray
+  }
+
+  override def count(): Long = offsetRanges.map(_.count).sum
+
+  override def countApprox(
+      timeout: Long,
+      confidence: Double = 0.95
+  ): PartialResult[BoundedDouble] = {
+    val c = count
+    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
+  }
+
+  override def isEmpty(): Boolean = count == 0L
+
+  override def take(num: Int): Array[R] = {
+    val nonEmptyPartitions = this.partitions
+      .map(_.asInstanceOf[KafkaRDDPartition])
+      .filter(_.count > 0)
+
+    if (num < 1 || nonEmptyPartitions.size < 1) {
+      return new Array[R](0)
+    }
+
+    // Determine in advance how many messages need to be taken from each partition
+    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+      val remain = num - result.values.sum
+      if (remain > 0) {
+        val taken = Math.min(remain, part.count)
+        result + (part.index -> taken.toInt)
+      } else {
+        result
+      }
+    }
+
+    val buf = new ArrayBuffer[R]
+    val res = context.runJob(
+      this,
+      (tc: TaskContext, it: Iterator[R]) => it.take(parts(tc.partitionId)).toArray,
+      parts.keys.toArray,
+      allowLocal = true)
+    res.foreach(buf ++= _)
+    buf.toArray
   }
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
