@@ -29,11 +29,10 @@ import java.util.{Calendar, TimeZone}
  * precision.
  */
 object DateTimeUtils {
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
-
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
   final val SECONDS_PER_DAY = 60 * 60 * 24L
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
   final val HUNDRED_NANOS_PER_SECOND = 1000L * 1000L * 10L
   final val NANOS_PER_SECOND = HUNDRED_NANOS_PER_SECOND * 100
 

@@ -42,7 +42,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
+      sqlContext.createDataFrame(data).coalesce(1).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }

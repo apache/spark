@@ -71,7 +71,10 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
   protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
+    withParquetDataFrame(data) { r =>
+      r.foreach(println)
+      checkAnswer(r, data.map(Row.fromTuple))
+    }
   }
 
   test("basic data types (without binary)") {
@@ -148,7 +151,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("map") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
+    val data = (1 to 4).map(i => Tuple1(Map(i -> (i + 1), (i + 1) -> (i + 2))))
     checkParquetFile(data)
   }
 

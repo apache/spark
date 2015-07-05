@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.parquet
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
+import java.util
 import java.util.{HashMap => JHashMap}
+
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
-import org.apache.parquet.hadoop.api.{ReadSupport, WriteSupport}
+import org.apache.parquet.hadoop.api.{InitContext, ReadSupport, WriteSupport}
 import org.apache.parquet.io.api._
 import org.apache.parquet.schema.MessageType
 
@@ -36,87 +39,68 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * A `parquet.io.api.RecordMaterializer` for Rows.
+ * A [[RecordMaterializer]] for Catalyst rows.
  *
- *@param root The root group converter for the record.
+ * @param parquetSchema Parquet schema of the records to be read
+ * @param catalystSchema Catalyst schema of the rows to be constructed
  */
-private[parquet] class RowRecordMaterializer(root: CatalystConverter)
+private[parquet] class RowRecordMaterializer(parquetSchema: MessageType, catalystSchema: StructType)
   extends RecordMaterializer[InternalRow] {
 
-  def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
-    this(CatalystConverter.createRootConverter(parquetSchema, attributes))
+  private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
 
-  override def getCurrentRecord: InternalRow = root.getCurrentRecord
+  override def getCurrentRecord: InternalRow = rootConverter.currentRow
 
-  override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
+  override def getRootConverter: GroupConverter = rootConverter
 }
 
-/**
- * A `parquet.hadoop.api.ReadSupport` for Row objects.
- */
 private[parquet] class RowReadSupport extends ReadSupport[InternalRow] with Logging {
-
   override def prepareForRead(
       conf: Configuration,
-      stringMap: java.util.Map[String, String],
+      keyValueMetaData: util.Map[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
-    log.debug(s"preparing for read with Parquet file schema $fileSchema")
-    // Note: this very much imitates AvroParquet
-    val parquetSchema = readContext.getRequestedSchema
-    var schema: Seq[Attribute] = null
+    log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
 
-    if (readContext.getReadSupportMetadata != null) {
-      // first try to find the read schema inside the metadata (can result from projections)
-      if (
-        readContext
-          .getReadSupportMetadata
-          .get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA) != null) {
-        schema = ParquetTypesConverter.convertFromString(
-          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
-      } else {
-        // if unavailable, try the schema that was read originally from the file or provided
-        // during the creation of the Parquet relation
-        if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
-          schema = ParquetTypesConverter.convertFromString(
-            readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
+    val toCatalyst = new CatalystSchemaConverter(conf)
+    val parquetSchema = readContext.getRequestedSchema
+    val catalystSchema =
+      Option(readContext.getReadSupportMetadata)
+        .map(_.toMap)
+        .flatMap { metadata =>
+          metadata
+            // First tries to read requested schema, which may result from projections
+            .get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+            // If not available, tries to read Catalyst schema from file metadata.  It's only
+            // available if the target file is written by Spark SQL.
+            .orElse(metadata.get(RowReadSupport.SPARK_METADATA_KEY))
         }
-      }
-    }
-    // if both unavailable, fall back to deducing the schema from the given Parquet schema
-    // TODO: Why it can be null?
-    if (schema == null)  {
-      log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(parquetSchema, false, true)
-    }
-    log.debug(s"list of attributes that will be read: $schema")
-    new RowRecordMaterializer(parquetSchema, schema)
+        .map(StructType.fromString)
+        .getOrElse {
+          logDebug("Catalyst schema not available, falling back to Parquet message type")
+          toCatalyst.convert(parquetSchema)
+        }
+
+    logDebug(s"Catalyst schema used to read Parquet files: $catalystSchema")
+    new RowRecordMaterializer(parquetSchema, catalystSchema)
   }
 
-  override def init(
-      configuration: Configuration,
-      keyValueMetaData: java.util.Map[String, String],
-      fileSchema: MessageType): ReadContext = {
-    var parquetSchema = fileSchema
-    val metadata = new JHashMap[String, String]()
-    val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
+  override def init(context: InitContext): ReadContext = {
+    val conf = context.getConfiguration
+    val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
+    val maybeRequestedSchema = Option(conf.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
 
-    if (requestedAttributes != null) {
-      // If the parquet file is thrift derived, there is a good chance that
-      // it will have the thrift class in metadata.
-      val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
-      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
-      metadata.put(
-        RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertToString(requestedAttributes))
-    }
+    val parquetSchema = maybeRequestedSchema.map { schemaString =>
+      val toParquet = new CatalystSchemaConverter(conf)
+      toParquet.convert(StructType.fromString(schemaString))
+    }.getOrElse(context.getFileSchema)
 
-    val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
-    if (origAttributesStr != null) {
-      metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
-    }
+    val metadata =
+      Map.empty[String, String] ++
+        maybeRequestedSchema.map(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
+        maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
 
-    new ReadSupport.ReadContext(parquetSchema, metadata)
+    new ReadContext(parquetSchema, metadata)
   }
 }
 
