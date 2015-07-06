@@ -319,7 +319,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
       if(rightValue == null) {
         null
       } else {
-        StringUtils.getLevenshteinDistance(leftValue.toString, rightValue.toString)
+        leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
       }
     }
   }
@@ -327,7 +327,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val stringUtils = classOf[StringUtils].getName
     nullSafeCodeGen(ctx, ev, (res, left, right) =>
-      s"$res = $stringUtils.getLevenshteinDistance($left.toString(), $right.toString());")
+      s"$res = $left.levenshteinDistance($right);")
   }
 }
 

@@ -207,6 +207,78 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
   }
 
+  private char charAt(int bytePos) {
+    int num = numBytes(bytes[bytePos]);
+    if (num == 1) return (char) bytes[bytePos];
+    int l = bytes[bytePos] & 0x000F;
+    l = l << 8 + num + 1 >> 8 + num + 1;
+    for (int i = 1; i < num; i++) {
+      l = l << 6;
+      l = l | (0x003F & bytes[bytePos + i]);
+    }
+    return (char) l;
+  }
+
+  public int levenshteinDistance(UTF8String other) {
+    // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
+
+    int n = length();
+    int m = other.length();
+
+    if (n == 0) {
+      return m;
+    } else if (m == 0) {
+      return n;
+    }
+
+    UTF8String s;
+    UTF8String t;
+
+    if (n <= m) {
+      s = this;
+      t = other;
+    } else {
+      s = other;
+      t = this;
+      n = s.length();
+      m = t.length();
+    }
+
+    int p[] = new int[n + 1];
+    int d[] = new int[n + 1];
+    int swap[];
+
+    int i;
+    int i_bytes;
+
+    int j;
+    int j_bytes;
+
+    char t_j;
+
+    int cost;
+
+    for (i = 0; i <= n; i++) {
+      p[i] = i;
+    }
+
+    for (j = 0, j_bytes = 0; j < m; j_bytes += numBytes(t.bytes[j_bytes]), j++) {
+      t_j = t.charAt(j_bytes);
+      d[0] = j + 1;
+
+      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytes(s.bytes[i_bytes]), i++) {
+        cost = s.charAt(i_bytes) == t_j ? 0 : 1;
+        d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+      }
+
+      swap = p;
+      p = d;
+      d = swap;
+    }
+
+    return p[n];
+  }
+
   @Override
   public int hashCode() {
     return Arrays.hashCode(bytes);

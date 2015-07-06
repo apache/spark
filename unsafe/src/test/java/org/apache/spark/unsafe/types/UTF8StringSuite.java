@@ -88,4 +88,28 @@ public class UTF8StringSuite {
     Assert.assertEquals(
       UTF8String.fromString("数据砖头").substring(3, 5), UTF8String.fromString("头"));
   }
+  
+  @Test
+  public void levenshteinDistance() {
+    Assert.assertEquals(
+        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("")), 0);
+    Assert.assertEquals(
+        UTF8String.fromString("").levenshteinDistance(UTF8String.fromString("a")), 1);
+    Assert.assertEquals(
+        UTF8String.fromString("aaapppp").levenshteinDistance(UTF8String.fromString("")), 7);
+    Assert.assertEquals(
+        UTF8String.fromString("frog").levenshteinDistance(UTF8String.fromString("fog")), 1);
+    Assert.assertEquals(
+        UTF8String.fromString("fly").levenshteinDistance(UTF8String.fromString("ant")),3);
+    Assert.assertEquals(
+        UTF8String.fromString("elephant").levenshteinDistance(UTF8String.fromString("hippo")), 7);
+    Assert.assertEquals(
+        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("elephant")), 7);
+    Assert.assertEquals(
+        UTF8String.fromString("hippo").levenshteinDistance(UTF8String.fromString("zzzzzzzz")), 8);
+    Assert.assertEquals(
+        UTF8String.fromString("hello").levenshteinDistance(UTF8String.fromString("hallo")),1);
+    Assert.assertEquals(
+        UTF8String.fromString("世界千世").levenshteinDistance(UTF8String.fromString("千a世b")),4);
+  }
 }
