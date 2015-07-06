@@ -263,11 +263,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int lower = Character.toLowerCase(code);
       if (lower != code) {
         if (lower == ERROR || localeDependent) {
-          // fallback to String.toUpperCase() to handle locale
+          // fallback to String.toLowerCase() to handle locale
           return fromString(toString().toLowerCase());
         }
         if (buf == null) {
-          // It's always have the same number of bytes for upper case
+          // It's always have the same number of bytes for lower case
           buf = new byte[numBytes];
           copyMemory(base, offset, buf, BYTE_ARRAY_OFFSET, numBytes);
         }
@@ -299,14 +299,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   @Override
   public int compareTo(final UTF8String other) {
     int len = numBytes < other.numBytes ? numBytes : other.numBytes;
-    int i = 0;
     // TODO: compare 8 bytes as unsigned long
-    while (i < len) {
+    for (int i = 0; i < len; i ++) {
+      // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
       int res = (getByte(i) & 0xFF) - (other.getByte(i) & 0xFF);
       if (res != 0) {
         return res;
       }
-      i += 1;
     }
     return numBytes - other.numBytes;
   }
