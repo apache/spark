@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive
@@ -30,7 +31,6 @@ import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SQLConf, SaveMode}
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -790,7 +790,7 @@ class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
  * A collection of tests for parquet data with various forms of partitioning.
  */
 abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def sqlContext = TestHive
+  override def sqlContext: SQLContext = TestHive
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null
