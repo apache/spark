@@ -83,7 +83,7 @@ public class UTF8StringSuite {
     testUpperandLower("", "");
     testUpperandLower("0123456", "0123456");
     testUpperandLower("ABCXYZ", "abcxyz");
-    testUpperandLower("ЀЁЂѺΏ", "ѐёђѻώ");
+    testUpperandLower("ЀЁЂѺΏỀΣ", "ѐёђѻώềσ");
     testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
   }
 

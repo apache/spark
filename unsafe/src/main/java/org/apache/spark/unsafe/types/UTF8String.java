@@ -91,18 +91,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   private int codePointAt(int start, int num) {
     byte first = getByte(start);
-    switch (num) {
-      case 1:
-        return (int) first;
-      case 2:
-        return ((first & 0x1F) << 6) | (getByte(start + 1) & 0x3F);
-      default:
-        int code = first & (1 << (7 - num) - 1);
-        for (int i = 1; i < num; i ++) {
-          code <<= 6;
-          code += getByte(start + i);
-        }
-        return code;
+    if (num == 1) {
+      return (int) first;
+    } else if (num == 2)  {
+      return ((first & 0x1F) << 6) | (getByte(start + 1) & 0x3F);
+    } else {
+      int code = first & ((1 << (7 - num)) - 1);
+      for (int i = 1; i < num; i ++) {
+        code <<= 6;
+        code += getByte(start + i) & 0x3F;
+      }
+      return code;
     }
   }
 
@@ -110,21 +109,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Update code point using UTF-8 encoding at (base, offset).
    */
   private static void updateCodePoint(Object base, long offset, int code, int num) {
-    switch (num) {
-      case 1:
-        UNSAFE.putByte(base, offset, (byte) code);
-        break;
-      case 2:
-        UNSAFE.putByte(base, offset, (byte) ((code >> 6) & 0x1F | 0xC0));
-        UNSAFE.putByte(base, offset + 1, (byte) (code & 0x3F | 0x80));
-        break;
-      default:
-        for (int i = 1; i < num; i ++) {
-          UNSAFE.putByte(base, offset + num - i, (byte) (code & 0x3F | 0x80));
-          code >>>= 6;
-        }
-        int first = (code & ((1 << (7 - num)) - 1)) + ~((1 << (8 - num)) - 1);
-        UNSAFE.putByte(base, offset, (byte) first);
+    if (num == 1) {
+      UNSAFE.putByte(base, offset, (byte) code);
+    } else if (num == 2) {
+      UNSAFE.putByte(base, offset, (byte) ((code >> 6) & 0x1F | 0xC0));
+      UNSAFE.putByte(base, offset + 1, (byte) (code & 0x3F | 0x80));
+    } else {
+      for (int i = 1; i < num; i++) {
+        UNSAFE.putByte(base, offset + num - i, (byte) (code & 0x3F | 0x80));
+        code >>>= 6;
+      }
+      int first = (code & ((1 << (7 - num)) - 1)) + ~((1 << (8 - num)) - 1);
+      UNSAFE.putByte(base, offset, (byte) first);
     }
   }
 
@@ -224,19 +220,23 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   private static String lang = Locale.getDefault().getLanguage();
   private static boolean localeDependent = lang == "tr" || lang == "az" || lang == "lt";
-  private static int ERROR = 0xFFFFFFFF;  // Character.ERROR
 
   /**
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
+    if (localeDependent) {
+      // fallback to String.toLowerCase() to handle locale
+      return fromString(toString().toLowerCase());
+    }
+
     byte[] buf = null;
     for (int i = 0; i < numBytes; ){
       int n = numBytesForFirstByte(getByte(i));
       int code = codePointAt(i, n);
       int upper = Character.toUpperCase(code);
       if (upper != code) {
-        if (upper == ERROR || localeDependent) {
+        if (localeDependent) {
           // fallback to String.toUpperCase() to handle locale
           return fromString(toString().toUpperCase());
         }
@@ -256,16 +256,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
+    if (localeDependent) {
+      // fallback to String.toLowerCase() to handle locale
+      return fromString(toString().toLowerCase());
+    }
+
     byte[] buf = null;
     for (int i = 0; i < numBytes; ){
       int n = numBytesForFirstByte(getByte(i));
       int code = codePointAt(i, n);
       int lower = Character.toLowerCase(code);
       if (lower != code) {
-        if (lower == ERROR || localeDependent) {
-          // fallback to String.toLowerCase() to handle locale
-          return fromString(toString().toLowerCase());
-        }
         if (buf == null) {
           // It's always have the same number of bytes for lower case
           buf = new byte[numBytes];
