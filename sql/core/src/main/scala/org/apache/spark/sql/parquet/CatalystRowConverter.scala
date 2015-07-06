@@ -146,6 +146,7 @@ private[parquet] class CatalystRowConverter(
         new CatalystStringConverter(updater)
 
       case TimestampType =>
+        // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         new PrimitiveConverter {
           override def addBinary(value: Binary): Unit = {
             assert(
