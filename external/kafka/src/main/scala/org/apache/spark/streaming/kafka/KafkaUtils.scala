@@ -408,6 +408,10 @@ object KafkaUtils {
       } else if (reset == Some("largest")){
         kc.getLatestLeaderOffsets(topicPartitions)
       } else {
+        val groupId = kafkaParams.get("group.id") match {
+          case Some(g) => g
+          case _ => throw new SparkException("need group.id in kafkaParams")
+        }
         val offsets =
           kc.getConsumerOffsets(kafkaParams.getOrElse("group.id", ""), topicPartitions.seq)
         if(offsets.isLeft) kc.getLatestLeaderOffsets(topicPartitions)
