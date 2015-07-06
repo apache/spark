@@ -83,7 +83,7 @@ abstract class DataType extends AbstractDataType {
 
 
 object DataType {
-  private[sql] def fromString(raw: String) = {
+  private[sql] def fromString(raw: String): DataType = {
     Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
   }
 
