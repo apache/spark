@@ -70,4 +70,26 @@ fi
 # rm "$PEP8_SCRIPT_PATH"
 rm "$PYTHON_LINT_REPORT_PATH"
 
+# Easy install pylint in /dev/pylint. To easy_install into a directory, the PYTHONPATH should
+# be set to the directory.
+# dev/pylint should be appended to the PATH variable as well.
+export "PYTHONPATH=$SPARK_ROOT_DIR/dev/pylint"
+export "PYLINT_HOME=$PYTHONPATH"
+export "PATH=$PYTHONPATH:$PATH"
+
+if [ ! -d "$PYLINT_HOME" ]; then
+    mkdir "$PYLINT_HOME"
+    easy_install -d "$PYLINT_HOME" pylint
+    easy_install_status="$?"
+
+    if [ "$easy_install_status" -ne 0 ]; then
+        echo "Unable to install pylint locally in \"$PYTHONPATH\"."
+    fi
+fi
+
+for to_be_checked in "$PATHS_TO_CHECK"
+do
+    pylint $to_be_checked
+done
+
 exit "$lint_status"
