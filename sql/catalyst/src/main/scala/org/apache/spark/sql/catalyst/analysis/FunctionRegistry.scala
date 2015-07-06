@@ -156,14 +156,24 @@ object FunctionRegistry {
     expression[Sum]("sum"),
 
     // string functions
+    expression[Ascii]("ascii"),
+    expression[Base64]("base64"),
+    expression[Encode]("encode"),
+    expression[Decode]("decode"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[StringLength]("length"),
+    expression[Levenshtein]("levenshtein"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
-    expression[UnHex]("unhex"),
-    expression[Upper]("upper")
+    expression[Unhex]("unhex"),
+    expression[Upper]("upper"),
+
+    // datetime functions
+    expression[CurrentDate]("current_date"),
+    expression[CurrentTimestamp]("current_timestamp")
   )
 
   val builtin: FunctionRegistry = {

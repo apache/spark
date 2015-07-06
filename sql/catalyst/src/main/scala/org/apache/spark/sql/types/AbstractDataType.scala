@@ -37,6 +37,9 @@ private[sql] abstract class AbstractDataType {
    * Returns true if this data type is a parent of the `childCandidate`.
    */
   private[sql] def isParentOf(childCandidate: DataType): Boolean
+
+  /** Readable string representation for the type. */
+  private[sql] def simpleString: String
 }
 
 
@@ -50,20 +53,26 @@ private[sql] abstract class AbstractDataType {
  *
  * This means that we prefer StringType over BinaryType if it is possible to cast to StringType.
  */
-private[sql] class TypeCollection(private val types: Seq[DataType]) extends AbstractDataType {
+private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
+  extends AbstractDataType {
+
   require(types.nonEmpty, s"TypeCollection ($types) cannot be empty")
 
-  private[sql] override def defaultConcreteType: DataType = types.head
+  private[sql] override def defaultConcreteType: DataType = types.head.defaultConcreteType
 
   private[sql] override def isParentOf(childCandidate: DataType): Boolean = false
+
+  private[sql] override def simpleString: String = {
+    types.map(_.simpleString).mkString("(", " or ", ")")
+  }
 }
 
 
 private[sql] object TypeCollection {
 
-  def apply(types: DataType*): TypeCollection = new TypeCollection(types)
+  def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
-  def unapply(typ: AbstractDataType): Option[Seq[DataType]] = typ match {
+  def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {
     case typ: TypeCollection => Some(typ.types)
     case _ => None
   }

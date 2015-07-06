@@ -166,4 +166,10 @@ class UDFSuite extends QueryTest {
     // 1 + 1 is constant folded causing a transformation.
     assert(ctx.sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
   }
+
+  test("type coercion for udf inputs") {
+    ctx.udf.register("intExpected", (x: Int) => x)
+    // pass a decimal to intExpected.
+    assert(ctx.sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
+  }
 }

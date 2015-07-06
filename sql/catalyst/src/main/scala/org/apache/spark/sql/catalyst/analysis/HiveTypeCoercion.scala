@@ -680,7 +680,7 @@ object HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case e: ExpectsInputTypes =>
+      case e: ExpectsInputTypes if (e.inputTypes.nonEmpty) =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
           implicitCast(in, expected).getOrElse(in)
@@ -708,8 +708,6 @@ object HiveTypeCoercion {
         case (NullType, target) => Cast(e, target.defaultConcreteType)
 
         // Implicit cast among numeric types
-        // If input is decimal, and we expect a decimal type, just use the input.
-        case (_: DecimalType, DecimalType) => e
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to unlimited precision decimal.
         case (_: NumericType, DecimalType) if !inType.isInstanceOf[DecimalType] =>
