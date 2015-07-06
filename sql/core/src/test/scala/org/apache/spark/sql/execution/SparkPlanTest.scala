@@ -54,10 +54,7 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[Row]): Unit = {
-    SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    checkAnswer(input, planFunction, compareCheck(expectedAnswer))
   }
 
   /**
@@ -71,11 +68,56 @@ class SparkPlanTest extends SparkFunSuite {
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
       expectedAnswer: Seq[A]): Unit = {
-    val expectedRows = expectedAnswer.map(Row.fromTuple)
-    SparkPlanTest.checkAnswer(input, planFunction, expectedRows) match {
+    checkAnswer(input, planFunction, expectedAnswer.map(Row.fromTuple))
+  }
+
+  protected def checkAnswer[A <: Product : TypeTag](
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      f: (SparkPlan, Seq[Row]) => Option[String]): Unit = {
+    SparkPlanTest.checkAnswer(input, planFunction, f) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
+  }
+
+  private def compareCheck(expectedAnswer: Seq[Row]): (SparkPlan, Seq[Row]) => Option[String] = {
+    (outputPlan: SparkPlan, sparkAnswer: Seq[Row]) => {
+      if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
+        val errorMessage =
+          s"""
+             | Results do not match for Spark plan:
+             | $outputPlan
+             | == Results ==
+             | ${sideBySide(
+                s"== Correct Answer - ${expectedAnswer.size} ==" +:
+                  prepareAnswer(expectedAnswer).map(_.toString()),
+                s"== Spark Answer - ${sparkAnswer.size} ==" +:
+                  prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")
+          }
+        """.stripMargin
+        Some(errorMessage)
+      } else {
+        None
+      }
+    }
+  }
+
+  protected def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
+    // Converts data to types that we can do equality comparison using Scala collections.
+    // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+    // Java's java.math.BigDecimal.compareTo).
+    // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
+    // equality test.
+    // This function is copied from Catalyst's QueryTest
+    val converted: Seq[Row] = answer.map { s =>
+      Row.fromSeq(s.toSeq.map {
+        case d: java.math.BigDecimal => BigDecimal(d)
+        case b: Array[Byte] => b.toSeq
+        case o => o
+      })
+    }
+    converted.sortBy(_.toString())
   }
 }
 
@@ -89,12 +131,12 @@ object SparkPlanTest {
    * @param input the input data to be used.
    * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
    *                     the physical operator that's being tested.
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checker check result if it's valid.
    */
   def checkAnswer(
       input: DataFrame,
       planFunction: SparkPlan => SparkPlan,
-      expectedAnswer: Seq[Row]): Option[String] = {
+      checker: (SparkPlan, Seq[Row]) => Option[String]): Option[String] = {
 
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
 
@@ -114,23 +156,6 @@ object SparkPlanTest {
         }
     }
 
-    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
-      // Converts data to types that we can do equality comparison using Scala collections.
-      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
-      // Java's java.math.BigDecimal.compareTo).
-      // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
-      // equality test.
-      // This function is copied from Catalyst's QueryTest
-      val converted: Seq[Row] = answer.map { s =>
-        Row.fromSeq(s.toSeq.map {
-          case d: java.math.BigDecimal => BigDecimal(d)
-          case b: Array[Byte] => b.toSeq
-          case o => o
-        })
-      }
-      converted.sortBy(_.toString())
-    }
-
     val sparkAnswer: Seq[Row] = try {
       resolvedPlan.executeCollect().toSeq
     } catch {
@@ -146,22 +171,7 @@ object SparkPlanTest {
         return Some(errorMessage)
     }
 
-    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
-      val errorMessage =
-        s"""
-           | Results do not match for Spark plan:
-           | $outputPlan
-           | == Results ==
-           | ${sideBySide(
-              s"== Correct Answer - ${expectedAnswer.size} ==" +:
-              prepareAnswer(expectedAnswer).map(_.toString()),
-              s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
-      """.stripMargin
-      return Some(errorMessage)
-    }
-
-    None
+    checker.apply(outputPlan, sparkAnswer)
   }
 }
 

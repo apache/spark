@@ -241,7 +241,7 @@ case class GeneratedAggregate(
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
       val initialValues = computeFunctions.flatMap(_.initialValues)
-      val newAggregationBuffer = newProjection(initialValues, child.output)
+      val newAggregationBuffer = newProjection(initialValues, child.output, mutableRow = true)
       log.info(s"Initial values: ${initialValues.mkString(",")}")
 
       // A projection that computes the group given an input tuple.
