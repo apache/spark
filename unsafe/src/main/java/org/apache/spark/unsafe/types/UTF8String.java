@@ -308,6 +308,10 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Override
   public int hashCode() {
-    return ByteArrayMethods.arrayHashCode(base, offset, numBytes);
+    int result = 1;
+    for (int i = 0; i < numBytes; i ++) {
+      result = 31 * result + getByte(i);
+    }
+    return result;
   }
 }

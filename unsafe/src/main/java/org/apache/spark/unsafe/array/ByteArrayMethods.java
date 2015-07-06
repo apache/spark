@@ -59,23 +59,4 @@ public class ByteArrayMethods {
     }
     return true;
   }
-
-  /**
-   * Optimized hashCode of byte array, calculating word-by-word.
-   *
-   * Note: Returned hashCode is different than java.utils.Arrays.hashCode().
-   */
-  public static int arrayHashCode(Object base, long offset, long length) {
-    long result = 1;
-    final long last = offset + length;
-    while (offset <= last - 8) {
-      result += (result << 5) + UNSAFE.getLong(base, offset);
-      offset += 8;
-    }
-    while (offset < last) {
-      result += (result << 5) + UNSAFE.getByte(base, offset);
-      offset += 1;
-    }
-    return (int) ((result >> 32) ^ result);
-  }
 }
