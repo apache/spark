@@ -287,15 +287,18 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           throw new AnalysisException(s"invalid function approximate($floatLit) $udfName")
         }
       }
-    | CASE ~> expression.? ~ rep1(WHEN ~> expression ~ (THEN ~> expression)) ~
-        (ELSE ~> expression).? <~ END ^^ {
-          case casePart ~ altPart ~ elsePart =>
-            val branches = altPart.flatMap { case whenExpr ~ thenExpr =>
-              Seq(whenExpr, thenExpr)
-            } ++ elsePart
-            casePart.map(CaseKeyWhen(_, branches)).getOrElse(CaseWhen(branches))
-        }
-      )
+    | CASE ~> whenThenElse ^^ CaseWhen
+    | CASE ~> expression ~ whenThenElse ^^
+      { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
+    )
+
+  protected lazy val whenThenElse: Parser[List[Expression]] =
+    rep1(WHEN ~> expression ~ (THEN ~> expression)) ~ (ELSE ~> expression).? <~ END ^^ {
+      case altPart ~ elsePart =>
+        altPart.flatMap { case whenExpr ~ thenExpr =>
+          Seq(whenExpr, thenExpr)
+        } ++ elsePart
+    }
 
   protected lazy val cast: Parser[Expression] =
     CAST ~ "(" ~> expression ~ (AS ~> dataType) <~ ")" ^^ {
@@ -354,6 +357,11 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val signedPrimary: Parser[Expression] =
     sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e}
 
+  protected lazy val attributeName: Parser[String] = acceptMatch("attribute name", {
+    case lexical.Identifier(str) => str
+    case lexical.Keyword(str) if !lexical.delimiters.contains(str) => str
+  })
+
   protected lazy val primary: PackratParser[Expression] =
     ( literal
     | expression ~ ("[" ~> expression <~ "]") ^^
@@ -364,9 +372,9 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | "(" ~> expression <~ ")"
     | function
     | dotExpressionHeader
-    | ident ^^ {case i => UnresolvedAttribute.quoted(i)}
     | signedPrimary
     | "~" ~> expression ^^ BitwiseNot
+    | attributeName ^^ UnresolvedAttribute.quoted
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
