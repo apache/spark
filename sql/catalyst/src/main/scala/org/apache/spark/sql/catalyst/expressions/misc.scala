@@ -46,7 +46,6 @@ case class Md5(child: Expression) extends UnaryExpression with ExpectsInputTypes
   }
 }
 
-
 /**
  * A function that returns a hash value of the argument
  */
@@ -85,7 +84,6 @@ case class Hash(children: Expression*) extends Expression {
   }
 
 }
-
 
 /**
  * A function that calculates the SHA-2 family of functions (SHA-224, SHA-256, SHA-384, and SHA-512)

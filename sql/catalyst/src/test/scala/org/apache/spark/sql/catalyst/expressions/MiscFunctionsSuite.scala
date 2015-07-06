@@ -36,7 +36,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val f = 'd.struct(StructField("name", StringType, true)).at(0)
     checkEvaluation(Hash(Literal.create(null, NullType)), 0)
     checkEvaluation(Hash(Literal(3)), 3)
-    checkEvaluation(Hash(Literal(3l)), 3)
+    checkEvaluation(Hash(Literal(3L)), 3)
     checkEvaluation(Hash(Literal(3.7d)), -644612093)
     checkEvaluation(Hash(Literal(3.7f)), 1080872141)
     val v1: Byte = 3
