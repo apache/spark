@@ -2,10 +2,10 @@ package org.apache.spark.unsafe.types
 
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FunSuite, Matchers}
+
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
-
-class UTF8StringSuite2 extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
+class UTF8StringPropertyChecks extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
 
   test("toString") {
     forAll { (s: String) =>
