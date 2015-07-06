@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests various Parquet queries.
@@ -130,13 +133,16 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
         val basePath = dir.getCanonicalPath
         sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
         sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        // delete summary files, so if we don't merge part-files, one column will not be included.
+        Utils.deleteRecursively(new File(basePath + "/foo=1/_metadata"))
+        Utils.deleteRecursively(new File(basePath + "/foo=1/_common_metadata"))
         assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
       }
     }
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES.key -> "true") {
-      testSchemaMerging(3)
+      testSchemaMerging(2)
     }
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
