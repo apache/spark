@@ -392,12 +392,13 @@ case class UnBase64(child: Expression) extends UnaryExpression with ExpectsInput
 /**
  * Decodes the first argument into a String using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
- * If either argument is null, the result will also be null. (As of Hive 0.12.0.).
+ * If either argument is null, the result will also be null.
  */
-case class Decode(bin: Expression, charset: Expression) extends Expression with ExpectsInputTypes {
-  override def children: Seq[Expression] = bin :: charset :: Nil
-  override def foldable: Boolean = bin.foldable && charset.foldable
-  override def nullable: Boolean = bin.nullable || charset.nullable
+case class Decode(bin: Expression, charset: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = bin
+  override def right: Expression = charset
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
@@ -420,13 +421,13 @@ case class Decode(bin: Expression, charset: Expression) extends Expression with 
 /**
  * Encodes the first argument into a BINARY using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
- * If either argument is null, the result will also be null. (As of Hive 0.12.0.)
+ * If either argument is null, the result will also be null.
 */
 case class Encode(value: Expression, charset: Expression)
-  extends Expression with ExpectsInputTypes {
-  override def children: Seq[Expression] = value :: charset :: Nil
-  override def foldable: Boolean = value.foldable && charset.foldable
-  override def nullable: Boolean = value.nullable || charset.nullable
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def left: Expression = value
+  override def right: Expression = charset
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
