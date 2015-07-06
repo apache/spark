@@ -23,11 +23,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructF
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
-
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
 
 /* Implicit conversions */
@@ -172,7 +172,7 @@ import scala.collection.JavaConversions._
  *       e.g. date_add(printf("%s-%s-%s", a,b,c), 3)
  *       We don't need to unwrap the data for printf and wrap it again and passes in data_add
  */
-private[hive] trait HiveInspectors {
+private[hive] trait HiveInspectors extends Logging {
 
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
     // writable
@@ -218,6 +218,14 @@ private[hive] trait HiveInspectors {
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
+
+    // java list type unsupported
+    case c: Class[_] if c == classOf[java.util.List[_]] =>
+      throw new AnalysisException(
+        "List type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch a component type in List<>")
+
+    case c => throw new AnalysisException(s"Unsupported java type $c")
   }
 
   /**
@@ -793,8 +801,8 @@ private[hive] trait HiveInspectors {
     }
 
   implicit class typeInfoConversions(dt: DataType) {
+    import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory._
     import org.apache.hadoop.hive.serde2.typeinfo._
-    import TypeInfoFactory._
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)

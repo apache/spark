@@ -22,15 +22,14 @@ import java.util
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHive
-
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
@@ -48,8 +47,8 @@ case class ListStringCaseClass(l: Seq[String])
  */
 class HiveUDFSuite extends QueryTest {
 
-  import TestHive.{udf, sql}
-  import TestHive.implicits._
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+  import org.apache.spark.sql.hive.test.TestHive.{sql, udf}
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -130,6 +129,32 @@ class HiveUDFSuite extends QueryTest {
       Seq(Row("1"), Row("2")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFIntegerToString")
 
+    TestHive.reset()
+  }
+
+  test("UDFToListString") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
+    intercept[AnalysisException] {
+      sql("SELECT testUDFToListString(s) FROM inputTable")
+    }
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
+    TestHive.reset()
+  }
+
+  test("UDFToListInt") {
+    val testData = TestHive.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
+    intercept[AnalysisException] {
+      sql("SELECT testUDFToListInt(s) FROM inputTable")
+    }
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
     TestHive.reset()
   }
 
