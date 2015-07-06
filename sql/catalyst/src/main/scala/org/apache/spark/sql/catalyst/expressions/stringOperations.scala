@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -325,7 +324,6 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val stringUtils = classOf[StringUtils].getName
     nullSafeCodeGen(ctx, ev, (res, left, right) =>
       s"$res = $left.levenshteinDistance($right);")
   }
