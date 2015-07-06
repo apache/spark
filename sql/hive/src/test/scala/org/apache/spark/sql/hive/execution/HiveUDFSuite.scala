@@ -140,8 +140,8 @@ class HiveUDFSuite extends QueryTest {
     intercept[AnalysisException] {
       sql("SELECT testUDFToListString(s) FROM inputTable")
     }
-    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
 
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
     TestHive.reset()
   }
 
@@ -153,8 +153,8 @@ class HiveUDFSuite extends QueryTest {
     intercept[AnalysisException] {
       sql("SELECT testUDFToListInt(s) FROM inputTable")
     }
-    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
 
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
     TestHive.reset()
   }
 
