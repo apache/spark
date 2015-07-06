@@ -218,7 +218,7 @@ private[spark] object SQLConf {
       "execution.")
 
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "<TDDO>")
 
   val DIALECT = stringConf("spark.sql.dialect", defaultValue = Some("sql"), doc = "<TODO>")
@@ -388,6 +388,7 @@ private[spark] object SQLConf {
   }
 }
 
+
 /**
  * A class that enables the setting and getting of mutable config parameters/hints.
  *
@@ -397,7 +398,6 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-
 private[sql] class SQLConf extends Serializable with CatalystConf {
   import SQLConf._
 
