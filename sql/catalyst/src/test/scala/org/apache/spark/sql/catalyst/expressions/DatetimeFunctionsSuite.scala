@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
-/* Dynamically injected style for the API docs */
+package org.apache.spark.sql.catalyst.expressions
 
-.developer {
-  background-color: #44751E;
-}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
-.experimental {
-  background-color: #257080;
-}
+class DatetimeFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("datetime function current_date") {
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val cd = CurrentDate().eval(EmptyRow).asInstanceOf[Int]
+    val d1 = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
+  }
 
-.alphaComponent {
-  background-color: #bb0000;
-}
+  test("datetime function current_timestamp") {
+    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
+    val t1 = System.currentTimeMillis()
+    assert(math.abs(t1 - ct.getTime) < 5000)
+  }
 
-.badge {
-  font-family: Arial, san-serif;
-  float: right;
 }
