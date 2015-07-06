@@ -313,6 +313,9 @@ private[parquet] class CatalystRowConverter(
 
     override def end(): Unit = updater.set(currentArray)
 
+    // NOTE: We can't reuse the mutable Map here and must instantiate a new `ArrayBuffer` for the
+    // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
+    // in row cells.
     override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
 
     // scalastyle:off
@@ -334,8 +337,8 @@ private[parquet] class CatalystRowConverter(
      * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
      */
     // scalastyle:on
-    private def isElementType(repeatedType: Type, elementType: DataType): Boolean = {
-      (repeatedType, elementType) match {
+    private def isElementType(parquetRepeatedType: Type, catalystElementType: DataType): Boolean = {
+      (parquetRepeatedType, catalystElementType) match {
         case (t: PrimitiveType, _) => true
         case (t: GroupType, _) if t.getFieldCount > 1 => true
         case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
@@ -383,6 +386,9 @@ private[parquet] class CatalystRowConverter(
 
     override def end(): Unit = updater.set(currentMap)
 
+    // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
+    // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
+    // cells.
     override def start(): Unit = currentMap = mutable.Map.empty[Any, Any]
 
     /** Parquet converter for key-value pairs within the map. */
