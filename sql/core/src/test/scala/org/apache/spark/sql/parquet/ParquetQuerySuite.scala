@@ -124,6 +124,27 @@ class ParquetQuerySuiteBase extends QueryTest with ParquetTest {
     }
   }
 
+  test("Enabling/disabling merging partfiles when merging parquet schema") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES.key -> "false") {
+      testSchemaMerging(3)
+    }
+  }
+
   test("Enabling/disabling schema merging") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>

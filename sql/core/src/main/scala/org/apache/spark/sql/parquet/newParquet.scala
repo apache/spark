@@ -119,6 +119,9 @@ private[sql] class ParquetRelation2(
       .map(_.toBoolean)
       .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
+  private val skipMergePartFiles =
+    sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_SKIP_MERGE_PARTFILES)
+
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation2.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
@@ -413,7 +416,16 @@ private[sql] class ParquetRelation2(
       val filesToTouch =
         if (shouldMergeSchemas) {
           // Also includes summary files, 'cause there might be empty partition directories.
-          (metadataStatuses ++ commonMetadataStatuses ++ dataStatuses).toSeq
+
+          // If skipMergePartFiles config is true, we assume that all part-files are the same for
+          // their schema with summary files, so we ignore them when merging schema.
+          // If the config is false, which is the default setting, we merge all part-files.
+          val needMerged: Seq[FileStatus] = if (skipMergePartFiles) {
+            Seq()
+          } else {
+            dataStatuses
+          }
+          (metadataStatuses ++ commonMetadataStatuses ++ needMerged).toSeq
         } else {
           // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
           // don't have this.

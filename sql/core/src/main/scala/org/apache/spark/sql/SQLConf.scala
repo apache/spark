@@ -233,6 +233,12 @@ private[spark] object SQLConf {
           "otherwise the schema is picked from the summary file or a random data file " +
           "if no summary file is available.")
 
+  val PARQUET_SCHEMA_SKIP_MERGE_PARTFILES = booleanConf("spark.sql.parquet.skipMergePartFiles",
+    defaultValue = Some(false),
+    doc = "When true, we make assumption that all part-files of Parquet are consistent with " +
+          "summary files and we will ignore them when merging schema. Otherwise, if this is " +
+          "false, which is the default, we will merge all part-files.")
+
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),
     doc = "Some other Parquet-producing systems, in particular Impala and older versions of " +
