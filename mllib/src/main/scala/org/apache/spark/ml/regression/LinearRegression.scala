@@ -146,10 +146,10 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, weights, intercept)
-      val trainingResults = new LinearRegressionTrainingResults(
+      val trainingResults = new LinearRegressionTrainingSummary(
         model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
-        Array())
-      return model.setTrainingResults(trainingResults)
+        Array(0D))
+      return model.setSummary(trainingResults)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -204,10 +204,10 @@ class LinearRegression(override val uid: String)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     val model = new LinearRegressionModel(uid, weights.compressed, intercept)
-    val trainingResults = new LinearRegressionTrainingResults(
+    val trainingResults = new LinearRegressionTrainingSummary(
       model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
       lossHistory.result())
-    copyValues(model.setTrainingResults(trainingResults))
+    copyValues(model.setSummary(trainingResults))
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
@@ -226,30 +226,29 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  @transient private var trainingResults: Option[LinearRegressionTrainingResults] = None
+  @transient private var summary: Option[LinearRegressionTrainingSummary] = None
 
   /**
-   * Gets results (e.g. residuals, mse, r^2) of model on training set. This method should only
-   * be called on the driver (it is not available on workers).
+   * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
+   * should only be called on the driver as `summary` is transient.
    */
-  def getTrainingResults: Option[LinearRegressionTrainingResults] = trainingResults
+  def getSummary: Option[LinearRegressionTrainingSummary] = summary
 
-  def setTrainingResults(trainingResults: LinearRegressionTrainingResults): this.type = {
-    this.trainingResults = Some(trainingResults)
+  def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
+    this.summary = Some(summary)
     this
   }
 
   /**
-   * Evaluates the model on a test-set.
-   * @param testset Test dataset to evaluate model on.
-   * @return
+   * Evaluates the model on a testset.
+   * @param dataset Test dataset to evaluate model on.
    */
-  def evaluate(testset: DataFrame): LinearRegressionResults = {
+  def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     val t = udf { features: Vector => predict(features) }
-    val predictionAndObservations = testset
+    val predictionAndObservations = dataset
       .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
 
-    new LinearRegressionResults(predictionAndObservations)
+    new LinearRegressionSummary(predictionAndObservations)
   }
 
   override protected def predict(features: Vector): Double = {
@@ -258,7 +257,7 @@ class LinearRegressionModel private[ml] (
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = new LinearRegressionModel(uid, weights, intercept)
-    if (trainingResults.isDefined) newModel.setTrainingResults(trainingResults.get)
+    if (summary.isDefined) newModel.setSummary(summary.get)
     copyValues(newModel, extra)
   }
 }
@@ -270,13 +269,21 @@ class LinearRegressionModel private[ml] (
  * @param objectiveTrace objective function value at each iteration.
  */
 @Experimental
-class LinearRegressionTrainingResults private[ml] (
+class LinearRegressionTrainingSummary private[ml] (
     predictionAndLabel: DataFrame,
-    val objectiveTrace: Array[Double])
-  extends LinearRegressionResults(predictionAndLabel) {
+    val objectiveTrace: DataFrame)
+  extends LinearRegressionSummary(predictionAndLabel) {
+
+  def this(predictionAndLabel: DataFrame, objectiveTrace: Array[Double]) =
+    this(predictionAndLabel, {
+      val sqlContext = predictionAndLabel.sqlContext
+      sqlContext
+        .createDataFrame(objectiveTrace.zipWithIndex.map(_.swap).toSeq)
+        .toDF("iteration", "objective")
+    })
 
   /** Number of training iterations until termination */
-  val totalIterations = objectiveTrace.length
+  val totalIterations = objectiveTrace.count()
 
 }
 
@@ -286,7 +293,7 @@ class LinearRegressionTrainingResults private[ml] (
  * @param predictionAndLabel dataframe with columns prediction(0) and label (1).
  */
 @Experimental
-class LinearRegressionResults private[ml] (
+class LinearRegressionSummary private[ml] (
     val predictionAndLabel: DataFrame) {
 
   private val metrics = new RegressionMetrics(predictionAndLabel.map {
@@ -324,7 +331,7 @@ class LinearRegressionResults private[ml] (
    */
   def r2: Double = metrics.r2
 
-  /** Get residuals */
+  /** Get residuals (predicted value - label value) */
   def residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => pred - label}
     val predCol = predictionAndLabel.columns(0)

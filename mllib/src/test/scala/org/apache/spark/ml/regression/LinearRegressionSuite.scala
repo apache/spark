@@ -22,6 +22,7 @@ import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.scalatest.Assertions
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -88,18 +89,18 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     // Training results for the model should be available
-    assert(model.getTrainingResults.isDefined)
+    assert(model.getSummary.isDefined)
 
     // Residuals in [[LinearRegressionResults]] should equal those manually computed
-    dataset.select("features", "label").map {
-      case Row(features: DenseVector, label: Double) =>
+    val expectedResiduals = dataset.select("features", "label")
+      .map { case Row(features: DenseVector, label: Double) =>
         val prediction =
           features(0) * model.weights(0) + features(1) * model.weights(1) + model.intercept
         prediction - label
-    }.zip(model.getTrainingResults.get.residuals.map(_.getDouble(0)))
+    }
+      .zip(model.getSummary.get.residuals.map(_.getDouble(0)))
       .collect()
-      .foreach {
-      case (manualResidual: Double, resultResidual: Double) =>
+      .foreach { case (manualResidual: Double, resultResidual: Double) =>
         assert(manualResidual ~== resultResidual relTol 1E-5)
     }
 
@@ -116,12 +117,17 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
                [,1]
        s0 0.9998749
      */
-    assert(model.getTrainingResults.get.meanSquaredError ~== 0.00972035 relTol 1E-5)
-    assert(model.getTrainingResults.get.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
-    assert(model.getTrainingResults.get.r2 ~== 0.9998749 relTol 1E-5)
+    assert(model.getSummary.get.meanSquaredError ~== 0.00972035 relTol 1E-5)
+    assert(model.getSummary.get.meanAbsoluteError ~== 0.07863206  relTol 1E-5)
+    assert(model.getSummary.get.r2 ~== 0.9998749 relTol 1E-5)
 
     // Objective function should be monotonically decreasing for linear regression
-    assert(model.getTrainingResults.get.objectiveTrace.sliding(2).forall(x => x(0) >= x(1)))
+    assert(
+      model.getSummary.get
+      .objectiveTrace.map(_.getAs[Double]("objective"))
+      .collect()
+      .sliding(2)
+      .forall(x => x(0) >= x(1)))
   }
 
   test("linear regression without intercept without regularization") {
