@@ -23,23 +23,26 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
+/**
+ * :: DeveloperApi ::
+ * The data type representing time intervals.
+ *
+ * Please use the singleton [[DataTypes.IntervalType]].
+ */
 @DeveloperApi
-class DayTimeIntervalType private() extends AtomicType {
+class IntervalType private() extends AtomicType {
   // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "THIS_TYPE$" in byte code.
+  // this type. Otherwise, the companion object would be of type "IntervalType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Long
+  private[sql] type InternalType = Interval
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
 
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
-  /**
-   * The default size of a value of the DayTimeIntervalType is 8 bytes.
-   */
-  override def defaultSize: Int = 8
+  override def defaultSize: Int = 12
 
-  private[spark] override def asNullable: DayTimeIntervalType = this
+  private[spark] override def asNullable: IntervalType = this
 }
 
-case object DayTimeIntervalType extends DayTimeIntervalType
+case object IntervalType extends IntervalType

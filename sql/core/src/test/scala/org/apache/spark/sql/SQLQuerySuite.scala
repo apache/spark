@@ -1469,12 +1469,24 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8753: add interval type") {
-    val df = sql("select interval 3 year, interval -14 month, interval 99 second, interval -4 day")
-    checkAnswer(df, Row(36, -14, 99L, -345600L))
+    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+    checkAnswer(df, Row(Interval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
     withTempPath(f => {
+      // Currently we don't yet support saving out values of interval data type.
       intercept[RuntimeException] {
         df.write.json(f.getCanonicalPath)
       }
     })
+
+    def checkIntervalParseError(s: String): Unit = {
+      val e = intercept[AnalysisException] {
+        sql(s)
+      }
+      e.message.contains("at least one time unit should be given for interval literal")
+    }
+
+    checkIntervalParseError("select interval")
+    // Currently we don't yet support nanosecond
+    checkIntervalParseError("select interval 23 nanosecond")
   }
 }
