@@ -693,7 +693,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_foreach_get_offsetRanges(self):
-        """Test the Python direct Kafka stream API."""
+        """Test the Python direct Kafka stream foreachRDD get offsetRanges."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -718,7 +718,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_transform_get_offsetRanges(self):
-        """Test the Python direct Kafka stream API."""
+        """Test the Python direct Kafka stream transform get offsetRanges."""
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),

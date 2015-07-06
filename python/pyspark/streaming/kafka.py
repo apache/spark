@@ -308,7 +308,8 @@ class KafkaDStream(DStream):
         if func.__code__.co_argcount == 1:
             old_func = func
             func = lambda r, rdd: old_func(rdd)
-        jfunc = KafkaTransformFunction(self._sc, func, self._jrdd_deserializer)
+        jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer) \
+            .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
 
@@ -324,28 +325,9 @@ class KafkaDStream(DStream):
             oldfunc = func
             func = lambda t, rdd: oldfunc(rdd)
         assert func.__code__.co_argcount == 2, "func should take one or two arguments"
-        return KafkaTransformedDStream(self, func)
 
+        def transformFunc(ctx, func, ser):
+            return TransformFunction(ctx, func, ser) \
+                .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
 
-class KafkaTransformFunction(TransformFunction):
-    """
-    Inherited from TransformFunction to offer KafkaRDD[X] -> RDD[Y] transformation function.
-    """
-
-    def __init__(self, ctx, func, *deserializers):
-        TransformFunction.__init__(self, ctx, func, deserializers)
-
-    def _wrapPythonRdd(self, jrdd, ctx, ser):
-        return KafkaRDD(jrdd, ctx, ser)
-
-
-class KafkaTransformedDStream(TransformedDStream):
-    """
-    Inherited from TransformedDStream to transform KafkaDStream[X] -> DStream[Y].
-    """
-
-    def __init__(self, prev, func):
-        TransformedDStream.__init__(self, prev, func)
-
-    def _transformFunction(self, ctx, func, *deserializers):
-        return KafkaTransformFunction(ctx, func, deserializers)
+        return TransformedDStream(self, func, transformFunc)
