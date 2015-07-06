@@ -24,13 +24,10 @@ import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types
-import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
 
 /* Implicit conversions */
@@ -219,14 +216,14 @@ private[hive] trait HiveInspectors extends Logging {
 
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
 
-    // list type
-    case c: Class[_] if c == classOf[java.util.List[_]] =>
-      logWarning("Failed to catch a component type in List<> because of type erasure in JVM," +
-        " so you need to cast it into the correct type by yourself")
-      ArrayType(NullType)
-
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
+
+    // java list type unsupported
+    case c: Class[_] if c == classOf[java.util.List[_]] =>
+      throw new AnalysisException(
+        "List type in java is unsupported because " +
+        "JVM type erasure makes spark fail to catch a component type in List<>")
 
     case c => throw new AnalysisException(s"Unsupported java type $c")
   }
@@ -804,8 +801,8 @@ private[hive] trait HiveInspectors extends Logging {
     }
 
   implicit class typeInfoConversions(dt: DataType) {
+    import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory._
     import org.apache.hadoop.hive.serde2.typeinfo._
-    import TypeInfoFactory._
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
