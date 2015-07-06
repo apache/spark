@@ -33,8 +33,7 @@ case class BlockUpdatedInfo(
     diskSize: Long,
     externalBlockStoreSize: Long)
 
-@DeveloperApi
-object BlockUpdatedInfo {
+private[spark] object BlockUpdatedInfo {
 
   private[spark] def apply(updateBlockInfo: UpdateBlockInfo): BlockUpdatedInfo = {
     BlockUpdatedInfo(
