@@ -722,27 +722,25 @@ case class CountDistinctFunction(
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var result: Any = null
+  var result: MutableLiteral = MutableLiteral(null, expr.dataType)
 
   override def update(input: Row): Unit = {
-    if (result == null) {
-      result = expr.eval(input)
+    if (result.value == null) {
+      result.value = expr.eval(input)
     }
   }
 
-  override def eval(input: Row): Any = result
+  override def eval(input: Row): Any = result.value
 }
 
 case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var result: Any = null
+  var result: MutableLiteral = MutableLiteral(null, expr.dataType)
 
   override def update(input: Row): Unit = {
-    result = input
+    result.value = expr.eval(input)
   }
 
-  override def eval(input: Row): Any = {
-    if (result != null) expr.eval(result.asInstanceOf[Row]) else null
-  }
+  override def eval(input: Row): Any = result.value
 }
