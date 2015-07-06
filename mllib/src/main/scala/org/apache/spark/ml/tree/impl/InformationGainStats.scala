@@ -76,15 +76,14 @@ private[tree] object InformationGainStats {
 
 /**
  * TODO: ELIMINATE THIS BEFORE MERGING!
- * RIGHT HERE NOW
  *
  * Predicted value for a node
  * @param predict predicted value
  * @param prob probability of the label (classification only)
  */
-class Predict(
-               val predict: Double,
-               val prob: Double = 0.0) extends Serializable {
+private[tree] class Predict(
+    val predict: Double,
+    val prob: Double = 0.0) extends Serializable {
 
   override def toString: String = s"$predict (prob = $prob)"
 

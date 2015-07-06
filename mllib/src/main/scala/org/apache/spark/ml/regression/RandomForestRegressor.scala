@@ -18,13 +18,13 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeEnsembleModel, TreeRegressorParams}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
@@ -82,9 +82,12 @@ final class RandomForestRegressor(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
-    val oldModel = OldRandomForest.trainRegressor(
-      oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    // val oldModel = OldRandomForest.trainRegressor(
+    //   oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
+    // RandomForestRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees = RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy,
+      getSeed).asInstanceOf[Array[DecisionTreeRegressionModel]]
+    copyValues(new RandomForestRegressionModel(trees).setParent(this))
   }
 
   override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)
@@ -114,6 +117,8 @@ final class RandomForestRegressionModel private[ml] (
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
+
+  def this(trees: Array[DecisionTreeRegressionModel]) = this(Identifiable.randomUID("rfc"), trees)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 

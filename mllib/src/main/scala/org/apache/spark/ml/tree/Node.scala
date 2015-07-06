@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.tree.impl.{InformationGainStats, Predict}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
   Node => OldNode, Predict => OldPredict}
@@ -222,22 +223,40 @@ private object InternalNode {
  *            but this will change later.
  */
 private[tree] class LearningNode(
-    prediction: Double,
-    impurity: Double,
-    gain: Double,
-    leftChild: Node,
-    rightChild: Node,
-    split: Split,
-    val id: Int,
-    val isLeaf: Boolean)
-  extends InternalNode(prediction, impurity, gain, leftChild, rightChild, split) {
+    var id: Int,
+    var predictionStats: Predict,
+    var impurity: Double,
+    var leftChild: Option[LearningNode],
+    var rightChild: Option[LearningNode],
+    var split: Option[Split],
+    var isLeaf: Boolean,
+    var stats: Option[InformationGainStats]) {
+
+  /**
+   * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
+   */
+  def toNode: Node = {
+    if (leftChild.nonEmpty) {
+      assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
+        "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
+      new InternalNode(predictionStats.predict, impurity, stats.get.gain,
+        leftChild.get.toNode, rightChild.get.toNode, split.get)
+    } else {
+      new LeafNode(predictionStats.predict, impurity)
+    }
+  }
 
 }
 
 private[tree] object LearningNode {
 
+  def apply(id: Int, predictionStats: Predict, impurity: Double, isLeaf: Boolean): LearningNode = {
+    new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
+  }
+
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(Double.NaN, Double.NaN, Double.NaN, null, null, null, nodeIndex, false)
+    new LearningNode(nodeIndex, new Predict(Double.NaN, Double.NaN), Double.NaN,
+      None, None, None, false, None)
   }
 
   /**

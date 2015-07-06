@@ -18,13 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
@@ -75,8 +75,12 @@ final class DecisionTreeClassifier(override val uid: String)
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
-    val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    // val oldModel = OldDecisionTree.train(oldDataset, strategy)
+    // DecisionTreeClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    val dt = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    copyValues(dt.setParent(this))
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -111,6 +115,8 @@ final class DecisionTreeClassificationModel private[ml] (
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
+
+  def this(rootNode: Node) = this(Identifiable.randomUID("dtc"), rootNode)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predict(features)

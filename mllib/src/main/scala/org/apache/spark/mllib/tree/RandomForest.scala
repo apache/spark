@@ -437,7 +437,7 @@ object RandomForest extends Serializable with Logging {
   val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "sqrt", "log2", "onethird")
 
-  private[spark] class NodeIndexInfo(
+  private[tree] class NodeIndexInfo(
       val nodeIndexInGroup: Int,
       val featureSubset: Option[Array[Int]]) extends Serializable
 
