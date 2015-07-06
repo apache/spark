@@ -22,7 +22,7 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
@@ -146,10 +146,12 @@ class LinearRegression(override val uid: String)
       val intercept = yMean
 
       val model = new LinearRegressionModel(uid, weights, intercept)
-      val trainingResults = new LinearRegressionTrainingSummary(
-        model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
-        Array(0D))
-      return model.setSummary(trainingResults)
+      val trainingSummary = copyValues(
+        new LinearRegressionTrainingSummary(
+          model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
+          Array(0D))
+      )
+      return model.setSummary(trainingSummary)
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -204,10 +206,12 @@ class LinearRegression(override val uid: String)
 
     // TODO: Converts to sparse format based on the storage, but may base on the scoring speed.
     val model = new LinearRegressionModel(uid, weights.compressed, intercept)
-    val trainingResults = new LinearRegressionTrainingSummary(
-      model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
-      lossHistory.result())
-    copyValues(model.setSummary(trainingResults))
+    val trainingSummary = copyValues(
+      new LinearRegressionTrainingSummary(
+        model.transform(dataset).select(model.getPredictionCol, model.getLabelCol),
+        lossHistory.result())
+    )
+    copyValues(model.setSummary(trainingSummary))
   }
 
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
@@ -226,18 +230,29 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  @transient private var summary: Option[LinearRegressionTrainingSummary] = None
+  @transient private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   /**
    * Gets results summary (e.g. residuals, mse, r-squared ) of model on training set. This method
    * should only be called on the driver as `summary` is transient.
+   *
+   * An exception is thrown if `trainingSummary == None`.
    */
-  def getSummary: Option[LinearRegressionTrainingSummary] = summary
+  def summary: LinearRegressionTrainingSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this LinearRegressionModel",
+        new NullPointerException())
+  }
 
   def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
-    this.summary = Some(summary)
+    this.trainingSummary = Some(summary)
     this
   }
+
+  def hasSummary: Boolean = trainingSummary.isDefined
+
 
   /**
    * Evaluates the model on a testset.
@@ -257,7 +272,7 @@ class LinearRegressionModel private[ml] (
 
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = new LinearRegressionModel(uid, weights, intercept)
-    if (summary.isDefined) newModel.setSummary(summary.get)
+    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     copyValues(newModel, extra)
   }
 }
@@ -265,22 +280,22 @@ class LinearRegressionModel private[ml] (
 /**
  * :: Experimental ::
  * Linear regression training results.
- * @param predictionAndLabel dataframe with columns prediction (0) and label (1).
+ * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveTrace objective function value at each iteration.
  */
 @Experimental
 class LinearRegressionTrainingSummary private[ml] (
-    predictionAndLabel: DataFrame,
+    predictions: DataFrame,
     val objectiveTrace: DataFrame)
-  extends LinearRegressionSummary(predictionAndLabel) {
+  extends LinearRegressionSummary(predictions) {
 
-  def this(predictionAndLabel: DataFrame, objectiveTrace: Array[Double]) =
-    this(predictionAndLabel, {
-      val sqlContext = predictionAndLabel.sqlContext
-      sqlContext
+  def this(predictions: DataFrame, objectiveTrace: Array[Double]) =
+    this(
+      predictions,
+      predictions.sqlContext
         .createDataFrame(objectiveTrace.zipWithIndex.map(_.swap).toSeq)
         .toDF("iteration", "objective")
-    })
+    )
 
   /** Number of training iterations until termination */
   val totalIterations = objectiveTrace.count()
@@ -290,15 +305,22 @@ class LinearRegressionTrainingSummary private[ml] (
 /**
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
- * @param predictionAndLabel dataframe with columns prediction(0) and label (1).
+ * @param predictions predictions outputted by the model's `transform` method.
  */
 @Experimental
 class LinearRegressionSummary private[ml] (
-    val predictionAndLabel: DataFrame) {
+    override val uid: String,
+    val predictions: DataFrame)
+  extends HasLabelCol with HasPredictionCol {
 
-  private val metrics = new RegressionMetrics(predictionAndLabel.map {
-    case Row(pred: Double, obs: Double) => (pred, obs)
-  })
+  def this(predictionAndLabel: DataFrame) = this(
+    Identifiable.randomUID("linRegSumm"),
+    predictionAndLabel)
+
+  private val metrics = new RegressionMetrics(predictions
+    .select($(predictionCol), $(labelCol))
+    .map { case Row(pred: Double, label: Double) => (pred, label) }
+  )
 
   /**
    * Returns the explained variance regression score.
@@ -334,10 +356,10 @@ class LinearRegressionSummary private[ml] (
   /** Get residuals (predicted value - label value) */
   def residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => pred - label}
-    val predCol = predictionAndLabel.columns(0)
-    val labelCol = predictionAndLabel.columns(1)
-    predictionAndLabel.select(t(col(predCol), col(labelCol)).as("residuals"))
+    predictions.select(t(col($(predictionCol)), col($(labelCol))).as("residuals"))
   }
+
+  override def copy(extra: ParamMap): LinearRegressionSummary = defaultCopy(extra)
 }
 
 /**
