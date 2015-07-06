@@ -218,11 +218,12 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  private def sparkContextInitialized(sc: SparkContext) = {
+  private def sparkContextInitialized(sc: SparkContext, backend: CoarseGrainedSchedulerBackend) = {
     sparkContextRef.synchronized {
       sparkContextRef.compareAndSet(null, sc)
       sparkContextRef.notifyAll()
     }
+    allocator.setScheduler(backend)
   }
 
   private def sparkContextStopped(sc: SparkContext) = {
@@ -612,8 +613,9 @@ object ApplicationMaster extends Logging {
     }
   }
 
-  private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {
-    master.sparkContextInitialized(sc)
+  private[spark] def sparkContextInitialized(sc: SparkContext,
+      backend: CoarseGrainedSchedulerBackend): Unit = {
+    master.sparkContextInitialized(sc, backend)
   }
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {

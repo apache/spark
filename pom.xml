@@ -87,18 +87,23 @@
 
   <modules>
     <module>core</module>
+<!--
     <module>bagel</module>
     <module>graphx</module>
     <module>mllib</module>
+-->
     <module>tools</module>
     <module>network/common</module>
     <module>network/shuffle</module>
+<!--
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+-->
     <module>unsafe</module>
     <module>assembly</module>
+<!--
     <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
@@ -106,10 +111,13 @@
     <module>external/mqtt</module>
     <module>external/zeromq</module>
     <module>examples</module>
+-->
     <module>repl</module>
     <module>launcher</module>
+<!--
     <module>external/kafka</module>
     <module>external/kafka-assembly</module>
+-->
   </modules>
 
   <properties>
